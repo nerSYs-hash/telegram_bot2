@@ -13,4 +13,3 @@ env/
 # Логи и временные файлы
 logs/
 *.log
-patchnote_draft.txt
