@@ -166,6 +166,9 @@ class CallbackHandler:
             await show_stats_menu(query, user, self.main_admin_id)
         elif data == "menu_settings":
             await self.show_main_menu(query, user)
+        elif data == "owner_backup":
+            from handlers.owner_handlers import send_database_backup
+            await send_database_backup(query, user, self.db, self.main_admin_id, context)    
         elif data == "menu_lottery":
             await self.lottery_handler.show_lottery_menu(query, user)
         elif data == "menu_bingo":

@@ -193,6 +193,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
     # ── Владелец ──
     if is_owner:
         if db.is_feature_enabled('statistics'):
+            keyboard.append([InlineKeyboardButton("💾 Скачать БД (Бэкап)", callback_data="owner_backup")])
             keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
 
         keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
