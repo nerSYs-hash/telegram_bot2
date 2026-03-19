@@ -33,7 +33,7 @@ class LotteryHandler:
         self.target_chat_id = target_chat_id
         self.main_admin_id = main_admin_id
         self.bot_username = bot_username
-        self._ensure_tables()
+        self._ensure_tables(
 
     # ══════════════════════════════════════════
     #  ТАБЛИЦЫ
