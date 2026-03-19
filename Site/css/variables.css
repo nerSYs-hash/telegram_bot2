@@ -1,0 +1,184 @@
+/* ===================================================
+   PULSE CHAT — Design Tokens v2.0
+   Telegram Desktop Night + Day themes (pixel-accurate)
+   =================================================== */
+
+:root {
+  --font-main: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'Cascadia Code', 'Fira Code', 'Consolas', monospace;
+  --font-size: 13px;
+  --font-size-sm: 12px;
+  --font-size-xs: 11px;
+  --font-size-date: 13px;
+
+  --radius-bubble-lg: 16px;
+  --radius-bubble-sm: 6px;
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 16px;
+  --radius-full: 50px;
+  --radius-input: 18px;
+
+  --header-h: 56px;
+  --sidebar-w: 380px;
+  --dialog-h: 72px;
+  --dialog-h-forum: 80px;
+  --topic-h: 54px;
+  --dialog-photo: 54px;
+  --dialog-padding: 8px 10px;
+  --dialog-name-left: 72px;
+  --dialog-text-left: 72px;
+  --msg-max-w: 430px;
+  --msg-padding: 8px 11px;
+  --msg-margin-left: 16px;
+  --msg-photo: 33px;
+  --msg-min-w: 160px;
+  --online-size: 14px;
+  --online-stroke: 2px;
+  --unread-h: 22px;
+  --unread-font: 12px;
+  --unread-pad: 6px;
+
+  --transition-fast: 0.15s ease;
+  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bottom: env(safe-area-inset-bottom, 0px);
+}
+
+/* ===== DARK THEME (Telegram Night — exact) ===== */
+[data-theme="dark"] {
+  --bg-0: #0e1621;
+  --bg-1: #17212b;
+  --bg-2: #1c2733;
+  --bg-3: #243044;
+  --bg-hover: rgba(255,255,255,0.05);
+  --bg-active: #2b5278;
+  --bg-ripple: rgba(255,255,255,0.04);
+
+  --surface: rgba(255,255,255,0.04);
+  --surface-hover: rgba(255,255,255,0.07);
+
+  --accent: #6ab2f2;
+  --accent-dark: #5288c1;
+  --accent-soft: rgba(106,178,242,0.12);
+  --accent-glow: 0 0 20px rgba(106,178,242,0.1);
+
+  --bubble-own: #2b5278;
+  --bubble-other: #182533;
+
+  --text-0: #f5f5f5;
+  --text-1: #d4dbe2;
+  --text-2: #708499;
+  --text-3: rgba(255,255,255,0.3);
+  --text-date: #6c7883;
+  --text-active: #ffffff;
+
+  --divider: rgba(255,255,255,0.06);
+  --online: #4dcd5e;
+  --danger: #e55757;
+  --warning: #e5ae40;
+  --success: #4dcd5e;
+
+  --unread: #5eb5f7;
+  --unread-muted: #49606e;
+
+  --shadow-sm: 0 1px 4px rgba(0,0,0,0.3);
+  --shadow: 0 2px 12px rgba(0,0,0,0.4);
+  --shadow-lg: 0 4px 24px rgba(0,0,0,0.5);
+
+  --glass: rgba(23,33,43,0.92);
+  --glass-border: rgba(255,255,255,0.06);
+
+  --gradient-bg: linear-gradient(135deg, #0e1621 0%, #17212b 100%);
+  --gradient-accent: linear-gradient(135deg, #6ab2f2, #a695e7);
+
+  --card-bg: rgba(255,255,255,0.03);
+  --card-border: rgba(255,255,255,0.06);
+
+  --input-bg: #242f3d;
+  --input-border: rgba(255,255,255,0.08);
+  --input-focus: rgba(106,178,242,0.3);
+
+  --menu-icon: #7e8e9f;
+  --reply-bar: #5eb5f7;
+
+  --active-name: #fff;
+  --active-text: rgba(255,255,255,0.7);
+  --active-date: rgba(255,255,255,0.5);
+}
+
+/* ===== LIGHT THEME (Telegram Day — accurate) ===== */
+[data-theme="light"] {
+  --bg-0: #e7ebee;
+  --bg-1: #ffffff;
+  --bg-2: #f4f4f5;
+  --bg-3: #e8e8e8;
+  --bg-hover: rgba(0,0,0,0.04);
+  --bg-active: #3390ec;
+  --bg-ripple: rgba(0,0,0,0.03);
+
+  --surface: rgba(0,0,0,0.03);
+  --surface-hover: rgba(0,0,0,0.06);
+
+  --accent: #3390ec;
+  --accent-dark: #2b7fd4;
+  --accent-soft: rgba(51,144,236,0.1);
+  --accent-glow: 0 0 20px rgba(51,144,236,0.08);
+
+  --bubble-own: #effdde;
+  --bubble-other: #ffffff;
+
+  --text-0: #000000;
+  --text-1: #232323;
+  --text-2: #707579;
+  --text-3: rgba(0,0,0,0.35);
+  --text-date: #707579;
+  --text-active: #ffffff;
+
+  --divider: rgba(0,0,0,0.08);
+  --online: #4fae4e;
+  --danger: #e53935;
+  --warning: #d4a23b;
+  --success: #4fae4e;
+
+  --unread: #3390ec;
+  --unread-muted: #c4c9cc;
+
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 4px 16px rgba(0,0,0,0.12);
+
+  --glass: rgba(255,255,255,0.95);
+  --glass-border: rgba(0,0,0,0.08);
+
+  --gradient-bg: linear-gradient(135deg, #e7ebee 0%, #ffffff 100%);
+  --gradient-accent: linear-gradient(135deg, #3390ec, #6c5ce7);
+
+  --card-bg: #ffffff;
+  --card-border: rgba(0,0,0,0.08);
+
+  --input-bg: #f4f4f5;
+  --input-border: rgba(0,0,0,0.1);
+  --input-focus: rgba(51,144,236,0.25);
+
+  --menu-icon: #707579;
+  --reply-bar: #3390ec;
+
+  --active-name: #fff;
+  --active-text: rgba(255,255,255,0.8);
+  --active-date: rgba(255,255,255,0.6);
+}
+
+/* ===== TG Peer Avatar Colors ===== */
+:root {
+  --peer1: #e17076;
+  --peer2: #7bc862;
+  --peer3: #e5ca77;
+  --peer4: #65aadd;
+  --peer5: #a695e7;
+  --peer6: #ee7aae;
+  --peer7: #6ec9cb;
+  --peer8: #faa774;
+}

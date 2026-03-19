@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Pulse Chat</title>
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link rel="stylesheet" href="css/variables.css">
+  <link rel="stylesheet" href="css/base.css">
+  <link rel="stylesheet" href="css/animations.css">
+  <link rel="stylesheet" href="css/components.css">
+  <link rel="stylesheet" href="css/layout.css">
+  <link rel="stylesheet" href="css/landing.css">
+  <link rel="stylesheet" href="css/auth.css">
+  <link rel="stylesheet" href="css/chat.css">
+  <link rel="stylesheet" href="css/modules.css">
+</head>
+<body data-theme="dark">
+
+<!-- PAGE: LANDING -->
+<div id="page-landing" class="page active">
+  <div class="landing-bg"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+  <nav class="landing-nav">
+    <div class="landing-logo">Pulse</div>
+    <div class="landing-nav-links">
+      <a href="#" class="hide-mobile" onclick="showPage('landing')">Главная</a>
+      <a href="#" class="hide-mobile" onclick="document.querySelector('.landing-features').scrollIntoView({behavior:'smooth'})">Функции</a>
+      <div class="theme-toggle" onclick="toggleTheme()" title="Сменить тему"></div>
+      <button class="btn-primary" onclick="showPage('auth')">Войти</button>
+    </div>
+  </nav>
+  <section class="landing-hero">
+    <div class="landing-badge"><i class="fa-solid fa-bolt"></i> Новое поколение общения</div>
+    <h1 class="landing-h1">Общайся<br><span class="gradient">без ограничений</span></h1>
+    <p class="landing-sub">Pulse — быстрый, безопасный мессенджер нового поколения. Все функции, к которым ты привык, и даже больше.</p>
+    <div class="landing-cta">
+      <button class="btn-primary" onclick="showPage('auth')" style="padding:14px 40px;font-size:16px">Начать общение</button>
+      <button class="btn-outline" onclick="document.querySelector('.landing-features').scrollIntoView({behavior:'smooth'})" style="padding:14px 40px;font-size:16px">Узнать больше</button>
+    </div>
+  </section>
+  <div class="landing-preview">
+    <div class="preview-frame">
+      <div class="preview-sidebar">
+        <div class="preview-sidebar-h"><i class="fa-solid fa-bars" style="margin-right:12px;opacity:0.5"></i>Чаты</div>
+        <div class="preview-chat-item active"><div class="preview-dot" style="background:#e17076">АП</div><div class="preview-chat-lines"><div class="preview-chat-name">Алексей</div><div class="preview-chat-msg">Круто! Покажешь?</div></div></div>
+        <div class="preview-chat-item"><div class="preview-dot" style="background:#a695e7">МИ</div><div class="preview-chat-lines"><div class="preview-chat-name">Мария</div><div class="preview-chat-msg">Документы отправила</div></div></div>
+        <div class="preview-chat-item"><div class="preview-dot" style="background:#7bc862">👥</div><div class="preview-chat-lines"><div class="preview-chat-name">Работа</div><div class="preview-chat-msg">Завтра митинг в 10</div></div></div>
+      </div>
+      <div class="preview-main">
+        <div class="preview-main-h"><div class="preview-dot" style="background:#e17076;width:32px;height:32px;font-size:13px">АП</div>Алексей <span class="status" style="margin-left:8px">● в сети</span></div>
+        <div class="preview-msgs">
+          <div class="preview-bubble other">Привет! Как дела?</div>
+          <div class="preview-bubble own">Делаю мессенджер — Pulse</div>
+          <div class="preview-bubble other">Круто! Покажешь когда готов?</div>
+          <div class="preview-bubble own">Уже почти 😎</div>
+        </div>
+        <div class="preview-input-bar"><i class="fa-regular fa-face-smile" style="color:var(--text-2);font-size:20px"></i><div class="preview-input-fake">Сообщение...</div><i class="fa-solid fa-paperclip" style="color:var(--text-2)"></i></div>
+      </div>
+    </div>
+  </div>
+  <div class="landing-features">
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-shield-halved"></i></div><div class="feature-title">Безопасность</div><div class="feature-desc">Сквозное шифрование. Никто кроме тебя и собеседника не прочитает переписку.</div></div>
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-bolt"></i></div><div class="feature-title">Скорость</div><div class="feature-desc">Мгновенная доставка. Работает быстро даже на слабом интернете.</div></div>
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-robot"></i></div><div class="feature-title">Бот-платформа</div><div class="feature-desc">Встроенная поддержка ботов с расширенными возможностями.</div></div>
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-users"></i></div><div class="feature-title">Группы и каналы</div><div class="feature-desc">Группы до 200К участников и каналы без ограничений.</div></div>
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-cloud"></i></div><div class="feature-title">Облачное хранение</div><div class="feature-desc">Все файлы в облаке. Доступ с любого устройства.</div></div>
+    <div class="feature-card"><div class="feature-icon"><i class="fa-solid fa-gamepad"></i></div><div class="feature-title">Геймификация</div><div class="feature-desc">Экономика, майнинг Пульсов, лотереи, топы.</div></div>
+  </div>
+  <footer class="landing-footer"><p>© 2026 Pulse Chat. Свобода общения без ограничений.</p></footer>
+</div>
+
+<!-- PAGE: AUTH -->
+<div id="page-auth" class="page">
+  <div class="landing-bg"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+  <button class="icon-btn auth-back" onclick="showPage('landing')"><i class="fa-solid fa-arrow-left" style="color:var(--text-1)"></i></button>
+
+  <div class="auth-card">
+    <div class="auth-logo">Pulse</div>
+    <p class="auth-subtitle">Войдите через Telegram</p>
+    <p style="color:var(--text-2);font-size:14px;margin-bottom:24px;line-height:1.5">Ваш аккаунт Pulse привязан к Telegram. Нажмите кнопку ниже для безопасного входа.</p>
+
+    <!-- Telegram Login Widget -->
+    <div id="tgWidgetContainer" style="display:flex;justify-content:center;margin-bottom:20px">
+      <script async src="https://telegram.org/js/telegram-widget.js?22"
+        data-telegram-login="Adcyn_bot"
+        data-size="large"
+        data-radius="12"
+        data-onauth="onTelegramAuth(user)"
+        data-request-access="write">
+      </script>
+    </div>
+
+    <!-- Fallback: если виджет не загрузился -->
+    <div id="tgFallback" style="display:none;text-align:center">
+      <p style="color:var(--text-2);font-size:13px;margin-bottom:16px">Виджет не загрузился? Войдите по Telegram ID:</p>
+      <div class="form-field" style="margin-bottom:12px">
+        <input type="number" id="manualTgId" placeholder="Ваш Telegram ID">
+      </div>
+      <button class="auth-submit" onclick="Auth.manualLogin()">Войти по ID</button>
+    </div>
+
+    <!-- Статус -->
+    <div id="authStatus" style="text-align:center;margin-top:16px;display:none">
+      <div class="auth-spinner"></div>
+      <p style="color:var(--text-2);font-size:14px;margin-top:8px">Авторизация...</p>
+    </div>
+
+    <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--divider);text-align:center">
+      <p style="color:var(--text-2);font-size:12px;line-height:1.5">
+        <i class="fa-solid fa-shield-halved" style="color:var(--accent);margin-right:4px"></i>
+        Мы не получаем ваш пароль от Telegram. Вход безопасен и подтверждён Telegram.
+      </p>
+    </div>
+  </div>
+</div>
+
+<!-- PAGE: CHAT -->
+<div id="page-chat" class="page">
+  <div id="sidebar" class="sidebar">
+    <div class="sidebar-header"><button class="icon-btn" onclick="toggleMenu()"><i class="fa-solid fa-bars"></i></button><div class="sidebar-title">Pulse</div><button class="icon-btn" onclick="toggleSearch()"><i class="fa-solid fa-magnifying-glass"></i></button></div>
+    <div class="search-bar" id="searchBar"><input type="text" id="searchInput" placeholder="Поиск..." oninput="filterChats(this.value)"></div>
+    <div class="chat-list" id="chatList"></div>
+    <button class="fab" onclick="Sidebar.openCreateModal()"><i class="fa-solid fa-pen-to-square"></i></button>
+  </div>
+  <div class="menu-overlay" id="menuOverlay" onclick="toggleMenu()"></div>
+  <div class="slide-menu" id="slideMenu">
+    <div class="menu-header"><div class="menu-avatar-circle" id="menuAvatarCircle">ВЫ</div><div class="menu-user-name" id="menuUserName">Пользователь</div><div class="menu-user-phone">+7 999 000 00 00</div></div>
+    <div class="menu-items">
+      <div class="menu-item" onclick="toggleMenu();showPage('profile')"><i class="fa-solid fa-user"></i><span>Профиль</span></div>
+      <div class="menu-item" onclick="toggleMenu();showPage('economy')"><i class="fa-solid fa-wallet"></i><span>Кошелёк</span></div>
+      <div class="menu-item" onclick="toggleMenu();showPage('top')"><i class="fa-solid fa-trophy"></i><span>ТОП-5</span></div>
+      <div class="menu-item" onclick="toggleMenu();showPage('lottery')"><i class="fa-solid fa-ticket"></i><span>Лотерея</span></div>
+      <div class="menu-item" onclick="toggleMenu();showPage('bbs')"><i class="fa-solid fa-heart"></i><span>Pulse BBS</span></div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" onclick="toggleMenu();Sidebar.openCreateModal()"><i class="fa-solid fa-users"></i><span>Новая группа</span></div>
+      <div class="menu-item" onclick="toggleMenu();Invite.showManagePanel()"><i class="fa-solid fa-link"></i><span>Мои ссылки</span></div>
+      <div class="menu-item" onclick="toggleMenu();showPage('profile')"><i class="fa-solid fa-gear"></i><span>Настройки</span></div>
+      <div class="menu-divider"></div>
+      <div class="menu-theme-row"><i class="fa-solid fa-moon"></i><span>Тёмная тема</span><div class="theme-toggle" onclick="toggleTheme()"></div></div>
+      <div class="menu-divider"></div>
+      <div class="menu-item" onclick="toggleMenu();Auth.logout()" style="color:var(--danger)"><i class="fa-solid fa-right-from-bracket" style="color:var(--danger)"></i><span>Выйти</span></div>
+    </div>
+  </div>
+  <div id="chatView" class="chat-view">
+    <div class="chat-header"><button class="icon-btn back-btn" onclick="goBack()"><i class="fa-solid fa-arrow-left"></i></button><div class="chat-header-avatar" id="chatAvatar"></div><div class="chat-header-info" onclick="Chat.toggleInfoPanel()"><div class="chat-header-name" id="chatName">Pulse Chat</div><div class="chat-header-status" id="chatStatus"></div></div><div class="chat-header-actions"><button class="icon-btn" onclick="Chat.toggleChatSearch()"><i class="fa-solid fa-magnifying-glass"></i></button><button class="icon-btn" onclick="Chat.toggleInfoPanel()"><i class="fa-solid fa-ellipsis-vertical"></i></button></div></div>
+    <!-- Search in chat -->
+    <div class="chat-search-panel" id="chatSearchPanel" style="display:none"><input type="text" id="chatSearchInput" placeholder="Поиск по сообщениям..." oninput="Chat.searchInChat(this.value)"><button class="icon-btn" onclick="Chat.toggleChatSearch()" style="width:32px;height:32px"><i class="fa-solid fa-xmark"></i></button></div>
+    <div class="messages-area" id="messagesArea"><div class="messages-container" id="messagesContainer"></div></div>
+    <div class="reply-preview" id="replyPreview" style="display:none"><div class="reply-preview-bar"></div><div class="reply-preview-content"><div class="reply-preview-name" id="replyName"></div><div class="reply-preview-text" id="replyText"></div></div><button class="reply-close" onclick="cancelReply()"><i class="fa-solid fa-xmark"></i></button></div>
+    <!-- Emoji picker -->
+    <div class="emoji-picker-panel" id="emojiPicker" style="display:none">
+      <div class="emoji-grid">
+        <span onclick="Chat.insertEmoji('😀')">😀</span><span onclick="Chat.insertEmoji('😂')">😂</span><span onclick="Chat.insertEmoji('😍')">😍</span><span onclick="Chat.insertEmoji('🥰')">🥰</span><span onclick="Chat.insertEmoji('😎')">😎</span><span onclick="Chat.insertEmoji('🤔')">🤔</span><span onclick="Chat.insertEmoji('😢')">😢</span><span onclick="Chat.insertEmoji('😮')">😮</span>
+        <span onclick="Chat.insertEmoji('👍')">👍</span><span onclick="Chat.insertEmoji('👎')">👎</span><span onclick="Chat.insertEmoji('❤️')">❤️</span><span onclick="Chat.insertEmoji('🔥')">🔥</span><span onclick="Chat.insertEmoji('🎉')">🎉</span><span onclick="Chat.insertEmoji('💯')">💯</span><span onclick="Chat.insertEmoji('👋')">👋</span><span onclick="Chat.insertEmoji('🙏')">🙏</span>
+        <span onclick="Chat.insertEmoji('✅')">✅</span><span onclick="Chat.insertEmoji('❌')">❌</span><span onclick="Chat.insertEmoji('⭐')">⭐</span><span onclick="Chat.insertEmoji('💎')">💎</span><span onclick="Chat.insertEmoji('🚀')">🚀</span><span onclick="Chat.insertEmoji('💰')">💰</span><span onclick="Chat.insertEmoji('📌')">📌</span><span onclick="Chat.insertEmoji('🎯')">🎯</span>
+      </div>
+    </div>
+    <div class="input-area" id="inputArea">
+      <button class="icon-btn" onclick="Chat.toggleEmoji()"><i class="fa-regular fa-face-smile"></i></button>
+      <div class="input-wrapper"><textarea id="msgInput" placeholder="Сообщение..." rows="1" oninput="autoResize(this)" onkeydown="handleKey(event)"></textarea></div>
+      <button class="icon-btn" id="attachBtn" onclick="Chat.showAttachMenu(event)"><i class="fa-solid fa-paperclip"></i></button>
+      <input type="file" id="fileInput" style="display:none" accept="image/jpeg,image/png,image/webp,image/gif,video/*,audio/*,.pdf,.doc,.docx,.zip,.rar,.txt" onchange="Chat.handleFileSelect(this)">
+      <button class="send-btn" id="sendBtn" onclick="sendMessage()" style="display:none"><i class="fa-solid fa-paper-plane"></i></button>
+      <button class="icon-btn" id="micBtn" onclick="Voice.toggleRecording()"><i class="fa-solid fa-microphone"></i></button>
+    </div>
+    <!-- Voice recording bar (replaces input area during recording) -->
+    <div class="voice-record-bar" id="voiceRecordBar" style="display:none">
+      <div class="voice-record-indicator">
+        <div class="voice-record-dot"></div>
+        <span class="voice-record-timer" id="voiceTimer">0:00</span>
+      </div>
+      <div class="voice-record-slide">
+        <i class="fa-solid fa-chevron-left"></i> Сдвиньте для отмены
+      </div>
+      <button class="voice-record-send" onclick="Voice.stopAndSend()">
+        <i class="fa-solid fa-paper-plane"></i>
+      </button>
+      <button class="voice-record-cancel" onclick="Voice.cancel()">
+        <i class="fa-solid fa-trash"></i>
+      </button>
+    </div>
+    <!-- Media preview (before sending) -->
+    <div class="media-preview" id="mediaPreview" style="display:none">
+      <div class="media-preview-content" id="mediaPreviewContent"></div>
+      <button class="reply-close" onclick="Chat.cancelMedia()"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+  </div>
+  <!-- Info panel overlay (TG-style right panel) -->
+  <div class="info-panel-overlay" id="infoPanelOverlay">
+    <div class="profile-header-bar">
+      <button class="icon-btn" onclick="Chat.toggleInfoPanel()"><i class="fa-solid fa-xmark"></i></button>
+      <span class="title">Информация</span>
+      <button class="icon-btn" onclick="Chat.toggleInfoPanel()"><i class="fa-solid fa-ellipsis-vertical"></i></button>
+    </div>
+    <div id="infoPanelContent"></div>
+  </div>
+</div>
+
+<!-- PAGE: INVITE (join via link) -->
+<div id="page-invite" class="page">
+  <div class="landing-bg"><div class="orb"></div><div class="orb"></div><div class="orb"></div></div>
+  <div class="join-container">
+    <div class="join-card">
+      <!-- Loading state -->
+      <div class="join-loading" id="inviteLoading" style="display:flex">
+        <div class="auth-spinner"></div>
+        <p style="color:var(--text-2);margin-top:16px">Загружаем приглашение...</p>
+      </div>
+      <!-- Success state -->
+      <div id="inviteContent" style="display:none;flex-direction:column;align-items:center">
+        <div class="join-avatar" id="inviteAvatar"></div>
+        <div class="join-chat-name" id="inviteGroupName"></div>
+        <div class="join-meta" id="inviteMeta"></div>
+        <div class="join-desc">Вас пригласили в это сообщество</div>
+        <button class="btn-primary join-btn" id="inviteJoinBtn" onclick="Invite.join()">
+          <i class="fa-solid fa-right-to-bracket" style="margin-right:8px"></i>Вступить в группу
+        </button>
+        <button class="btn-outline" onclick="showPage('landing')" style="margin-top:8px;width:100%;padding:12px">
+          На главную
+        </button>
+      </div>
+      <!-- Error state -->
+      <div id="inviteError" style="display:none;flex-direction:column;align-items:center">
+        <i class="fa-solid fa-link-slash" style="font-size:48px;color:var(--danger);opacity:0.4;margin-bottom:16px"></i>
+        <div class="join-chat-name">Ссылка недействительна</div>
+        <div class="join-desc" id="inviteErrorText">Приглашение истекло или было отозвано</div>
+        <button class="btn-primary" onclick="showPage('landing')" style="width:100%;padding:12px">
+          На главную
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Forward modal -->
+<div id="modalForward" class="modal">
+  <div class="modal-content">
+    <h3>Переслать в...</h3>
+    <div id="forwardChatList" class="forward-list"></div>
+    <div class="modal-actions"><button class="btn-outline" onclick="closeForwardModal()">Отмена</button></div>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════
+     ADMIN PANEL (slides from right)
+     ═══════════════════════════════════════ -->
+<div class="admin-panel-overlay" id="adminPanel">
+  <div class="profile-header-bar">
+    <button class="icon-btn" onclick="Admin.closePanel()"><i class="fa-solid fa-arrow-left"></i></button>
+    <span class="title">Управление</span>
+    <span id="adminMyRole" style="font-size:12px;color:var(--accent);margin-left:auto;padding-right:12px"></span>
+  </div>
+
+  <div style="padding:16px 16px 8px;text-align:center">
+    <div style="font-size:16px;font-weight:700" id="adminChatName"></div>
+  </div>
+
+  <!-- Tabs -->
+  <div class="admin-tabs">
+    <div class="admin-tab active" data-tab="members" onclick="Admin._showTab('members')"><i class="fa-solid fa-users"></i> Участники</div>
+    <div class="admin-tab" data-tab="topics" onclick="Admin._showTab('topics');Chat._loadTopics(State.currentChatId).then(()=>Admin._renderTopicsAdmin())"><i class="fa-solid fa-layer-group"></i> Ветки</div>
+    <div class="admin-tab admin-only" data-tab="audit" onclick="Admin._showTab('audit');Admin.loadAuditLog()"><i class="fa-solid fa-clipboard-list"></i> Лог</div>
+  </div>
+
+  <!-- Members tab -->
+  <div class="admin-tab-content" id="adminTab_members">
+    <div id="adminMembersList"></div>
+  </div>
+
+  <!-- Topics tab -->
+  <div class="admin-tab-content" id="adminTab_topics" style="display:none">
+    <div id="adminTopicsList"></div>
+  </div>
+
+  <!-- Audit log tab -->
+  <div class="admin-tab-content admin-only" id="adminTab_audit" style="display:none">
+    <div id="adminAuditList"></div>
+  </div>
+</div>
+
+<!-- PAGE: PROFILE -->
+<div id="page-profile" class="page">
+  <div class="profile-header-bar"><button class="icon-btn" onclick="goBackPage()"><i class="fa-solid fa-arrow-left"></i></button><span class="title">Профиль</span></div>
+  <div class="profile-top">
+    <div class="profile-avatar-large" id="profileAvatarWrap"><span id="profileInitials">ВЫ</span></div>
+    <div class="profile-name" id="profileName">Пользователь</div>
+    <div class="profile-online-status">в сети</div>
+  </div>
+  <!-- Status -->
+  <div class="profile-section">
+    <div class="profile-row" onclick="Profile.editStatus()">
+      <i class="fa-solid fa-quote-left" style="color:var(--accent)"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileStatusText" style="font-style:italic;color:var(--text-2)">Нажмите, чтобы добавить статус...</div>
+        <div class="profile-row-sub">Статус</div>
+      </div>
+      <i class="fa-solid fa-pen" style="color:var(--text-2);font-size:13px"></i>
+    </div>
+  </div>
+  <!-- Account -->
+  <div class="profile-section">
+    <div class="section-title">Аккаунт</div>
+    <div class="profile-row">
+      <i class="fa-solid fa-at"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileUsername">@user</div>
+        <div class="profile-row-sub">Имя пользователя</div>
+      </div>
+    </div>
+    <div class="profile-row">
+      <i class="fa-solid fa-hashtag"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileTgId">—</div>
+        <div class="profile-row-sub">Telegram ID</div>
+      </div>
+    </div>
+    <div class="profile-row">
+      <i class="fa-solid fa-calendar"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileRegDate">—</div>
+        <div class="profile-row-sub">Дата регистрации</div>
+      </div>
+    </div>
+  </div>
+  <!-- Stats -->
+  <div class="profile-section">
+    <div class="section-title">Статистика</div>
+    <div class="profile-row" onclick="showPage('economy')">
+      <i class="fa-solid fa-gem" style="color:var(--accent)"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileBalance">0 💎</div>
+        <div class="profile-row-sub">Баланс</div>
+      </div>
+      <i class="fa-solid fa-chevron-right" style="color:var(--text-2);font-size:12px"></i>
+    </div>
+    <div class="profile-row">
+      <i class="fa-solid fa-comment"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileMsgCount">0</div>
+        <div class="profile-row-sub">Сообщений</div>
+      </div>
+    </div>
+    <div class="profile-row">
+      <i class="fa-solid fa-users"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" id="profileGroupsCount">0</div>
+        <div class="profile-row-sub">Групп</div>
+      </div>
+    </div>
+  </div>
+  <!-- Settings -->
+  <div class="profile-section">
+    <div class="section-title">Настройки</div>
+    <div class="profile-row" onclick="toggleTheme()">
+      <i class="fa-solid fa-palette"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label">Тема</div>
+        <div class="profile-row-sub" id="themeLabel">Тёмная</div>
+      </div>
+    </div>
+    <div class="profile-row" onclick="Notify.toggleEnabled()">
+      <i class="fa-solid fa-bell" id="notifIcon"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label">Уведомления</div>
+        <div class="profile-row-sub" id="notifStatusLabel">Включены</div>
+      </div>
+    </div>
+  </div>
+  <!-- Logout -->
+  <div class="profile-section">
+    <div class="profile-row" onclick="Auth.logout()">
+      <i class="fa-solid fa-right-from-bracket" style="color:var(--danger)"></i>
+      <div class="profile-row-content">
+        <div class="profile-row-label" style="color:var(--danger)">Выйти из аккаунта</div>
+      </div>
+    </div>
+  </div>
+  <div style="height:40px"></div>
+</div>
+
+<!-- PAGE: ECONOMY -->
+<div id="page-economy" class="page">
+  <div class="profile-header-bar"><button class="icon-btn" onclick="goBackPage()"><i class="fa-solid fa-arrow-left"></i></button><span class="title">Кошелёк</span></div>
+  <div class="economy-balance-card">
+    <div class="economy-balance-label">Ваш баланс</div>
+    <div class="economy-balance-amount">...</div>
+    <div class="economy-balance-currency">💎 Пульсов</div>
+    <div id="economyRate" style="font-size:13px;opacity:0.6;margin-top:4px"></div>
+  </div>
+  <div class="economy-actions">
+    <div class="economy-action-btn" onclick="Economy.openTransferModal()"><i class="fa-solid fa-paper-plane"></i><span>Перевод</span></div>
+    <div class="economy-action-btn" onclick="showPage('top')"><i class="fa-solid fa-trophy"></i><span>ТОП</span></div>
+    <div class="economy-action-btn" onclick="showPage('lottery')"><i class="fa-solid fa-ticket"></i><span>Лотерея</span></div>
+  </div>
+  <div class="profile-section" style="margin-top:20px">
+    <div class="section-title">Последние операции</div>
+    <div id="economyTransactions">
+      <div style="text-align:center;padding:20px"><div class="auth-spinner" style="width:24px;height:24px;border-width:2px;margin:0 auto"></div></div>
+    </div>
+  </div>
+  <div style="height:40px"></div>
+</div>
+
+<!-- PAGE: TOP -->
+<div id="page-top" class="page">
+  <div class="profile-header-bar"><button class="icon-btn" onclick="goBackPage()"><i class="fa-solid fa-arrow-left"></i></button><span class="title">ТОП</span></div>
+  <div class="top-tabs">
+    <div class="top-tab active" data-tab="rich" onclick="Economy.loadTop('rich')">💰 Богачи</div>
+    <div class="top-tab" data-tab="active" onclick="Economy.loadTop('active')">⚡ Активисты</div>
+  </div>
+  <div class="top-list" id="topList"></div>
+  <div style="height:40px"></div>
+</div>
+<!-- Модалка создания группы -->
+<div id="modalCreate" class="modal">
+  <div class="modal-content">
+    <h3>Создать сообщество</h3>
+    <input type="text" id="newGroupName" placeholder="Название группы...">
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeModal()">Отмена</button>
+      <button class="btn-primary" onclick="processCreateGroup()">Создать</button>
+    </div>
+  </div>
+</div>
+
+<!-- Модалка создания ветки (Topics) -->
+<div id="modalCreateTopic" class="modal">
+  <div class="modal-content">
+    <h3>Новая ветка</h3>
+    <p style="font-size:13px;color:var(--text-2);margin-bottom:16px">Ветка — это отдельная тема для обсуждения внутри сообщества</p>
+    <input type="text" id="newTopicName" placeholder="Название ветки..." maxlength="64">
+    <div class="topic-suggestions">
+      <span class="topic-chip" onclick="document.getElementById('newTopicName').value='💬 Общий чат'">💬 Общий чат</span>
+      <span class="topic-chip" onclick="document.getElementById('newTopicName').value='📢 Новости'">📢 Новости</span>
+      <span class="topic-chip" onclick="document.getElementById('newTopicName').value='❓ Вопросы'">❓ Вопросы</span>
+      <span class="topic-chip" onclick="document.getElementById('newTopicName').value='📷 Медиа'">📷 Медиа</span>
+    </div>
+    <div class="modal-actions">
+      <button class="btn-outline" onclick="closeTopicModal()">Отмена</button>
+      <button class="btn-primary" onclick="processCreateTopic()">Создать</button>
+    </div>
+  </div>
+</div>
+<!-- PAGE: LOTTERY -->
+<div id="page-lottery" class="page">
+  <div class="profile-header-bar"><button class="icon-btn" onclick="goBackPage()"><i class="fa-solid fa-arrow-left"></i></button><span class="title">Лотерея</span></div>
+  <div class="lottery-jackpot">
+    <div class="lottery-jackpot-label">Джекпот</div>
+    <div class="lottery-jackpot-amount" id="lotteryJackpot">...</div>
+  </div>
+  <div class="lottery-ticket-grid">
+    <div class="lottery-ticket" onclick="Economy.buyTicket(1)"><div class="price">100 💎</div><div class="label">1 билет</div></div>
+    <div class="lottery-ticket" onclick="Economy.buyTicket(3)"><div class="price">300 💎</div><div class="label">3 билета</div></div>
+    <div class="lottery-ticket" onclick="Economy.buyTicket(5)"><div class="price">500 💎</div><div class="label">5 билетов</div></div>
+    <div class="lottery-ticket" onclick="Economy.buyTicket(10)"><div class="price">1 000 💎</div><div class="label">10 билетов</div></div>
+  </div>
+  <div class="profile-section">
+    <div class="section-title" id="lotteryMyTickets">Ваши билеты: 0</div>
+    <div id="lotteryStats"></div>
+  </div>
+  <div style="height:40px"></div>
+</div>
+
+<!-- PAGE: BBS -->
+<div id="page-bbs" class="page">
+  <div class="profile-header-bar"><button class="icon-btn" onclick="goBackPage()"><i class="fa-solid fa-arrow-left"></i></button><span class="title">Pulse BBS</span><button class="icon-btn"><i class="fa-solid fa-plus"></i></button></div>
+  <div id="bbsList" style="overflow-y:auto;flex:1"></div>
+  <div style="height:40px"></div>
+</div>
+
+<!-- SCRIPTS -->
+<script src="js/utils/helpers.js"></script>
+<script src="js/utils/api.js"></script>
+<script src="js/core/state.js"></script>
+<script src="js/data/mock.js"></script>
+<script src="js/modules/auth.js"></script>
+<script src="js/modules/invite.js"></script>
+<script src="js/modules/sidebar.js"></script>
+<script src="js/modules/chat.js"></script>
+<script src="js/modules/economy.js"></script>
+<script src="js/modules/profile.js"></script>
+<script src="js/modules/voice.js"></script>
+<script src="js/modules/polls.js"></script>
+<script src="js/modules/admin.js"></script>
+<script src="js/core/app.js"></script>
+</body>
+</html>

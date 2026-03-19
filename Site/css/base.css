@@ -1,0 +1,71 @@
+/* ===================================================
+   PULSE CHAT — Base Reset & Typography
+   =================================================== */
+
+*, *::before, *::after {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  height: 100%;
+  overflow: hidden;
+  font-family: var(--font-main);
+  font-size: 15px;
+  color: var(--text-0);
+  background: var(--bg-0);
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+  transition: background var(--transition), color var(--transition);
+}
+
+button {
+  border: none;
+  background: none;
+  cursor: pointer;
+  color: inherit;
+  font-family: inherit;
+}
+
+input, textarea {
+  border: none;
+  outline: none;
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+  background: none;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img {
+  display: block;
+  max-width: 100%;
+}
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--text-3); border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-2); }
+
+/* Selection */
+::selection { background: var(--accent-soft); }
+
+/* Focus visible */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ===== LIGHT THEME ADJUSTMENTS ===== */
+[data-theme="light"] .slide-menu { box-shadow: 4px 0 24px rgba(0,0,0,0.12); }
+[data-theme="light"] .context-menu { background: var(--bg-1); box-shadow: 0 2px 16px rgba(0,0,0,0.12); }
+[data-theme="light"] .reaction-picker { background: var(--bg-1); }
+[data-theme="light"] .admin-panel-overlay { box-shadow: -2px 0 16px rgba(0,0,0,0.08); }
+[data-theme="light"] .info-panel-overlay { box-shadow: -2px 0 16px rgba(0,0,0,0.06); }
+[data-theme="light"] .chat-view::before { opacity: 0.01; }

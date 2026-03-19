@@ -1,0 +1,188 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Статистика активности и динамика пользователей. Вынесено из Database."""
+
+
+def update_user_activity(db, user_id, date, **kwargs):
+    """Update user activity statistics"""
+    db.cursor.execute('''
+        SELECT * FROM user_stats WHERE user_id = ? AND date = ?
+    ''', (user_id, date))
+
+    existing = db.cursor.fetchone()
+
+    if existing:
+        fields = []
+        values = []
+        for key, value in kwargs.items():
+            if value is not None:
+                fields.append(f"{key} = {key} + ?")
+                values.append(value)
+
+        if fields:
+            query = f"UPDATE user_stats SET {', '.join(fields)} WHERE user_id = ? AND date = ?"
+            values.extend([user_id, date])
+            db.cursor.execute(query, values)
+    else:
+        fields = ['user_id', 'date'] + list(kwargs.keys())
+        placeholders = ['?'] * len(fields)
+        values = [user_id, date] + list(kwargs.values())
+
+        query = f"INSERT INTO user_stats ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
+        db.cursor.execute(query, values)
+
+    db.conn.commit()
+
+
+def get_active_core_count(db, date):
+    """Get number of active users for date"""
+    db.cursor.execute('''
+        SELECT COUNT(DISTINCT user_id) as count
+        FROM user_stats
+        WHERE date = ? AND total_messages > 0
+    ''', (date,))
+    result = db.cursor.fetchone()
+    return result['count'] if result else 0
+
+
+def register_topic(db, chat_id, thread_id, thread_name=None):
+    """Register or update a topic/thread. Never overwrites a real name with a generic one."""
+    is_main = (thread_id is None)
+    default_name = 'General' if is_main else f'Ветка #{thread_id}'
+    name_to_insert = thread_name or default_name
+
+    # Check if a real name already exists
+    db.cursor.execute('''
+        SELECT thread_name FROM topics 
+        WHERE chat_id = ? AND thread_id IS ?
+    ''', (chat_id, thread_id))
+    existing = db.cursor.fetchone()
+
+    if existing:
+        existing_name = existing['thread_name'] or ''
+        is_new_generic = (
+            name_to_insert.startswith('Ветка #') or
+            name_to_insert.startswith('Ветка ') or
+            name_to_insert == default_name
+        )
+        is_existing_real = (
+            existing_name and
+            not existing_name.startswith('Ветка #') and
+            not existing_name.startswith('Ветка ')
+        )
+
+        if is_new_generic and is_existing_real:
+            # Keep existing real name, just bump counters
+            db.cursor.execute('''
+                UPDATE topics SET
+                    last_message_at = CURRENT_TIMESTAMP,
+                    total_messages = total_messages + 1
+                WHERE chat_id = ? AND thread_id IS ?
+            ''', (chat_id, thread_id))
+        else:
+            db.cursor.execute('''
+                UPDATE topics SET
+                    last_message_at = CURRENT_TIMESTAMP,
+                    total_messages = total_messages + 1,
+                    thread_name = ?
+                WHERE chat_id = ? AND thread_id IS ?
+            ''', (name_to_insert, chat_id, thread_id))
+    else:
+        db.cursor.execute('''
+            INSERT INTO topics (chat_id, thread_id, thread_name, is_main_thread,
+                                last_message_at, total_messages)
+            VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP, 1)
+        ''', (chat_id, thread_id, name_to_insert, is_main))
+
+    db.conn.commit()
+
+
+def update_topic_name(db, chat_id, thread_id, thread_name):
+    """Force-update topic name (from forum service messages). Always overwrites."""
+    db.cursor.execute('''
+        INSERT INTO topics (chat_id, thread_id, thread_name, is_main_thread,
+                            last_message_at, total_messages)
+        VALUES (?, ?, ?, 0, CURRENT_TIMESTAMP, 0)
+        ON CONFLICT(chat_id, thread_id) DO UPDATE SET
+            thread_name = ?
+    ''', (chat_id, thread_id, thread_name, thread_name))
+    db.conn.commit()
+
+
+def purge_unnamed_topics(db, chat_id):
+    """Remove topics that only have generic names (Ветка #xxx)."""
+    db.cursor.execute('''
+        DELETE FROM topics 
+        WHERE chat_id = ? 
+          AND is_main_thread = 0
+          AND (thread_name LIKE 'Ветка #%' OR thread_name LIKE 'Ветка %')
+          AND thread_name NOT LIKE '%General%'
+    ''', (chat_id,))
+    deleted = db.cursor.rowcount
+    db.conn.commit()
+    return deleted
+
+
+def get_all_topics(db, chat_id):
+    """Get all topics/threads for a chat"""
+    db.cursor.execute('''
+        SELECT * FROM topics 
+        WHERE chat_id = ?
+        ORDER BY is_main_thread DESC, total_messages DESC
+    ''', (chat_id,))
+    return db.cursor.fetchall()
+
+
+def get_joined_users_count(db, start_date, end_date):
+    """Получить количество вступивших пользователей за период"""
+    db.cursor.execute('''
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE joined_at >= ? AND joined_at <= ?
+          AND is_admin = 0 AND is_owner = 0
+    ''', (start_date, end_date))
+
+    result = db.cursor.fetchone()
+    return result['count'] if result else 0
+
+
+def get_left_users_count(db, start_date, end_date):
+    """Получить количество вышедших пользователей за период"""
+    db.cursor.execute('''
+        SELECT COUNT(*) as count 
+        FROM transactions
+        WHERE transaction_type = 'return_on_leave'
+          AND timestamp >= ? AND timestamp <= ?
+    ''', (start_date, end_date))
+
+    result = db.cursor.fetchone()
+    return result['count'] if result else 0
+
+
+def get_user_dynamics_stats(db, start_date, end_date):
+    """Получить расширенную статистику динамики пользователей"""
+    joined = get_joined_users_count(db, start_date, end_date)
+    left = get_left_users_count(db, start_date, end_date)
+
+    db.cursor.execute('''
+        SELECT COUNT(*) as count 
+        FROM users 
+        WHERE joined_at < ?
+          AND is_admin = 0 AND is_owner = 0
+    ''', (start_date,))
+
+    initial_users = db.cursor.fetchone()['count']
+    net_change = joined - left
+
+    retention_rate = 0.0
+    if initial_users > 0:
+        retention_rate = ((initial_users - left) / initial_users) * 100
+
+    return {
+        'joined': joined,
+        'left': left,
+        'net_change': net_change,
+        'initial_users': initial_users,
+        'retention_rate': round(retention_rate, 1),
+        'final_users': initial_users + joined - left
+    }
