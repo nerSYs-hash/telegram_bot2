@@ -486,7 +486,8 @@ class CallbackHandler:
         if is_owner:
             if self.db.is_feature_enabled('statistics'):
                 keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
-
+            
+            keyboard.append([InlineKeyboardButton("💾 Скачать БД (Бэкап)", callback_data="owner_backup")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
