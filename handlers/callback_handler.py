@@ -44,6 +44,13 @@ from handlers.horoscope_handler import (
     diagnose_emoji,
 )
 from handlers.bbs_handlers import handle_bbs_callback
+from handlers.reactor_handlers import (
+    show_reactor_menu, handle_reactor_donate_fixed,
+    handle_reactor_donate_custom_start, handle_reactor_feature,
+    show_reactor_admin, reactor_admin_reset, reactor_admin_set_target,
+    reactor_admin_set_status, reactor_admin_custom_target_start,
+    ensure_reactor_tables,
+)
 
 class CallbackHandler:
     def __init__(self, db, target_chat_id, main_admin_id, bot_username):
@@ -55,6 +62,9 @@ class CallbackHandler:
         self.lottery_handler = LotteryHandler(db, target_chat_id, main_admin_id, bot_username)
         self.bingo_handler = BingoHandler(db, target_chat_id, main_admin_id, bot_username)
         self.gift_handler = GiftHandler(db, target_chat_id, main_admin_id)
+        
+        # Инициализация таблиц Реактора
+        ensure_reactor_tables(db)
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all callback queries"""
@@ -415,6 +425,49 @@ class CallbackHandler:
         elif data.startswith("detail_export_"):
             await self.export_user_detalization(query, data, user, context)
         
+        # ═══ REACTOR 2.0 CALLBACKS ═══
+        elif data == "menu_reactor":
+            if not self.db.is_feature_enabled('reactor'):
+                await query.answer("🔋 Реактор временно отключён.", show_alert=True)
+                return
+            is_owner = user.id == self.main_admin_id
+            await show_reactor_menu(query, context, self.db, user.id, is_owner=is_owner)
+
+        elif data.startswith("reactor_donate_") and data != "reactor_donate_custom":
+            if not self.db.is_feature_enabled('reactor'):
+                await query.answer("🔋 Реактор временно отключён.", show_alert=True)
+                return
+            await handle_reactor_donate_fixed(query, data, user, context, self.db, self.target_chat_id)
+
+        elif data == "reactor_donate_custom":
+            if not self.db.is_feature_enabled('reactor'):
+                await query.answer("🔋 Реактор временно отключён.", show_alert=True)
+                return
+            await handle_reactor_donate_custom_start(query, user, context, self.db)
+
+        elif data.startswith("reactor_feat_"):
+            if not self.db.is_feature_enabled('reactor'):
+                await query.answer("🔋 Реактор временно отключён.", show_alert=True)
+                return
+            await handle_reactor_feature(query, data, self.db, user.id)
+
+        elif data == "reactor_admin":
+            await show_reactor_admin(query, context, self.db, user.id, self.main_admin_id)
+
+        elif data == "reactor_admin_reset":
+            await reactor_admin_reset(query, context, self.db, user.id, self.main_admin_id)
+
+        elif data.startswith("reactor_admin_target_") and data != "reactor_admin_target_custom":
+            target_val = data.replace("reactor_admin_target_", "")
+            await reactor_admin_set_target(query, context, self.db, user.id, self.main_admin_id, target_val)
+
+        elif data == "reactor_admin_target_custom":
+            await reactor_admin_custom_target_start(query, user, context, self.db, self.main_admin_id)
+
+        elif data.startswith("reactor_admin_status_"):
+            new_status = data.replace("reactor_admin_status_", "")
+            await reactor_admin_set_status(query, context, self.db, user.id, self.main_admin_id, new_status)
+
         # ═══ DONATE CALLBACKS ═══
         elif data == "donate_menu":
             await show_donate_menu(query, user, self.db)
@@ -479,6 +532,9 @@ class CallbackHandler:
 
         if self.db.is_feature_enabled('bbs'):
             keyboard.append([InlineKeyboardButton("❣️ Pulse BBS", callback_data="menu_bbs")])
+        
+        if self.db.is_feature_enabled('reactor'):
+            keyboard.append([InlineKeyboardButton("🔋 Реактор 2.0", callback_data="menu_reactor")])
         
         keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
         
@@ -863,6 +919,10 @@ class CallbackHandler:
             keyboard.append([InlineKeyboardButton("🎁 Подарок месяца (управление)", callback_data="menu_monthly_gift")])
         elif monthly_gift_enabled:
             keyboard.append([InlineKeyboardButton("🎁 Подарок месяца", callback_data="monthly_gift_user_view")])
+        
+        # Reactor 2.0
+        if self.db.is_feature_enabled('reactor'):
+            keyboard.append([InlineKeyboardButton("🔋 Реактор 2.0", callback_data="menu_reactor")])
         
         # Back button
         keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])

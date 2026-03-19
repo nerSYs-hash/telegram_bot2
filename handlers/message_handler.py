@@ -25,6 +25,7 @@ from handlers.messages.admin_logic import (
 from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.bbs_handlers import process_bbs_input
+from handlers.reactor_handlers import handle_reactor_custom_amount, handle_reactor_admin_custom_target
 
 # ═══ Тексты кнопок ReplyKeyboard (должны совпадать с system_commands.py) ═══
 REPLY_BTN_PROFILE = "👤 Профиль"
@@ -540,6 +541,8 @@ class MessageHandler:
                     kb.append([InlineKeyboardButton("🎁 Подарок месяца (управление)", callback_data="menu_monthly_gift")])
                 elif monthly_gift_enabled:
                     kb.append([InlineKeyboardButton("🎁 Подарок месяца", callback_data="monthly_gift_user_view")])
+                if self.db.is_feature_enabled('reactor'):
+                    kb.append([InlineKeyboardButton("🔋 Реактор 2.0", callback_data="menu_reactor")])
                 await message.reply_text("🎯 АКТИВНОСТИ\n\nВыберите активность:", reply_markup=InlineKeyboardMarkup(kb))
                 return
             elif btn == REPLY_BTN_BANK:
@@ -574,6 +577,22 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
         
+        # ═══ REACTOR 2.0: обработка «Своя сумма» и «Своя цель» (доступно ВСЕМ в ЛС) ═══
+        if message.text:
+            if context.user_data.get('awaiting_reactor_custom'):
+                handled = await handle_reactor_custom_amount(
+                    update, context, self.db, self.target_chat_id
+                )
+                if handled:
+                    return
+
+            if context.user_data.get('awaiting_reactor_target'):
+                handled = await handle_reactor_admin_custom_target(
+                    update, context, self.db, self.main_admin_id
+                )
+                if handled:
+                    return
+
         # ═══ BBS FSM — доступен ВСЕМ пользователям в ЛС ═══
         if await process_bbs_input(message, context, self.db):
             return
@@ -611,6 +630,9 @@ class MessageHandler:
             context.user_data.pop('bbs_edit_photos', None)
             context.user_data.pop('bbs_edit_cities', None)
             context.user_data.pop('bbs_edit_goals', None)
+            # Reactor 2.0 cleanup
+            context.user_data.pop('awaiting_reactor_custom', None)
+            context.user_data.pop('awaiting_reactor_target', None)
             await message.reply_text("❌ Действие отменено.")
             return
         

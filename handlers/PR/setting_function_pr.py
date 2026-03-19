@@ -24,12 +24,24 @@ async def show_settings(query, user, db, admin_id):
         await query.answer("У вас нет доступа к этой функции.", show_alert=True)
         return
 
-    reactor_balance = int(float(db.get_setting('reactor_balance', 0)))
-    reactor_goal = int(float(db.get_setting('reactor_goal', 10000)))
+    # Реактор: берём данные из reactor_state таблицы
+    try:
+        db.cursor.execute('SELECT current_pool, target_pool, status FROM reactor_state ORDER BY id DESC LIMIT 1')
+        r_state = db.cursor.fetchone()
+        if r_state:
+            reactor_balance = int(float(r_state['current_pool']))
+            reactor_goal = int(float(r_state['target_pool']))
+            reactor_status = r_state['status']
+        else:
+            reactor_balance, reactor_goal, reactor_status = 0, 100000, 'charging'
+    except Exception:
+        reactor_balance, reactor_goal, reactor_status = 0, 100000, 'charging'
+
+    reactor_pct = (reactor_balance / reactor_goal * 100) if reactor_goal > 0 else 0
 
     message = f"⚙️ НАСТРОЙКИ БОТА\n\n"
     message += f"🔋 Реактор: {format_number(reactor_balance)} / {format_number(reactor_goal)}\n"
-    message += f"📊 Прогресс: {(reactor_balance/reactor_goal)*100:.1f}%"
+    message += f"📊 Прогресс: {reactor_pct:.1f}% | Статус: {reactor_status}"
 
     keyboard = [
         [InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")],
@@ -69,6 +81,7 @@ async def show_features_management(query, user, db, admin_id):
         ('🔮 Гороскоп', 'horoscope'),
         ('❣️ Pulse BBS', 'bbs'),
         ('✏️ Ред. анкет BBS', 'bbs_edit'),
+        ('🔋 Реактор 2.0', 'reactor'),
     ]
 
     message = "🔧 УПРАВЛЕНИЕ ФУНКЦИЯМИ\n\n"
