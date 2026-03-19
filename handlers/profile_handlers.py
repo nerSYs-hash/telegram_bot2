@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import html
+import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import format_number, get_today_date_msk
@@ -84,7 +85,7 @@ async def show_profile(update_or_query, context, db, user_id):
         total_earned = 0.0
     
     try:
-        db.cursor.execute("SELECT SUM(amount) as tot FROM reactor WHERE user_id = ?", (user_id,))
+        db.cursor.execute("SELECT SUM(amount) as tot FROM reactor_contributions WHERE user_id = ?", (user_id,))
         tot_reactor_row = db.cursor.fetchone()
         reactor_donated = float(tot_reactor_row['tot'] or 0) if tot_reactor_row else 0.0
     except Exception:
@@ -163,12 +164,14 @@ async def show_profile(update_or_query, context, db, user_id):
 
     try:
         await send_method(text, reply_markup=reply_markup, parse_mode='HTML')
-    except Exception:
+    except Exception as e:
+        logging.error(f"[show_profile] send_method ошибка: {e}", exc_info=True)
         try:
-            if hasattr(update_or_query, 'message') and update_or_query.message:
+            # Fallback: при ошибке edit пытаемся отправить новое сообщение
+            if hasattr(update_or_query, 'message') and hasattr(update_or_query.message, 'reply_text'):
                 await update_or_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
-        except:
-            pass
+        except Exception as fallback_e:
+            logging.error(f"[show_profile] fallback ошибка: {fallback_e}", exc_info=True)
 
 
 # ═══════════════════════════════════════════════════════════════

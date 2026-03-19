@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 
 import os
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, generate_referral_link, get_moscow_time, get_today_date_msk
@@ -191,7 +192,14 @@ class CallbackHandler:
             await self.refresh_referral_link(query, user, context)
         # Menu callbacks
         elif data == "menu_profile":
-            await show_profile(query, context, self.db, user.id)
+            try:
+                await show_profile(query, context, self.db, user.id)
+            except Exception as e:
+                logging.error(f"[menu_profile] Ошибка: {e}", exc_info=True)
+                try:
+                    await query.answer(f"❌ Ошибка профиля: {e}", show_alert=True)
+                except:
+                    pass
         elif data == "profile_settings":
             await show_profile_settings(query, user, self.db)
         elif data.startswith("prof_notif_") or data.startswith("prof_age_"):

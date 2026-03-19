@@ -22,8 +22,12 @@ def get_main_reply_keyboard(db):
     Нижняя клавиатура — только базовые кнопки.
     Всё остальное — через inline-меню (📋 Меню).
     """
+    # Логика: если профиль включен — показываем его, иначе показываем баланс
+    profile_enabled = db.is_feature_enabled('profile')
+    balance_or_profile = KeyboardButton("👤 Профиль") if profile_enabled else KeyboardButton("💰 Баланс")
+    
     keyboard = [
-        [KeyboardButton("💰 Баланс"), KeyboardButton("📊 Курс")],
+        [balance_or_profile, KeyboardButton("📊 Курс")],
         [KeyboardButton("❓ FAQ"), KeyboardButton("📋 Меню")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
@@ -155,7 +159,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
         await update.message.reply_text("Сначала используй /start")
         return
 
-    is_owner = user.id == admin_id or user_data.get('is_owner')
+    is_owner = user.id == admin_id or user_data.get['is_owner']
 
     # Обычные пользователи — только в ЛС
     if not is_owner and update.effective_chat.type != 'private':
@@ -173,6 +177,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
     keyboard = []
 
     # ── Кнопки для ВСЕХ (если функция включена) ──
+    if db.is_feature_enabled('profile'):
+        keyboard.append([InlineKeyboardButton("👤 Профиль", callback_data="menu_profile")])
+
     if db.is_feature_enabled('top') or db.is_feature_enabled('top_commands'):
         keyboard.append([InlineKeyboardButton("🏆 ТОП-5", callback_data="menu_top5")])
 
@@ -192,11 +199,11 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
 
     # ── Владелец ──
     if is_owner:
-        if db.is_feature_enabled('statistics'):
-            keyboard.append([InlineKeyboardButton("💾 Скачать БД (Бэкап)", callback_data="owner_backup")])
-            keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
-            
         keyboard.append([InlineKeyboardButton("💾 Скачать БД (Бэкап)", callback_data="owner_backup")])
+        
+        if db.is_feature_enabled('statistics'):
+            keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
+        
         keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
         keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
