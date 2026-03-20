@@ -71,3 +71,37 @@ function linkify(text) {
   text = text.replace(/@(\w+)/g, '<span class="msg-mention" onclick="event.stopPropagation()">@$1</span>');
   return text;
 }
+
+// ═══ TG Ripple Effect ═══
+function initRipple(el) {
+  if (!el || el._rippleInit) return;
+  el._rippleInit = true;
+  el.classList.add('rp');
+  el.addEventListener('pointerdown', function(e) {
+    const rippleContainer = document.createElement('div');
+    rippleContainer.className = 'c-ripple';
+    const circle = document.createElement('div');
+    circle.className = 'c-ripple__circle';
+    const rect = el.getBoundingClientRect();
+    const size = Math.max(rect.width, rect.height) * 2;
+    circle.style.width = circle.style.height = size + 'px';
+    circle.style.left = (e.clientX - rect.left - size/2) + 'px';
+    circle.style.top = (e.clientY - rect.top - size/2) + 'px';
+    rippleContainer.appendChild(circle);
+    el.appendChild(rippleContainer);
+    setTimeout(() => rippleContainer.remove(), 400);
+  });
+}
+
+// ═══ TG Avatar Gradient Colors ═══
+const TG_AVATAR_COLORS = ['red','orange','violet','green','cyan','blue','pink'];
+function getAvatarColor(id) {
+  return TG_AVATAR_COLORS[(id || 0) % TG_AVATAR_COLORS.length];
+}
+function makeAvatarHTML(name, id, size) {
+  const s = size || 54;
+  const color = getAvatarColor(id);
+  const initials = name ? (name.length >= 2 ? name.substring(0,2) : name[0] || '?').toUpperCase() : '?';
+  const fontSize = Math.round(s * 0.38);
+  return `<div class="avatar-gradient" data-color="${color}" style="width:${s}px;height:${s}px;font-size:${fontSize}px">${initials}</div>`;
+}

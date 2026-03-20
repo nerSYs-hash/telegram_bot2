@@ -142,7 +142,7 @@
     </div>
   </div>
   <div id="chatView" class="chat-view">
-    <div class="chat-header"><button class="icon-btn back-btn" onclick="goBack()"><i class="fa-solid fa-arrow-left"></i></button><div class="chat-header-avatar" id="chatAvatar"></div><div class="chat-header-info" onclick="Chat.toggleInfoPanel()"><div class="chat-header-name" id="chatName">Pulse Chat</div><div class="chat-header-status" id="chatStatus"></div></div><div class="chat-header-actions"><button class="icon-btn" onclick="Chat.toggleChatSearch()"><i class="fa-solid fa-magnifying-glass"></i></button><button class="icon-btn" onclick="Chat.toggleInfoPanel()"><i class="fa-solid fa-ellipsis-vertical"></i></button></div></div>
+    <div class="chat-header"><button class="icon-btn back-btn" onclick="goBack()"><i class="fa-solid fa-arrow-left"></i></button><div class="chat-header-avatar" id="chatAvatar"></div><div class="chat-header-info" onclick="Chat.toggleInfoPanel()"><div class="chat-header-name" id="chatName">Pulse Chat</div><div class="chat-header-status" id="chatStatus"></div></div><div class="chat-header-actions"><button class="icon-btn call-header-btn" id="callAudioBtn" onclick="Calls.startCall(Chat.chatMeta?.peerId,Chat.chatMeta?.name,false)" style="display:none"><i class="fa-solid fa-phone"></i></button><button class="icon-btn call-header-btn" id="callVideoBtn" onclick="Calls.startCall(Chat.chatMeta?.peerId,Chat.chatMeta?.name,true)" style="display:none"><i class="fa-solid fa-video"></i></button><button class="icon-btn" onclick="Chat.toggleChatSearch()"><i class="fa-solid fa-magnifying-glass"></i></button><button class="icon-btn" onclick="Chat.toggleInfoPanel()"><i class="fa-solid fa-ellipsis-vertical"></i></button></div></div>
     <!-- Search in chat -->
     <div class="chat-search-panel" id="chatSearchPanel" style="display:none"><input type="text" id="chatSearchInput" placeholder="Поиск по сообщениям..." oninput="Chat.searchInChat(this.value)"><button class="icon-btn" onclick="Chat.toggleChatSearch()" style="width:32px;height:32px"><i class="fa-solid fa-xmark"></i></button></div>
     <div class="messages-area" id="messagesArea"><div class="messages-container" id="messagesContainer"></div></div>
@@ -480,6 +480,8 @@
 <script src="js/modules/economy.js"></script>
 <script src="js/modules/profile.js"></script>
 <script src="js/modules/voice.js"></script>
+<script src="js/modules/mediaplayer.js"></script>
+<script src="js/modules/calls.js"></script>
 <script src="js/modules/polls.js"></script>
 <script src="js/modules/admin.js"></script>
 <script src="js/core/app.js"></script>

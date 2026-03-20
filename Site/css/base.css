@@ -69,3 +69,48 @@ img {
 [data-theme="light"] .admin-panel-overlay { box-shadow: -2px 0 16px rgba(0,0,0,0.08); }
 [data-theme="light"] .info-panel-overlay { box-shadow: -2px 0 16px rgba(0,0,0,0.06); }
 [data-theme="light"] .chat-view::before { opacity: 0.01; }
+
+/* ═══ TG Ripple Effect ═══ */
+.rp { position: relative; overflow: hidden; }
+.c-ripple {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.c-ripple__circle {
+  display: block;
+  position: absolute;
+  border-radius: 50%;
+  background-color: var(--ripple-color, rgba(0,0,0,0.08));
+  transform: scale(0);
+  animation: ripple-effect 0.35s ease-out forwards;
+  pointer-events: none;
+}
+[data-theme="dark"] .c-ripple__circle,
+.dark .c-ripple__circle {
+  --ripple-color: rgba(255,255,255,0.08);
+}
+@keyframes ripple-effect {
+  to { transform: scale(4); opacity: 0; }
+}
+
+/* ═══ TG Avatar Gradients ═══ */
+.avatar-gradient {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  color: #fff;
+  font-weight: 600;
+  text-transform: uppercase;
+  user-select: none;
+}
+.avatar-gradient[data-color="red"]    { background: linear-gradient(var(--peer-avatar-red-top), var(--peer-avatar-red-bottom)); }
+.avatar-gradient[data-color="orange"] { background: linear-gradient(var(--peer-avatar-orange-top), var(--peer-avatar-orange-bottom)); }
+.avatar-gradient[data-color="violet"] { background: linear-gradient(var(--peer-avatar-violet-top), var(--peer-avatar-violet-bottom)); }
+.avatar-gradient[data-color="green"]  { background: linear-gradient(var(--peer-avatar-green-top), var(--peer-avatar-green-bottom)); }
+.avatar-gradient[data-color="cyan"]   { background: linear-gradient(var(--peer-avatar-cyan-top), var(--peer-avatar-cyan-bottom)); }
+.avatar-gradient[data-color="blue"]   { background: linear-gradient(var(--peer-avatar-blue-top), var(--peer-avatar-blue-bottom)); }
+.avatar-gradient[data-color="pink"]   { background: linear-gradient(var(--peer-avatar-pink-top), var(--peer-avatar-pink-bottom)); }

@@ -182,3 +182,14 @@
   --peer7: #6ec9cb;
   --peer8: #faa774;
 }
+
+/* ═══ TG Avatar Gradient Colors ═══ */
+:root {
+  --peer-avatar-red-top: #FF885E; --peer-avatar-red-bottom: #FF516A;
+  --peer-avatar-orange-top: #FFCD6B; --peer-avatar-orange-bottom: #FEC84C;
+  --peer-avatar-violet-top: #82B1FF; --peer-avatar-violet-bottom: #665FFF;
+  --peer-avatar-green-top: #A0DE7E; --peer-avatar-green-bottom: #54CB68;
+  --peer-avatar-cyan-top: #53EAD1; --peer-avatar-cyan-bottom: #28C9B7;
+  --peer-avatar-blue-top: #72D5FD; --peer-avatar-blue-bottom: #2A9EF1;
+  --peer-avatar-pink-top: #E0A2F3; --peer-avatar-pink-bottom: #D669ED;
+}

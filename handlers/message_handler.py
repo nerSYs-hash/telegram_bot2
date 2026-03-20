@@ -25,7 +25,7 @@ from handlers.messages.admin_logic import (
 from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.bbs_handlers import process_bbs_input
-from handlers.reactor_handlers import handle_reactor_custom_amount, handle_reactor_admin_custom_target
+
 
 # ═══ Тексты кнопок ReplyKeyboard (должны совпадать с system_commands.py) ═══
 REPLY_BTN_PROFILE = "👤 Профиль"

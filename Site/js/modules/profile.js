@@ -17,10 +17,9 @@ const Profile = {
       const wrap = document.getElementById('profileAvatarWrap');
       if (wrap) {
         if (State.currentUser.photo) {
-          wrap.innerHTML = `<img src="${State.currentUser.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.innerHTML='<span id=profileInitials>${Profile._initials(data.name)}</span>'">`;
+          wrap.innerHTML = `<img src="${State.currentUser.photo}" style="width:100%;height:100%;border-radius:50%;object-fit:cover" onerror="this.parentElement.innerHTML=makeAvatarHTML('${escapeHTML(data.name)}',${data.user_id},120)">`;
         } else {
-          const el = document.getElementById('profileInitials');
-          if (el) el.textContent = this._initials(data.name);
+          wrap.innerHTML = makeAvatarHTML(data.name, data.user_id, 120);
         }
       }
 

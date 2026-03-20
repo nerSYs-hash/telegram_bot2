@@ -18,7 +18,7 @@ from telegram.ext import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
-from aiogram.client.telegram import TelegramAPIServer
+from telegram.ext import ApplicationBuilder
 # Import custom modules
 from database.db_manager import Database
 from handlers.command_handler import CommandHandler as BotCommandHandler

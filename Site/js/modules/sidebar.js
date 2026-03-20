@@ -23,9 +23,13 @@ const Sidebar = {
 
         const color = chat.avatar_color || '#54a9eb';
 
-        // Avatar content
-        let avatarContent = chat.name.substring(0, 2).toUpperCase();
-        if (chat.is_bot) avatarContent = '<i class="fa-solid fa-robot" style="font-size:20px"></i>';
+        // Avatar: TG gradient or bot icon
+        let avatarHTML;
+        if (chat.is_bot) {
+          avatarHTML = `<div style="background:#0088cc;width:var(--dialog-photo);height:var(--dialog-photo);display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-size:20px"><i class="fa-solid fa-robot"></i></div>`;
+        } else {
+          avatarHTML = makeAvatarHTML(chat.name, chat.id?.charCodeAt?.(0) || 0, 54);
+        }
 
         // Real timestamp from server (last_msg_ts) or fallback
         const timeStr = chat.last_msg_ts
@@ -49,9 +53,7 @@ const Sidebar = {
 
         item.innerHTML = `
           <div class="chat-item-avatar">
-            <div style="background:${color};width:var(--dialog-photo);height:var(--dialog-photo);display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:600;font-size:${chat.is_bot ? '20' : '18'}px">
-              ${avatarContent}
-            </div>
+            ${avatarHTML}
             ${chat.online ? '<div class="avatar-online"></div>' : ''}
           </div>
           <div class="chat-item-body">
@@ -69,6 +71,7 @@ const Sidebar = {
           </div>
         `;
         list.appendChild(item);
+        initRipple(item);
       });
 
       if (chats.length === 0) {

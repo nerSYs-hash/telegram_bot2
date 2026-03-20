@@ -150,12 +150,15 @@ class ConnectionManager:
     def __init__(self):
         # chat_id -> list of (ws, user_id, user_name)
         self.rooms: dict[str, list] = {}
+        # user_id -> ws (global registry for direct messages / calls)
+        self.users: dict[int, WebSocket] = {}
 
     async def connect(self, ws: WebSocket, chat_id: str, user_id: int, user_name: str):
         await ws.accept()
         if chat_id not in self.rooms:
             self.rooms[chat_id] = []
         self.rooms[chat_id].append((ws, user_id, user_name))
+        self.users[user_id] = ws  # Track globally
         print(f"🔗 WS: {user_name} joined {chat_id} ({len(self.rooms[chat_id])} online)")
 
     def disconnect(self, ws: WebSocket, chat_id: str):
@@ -163,6 +166,8 @@ class ConnectionManager:
             self.rooms[chat_id] = [(w, u, n) for w, u, n in self.rooms[chat_id] if w != ws]
             if not self.rooms[chat_id]:
                 del self.rooms[chat_id]
+        # Remove from global user registry
+        self.users = {k: v for k, v in self.users.items() if v != ws}
 
     async def broadcast(self, chat_id: str, message: dict, exclude_user: int = None):
         if chat_id not in self.rooms:
@@ -177,6 +182,17 @@ class ConnectionManager:
                 dead.append(ws)
         for ws in dead:
             self.disconnect(ws, chat_id)
+
+    async def send_to_user(self, user_id: int, message: dict):
+        """Send a message directly to a specific user (for calls)"""
+        ws = self.users.get(user_id)
+        if ws:
+            try:
+                await ws.send_json(message)
+                return True
+            except:
+                del self.users[user_id]
+        return False
 
 manager = ConnectionManager()
 
@@ -2249,11 +2265,58 @@ async def get_chat_members(chat_id: str):
 
 
 # ══════════════════════════════════════════════
+# API: WebRTC Calls (Signaling)
+# ══════════════════════════════════════════════
+
+class CallStartData(BaseModel):
+    caller_id: int
+    callee_id: int
+    video: bool = False
+
+@app.post("/api/call/start")
+async def call_start(data: CallStartData):
+    """Initiate a call — sends ring event to callee via WS"""
+    caller = db_bridge.get_user_data(data.caller_id)
+    caller_name = (caller.get('username') or caller.get('first_name')) if caller else f"User_{data.caller_id}"
+    
+    sent = await manager.send_to_user(data.callee_id, {
+        "type": "call_incoming",
+        "caller_id": data.caller_id,
+        "caller_name": caller_name,
+        "video": data.video,
+    })
+    
+    if not sent:
+        return {"status": "error", "detail": "Пользователь не в сети"}
+    
+    print(f"📞 Call: {caller_name} → User_{data.callee_id} ({'video' if data.video else 'audio'})")
+    return {"status": "success"}
+
+class CallSignalData(BaseModel):
+    from_id: int
+    to_id: int
+    signal_type: str  # "offer", "answer", "ice", "reject", "end"
+    data: Optional[dict] = None
+
+@app.post("/api/call/signal")
+async def call_signal(data: CallSignalData):
+    """Forward WebRTC signaling data between peers"""
+    await manager.send_to_user(data.to_id, {
+        "type": "call_signal",
+        "signal_type": data.signal_type,
+        "from_id": data.from_id,
+        "data": data.data,
+    })
+    return {"status": "success"}
+
+
+# ══════════════════════════════════════════════
 # STATIC: Serve frontend
 # ══════════════════════════════════════════════
 
 site_path = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 app.mount("/uploads", StaticFiles(directory=os.path.join(site_path, "uploads")), name="uploads")
+app.mount("/icons", StaticFiles(directory=os.path.join(site_path, "icons")), name="icons")
 app.mount("/css", StaticFiles(directory=os.path.join(site_path, "css")), name="css")
 app.mount("/js", StaticFiles(directory=os.path.join(site_path, "js")), name="js")
 app.mount("/api_docs", StaticFiles(directory=os.path.join(site_path, "api")), name="api_docs")

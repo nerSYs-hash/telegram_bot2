@@ -37,6 +37,9 @@ document.addEventListener('DOMContentLoaded', () => {
 
   console.log('✨ Pulse Chat initialized');
 
+  // Init ripple on static elements
+  document.querySelectorAll('.menu-item, .profile-row, .icon-btn').forEach(el => initRipple(el));
+
   // Reset title when tab becomes visible again
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && typeof Notify !== 'undefined') {

@@ -37,13 +37,21 @@ const Chat = {
     const isBot = chatMeta?.is_bot || false;
     const isGroup = chatMeta?.is_group || false;
 
-    this.chatMeta = { id: chatId, name, color, isBot, isGroup };
+    this.chatMeta = { id: chatId, name, color, isBot, isGroup, peerId: chatMeta?.peer_id || null };
 
     // Header
     const av = document.getElementById('chatAvatar');
-    const aCont = isBot ? '<i class="fa-solid fa-robot" style="font-size:16px"></i>' : initials;
-    av.innerHTML = `<div style="background:${color};width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-weight:600;font-size:15px">${aCont}</div>`;
+    if (isBot) {
+      av.innerHTML = `<div style="background:#0088cc;width:40px;height:40px;display:flex;align-items:center;justify-content:center;border-radius:50%;color:#fff;font-size:16px"><i class="fa-solid fa-robot"></i></div>`;
+    } else {
+      av.innerHTML = makeAvatarHTML(name, chatId?.charCodeAt?.(0) || 0, 40);
+    }
     document.getElementById('chatName').textContent = name;
+
+    // Call buttons (only for DM, non-bot)
+    const showCalls = !isBot && !isGroup && chatMeta?.peer_id;
+    document.getElementById('callAudioBtn').style.display = showCalls ? '' : 'none';
+    document.getElementById('callVideoBtn').style.display = showCalls ? '' : 'none';
 
     const st = document.getElementById('chatStatus');
     if (isBot) { st.textContent = 'бот'; st.className = 'chat-header-status online'; }
@@ -243,14 +251,25 @@ const Chat = {
           const hasText = msg.text && !msg.text.startsWith('📎');
           if (!hasText) isMediaOnly = true;
         } else if (msg.media_type === 'video') {
-          mediaHTML = `<div class="msg-media"><video src="${msg.media_url}" controls preload="metadata" style="max-width:100%;border-radius:12px"></video></div>`;
+          if (typeof MediaPlayer !== 'undefined') {
+            mediaHTML = `<div class="msg-media">${MediaPlayer.renderVideo(msg.media_url, msg.id)}</div>`;
+          } else {
+            mediaHTML = `<div class="msg-media"><video src="${msg.media_url}" controls preload="metadata" style="max-width:100%;border-radius:12px"></video></div>`;
+          }
         } else if (msg.media_type === 'voice') {
           const dur = msg._voiceDuration || Voice.parseDuration(msg.text) || 0;
           mediaHTML = Voice.renderPlayer(msg.media_url, msg.id, dur);
           const hasText = msg.text && !msg.text.startsWith('🎤');
           if (!hasText) isMediaOnly = false; // Voice always shows in bubble
         } else if (msg.media_type === 'audio') {
-          mediaHTML = `<div class="msg-media"><audio src="${msg.media_url}" controls style="width:100%"></audio></div>`;
+          const aTitle = (msg.media_name || 'Аудио').replace(/\.[^.]+$/, '');
+          mediaHTML = `<div class="msg-audio-card" onclick="MediaPlayer.play('${msg.media_url}',${JSON.stringify(aTitle)},'')">
+            <button class="voice-play-btn"><i class="fa-solid fa-play"></i></button>
+            <div style="flex:1;min-width:0">
+              <div style="font-size:14px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${escapeHTML(aTitle)}</div>
+              <div style="font-size:12px;color:var(--text-2)">Аудио</div>
+            </div>
+          </div>`;
         } else if (msg.media_type === 'poll') {
           // Poll - rendered async after DOM insert
           mediaHTML = `<div class="poll-container" id="poll_${msg.id}"><div style="text-align:center;padding:12px;color:var(--text-2)">Загрузка опроса...</div></div>`;
@@ -919,6 +938,12 @@ const Chat = {
             // Re-render the poll that was updated
             const pollMsg = this.messages.find(m => m.media_url === d.poll_id);
             if (pollMsg) Polls.renderPoll(d.poll_id, pollMsg.id);
+          }
+          else if (d.type === 'call_incoming' && typeof Calls !== 'undefined') {
+            Calls.handleIncoming(d.caller_id, d.caller_name, d.video);
+          }
+          else if (d.type === 'call_signal' && typeof Calls !== 'undefined') {
+            Calls.handleSignal(d.signal_type, d.from_id, d.data);
           }
           else if (d.type === 'pong') {
             // Keepalive confirmed
