@@ -423,6 +423,46 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in TOP-5 update: {e}")
 
+    async def error_handler(self, update, context):
+        """Handle errors"""
+        try:
+            logger.error(f"Exception while handling an update: {context.error}")
+            
+            # Log full traceback
+            import traceback
+            tb_list = traceback.format_exception(type(context.error), context.error, context.error.__traceback__)
+            tb_string = ''.join(tb_list)
+            logger.error(tb_string)
+            
+            # Try to notify user if it's a user update
+            if update and update.effective_user:
+                try:
+                    await context.bot.send_message(
+                        chat_id=update.effective_chat.id,
+                        text=f"❌ Произошла ошибка при обработке вашего запроса.\n\n"
+                             f"Ошибка: {str(context.error)[:200]}\n\n"
+                             f"Администратор уведомлен."
+                    )
+                except Exception as send_error:
+                    logger.error(f"Failed to notify user about error: {send_error}")
+            
+            # Notify admin
+            try:
+                error_msg = f"⚠️ ОШИБКА БОТА\n\n"
+                error_msg += f"Пользователь: {update.effective_user.first_name if update and update.effective_user else 'Unknown'}\n"
+                error_msg += f"Ошибка: {str(context.error)[:500]}\n\n"
+                error_msg += f"Время: {get_moscow_time().strftime('%d.%m.%Y %H:%M:%S')}"
+                
+                await context.bot.send_message(
+                    chat_id=self.main_admin_id,
+                    text=error_msg
+                )
+            except Exception as notify_error:
+                logger.error(f"Failed to notify admin about error: {notify_error}")
+        
+        except Exception as e:
+            logger.error(f"Error in error_handler itself: {e}")
+
     def setup_handlers(self):
         """Setup all handlers"""
         # Command handlers
@@ -475,6 +515,9 @@ class TelegramBot:
                 ChatMemberHandler.CHAT_MEMBER
             )
         )
+        
+        # Error handler (MUST be last)
+        self.application.add_error_handler(self.error_handler)
         
         logger.info("Handlers setup complete")
     

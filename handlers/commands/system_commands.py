@@ -159,7 +159,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
         await update.message.reply_text("Сначала используй /start")
         return
 
-    is_owner = user.id == admin_id or user_data.get['is_owner']
+    is_owner = user.id == admin_id or user_data['is_owner']
 
     # Обычные пользователи — только в ЛС
     if not is_owner and update.effective_chat.type != 'private':

@@ -45,6 +45,9 @@ from handlers.horoscope_handler import (
     diagnose_emoji,
 )
 from handlers.bbs_handlers import handle_bbs_callback
+from handlers.shop_handlers import (
+    show_shop_main, show_shop_category, show_shop_item, buy_shop_item
+)
 from handlers.reactor_handlers import (
     show_reactor_menu, handle_reactor_donate_fixed,
     handle_reactor_donate_custom_start, handle_reactor_feature,
@@ -163,9 +166,10 @@ class CallbackHandler:
         # Back to main menu
         if data == "back_to_menu":
             await self.show_main_menu(query, user)
+            return
         
         # Menu callbacks
-        elif data == "menu_balance":
+        if data == "menu_balance":
             await self.show_balance(query, user)
         elif data == "menu_top":
             await show_top(query, self.db, self.target_chat_id, context)
@@ -204,9 +208,26 @@ class CallbackHandler:
             await show_profile_settings(query, user, self.db)
         elif data.startswith("prof_notif_") or data.startswith("prof_age_"):
             await toggle_profile_setting(query, data, user, self.db)
+        
+        # ═══ МАГАЗИН CALLBACKS ═══
+        elif data == "shop_main":
+            await show_shop_main(query, context, self.db, user.id)
+        elif data.startswith("shop_cat_"):
+            cat_id = data.replace("shop_cat_", "")
+            await show_shop_category(query, context, self.db, user.id, cat_id)
+        elif data.startswith("shop_item_"):
+            parts = data.replace("shop_item_", "").split("_")
+            cat_id = parts[0]
+            item_id = parts[1]
+            await show_shop_item(query, context, self.db, user.id, cat_id, item_id)
+        elif data.startswith("shop_buy_"):
+            parts = data.replace("shop_buy_", "").split("_")
+            cat_id = parts[0]
+            item_id = parts[1]
+            await buy_shop_item(query, context, self.db, user.id, cat_id, item_id)
             
         # Заглушки для профиля
-        elif data in ["stub_quests", "stub_market", "stub_settings"]:
+        elif data in ["stub_quests", "stub_settings"]:
             await query.answer("🚧 Этот раздел находится в разработке! Следите за обновлениями.", show_alert=True)
         
         # Activities menu callback

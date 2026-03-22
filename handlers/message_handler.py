@@ -13,6 +13,17 @@ from utils.helpers import (
     format_number
 )
 from handlers.messages.mining_logic import process_mining_reward
+from handlers.shop_mechanics import (
+    should_announce_entrance,
+    get_pending_prank,
+    mark_prank_used,
+    get_active_bounty,
+    reward_bounty_hunter,
+    penalize_bounty_victim,
+    close_bounty,
+    apply_title_to_user,
+    remove_title_from_user,
+)
 
 from handlers.messages.events_logic import (
     handle_member_left, handle_reaction,
@@ -316,6 +327,55 @@ class MessageHandler:
             thread_id=thread_id       # Передаем ID ветки
         )
         
+        # ═══════════════════════════════════════════════════════════════════════════════
+        # === МЕХАНИКИ ТОВАРОВ ИЗ ЧЕРНОГО РЫНКА ===
+        # ═══════════════════════════════════════════════════════════════════════════════
+        
+        # 🚨 ВХОД С НОГИ (Глашатай) - объявление первого сообщения за день
+        if should_announce_entrance(self.db, user.id):
+            username = user.username or f"User{user.id}"
+            announcement = f"🚨 <b>ВНИМАНИЕ!</b> В чат зашел Олигарх @{username}!"
+            try:
+                await message.chat.send_message(announcement, parse_mode='HTML')
+            except Exception as e:
+                logging.warning(f"Could not announce entrance: {e}")
+        
+        # 🐸 ЯДОВИТЫЙ ПЛЕВОК (Пранк) - замена сообщения жертвы на "КВА-КВА!"
+        prank = get_pending_prank(self.db, user.id)
+        if prank:
+            try:
+                # Удаляем оригинальное сообщение жертвы
+                await message.delete()
+            except:
+                pass
+            
+            # Пишем сообщение о пранке
+            prank_msg = f"🐸 <b>@{user.username or f'User{user.id}'}</b> хотел что-то сказать, но вместо этого квакнул: <b>КВА-КВА!</b>"
+            try:
+                await message.chat.send_message(prank_msg, reply_to_message_id=message.reply_to_message.message_id if message.reply_to_message else None, parse_mode='HTML')
+            except:
+                await message.chat.send_message(prank_msg, parse_mode='HTML')
+            
+            # Помечаем пранк как использованный
+            mark_prank_used(self.db, prank['id'])
+            return  # Не продолжаем обработку
+        
+        # 🎯 ОХОТА НА ГОЛОВУ (Bounty) - проверяем, есть ли активный заказ
+        bounty = get_active_bounty(self.db)
+        if bounty and bounty.get('victim_id') == user.id:
+            # Это сообщение от жертвы! Кто первый ответит - получит награду
+            # Сохраняем это сообщение как "целевое" для баунти
+            try:
+                self.db.cursor.execute('''
+                    UPDATE marketplace_services
+                    SET content = ?
+                    WHERE id = ?
+                ''', (f"victim_id:{user.id}|msg_id:{message.message_id}", bounty['id']))
+                self.db.conn.commit()
+            except:
+                pass
+        
+        # ═════════════════════════════════════════════════════════════════════════════
         # === ДАЛЕЕ КОД ВЫПОЛНЯЕТСЯ ДЛЯ ВСЕХ (включая админов и владельца) ===
 
         # === КНОПКИ ReplyKeyboard в ГРУППОВОМ ЧАТЕ ===
@@ -597,6 +657,10 @@ class MessageHandler:
         if await process_bbs_input(message, context, self.db):
             return
         
+        # ═══ ОБРАБОТКА ТОВАРОВ ИЗ ЧЕРНОГО РЫНКА — доступна ВСЕМ пользователям в ЛС ═══
+        if message.text and await self._handle_shop_item_input(update, context):
+            return
+        
         # Only admin can use private chat features
         if user.id != self.main_admin_id:
             await message.reply_text(
@@ -649,6 +713,201 @@ class MessageHandler:
             "Для создания пресс-релиза:\n"
             "➡️ /menu → ⚙️ Настройки → 📰 Пресс-релиз"
         )
+    
+    async def _handle_shop_item_input(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> bool:
+        """Обработка ввода пользователя для товаров из черного рынка.
+        Возвращает True если сообщение было обработано.
+        """
+        message = update.message
+        user = message.from_user
+        
+        if not message.text:
+            return False
+        
+        text = message.text.strip()
+        awaiting = context.user_data.get('awaiting', '')
+        
+        # ═════════════════════════════════════════════════════════════════════════════
+        # 🏷️ КАСТОМНЫЙ ТИТУЛ (title_text_*)
+        # ═════════════════════════════════════════════════════════════════════════════
+        if awaiting.startswith('title_text_'):
+            user_id = int(awaiting.split('_')[-1])
+            if user.id == user_id and len(text) <= 16:
+                try:
+                    # Обновляем контент в БД с текстом титула
+                    self.db.cursor.execute('''
+                        UPDATE marketplace_services
+                        SET content = ?
+                        WHERE user_id = ? AND service_type = 'title' AND status = 'active'
+                        ORDER BY id DESC LIMIT 1
+                    ''', (text, user_id))
+                    self.db.conn.commit()
+                    
+                    # Выдаем админские права и кастомный титул в чате
+                    success = await apply_title_to_user(
+                        context=context,
+                        chat_id=self.target_chat_id,
+                        user_id=user_id,
+                        title_text=text
+                    )
+                    
+                    if success:
+                        confirmation_text = (
+                            f"✅ <b>ТИТУЛ УСТАНОВЛЕН И АКТИВИРОВАН!</b>\n\n"
+                            f"🏷️ Твой титул: <b>{text}</b>\n\n"
+                            f"✨ В интерфейсе Telegram вы теперь видны как модератор с этим титулом!\n"
+                            f"👥 Ваши админские права действуют 7 дней\n\n"
+                            f"<i>После истечения срока права будут автоматически сняты.</i>"
+                        )
+                    else:
+                        confirmation_text = (
+                            f"⚠️ <b>ТИТУЛ СОХРАНЕН, НО ПРАВА НЕ ВЫДАНЫ</b>\n\n"
+                            f"🏷️ Твой титул: <b>{text}</b>\n"
+                            f"(сохранено в БД, но бот не смог выдать админские права)\n\n"
+                            f"<i>Проверьте, что бот сам имеет админские права в чате.</i>"
+                        )
+                    
+                    await message.reply_text(confirmation_text, parse_mode='HTML')
+                    context.user_data.pop('awaiting', None)
+                    return True
+                except Exception as e:
+                    logger.error(f"Error setting title: {e}")
+                    await message.reply_text(f"❌ Ошибка при установке титула: {e}")
+                    return True
+            else:
+                await message.reply_text("❌ Титул слишком длинный (макс. 16 символов)")
+                return True
+        
+        # ═════════════════════════════════════════════════════════════════════════════
+        # 🐸 ЯДОВИТЫЙ ПЛЕВОК (prank_victim_*)
+        # ═════════════════════════════════════════════════════════════════════════════
+        if awaiting.startswith('prank_victim_'):
+            user_id = int(awaiting.split('_')[-1])
+            if user.id == user_id:
+                try:
+                    victim_id = int(text)
+                    
+                    # Обновляем пранк с ID жертвы
+                    self.db.cursor.execute('''
+                        UPDATE marketplace_services
+                        SET content = ?
+                        WHERE user_id = ? AND service_type = 'prank' AND status = 'pending'
+                        ORDER BY id DESC LIMIT 1
+                    ''', (f'victim_id:{victim_id}', user_id))
+                    self.db.conn.commit()
+                    
+                    await message.reply_text(
+                        f"✅ <b>ПРАНК ГОТОВ!</b>\n\n"
+                        f"🐸 Жертва: User{victim_id}\n\n"
+                        f"<i>Следующее сообщение жертвы будет заменено на 'КВА-КВА!'</i>",
+                        parse_mode='HTML'
+                    )
+                    context.user_data.pop('awaiting', None)
+                    return True
+                except ValueError:
+                    await message.reply_text("❌ Неверный ID жертвы. Укажите числовой ID.")
+                    return True
+                except Exception as e:
+                    logger.error(f"Error setting prank victim: {e}")
+                    await message.reply_text("❌ Ошибка")
+                    return True
+        
+        # ═════════════════════════════════════════════════════════════════════════════
+        # 📢 ГОЛОС СВЫШЕ (voice_text_*)
+        # ═════════════════════════════════════════════════════════════════════════════
+        if awaiting.startswith('voice_text_'):
+            user_id = int(awaiting.split('_')[-1])
+            if user.id == user_id and len(text) <= 200:
+                try:
+                    # Отмечаем "Голос Свыше" как использованный и сохраняем текст
+                    self.db.cursor.execute('''
+                        UPDATE marketplace_services
+                        SET status = 'used', content = ?
+                        WHERE user_id = ? AND service_type = 'voice_above' AND status = 'pending'
+                        ORDER BY id DESC LIMIT 1
+                    ''', (text, user_id))
+                    self.db.conn.commit()
+                    
+                    # Публикуем в главный чат (от имени бота)
+                    voice_msg = f"📢 <i>Голос Свыше:</i>\n\n{text}"
+                    try:
+                        sent_msg = await context.bot.send_message(
+                            chat_id=self.target_chat_id,
+                            text=voice_msg,
+                            parse_mode='HTML'
+                        )
+                        # Закрепляем на 1 час
+                        await context.bot.pin_chat_message(
+                            chat_id=self.target_chat_id,
+                            message_id=sent_msg.message_id
+                        )
+                        
+                        # Удалим закреп через час (не реализуем, т.к. нет scheduler здесь)
+                    except:
+                        pass
+                    
+                    await message.reply_text(
+                        f"✅ <b>СООБЩЕНИЕ ОПУБЛИКОВАНО!</b>\n\n"
+                        f"📢 Твой голос звучал в чате и был закреплен на 1 час\n\n"
+                        f"<i>Никто не узнает, что это был ты! 🤐</i>",
+                        parse_mode='HTML'
+                    )
+                    context.user_data.pop('awaiting', None)
+                    return True
+                except Exception as e:
+                    logger.error(f"Error publishing voice above: {e}")
+                    await message.reply_text("❌ Ошибка при публикации")
+                    return True
+            else:
+                await message.reply_text("❌ Сообщение слишком длинное (макс. 200 символов)")
+                return True
+        
+        # ═════════════════════════════════════════════════════════════════════════════
+        # 🎯 ЗАКАЗ ЗА ГОЛОВУ (bounty_victim_*)
+        # ═════════════════════════════════════════════════════════════════════════════
+        if awaiting.startswith('bounty_victim_'):
+            user_id = int(awaiting.split('_')[-1])
+            if user.id == user_id:
+                try:
+                    victim_id = int(text)
+                    
+                    # Обновляем заказ с ID жертвы
+                    self.db.cursor.execute('''
+                        UPDATE marketplace_services
+                        SET content = ?
+                        WHERE user_id = ? AND service_type = 'bounty' AND status = 'pending'
+                        ORDER BY id DESC LIMIT 1
+                    ''', (f'victim_id:{victim_id}', user_id))
+                    self.db.conn.commit()
+                    
+                    # Объявляем охоту в чате
+                    bounty_msg = f"🎯 <b>ВНИМАНИЕ! За голову</b> <b>User{victim_id}</b> <b>назначена награда!</b>\n\n<i>Первый, кто сделает Reply на следующее сообщение жертвы, получит куш 💰</i>"
+                    try:
+                        await context.bot.send_message(
+                            chat_id=self.target_chat_id,
+                            text=bounty_msg,
+                            parse_mode='HTML'
+                        )
+                    except:
+                        pass
+                    
+                    await message.reply_text(
+                        f"✅ <b>ОХОТА ОБЪЯВЛЕНА!</b>\n\n"
+                        f"🎯 Цель: User{victim_id}\n\n"
+                        f"<i>Охотники готовятся к прыжку...</i>",
+                        parse_mode='HTML'
+                    )
+                    context.user_data.pop('awaiting', None)
+                    return True
+                except ValueError:
+                    await message.reply_text("❌ Неверный ID цели. Укажите числовой ID.")
+                    return True
+                except Exception as e:
+                    logger.error(f"Error setting bounty victim: {e}")
+                    await message.reply_text("❌ Ошибка")
+                    return True
+        
+        return False
     
     async def publish_press_release(self, message, context):
         """Delegates to admin_logic"""

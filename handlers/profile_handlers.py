@@ -143,6 +143,35 @@ async def show_profile(update_or_query, context, db, user_id):
     text += f"🔥 <b>Открыто Комбо:</b> {combos_today} шт.\n"
     text += f"{ICON_ROCKET} <b>Закрыто Спринтов:</b> {sprints_today} шт.\n\n"
     
+    # ═════════════════════════════════════════════════════════════
+    # АКТИВНЫЕ УСЛУГИ ИЗ ЧЕРНОГО РЫНКА
+    # ═════════════════════════════════════════════════════════════
+    from handlers.shop_mechanics import get_active_services, get_service_remaining_time
+    
+    active_services = get_active_services(db, user_id)
+    if active_services:
+        text += f"🛒 <b>АКТИВНЫЕ УСЛУГИ</b>\n"
+        
+        service_labels = {
+            'shield': '🛡️ Щит',
+            'boost_x2': '⚡️ Бустер х2',
+            'entrance': '🚨 Вход с ноги',
+            'title': '🏷️ Титул',
+            'vip_top': '🌟 VIP в ТОПе',
+            'rp_cmds': '🎭 Ролевые команды',
+            'luck_paw': '🍀 Лапка на удачу',
+            'toad_skin': '🐸 Жабья шкура',
+            'neon_skin': '🖼️ Неоновое Болото',
+            'voice_above': '📢 Голос Свыше',
+        }
+        
+        for service_type, service_info in active_services.items():
+            label = service_labels.get(service_type, service_type)
+            remaining = get_service_remaining_time(service_info['expires_at'])
+            text += f"  {label}: <i>{remaining}</i>\n"
+        
+        text += "\n"
+    
     text += f"💘 <b>BBS (ЗНАКОМСТВА)</b>\n"
     if bbs_profile:
         import json
@@ -157,7 +186,7 @@ async def show_profile(update_or_query, context, db, user_id):
         text += f"💌 <b>Анкета:</b> Не создана\n"
 
     # ИСПРАВЛЕНИЕ: Кнопка настроек теперь ведет на настоящий маршрут, а не на заглушку
-    keyboard =[[InlineKeyboardButton("💸 Перевести Пульсы", callback_data="donate_to_user_start")],[InlineKeyboardButton("❤️ Моя Анкета BBS", callback_data="bbs_dating")],[InlineKeyboardButton("📜 Мои Квесты (Скоро)", callback_data="stub_quests"), InlineKeyboardButton("🛍 Рынок (Скоро)", callback_data="stub_market")],[InlineKeyboardButton("⚙️ Настройки Профиля", callback_data="profile_settings")],[InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_menu")]
+    keyboard =[[InlineKeyboardButton("💸 Перевести Пульсы", callback_data="donate_to_user_start")],[InlineKeyboardButton("❤️ Моя Анкета BBS", callback_data="bbs_dating")],[InlineKeyboardButton("📜 Мои Квесты (Скоро)", callback_data="stub_quests"), InlineKeyboardButton("🛍 Рынок", callback_data="shop_main")],[InlineKeyboardButton("⚙️ Настройки Профиля", callback_data="profile_settings")],[InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
