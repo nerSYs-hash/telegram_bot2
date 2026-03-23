@@ -147,7 +147,8 @@ def get_latest_top_snapshot(db):
         SELECT tah.*, u.username, u.first_name
         FROM top_activists_history tah
         JOIN users u ON tah.user_id = u.user_id
-        WHERE (tah.date, tah.time_slot) = (
+        WHERE u.is_left = 0
+          AND (tah.date, tah.time_slot) = (
             SELECT date, time_slot
             FROM top_activists_history
             ORDER BY id DESC
@@ -177,6 +178,7 @@ def get_previous_top_snapshot(db):
         FROM top_activists_history tah
         JOIN users u ON tah.user_id = u.user_id
         WHERE tah.date = ? AND tah.time_slot = ?
+          AND u.is_left = 0
         ORDER BY tah.rank ASC
     ''', (prev['date'], prev['time_slot']))
     return db.cursor.fetchall()
@@ -238,6 +240,7 @@ def get_all_top_appearances(db, days=30):
         FROM top_activists_history tah
         JOIN users u ON tah.user_id = u.user_id
         WHERE tah.date >= date('now', ?)
+          AND u.is_left = 0
         GROUP BY tah.user_id
         ORDER BY appearances DESC, best_rank ASC
     ''', (f'-{days} days',))

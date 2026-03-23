@@ -21,6 +21,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, get_today_date_msk
 from handlers.bbs_handlers import handle_bbs_reaction, on_member_left_cleanup
+from handlers.journal_handlers import log_join, log_leave
 
 
 async def handle_member_left(update, context, db, admin_id, target_chat_id):
@@ -169,6 +170,9 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     
     # Send exit interview
     try:
+        # ═══ ЖУРНАЛ: логируем выход ═══
+        await log_leave(context.bot, db, user_id)
+
         # ═══ BBS: удалить анкету покинувшего пользователя ═══
         await on_member_left_cleanup(context.bot, db, user_id, target_chat_id)
 
@@ -257,6 +261,9 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
     # Пометить пользователя как вернувшегося
     db.cursor.execute('UPDATE users SET is_left = 0 WHERE user_id = ?', (user_id,))
     db.conn.commit()
+    
+    # ═══ ЖУРНАЛ: логируем возврат ═══
+    await log_join(context.bot, db, user_id)
     
     # sqlite3.Row does NOT support .get() — use bracket access
     try:

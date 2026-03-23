@@ -219,16 +219,6 @@ class Database:
         ''')
 
         self.cursor.execute('''
-            CREATE TABLE IF NOT EXISTS reactor (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                user_id INTEGER NOT NULL,
-                amount INTEGER NOT NULL,
-                donated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-                FOREIGN KEY (user_id) REFERENCES users(user_id)
-            )
-        ''')
-
-        self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS referral_links (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
@@ -472,6 +462,14 @@ class Database:
         # Initialize BBS tables
         from handlers.bbs_handlers import init_bbs_tables
         init_bbs_tables(self)
+
+        # Initialize Triggers tables
+        from handlers.triggers_handlers import ensure_trigger_tables
+        ensure_trigger_tables(self)
+
+        # Initialize Journal tables
+        from handlers.journal_handlers import ensure_journal_tables
+        ensure_journal_tables(self)
 
         # Run migrations
         _migrate_to_decimal_balances(self)

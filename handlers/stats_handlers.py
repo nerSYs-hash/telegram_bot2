@@ -988,7 +988,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
                 COUNT(DISTINCT CASE WHEN us.total_messages > 0 THEN us.date END) as active_days
             FROM users u
             LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
-            WHERE u.is_admin = 0 AND u.is_owner = 0
+            WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
             GROUP BY u.user_id ORDER BY pulses_mined DESC, total_messages DESC
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 

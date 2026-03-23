@@ -521,6 +521,27 @@ class TelegramBot:
         
         logger.info("Handlers setup complete")
     
+    async def check_inactive_users_job(self):
+        """Scheduled: проверка неактивных пользователей (60+ дней)"""
+        try:
+            from handlers.reminders import check_inactive_users
+            await check_inactive_users(
+                self.application.bot, self.db,
+                self.target_chat_id, self.main_admin_id
+            )
+        except Exception as e:
+            logger.error(f"Error in check_inactive_users: {e}")
+
+    async def send_weekly_report_job(self):
+        """Scheduled: еженедельный отчёт владельцу"""
+        try:
+            from handlers.reminders import send_weekly_report
+            await send_weekly_report(
+                self.application.bot, self.db, self.main_admin_id
+            )
+        except Exception as e:
+            logger.error(f"Error in weekly report: {e}")
+
     def setup_jobs(self):
         """Setup scheduled jobs"""
         # Daily statistics DISABLED - use /top5 command instead
@@ -605,6 +626,24 @@ class TelegramBot:
             hour=22,
             minute=0,
             id='top5_evening'
+        )
+        
+        # ═══ Проверка неактивных пользователей (раз в 24 часа) ═══
+        self.scheduler.add_job(
+            self.check_inactive_users_job,
+            'interval',
+            hours=24,
+            id='check_inactive'
+        )
+        
+        # ═══ Еженедельный отчёт владельцу (воскресенье 20:00 МСК) ═══
+        self.scheduler.add_job(
+            self.send_weekly_report_job,
+            'cron',
+            day_of_week='sun',
+            hour=20,
+            minute=0,
+            id='weekly_report'
         )
         
         self.scheduler.start()

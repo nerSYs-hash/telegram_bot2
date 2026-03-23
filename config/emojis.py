@@ -36,8 +36,9 @@ ICON_PISCES = "♓"
 ICON_BALANCE_SCALE = "⚖"
 ICON_GEAR = "⚙"
 ICON_WARNING = "⚠"
-ICON_HIGH_VOLTAGE = "⚡"
+ICON_HIGH_VOLTAGE = '<tg-emoji emoji-id="5451636889717062286">⚡</tg-emoji>'
 ICON_PICK = "⛏"
+ICON_ALARM_STRONG = '<tg-emoji emoji-id="395695537687123235">🚨</tg-emoji>'
 ICON_NO_ENTRY = "⛔"
 ICON_CHECK_MARK_BUTTON = '<tg-emoji emoji-id="5206607081334906820">✅</tg-emoji>' 
 ICON_ENVELOPE = "✉"
