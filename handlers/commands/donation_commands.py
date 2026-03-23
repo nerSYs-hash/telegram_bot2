@@ -18,7 +18,7 @@ async def donate_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db)
       /donate                              — интерактивное меню
       /donate @username <сумма> [коммент]   — донат пользователю
       /donate bank <сумма>                  — донат в Центробанк
-      /donate reactor <сумма>               — донат в Реактор
+      /donate reactor <сумма>               — донат в Реакторе
     """
     user = update.effective_user
     user_data = db.get_user(user.id)
