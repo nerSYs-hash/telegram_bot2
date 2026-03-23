@@ -27,6 +27,12 @@ from handlers.callback_handler import CallbackHandler
 from handlers.commands.exchange_commands import recalc_rate_command
 from utils.helpers import get_moscow_time, format_number
 from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update
+from handlers.onboarding_handlers import get_onboarding_handler
+from handlers.approval_handlers import (
+    show_new_application, approve_application, skip_application, 
+    reject_application_start, receive_rejection_reason, cancel_reject, WAITING_FOR_REASON
+)
+from telegram.ext import ConversationHandler, MessageHandler, filters
 
 # Load environment variables
 load_dotenv()
@@ -465,8 +471,10 @@ class TelegramBot:
 
     def setup_handlers(self):
         """Setup all handlers"""
+        self.application.bot_data['db'] = self.db
+        self.application.bot_data['target_chat_id'] = self.target_chat_id
         # Command handlers
-        self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
+        self.application.add_handler(get_onboarding_handler())
         self.application.add_handler(CommandHandler("menu", self.command_handler.menu_command))
         self.application.add_handler(CommandHandler("balance", self.command_handler.balance_command))
         self.application.add_handler(CommandHandler("top", self.command_handler.top_command))
@@ -481,7 +489,10 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("profile", self.command_handler.profile_command))
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
-        
+    
+       
+       
+       
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
             MessageHandler(
@@ -502,8 +513,39 @@ class TelegramBot:
             )
         )
         
+        # ═══ APPROVAL callbacks (MUST be before general CallbackQueryHandler!) ═══
+        # FSM для отклонения заявки
+        reject_conv_handler = ConversationHandler(
+            entry_points=[CallbackQueryHandler(reject_application_start, pattern="^reject_app_")],
+            states={
+                WAITING_FOR_REASON: [
+                    MessageHandler(filters.TEXT & ~filters.COMMAND, lambda u, c: receive_rejection_reason(u, c, self.db))
+                ]
+            },
+            fallbacks=[CallbackQueryHandler(lambda q, c: cancel_reject(q, c, self.db), pattern="^cancel_reject$")],
+            per_message=False
+        )
+        self.application.add_handler(reject_conv_handler)
+
+        self.application.add_handler(CallbackQueryHandler(
+            lambda q, c: show_new_application(Update(0, callback_query=q), c, self.db),
+            pattern="^check_new_apps$"
+        ))
+        self.application.add_handler(CallbackQueryHandler(
+            lambda q, c: approve_application(q, c, self.db, self.target_chat_id),
+            pattern="^approve_app_"
+        ))
+        self.application.add_handler(CallbackQueryHandler(
+            lambda q, c: skip_application(q, c, self.db),
+            pattern="^skip_app_"
+        ))
+        
+        # Callback handler (general) — must be last
+        self.application.add_handler(CallbackQueryHandler(self.callback_handler.handle_callback))
+        
         # Callback handler
         self.application.add_handler(CallbackQueryHandler(self.callback_handler.handle_callback))
+        
         
         # Message reaction handler (для подсчёта реакций)
         self.application.add_handler(MessageReactionHandler(self.message_handler.handle_reaction))

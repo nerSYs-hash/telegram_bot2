@@ -453,7 +453,70 @@ class Database:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
-
+        columns_to_add = [
+            ('is_admin', 'INTEGER DEFAULT 0'),
+            ('is_owner', 'INTEGER DEFAULT 0'),
+            ('referral_code', 'TEXT'),
+            ('last_active', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+            ('is_left', 'INTEGER DEFAULT 0'),
+            ('frozen_balance', 'INTEGER DEFAULT 0'),
+            ('freeze_until', 'TIMESTAMP'),
+            ('referrer_id', 'INTEGER'),
+            ('is_qualified', 'INTEGER DEFAULT 0'),
+            ('last_rejection_reason', 'TEXT'),
+            ('balance', 'INTEGER DEFAULT 0'),
+            ('joined_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+        ]
+        for col, type_default in columns_to_add:
+            try:
+                self.cursor.execute(f"ALTER TABLE users ADD COLUMN {col} {type_default}")
+                self.conn.commit()
+            except Exception:
+                pass  # колонка уже существует
+          # --- Миграция: добавить колонки is_admin и is_owner, если их нет ---
+                # --- Миграция для таблицы users: добавить недостающие колонки ---
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN is_admin INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN is_owner INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN referral_code TEXT")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN last_active TIMESTAMP DEFAULT CURRENT_TIMESTAMP")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN is_left INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN frozen_balance INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN freeze_until TIMESTAMP")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN referrer_id INTEGER")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN is_qualified INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN last_rejection_reason TEXT")
+        except Exception:
+            pass
+        self.conn.commit()
+        
         # Создаём таблицу top_activists_history + индексы
         _create_exchange_tables(self)
 
