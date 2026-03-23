@@ -354,8 +354,6 @@ async def journal_test(query, context, db, admin_id: int) -> None:
 async def handle_journal_text_input(update, context, db) -> bool:
     """
     Обработчик ввода ID канала / пересланного сообщения.
-    Вызывается из message_handler.
-    Возвращает True если обработано.
     """
     if context.user_data.get('owner_awaiting') != 'journal_connect':
         return False
@@ -365,11 +363,17 @@ async def handle_journal_text_input(update, context, db) -> bool:
 
     channel_id = None
 
-    # Пересланное сообщение из канала
-    if message.forward_from_chat:
-        channel_id = message.forward_from_chat.id
+    # ПРОВЕРКА ПЕРЕСЫЛКИ (Новый способ для v20+)
+    if message.forward_origin:
+        # Если переслано из канала или супергруппы
+        if hasattr(message.forward_origin, 'chat'):
+            channel_id = message.forward_origin.chat.id
+        # Если переслано от имени канала (sender_chat)
+        elif hasattr(message.forward_origin, 'sender_chat'):
+            channel_id = message.forward_origin.sender_chat.id
+            
     elif message.text:
-        # Ручной ввод ID
+        # Ручной ввод ID (оставляем как было)
         text = message.text.strip()
         try:
             channel_id = int(text)
