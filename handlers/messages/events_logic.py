@@ -15,6 +15,7 @@ db, admin_id, target_chat_id передаются явно.
 """
 
 import logging
+import telegram.error
 from datetime import datetime, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
@@ -168,14 +169,20 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         except Exception as e:
             logging.error(f"Error sending leave notification: {e}")
     
-    # Send exit interview
+    # ═══ ЖУРНАЛ: логируем выход ═══
     try:
-        # ═══ ЖУРНАЛ: логируем выход ═══
         await log_leave(context.bot, db, user_id)
+    except Exception as e:
+        logging.error(f"Journal log_leave error: {e}")
 
-        # ═══ BBS: удалить анкету покинувшего пользователя ═══
+    # ═══ BBS: удалить анкету покинувшего пользователя ═══
+    try:
         await on_member_left_cleanup(context.bot, db, user_id, target_chat_id)
+    except Exception as e:
+        logging.error(f"BBS cleanup error: {e}")
 
+    # ═══ EXIT SURVEY: отправляем опрос ═══
+    try:
         user_link = f"@{username}" if username else (user_data['first_name'] or 'Друг')
         
         # Get ONE-TIME invite link for THIS chat and THIS user
