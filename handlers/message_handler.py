@@ -38,8 +38,11 @@ REPLY_BTN_ACTIVITIES = "🎯 Активности"
 REPLY_BTN_BANK = "🏦 Центробанк"
 REPLY_BTN_DETAIL = "📋 Детализация"
 REPLY_BTN_FAQ = "❓ FAQ"
+REPLY_BTN_OWNER_PANEL = "👑 Панель Владельца"
+REPLY_BTN_NEW_APPS = "📋 Новые заявки"
 REPLY_BUTTONS = {REPLY_BTN_BALANCE, REPLY_BTN_PROFILE, REPLY_BTN_COURSE, REPLY_BTN_TOP5, REPLY_BTN_MENU,
-                 REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ}
+                 REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ,
+                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_NEW_APPS}
 
 
 class MessageHandler:
@@ -409,6 +412,14 @@ class MessageHandler:
                 from handlers.commands.system_commands import _show_faq_menu
                 await _show_faq_menu(message)
                 return
+            elif btn == REPLY_BTN_OWNER_PANEL:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                return
+            elif btn == REPLY_BTN_NEW_APPS:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
@@ -607,11 +618,19 @@ class MessageHandler:
                 from handlers.commands.system_commands import _show_faq_menu
                 await _show_faq_menu(message)
                 return
+            elif btn == REPLY_BTN_OWNER_PANEL:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                return
+            elif btn == REPLY_BTN_NEW_APPS:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
-        
+
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         #if message.text and context.user_data.get('owner_awaiting'):
         #    handled = await handle_owner_text_input(

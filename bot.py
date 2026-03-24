@@ -461,26 +461,31 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("restrict", lambda u, c: restrict_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
         self.application.add_handler(CallbackQueryHandler(admin_moderation_callback, pattern="^adm_"))
 
-        # Панель администратора — кнопка "Новые заявки"
-        from handlers.admin_moderation import new_application_callback, send_admin_panel
+        # Панель администратора — кнопки
+        from handlers.admin_moderation import (
+            new_application_callback, send_admin_panel,
+            panel_callback, handle_panel_input, handle_reject_reason
+        )
         self.application.add_handler(CallbackQueryHandler(new_application_callback, pattern="^new_app$"))
+        self.application.add_handler(CallbackQueryHandler(panel_callback, pattern="^panel_"))
 
-        # Ввод причины отказа от администратора (текстовое сообщение)
-        from handlers.admin_moderation import handle_reject_reason
+        # Ввод текста — причина отказа и ввод данных для панели владельца
+        async def _combined_text_handler(update, context):
+            if not await handle_panel_input(update, context):
+                await handle_reject_reason(update, context)
         self.application.add_handler(
-            MessageHandler(
-                filters.TEXT & ~filters.COMMAND,
-                handle_reject_reason
-            ),
-            group=1  # группа 1 — после основных обработчиков
+            MessageHandler(filters.TEXT & ~filters.COMMAND, _combined_text_handler),
+            group=1
         )
 
         # Команда /panel — отправляет панель в чат администраторов
-        from config import ADMIN_CHAT_ID
         async def panel_command(update, context):
-            if update.effective_user.id == self.main_admin_id or \
-               (self.db.get_user(update.effective_user.id) or {}).get('is_admin'):
-                await send_admin_panel(context.bot, update.effective_chat.id)
+            uid = update.effective_user.id
+            is_owner = (uid == self.main_admin_id)
+            user_data = self.db.get_user(uid)
+            is_adm = is_owner or (user_data and (user_data.get('is_admin') or user_data.get('is_owner')))
+            if is_adm:
+                await send_admin_panel(context.bot, update.effective_chat.id, is_owner=is_owner)
         self.application.add_handler(CommandHandler("panel", panel_command))
         
         # Forum topic event handlers (MUST be before general message handler)

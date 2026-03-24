@@ -191,6 +191,9 @@ class CallbackHandler:
             await self.show_activities_menu(query, user)
         
         # FAQ callbacks
+        elif data == "faq_menu":
+            from handlers.commands.system_commands import _show_faq_menu
+            await _show_faq_menu(query.message)
         elif data == "faq_commands":
             from handlers.commands.system_commands import FAQ_COMMANDS_USER, FAQ_COMMANDS_ADMIN
             text = FAQ_COMMANDS_USER

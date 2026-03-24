@@ -17,18 +17,30 @@ from utils.helpers import format_number
 # УМНАЯ ПОСТОЯННАЯ КЛАВИАТУРА (ReplyKeyboard)
 # ═══════════════════════════════════════════════════════════
 
-def get_main_reply_keyboard(db):
+def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
     """
     Нижняя клавиатура — только базовые кнопки.
-    Всё остальное — через inline-меню (📋 Меню).
+    Владелец видит [👑 Панель Владельца], Админ — [📋 Новые заявки], остальные — [❓ FAQ].
     """
-    # Логика: если профиль включен — показываем его, иначе показываем баланс
     profile_enabled = db.is_feature_enabled('profile')
     balance_or_profile = KeyboardButton("👤 Профиль") if profile_enabled else KeyboardButton("💰 Баланс")
-    
+
+    is_owner = user_id and main_admin_id and user_id == main_admin_id
+    is_admin = False
+    if user_id and not is_owner:
+        u = db.get_user(user_id)
+        is_admin = bool(u and (u.get('is_admin') or u.get('is_owner')))
+
+    if is_owner:
+        special_btn = KeyboardButton("👑 Панель Владельца")
+    elif is_admin:
+        special_btn = KeyboardButton("📋 Новые заявки")
+    else:
+        special_btn = KeyboardButton("❓ FAQ")
+
     keyboard = [
         [balance_or_profile, KeyboardButton("📊 Курс")],
-        [KeyboardButton("❓ FAQ"), KeyboardButton("📋 Меню")],
+        [special_btn, KeyboardButton("📋 Меню")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
@@ -158,12 +170,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, 
         else:
             await update.message.reply_text(
                 f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-                reply_markup=get_main_reply_keyboard(db)
+                reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
             )
     else:
         await update.message.reply_text(
             f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-            reply_markup=get_main_reply_keyboard(db)
+            reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
         )
 
 
@@ -241,6 +253,7 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
         keyboard.append([InlineKeyboardButton("📋 Детализация", callback_data="my_detalization")])
     if db.is_feature_enabled('bbs'):
         keyboard.append([InlineKeyboardButton("❣️ Pulse BBS", callback_data="menu_bbs")])
+    keyboard.append([InlineKeyboardButton("❓ FAQ / Помощь", callback_data="faq_menu")])
     keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
 
     # ── Статистика: для админов И владельца ──

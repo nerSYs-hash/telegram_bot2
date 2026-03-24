@@ -361,12 +361,12 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
     text = (
         f"📋 <b>ЗАЯВКА #{app_id}</b>"
         f"{block_d}\n"
-        f"👤 Имя: {html.escape(reg_data.get('q_name') or '—')}\n"
+        f"👤 Имя: {html.escape(reg_data.get('q_name') or '—')} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
         f"🎂 Возраст: {reg_data.get('q_age') or '—'}\n"
         f"🏙 Город: {html.escape(reg_data.get('q_city') or '—')}\n"
         f"💊 Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n"
         f"🤝 Реферал: {html.escape(str(reg_data.get('referred_by') or 'Нет'))}\n"
-        f"🆔 ID: <code>{user_id}</code> | {username_str}\n\n"
+        f"🆔 Никнейм: {username_str}\n\n"
         f"📅 <b>Блок Е:</b>\n"
         f"Дата заявки: {applied_at}\n\n"
         f"⏳ <i>Заявка заблокирована на 2 минуты для вас</i>"
@@ -565,38 +565,85 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из ЧС.",
                                         parse_mode="HTML")
 
-    # ─── ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ ───
+    # ─── ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ (4.2.3) ───
     elif awaiting == 'check_user':
-        if text.startswith('@'):
-            user_data = await get_user_by_username(text.lstrip('@'))
-        else:
+        from config import CHAT_ID
+
+        # Определяем способ ввода и получаем данные
+        search_by_id = False
+        user_data = None
+
+        if text.startswith('#user'):
+            # Формат #user123456789
+            raw = text[5:].strip()
             try:
-                user_data = await get_user(int(text))
+                tg_id = int(raw)
+                user_data = await get_user(tg_id)
+                search_by_id = True
             except ValueError:
-                await update.message.reply_text("❌ Введите ID или @username.")
+                await update.message.reply_text("❌ Неверный формат. Используйте #user123456789 или @username.")
+                return True
+        elif text.startswith('@'):
+            user_data = await get_user_by_username(text.lstrip('@'))
+            search_by_id = False
+        else:
+            # Просто число
+            try:
+                tg_id = int(text)
+                user_data = await get_user(tg_id)
+                search_by_id = True
+            except ValueError:
+                await update.message.reply_text("❌ Введите #userID, числовой ID или @username.")
                 return True
 
-        if not user_data:
-            await update.message.reply_text("❌ Пользователь не найден в базе регистрации.")
+        # Если не нашли в базе — пробуем через Telegram API (только если есть username)
+        tg_member = None
+        resolved_id = user_data['tg_id'] if user_data else None
+
+        if user_data:
+            # Проверяем членство в чате
+            try:
+                tg_member = await context.bot.get_chat_member(CHAT_ID, user_data['tg_id'])
+            except Exception:
+                tg_member = None
+
+        in_chat = tg_member and tg_member.status not in ('left', 'kicked', 'banned')
+
+        # Актуальное имя и ник из Telegram (если в чате)
+        actual_first = user_data.get('first_name') or '' if user_data else ''
+        actual_last = user_data.get('last_name') or '' if user_data else ''
+        actual_username = user_data.get('username') if user_data else None
+        if tg_member and hasattr(tg_member, 'user'):
+            actual_first = tg_member.user.first_name or actual_first
+            actual_last = tg_member.user.last_name or actual_last
+            actual_username = tg_member.user.username or actual_username
+
+        full_name = html.escape(f"{actual_first} {actual_last}".strip() or '—')
+        user_link = f'<a href="tg://user?id={resolved_id}">{full_name}</a>' if resolved_id else full_name
+        nik_str = f"@{actual_username}" if actual_username else "не указан"
+        uid_str = f"#user{resolved_id}" if resolved_id else "неизвестен"
+        q_name = user_data.get('q_name') if user_data else None
+        anketa_name = html.escape(q_name) if q_name else "не заполнял"
+        anketa_status = "✅ Заполнена" if (user_data and user_data.get('q_name')) else "❌ Не заполнена"
+        chat_status = "✅ В чате" if in_chat else "❌ Не в чате"
+
+        if not user_data and not tg_member:
+            await update.message.reply_text(
+                f"🔍 Пользователь <b>{html.escape(text)}</b> не найден ни в базе, ни в чате.",
+                parse_mode="HTML"
+            )
             return True
 
-        bl = await is_blacklisted(user_data['tg_id'])
-        adm = await is_admin(user_data['tg_id'])
-        status = user_data.get('status', '—')
         await update.message.reply_text(
-            f"🔍 <b>Пользователь</b>\n\n"
-            f"ID: <code>{user_data['tg_id']}</code>\n"
-            f"Имя: {html.escape((user_data.get('first_name') or '') + ' ' + (user_data.get('last_name') or '')).strip() or '—'}\n"
-            f"Username: @{user_data.get('username') or 'нет'}\n"
-            f"Статус: {status}\n"
-            f"Администратор: {'✅' if adm else '❌'}\n"
-            f"В ЧС: {'🚫 да' if bl else '✅ нет'}\n\n"
-            f"Анкета:\n"
-            f"Имя: {user_data.get('q_name') or '—'}\n"
-            f"Возраст: {user_data.get('q_age') or '—'}\n"
-            f"Город: {user_data.get('q_city') or '—'}\n"
-            f"Терапия: {user_data.get('q_therapy') or '—'}",
-            parse_mode="HTML"
+            f"🔍 <b>Проверка пользователя</b>\n\n"
+            f"Имя: {anketa_name}\n"
+            f"Пользователь: {user_link}\n"
+            f"Ник: {nik_str}\n"
+            f"ID: <code>{uid_str}</code>\n"
+            f"Статус в чате: {chat_status}\n"
+            f"Анкета: {anketa_status}",
+            parse_mode="HTML",
+            disable_web_page_preview=True
         )
 
     return True
