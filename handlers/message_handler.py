@@ -51,6 +51,10 @@ class MessageHandler:
         self.db = db
         self.target_chat_id = target_chat_id
         self.main_admin_id = main_admin_id
+
+        # Второй чат (чат админов/модераторов) — опционально
+        admin_chat_env = os.getenv('ADMIN_CHAT_ID', '')
+        self.admin_chat_id = int(admin_chat_env) if admin_chat_env.strip() else None
         
         # Cache for chat administrators
         self.chat_admins_cache = set()
@@ -139,6 +143,11 @@ class MessageHandler:
             return
         
         if message.chat.id != self.target_chat_id:
+            # Разрешаем сообщения из чата админов (только логируем, не обрабатываем майнинг/статистику)
+            if self.admin_chat_id and message.chat.id == self.admin_chat_id:
+                logging.info(f"📨 Message from admin chat {message.chat.id}, passing to private handler logic")
+                await self.handle_private_message(update, context)
+                return
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
         
@@ -273,6 +282,10 @@ class MessageHandler:
         
         # === ПРОВЕРКА АДМИНИСТРАТОРА (ПЕРЕД ИСПОЛЬЗОВАНИЕМ is_excluded) ===
         user_data = self.db.get_user(user.id)
+        
+        if user_data and user_data.get('is_blacklisted') == 1:
+            logging.info(f"☠️ Блэклист: игнорируем сообщение от {user.id}")
+            return # Полностью прекращаем работу с этим юзером!
         
         # Get current chat administrators from Telegram
         chat_admins = await self.get_chat_administrators(context)

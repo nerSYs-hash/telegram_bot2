@@ -10,6 +10,7 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import ContextTypes, ConversationHandler
 
+
 logger = logging.getLogger(__name__)
 
 # Состояния для FSM отказа
@@ -98,19 +99,21 @@ async def show_new_application(update: Update, context: ContextTypes.DEFAULT_TYP
             await query.edit_message_text("❌ Произошла ошибка при загрузке заявки!")
 
 
-async def skip_application(query, context, db):
+async def skip_application(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     """Админ пропустил заявку, возвращаем статус 'new'"""
+    query = update.callback_query
     user_id = int(query.data.replace("skip_app_", ""))
     try:
         db.cursor.execute("UPDATE applications SET status = 'new', locked_by = NULL WHERE user_id = ?", (user_id,))
         db.conn.commit()
-        await show_new_application(query, context, db) # Сразу показываем следующую
+        await show_new_application(update, context, db)  # передаём update
     except Exception as e:
         logger.error(f"Ошибка пропуска заявки: {e}")
 
 
-async def approve_application(query, context, db, target_chat_id):
+async def approve_application(update: Update, context: ContextTypes.DEFAULT_TYPE, db, target_chat_id):
     """Одобрение заявки и выдача одноразовой ссылки"""
+    query = update.callback_query
     user_id = int(query.data.replace("approve_app_", ""))
     admin_id = query.from_user.id
     admin_username = query.from_user.username or query.from_user.first_name
@@ -121,16 +124,27 @@ async def approve_application(query, context, db, target_chat_id):
         db.conn.commit()
 
         # 2. Получаем имя из анкеты
-        db.cursor.execute("SELECT name FROM applications WHERE user_id = ?", (user_id,))
+        db.cursor.execute("SELECT name, username, first_name FROM applications WHERE user_id = ?", (user_id,))
         row = db.cursor.fetchone()
         app_name = row['name'] if row else "Друг"
 
+        # 3. Добавляем пользователя в таблицу users, если его там ещё нет
+        user_data = db.get_user(user_id)
+        if not user_data and row:
+            db.add_user(
+                user_id,
+                username=row['username'],
+                first_name=row['first_name']
+            )
+            # Обновляем user_data после добавления
+            user_data = db.get_user(user_id)
+            
         # 3. ГЕНЕРИРУЕМ ОДНОРАЗОВУЮ ССЫЛКУ В ЧАТ
         try:
             invite = await context.bot.create_chat_invite_link(
                 chat_id=target_chat_id,
                 name=f"Invite: {app_name}",
-                member_limit=1, # Ссылка сгорит после 1 входа!
+                member_limit=1,
                 creates_join_request=False
             )
             invite_link = invite.invite_link
@@ -147,16 +161,41 @@ async def approve_application(query, context, db, target_chat_id):
                      f"Просто используй свою личную одноразовую ссылку:\n{invite_link}\n\n"
                      f"<i>⚠️ Ссылка сгорит сразу после перехода. Не передавай её никому!</i>",
                 parse_mode='HTML',
-                message_effect_id="5046509860389126442" # 🎉 Конфетти
+                message_effect_id="5046509860389126442"  # конфетти
             )
-            
-            # 5. Запускаем таймер на 1 минуту для отправки сообщения про рефералку
             context.job_queue.run_once(
-                send_referral_promo, 
-                60, # 60 секунд
-                data={'user_id': user_id, 'app_name': app_name}, 
+                send_referral_promo,
+                60,
+                data={'user_id': user_id, 'app_name': app_name},
                 name=f"ref_promo_{user_id}"
             )
+        except Exception as e:
+            logger.warning(f"Не удалось отправить ссылку юзеру {user_id}: {e}")
+            
+            
+            # 7. Обновляем сообщение у админа
+            await query.edit_message_text(
+            f"{query.message.text}\n\n"
+            f"✅ <b>ЗАЯВКА ОДОБРЕНА</b> (@{admin_username})\n"
+            f"Одноразовая ссылка отправлена пользователю.",
+            parse_mode='HTML'
+            )
+            # 5. Планируем промо через 60 сек (без job_queue)
+            import asyncio as _asyncio
+            async def _delayed_promo():
+                await _asyncio.sleep(60)
+                try:
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=f"🎁 {app_name}, добро пожаловать!\n\n"
+                             f"Приглашай своих знакомых и друзей в чат Pulse 💗💗💗.\n"
+                             f"Отправь нашего бота своему статусному другу и зарабатывай Пульсы за каждого приглашенного!\n\n"
+                             f"<i>Твою личную ссылку можно получить в меню бота.</i>",
+                        parse_mode='HTML'
+                    )
+                except Exception:
+                    pass
+            _asyncio.create_task(_delayed_promo())
         except Exception as e:
             logger.warning(f"Не удалось отправить ссылку юзеру {user_id}: {e}")
 
@@ -167,10 +206,18 @@ async def approve_application(query, context, db, target_chat_id):
             f"Одноразовая ссылка отправлена пользователю.",
             parse_mode='HTML'
         )
-
+    
+        # 7 Отправляем в журнал
+        user_data = db.get_user(user_id)
+        await log_event(context, 'approved', user_data, {'admin_username': admin_username})                
+    
+    
     except Exception as e:
         logger.error(f"Ошибка одобрения: {e}")
-        await query.answer("❌ Ошибка при одобрении!", show_alert=True)
+        try:
+            await query.answer("❌ Ошибка при одобрении!", show_alert=True)
+        except Exception:
+            pass  # игнорируем ошибку, если callback уже устарел
 
 
 async def send_referral_promo(context: ContextTypes.DEFAULT_TYPE):
@@ -194,8 +241,9 @@ async def send_referral_promo(context: ContextTypes.DEFAULT_TYPE):
 
 # ─── БЛОК ОТКАЗА (FSM ДЛЯ АДМИНА) ───
 
-async def reject_application_start(query, context):
+async def reject_application_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Начало процедуры отказа — спрашиваем причину"""
+    query = update.callback_query
     user_id = int(query.data.replace("reject_app_", ""))
     context.user_data['rejecting_user_id'] = user_id
     context.user_data['rejecting_msg_id'] = query.message.message_id
@@ -271,6 +319,10 @@ async def receive_rejection_reason(update: Update, context: ContextTypes.DEFAULT
                  f"Причина: <i>{reason}</i>",
             parse_mode='HTML'
         )
+        
+        # Отправляем в журнал
+        user_data = db.get_user(user_id)
+        await log_event(context, 'rejected', user_data, {'admin_username': admin_username, 'reason': reason})
 
     except Exception as e:
         logger.error(f"Ошибка при сохранении отказа: {e}")
@@ -284,8 +336,9 @@ async def receive_rejection_reason(update: Update, context: ContextTypes.DEFAULT
     return ConversationHandler.END
 
 
-async def cancel_reject(query, context, db):
+async def cancel_reject(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     """Отмена процедуры отказа (возврат кнопок)"""
+    query = update.callback_query
     user_id = context.user_data.get('rejecting_user_id')
     orig_text = context.user_data.get('rejecting_text')
     

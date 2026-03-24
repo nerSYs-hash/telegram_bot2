@@ -120,6 +120,7 @@ class Database:
                 frozen_balance INTEGER DEFAULT 0,
                 freeze_until TIMESTAMP,
                 is_left INTEGER DEFAULT 0,
+                is_banned INTEGER DEFAULT 0,
                 FOREIGN KEY (referrer_id) REFERENCES users(user_id)
             )
         ''')
@@ -453,6 +454,47 @@ class Database:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+
+        # ── Таблица заявок (онбординг) ──
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS applications (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL UNIQUE,
+                username TEXT,
+                first_name TEXT,
+                name TEXT,
+                age INTEGER,
+                city TEXT,
+                therapy TEXT,
+                ref_code TEXT,
+                status TEXT DEFAULT 'new',
+                rejection_reason TEXT,
+                locked_by INTEGER,
+                locked_at TIMESTAMP,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY (user_id) REFERENCES users(user_id)
+            )
+        ''')
+        # Миграции для applications (если таблица уже существует без части колонок)
+        for col, col_type in [
+            ('username', 'TEXT'),
+            ('first_name', 'TEXT'),
+            ('name', 'TEXT'),
+            ('age', 'INTEGER'),
+            ('city', 'TEXT'),
+            ('therapy', 'TEXT'),
+            ('ref_code', 'TEXT'),
+            ('rejection_reason', 'TEXT'),
+            ('locked_by', 'INTEGER'),
+            ('locked_at', 'TIMESTAMP'),
+            ('created_at', 'TIMESTAMP DEFAULT CURRENT_TIMESTAMP'),
+        ]:
+            try:
+                self.cursor.execute(f"ALTER TABLE applications ADD COLUMN {col} {col_type}")
+                self.conn.commit()
+            except Exception:
+                pass  # колонка уже существует
+
         columns_to_add = [
             ('is_admin', 'INTEGER DEFAULT 0'),
             ('is_owner', 'INTEGER DEFAULT 0'),
@@ -542,6 +584,13 @@ class Database:
         # Migration: add is_left column to users
         try:
             self.cursor.execute("ALTER TABLE users ADD COLUMN is_left INTEGER DEFAULT 0")
+            self.conn.commit()
+        except Exception:
+            pass  # Column already exists
+
+        # Migration: add is_banned column to users
+        try:
+            self.cursor.execute("ALTER TABLE users ADD COLUMN is_banned INTEGER DEFAULT 0")
             self.conn.commit()
         except Exception:
             pass  # Column already exists

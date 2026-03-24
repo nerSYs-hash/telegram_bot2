@@ -118,7 +118,9 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
     )
 
     keyboard = [
+        [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
+        [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal")],
         [InlineKeyboardButton("📊 Опросы при выходе", callback_data="owner_survey_results")],
@@ -137,6 +139,108 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
     else:
         msg = query_or_update.effective_message or query_or_update.message
         await msg.reply_text(text, parse_mode='HTML', reply_markup=markup)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  👨‍💼 ПЕРСОНАЛ
+# ═══════════════════════════════════════════════════════════════
+
+async def show_staff_menu(query, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    text = (
+        "👨‍💼 <b>ПЕРСОНАЛ</b>\n"
+        f"{'━' * 24}\n\n"
+        "Введите ID пользователя после нажатия кнопки."
+    )
+    keyboard = [
+        [InlineKeyboardButton("➕ Назначить админа", callback_data="owner_staff_add")],
+        [InlineKeyboardButton("➖ Снять админа", callback_data="owner_staff_remove")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def staff_add_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    context.user_data['owner_awaiting'] = 'staff_add'
+    text = (
+        "➕ <b>Назначить админа</b>\n\n"
+        "Отправьте <code>user_id</code> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def staff_remove_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    context.user_data['owner_awaiting'] = 'staff_remove'
+    text = (
+        "➖ <b>Снять админа</b>\n\n"
+        "Отправьте <code>user_id</code> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ═══════════════════════════════════════════════════════════════
+#  🛡 МОДЕРАЦИЯ (БЛЭКЛИСТ)
+# ═══════════════════════════════════════════════════════════════
+
+async def show_moderation_menu(query, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    try:
+        db.cursor.execute('SELECT COUNT(*) as cnt FROM users WHERE is_blacklisted = 1')
+        bl_count = db.cursor.fetchone()['cnt']
+    except Exception:
+        bl_count = 0
+
+    text = (
+        "🛡 <b>МОДЕРАЦИЯ</b>\n"
+        f"{'━' * 24}\n\n"
+        f"🚫 В блэклисте: <b>{bl_count}</b> чел."
+    )
+    keyboard = [
+        [InlineKeyboardButton("🚫 Добавить в блэклист", callback_data="owner_bl_add")],
+        [InlineKeyboardButton("✅ Убрать из блэклиста", callback_data="owner_bl_remove")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def blacklist_add_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    context.user_data['owner_awaiting'] = 'bl_add'
+    text = (
+        "🚫 <b>Добавить в блэклист</b>\n\n"
+        "Отправьте <code>user_id</code> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_moderation")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def blacklist_remove_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    context.user_data['owner_awaiting'] = 'bl_remove'
+    text = (
+        "✅ <b>Убрать из блэклиста</b>\n\n"
+        "Отправьте <code>user_id</code> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_moderation")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -300,6 +404,103 @@ async def handle_owner_text_input(
         return False
 
     text = message.text.strip() if message.text else ''
+
+    # ── Назначить админа ──
+    if awaiting == 'staff_add':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except ValueError:
+            await message.reply_text("❌ Некорректный ID.", parse_mode='HTML')
+            return True
+        target = db.get_user(target_id)
+        if not target:
+            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            return True
+        try:
+            db.cursor.execute('UPDATE users SET is_admin = 1 WHERE user_id = ?', (target_id,))
+            db.conn.commit()
+            name = target['username'] or target['first_name'] or str(target_id)
+            await message.reply_text(
+                f"✅ @{name} (<code>{target_id}</code>) назначен <b>администратором</b>.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]]),
+            )
+            logger.info(f"STAFF ADD: {target_id} by {user.id}")
+        except Exception as e:
+            await message.reply_text(f"❌ Ошибка: {e}")
+        return True
+
+    # ── Снять админа ──
+    if awaiting == 'staff_remove':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except ValueError:
+            await message.reply_text("❌ Некорректный ID.", parse_mode='HTML')
+            return True
+        target = db.get_user(target_id)
+        if not target:
+            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            return True
+        if target_id == admin_id:
+            await message.reply_text("⛔ Нельзя снять владельца.")
+            return True
+        try:
+            db.cursor.execute('UPDATE users SET is_admin = 0 WHERE user_id = ?', (target_id,))
+            db.conn.commit()
+            name = target['username'] or target['first_name'] or str(target_id)
+            await message.reply_text(
+                f"✅ @{name} (<code>{target_id}</code>) снят с должности администратора.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]]),
+            )
+            logger.info(f"STAFF REMOVE: {target_id} by {user.id}")
+        except Exception as e:
+            await message.reply_text(f"❌ Ошибка: {e}")
+        return True
+
+    # ── Добавить в блэклист ──
+    if awaiting == 'bl_add':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except ValueError:
+            await message.reply_text("❌ Некорректный ID.", parse_mode='HTML')
+            return True
+        try:
+            db.cursor.execute('UPDATE users SET is_blacklisted = 1 WHERE user_id = ?', (target_id,))
+            db.conn.commit()
+            await message.reply_text(
+                f"🚫 Пользователь <code>{target_id}</code> добавлен в блэклист.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]),
+            )
+            logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
+        except Exception as e:
+            await message.reply_text(f"❌ Ошибка: {e}")
+        return True
+
+    # ── Убрать из блэклиста ──
+    if awaiting == 'bl_remove':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except ValueError:
+            await message.reply_text("❌ Некорректный ID.", parse_mode='HTML')
+            return True
+        try:
+            db.cursor.execute('UPDATE users SET is_blacklisted = 0 WHERE user_id = ?', (target_id,))
+            db.conn.commit()
+            await message.reply_text(
+                f"✅ Пользователь <code>{target_id}</code> убран из блэклиста.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]),
+            )
+            logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
+        except Exception as e:
+            await message.reply_text(f"❌ Ошибка: {e}")
+        return True
 
     # ── Эмиссия пульсов ──
     if awaiting == 'emit':
