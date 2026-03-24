@@ -300,7 +300,7 @@ async def show_journal_menu(query, db, admin_id: int) -> None:
     keyboard = [[btn_connect]]
     if extra_row:
         keyboard.append(extra_row)
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="panel_main")])
 
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))

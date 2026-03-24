@@ -481,7 +481,7 @@ class MessageHandler:
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
-        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id):
+        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
 
     async def handle_forum_topic_event(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -687,7 +687,7 @@ class MessageHandler:
         # process_admin_input обрабатывает: thread_id, schedule_time, press_release,
         # exchange_rate, bank_transfer, donate, а также новые: pr_photo, edit_text,
         # edit_photo, edit_time, edit_target_manual
-        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id):
+        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
 
         # Default: suggest using menu

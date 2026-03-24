@@ -384,7 +384,7 @@ async def show_triggers_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton("✨ Создать триггер", callback_data="trigger_create")],
         [InlineKeyboardButton("📋 Управление", callback_data="trigger_list")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))

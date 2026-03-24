@@ -49,7 +49,10 @@ from handlers.owner_handlers import (
     show_owner_dashboard, show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_system_menu, toggle_maintenance,
-    ensure_owner_columns,
+    ensure_owner_columns, show_statistics_not_in_chat,
+)
+from handlers.journal_handlers import (
+    show_journal_menu, journal_connect_start, journal_disconnect, journal_test,
 )
 
 
@@ -438,6 +441,16 @@ class CallbackHandler:
             await show_system_menu(query, self.db, self.main_admin_id)
         elif data == "owner_maintenance_toggle":
             await toggle_maintenance(query, self.db, self.main_admin_id)
+        elif data == "owner_journal":
+            await show_journal_menu(query, self.db, self.main_admin_id)
+        elif data == "journal_connect":
+            await journal_connect_start(query, context, self.db, self.main_admin_id)
+        elif data == "journal_disconnect":
+            await journal_disconnect(query, self.db, self.main_admin_id)
+        elif data == "journal_test":
+            await journal_test(query, context, self.db, self.main_admin_id)
+        elif data == "owner_stats_not_in_chat":
+            await show_statistics_not_in_chat(query, self.main_admin_id)
 
         # ═══ RESTRICT PANEL CALLBACKS ═══
         elif data.startswith("restrict_"):
@@ -509,7 +522,6 @@ class CallbackHandler:
 
         # ── Владелец ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 

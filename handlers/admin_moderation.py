@@ -291,7 +291,11 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
             [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
             [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
              InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
-            [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")],
+            [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+             InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
+            [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
+             InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+            [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         ])
         text = "👑 <b>Панель владельца</b>\n\nВыберите раздел:"
     else:

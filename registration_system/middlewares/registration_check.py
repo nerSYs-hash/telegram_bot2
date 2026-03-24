@@ -2,7 +2,7 @@ from typing import Any, Awaitable, Callable, Dict
 from aiogram import BaseMiddleware
 from aiogram.types import Message
 # Импортируем функцию получения юзера из файла друга
-from database.db_friend import get_user 
+from database import get_user
 
 class CheckRegistrationMiddleware(BaseMiddleware):
     async def __call__(

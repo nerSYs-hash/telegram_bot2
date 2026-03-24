@@ -121,6 +121,8 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
         [InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("📢 Журнал", callback_data="owner_journal"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")],
     ]
@@ -169,7 +171,7 @@ async def show_staff_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton("➕ Назначить админа", callback_data="owner_staff_add")],
         [InlineKeyboardButton("➖ Разжаловать", callback_data="owner_staff_remove")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
 
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -221,7 +223,7 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton("💸 Выдать Пульсы", callback_data="owner_emit")],
         [InlineKeyboardButton("💀 Глобальный Вайп", callback_data="owner_wipe")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -308,7 +310,7 @@ async def show_system_menu(query, db, admin_id: int) -> None:
 
     keyboard = [
         [InlineKeyboardButton(btn_label, callback_data="owner_maintenance_toggle")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -644,6 +646,82 @@ async def handle_owner_text_input(
 # ═══════════════════════════════════════════════════════════════
 #  💾 БЭКАП (существующий функционал)
 # ═══════════════════════════════════════════════════════════════
+
+async def show_statistics_not_in_chat(query, admin_id: int) -> None:
+    """Статистика 4.5 — пользователи Не в чате (БЗА / НПС)."""
+    if query.from_user.id != admin_id:
+        await query.answer("⛔", show_alert=True)
+        return
+
+    import sqlite3
+
+    db_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'registration_system', 'pulse_bot.db'
+    )
+
+    bza_lines = []
+    nps_lines = []
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT tg_id, first_name, last_name, username FROM users "
+            "WHERE questionnaire_state IS NOT NULL"
+        )
+        for row in cur.fetchall():
+            fn = (row['first_name'] or '').strip()
+            ln = (row['last_name'] or '').strip()
+            name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
+            bza_lines.append(f"{name}, #user{row['tg_id']}, БЗА")
+
+        cur.execute(
+            "SELECT tg_id, first_name, last_name, username FROM users "
+            "WHERE invite_link IS NOT NULL AND status = 'not_in_chat'"
+        )
+        for row in cur.fetchall():
+            fn = (row['first_name'] or '').strip()
+            ln = (row['last_name'] or '').strip()
+            name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
+            nps_lines.append(f"{name}, #user{row['tg_id']}, НПС")
+
+        conn.close()
+    except Exception as e:
+        logger.error(f"show_statistics_not_in_chat DB error: {e}")
+        await query.edit_message_text(
+            f"❌ Ошибка чтения базы регистрации:\n<code>{e}</code>\n\n"
+            f"Путь: <code>{db_path}</code>",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]
+            ])
+        )
+        return
+
+    all_lines = bza_lines + nps_lines
+    body = "\n".join(all_lines) if all_lines else "<i>Нет пользователей вне чата</i>"
+
+    text = (
+        f"📊 <b>НЕ В ЧАТЕ</b>\n"
+        f"{'━' * 24}\n\n"
+        f"🔴 БЗА (бросил анкету): <b>{len(bza_lines)}</b>\n"
+        f"🟡 НПС (не перешёл по ссылке): <b>{len(nps_lines)}</b>\n\n"
+        f"{body}"
+    )
+
+    if len(text) > 4000:
+        text = text[:3980] + "\n\n<i>...список обрезан</i>"
+
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]]
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        if 'not modified' not in str(e).lower():
+            logger.error(f"show_statistics_not_in_chat error: {e}")
+
 
 async def send_database_backup(query, user, db, admin_id: int, context) -> None:
     """Отправляет файл базы данных владельцу."""

@@ -151,7 +151,6 @@ class CallbackHandler:
 
         # ── Владелец ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 

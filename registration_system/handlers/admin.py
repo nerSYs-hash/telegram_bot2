@@ -234,16 +234,85 @@ async def handle_triggers_button(message: Message):
     """Обработка нажатия на кнопку 'Триггеры'"""
     admin_id = message.from_user.id
     logger.info(f"Admin {admin_id} clicked TRIGGERS button")
-    
+
     if admin_id != OWNER_ID and not await is_admin(admin_id):
         await message.answer("❌ У вас нет доступа.")
         return
-    
+
     await message.answer(
         "⚡ **Управление триггерами**\n\n"
         "Функция в разработке.",
         parse_mode="Markdown"
     )
+
+
+@router.message(F.text == Buttons.JOURNAL, F.chat.type == ChatType.PRIVATE)
+async def handle_journal_button(message: Message):
+    """Обработка нажатия на кнопку 'Журнал' (п.5.1)"""
+    from config import OWNER_ID as OID
+    if message.from_user.id != OID:
+        await message.answer("❌ Только для владельца.")
+        return
+
+    from utils.journal import get_journal_channel_id
+    from utils.keyboards import create_journal_management_keyboard
+
+    channel_id = await get_journal_channel_id()
+    status = f"✅ Канал подключён (ID: `{channel_id}`)" if channel_id else "❌ Канал не подключён"
+
+    await message.answer(
+        f"📢 **Управление журналом**\n\n"
+        f"{status}\n\n"
+        f"Выберите действие:",
+        reply_markup=create_journal_management_keyboard(),
+        parse_mode="Markdown"
+    )
+
+
+@router.message(F.text == Buttons.STATISTICS, F.chat.type == ChatType.PRIVATE)
+async def handle_statistics_button(message: Message):
+    """
+    Обработка кнопки 'Статистика' — п.4.5.
+    Показывает список пользователей «Не в чате» с причинами БЗА / НПС.
+    """
+    from config import OWNER_ID as OID
+    if message.from_user.id != OID:
+        await message.answer("❌ Только для владельца.")
+        return
+
+    from database import get_users_with_incomplete_questionnaire, get_users_with_unused_link
+
+    # БЗА — бросил заполнение (есть незаконченная анкета, любое время)
+    bza_users = await get_users_with_incomplete_questionnaire(minutes=1)
+    # НПС — не перешли по ссылке (ссылка выдана 1+ мин назад, ещё не вступили)
+    nps_users = await get_users_with_unused_link(minutes=1)
+
+    def _fmt_user(u: dict, reason: str) -> str:
+        first = u.get('first_name', '')
+        last = u.get('last_name', '')
+        name = f"{first} {last}".strip() or "—"
+        return f"{name}, #user{u['tg_id']}, {reason}"
+
+    lines = ["📊 **Статистика — Не в чате**\n"]
+
+    if bza_users or nps_users:
+        seen = set()
+        for u in bza_users:
+            uid = u['tg_id']
+            if uid not in seen:
+                lines.append(_fmt_user(u, "БЗА"))
+                seen.add(uid)
+        for u in nps_users:
+            uid = u['tg_id']
+            if uid not in seen:
+                lines.append(_fmt_user(u, "НПС"))
+                seen.add(uid)
+        lines.append(f"\n📌 БЗА — бросил заполнение")
+        lines.append(f"📌 НПС — не перешли по ссылке")
+    else:
+        lines.append("✅ Нет пользователей вне чата с незавершённой регистрацией.")
+
+    await message.answer("\n".join(lines), parse_mode="Markdown")
 
 
 # ==================== ОБРАБОТЧИКИ CALLBACK-КНОПОК ====================
