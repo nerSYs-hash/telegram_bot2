@@ -2,11 +2,11 @@
 # -*- coding: utf-8 -*-
 
 import html
-import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import format_number, get_today_date_msk
-from config.emojis import ICON_MONEY_BAG, ICON_ROCKET, ICON_MILITARY_MEDAL
+from config import ICON_MONEY_BAG, ICON_ROCKET, ICON_MILITARY_MEDAL
+from database.db_friend import get_user as get_reg_data
 
 def _ensure_profile_columns(db):
     """Секретный предохранитель: автоматически добавляет нужные колонки в БД, если их еще нет"""
@@ -24,6 +24,11 @@ def _ensure_profile_columns(db):
 async def show_profile(update_or_query, context, db, user_id):
     """Генерация и отображение Личного кабинета пользователя"""
     
+    # 1. СНАЧАЛА ПОЛУЧАЕМ ВСЕ ДАННЫЕ
+    reg_user = await get_reg_data(user_id) # Из базы друга
+    user_data = db.get_user(user_id)       # Из твоей базы
+    
+    # Определение метода отправки (твой старый блок)
     query = getattr(update_or_query, 'callback_query', None)
     if query:
         user = query.from_user
@@ -38,16 +43,26 @@ async def show_profile(update_or_query, context, db, user_id):
         user = update_or_query.message.from_user
         send_method = update_or_query.message.reply_text
         alert_method = update_or_query.message.reply_text
-
+    
+    # Проверки
     if not db.is_feature_enabled('profile'):
         await alert_method("⛔️ Личный кабинет временно отключен администрацией.")
         return
 
-    user_data = db.get_user(user_id)
     if not user_data:
         await alert_method("❌ Вы не зарегистрированы. Напишите что-нибудь в чат или нажмите /start.")
         return
 
+    # 2. ЛОГИКА ИМЕНИ (Берем из анкеты, если есть)
+    if reg_user and reg_user.get('q_name'):
+        safe_first_name = html.escape(reg_user['q_name'])
+    else:
+        safe_first_name = html.escape(user.first_name or "Пользователь")
+    
+    username_text = f"@{user.username}" if user.username else safe_first_name
+    safe_username = html.escape(username_text)
+
+    # 3. РАСЧЕТ ДНЕЙ И ТИТУЛА
     days_in_chat = 0
     joined_at = user_data['joined_at']
     if joined_at:
@@ -66,13 +81,22 @@ async def show_profile(update_or_query, context, db, user_id):
         title_row = db.cursor.fetchone()
     except Exception:
         title_row = None
-    
-    status_text = f"[{title_row['emoji']} {title_row['title_name']}]" if title_row else "[Участник]"
-    
+
+    # 4. ЛОГИКА СТАТУСА (Объединенная)
     if user_data['is_owner']: 
         status_text = "[👑 Создатель]"
     elif user_data['is_admin']: 
         status_text = "[⭐ Администратор]"
+    else:
+        reg_status = reg_user.get('status') if reg_user else None
+        if reg_status in ['approved', 'in_chat']:
+            status_text = "[✅ Участник]"
+        else:
+            status_text = f"[{title_row['emoji']} {title_row['title_name']}]" if title_row else "[📝 Новичок]"
+
+    # ДАЛЬШЕ ИДЕТ ТВОЙ КОД КОШЕЛЬКА (balance = float... и так далее)
+    
+    status_text = f"[{title_row['emoji']} {title_row['title_name']}]" if title_row else "[Участник]"
 
     balance = float(user_data['balance'] or 0)
     frozen = float(user_data['frozen_balance'] or 0)
@@ -85,7 +109,7 @@ async def show_profile(update_or_query, context, db, user_id):
         total_earned = 0.0
     
     try:
-        db.cursor.execute("SELECT SUM(amount) as tot FROM reactor_contributions WHERE user_id = ?", (user_id,))
+        db.cursor.execute("SELECT SUM(amount) as tot FROM reactor WHERE user_id = ?", (user_id,))
         tot_reactor_row = db.cursor.fetchone()
         reactor_donated = float(tot_reactor_row['tot'] or 0) if tot_reactor_row else 0.0
     except Exception:
@@ -143,35 +167,6 @@ async def show_profile(update_or_query, context, db, user_id):
     text += f"🔥 <b>Открыто Комбо:</b> {combos_today} шт.\n"
     text += f"{ICON_ROCKET} <b>Закрыто Спринтов:</b> {sprints_today} шт.\n\n"
     
-    # ═════════════════════════════════════════════════════════════
-    # АКТИВНЫЕ УСЛУГИ ИЗ ЧЕРНОГО РЫНКА
-    # ═════════════════════════════════════════════════════════════
-    from handlers.shop_mechanics import get_active_services, get_service_remaining_time
-    
-    active_services = get_active_services(db, user_id)
-    if active_services:
-        text += f"🛒 <b>АКТИВНЫЕ УСЛУГИ</b>\n"
-        
-        service_labels = {
-            'shield': '🛡️ Щит',
-            'boost_x2': '⚡️ Бустер х2',
-            'entrance': '🚨 Вход с ноги',
-            'title': '🏷️ Титул',
-            'vip_top': '🌟 VIP в ТОПе',
-            'rp_cmds': '🎭 Ролевые команды',
-            'luck_paw': '🍀 Лапка на удачу',
-            'toad_skin': '🐸 Жабья шкура',
-            'neon_skin': '🖼️ Неоновое Болото',
-            'voice_above': '📢 Голос Свыше',
-        }
-        
-        for service_type, service_info in active_services.items():
-            label = service_labels.get(service_type, service_type)
-            remaining = get_service_remaining_time(service_info['expires_at'])
-            text += f"  {label}: <i>{remaining}</i>\n"
-        
-        text += "\n"
-    
     text += f"💘 <b>BBS (ЗНАКОМСТВА)</b>\n"
     if bbs_profile:
         import json
@@ -186,21 +181,19 @@ async def show_profile(update_or_query, context, db, user_id):
         text += f"💌 <b>Анкета:</b> Не создана\n"
 
     # ИСПРАВЛЕНИЕ: Кнопка настроек теперь ведет на настоящий маршрут, а не на заглушку
-    keyboard =[[InlineKeyboardButton("💸 Перевести Пульсы", callback_data="donate_to_user_start")],[InlineKeyboardButton("❤️ Моя Анкета BBS", callback_data="bbs_dating")],[InlineKeyboardButton("📜 Мои Квесты (Скоро)", callback_data="stub_quests"), InlineKeyboardButton("🛍 Рынок", callback_data="shop_main")],[InlineKeyboardButton("⚙️ Настройки Профиля", callback_data="profile_settings")],[InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_menu")]
+    keyboard =[[InlineKeyboardButton("💸 Перевести Пульсы", callback_data="donate_to_user_start")],[InlineKeyboardButton("❤️ Моя Анкета BBS", callback_data="bbs_dating")],[InlineKeyboardButton("📜 Мои Квесты (Скоро)", callback_data="stub_quests"), InlineKeyboardButton("🛍 Рынок (Скоро)", callback_data="stub_market")],[InlineKeyboardButton("⚙️ Настройки Профиля", callback_data="profile_settings")],[InlineKeyboardButton("🔙 Главное меню", callback_data="back_to_menu")]
     ]
     
     reply_markup = InlineKeyboardMarkup(keyboard)
 
     try:
         await send_method(text, reply_markup=reply_markup, parse_mode='HTML')
-    except Exception as e:
-        logging.error(f"[show_profile] send_method ошибка: {e}", exc_info=True)
+    except Exception:
         try:
-            # Fallback: при ошибке edit пытаемся отправить новое сообщение
-            if hasattr(update_or_query, 'message') and hasattr(update_or_query.message, 'reply_text'):
+            if hasattr(update_or_query, 'message') and update_or_query.message:
                 await update_or_query.message.reply_text(text, reply_markup=reply_markup, parse_mode='HTML')
-        except Exception as fallback_e:
-            logging.error(f"[show_profile] fallback ошибка: {fallback_e}", exc_info=True)
+        except:
+            pass
 
 
 # ═══════════════════════════════════════════════════════════════

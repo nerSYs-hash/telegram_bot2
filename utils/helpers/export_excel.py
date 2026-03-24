@@ -559,6 +559,223 @@ def export_stats_to_excel(stats_data, filename):
                 ws_j.column_dimensions[col].width = w
             ws_j.freeze_panes = 'A5'
 
+        # ── ЛИСТ "СТАТ МАЙНИНГ" (детализация по каждой активности) ────────
+        if 'mining_detailed' in stats_data and stats_data['mining_detailed']:
+            md = stats_data['mining_detailed']
+            ws_m = wb.create_sheet("СтатМайнинг")
+
+            # ── Стили ─────────────────────────────────────────────────────
+            green_font   = Font(bold=False, size=11, color="27AE60")
+            green_bold   = Font(bold=True,  size=11, color="27AE60")
+            red_font     = Font(bold=False, size=11, color="E74C3C")
+            red_bold     = Font(bold=True,  size=11, color="E74C3C")
+            bold_font    = Font(bold=True,  size=12)
+            cat_font     = Font(bold=True,  size=12, color="FFFFFF")
+            cat_fill_grn = PatternFill(start_color="27AE60", end_color="27AE60", fill_type="solid")
+            cat_fill_org = PatternFill(start_color="E67E22", end_color="E67E22", fill_type="solid")
+            cat_fill_blu = PatternFill(start_color="3498DB", end_color="3498DB", fill_type="solid")
+            cat_fill_red = PatternFill(start_color="E74C3C", end_color="E74C3C", fill_type="solid")
+            total_fill   = PatternFill(start_color="D5F5E3", end_color="D5F5E3", fill_type="solid")
+            m_cols = ['A', 'B', 'C', 'D']
+
+            row = 1
+
+            # ── Заголовок ─────────────────────────────────────────────────
+            ws_m.merge_cells(f'A{row}:D{row}')
+            ws_m[f'A{row}'] = "📊 ДЕТАЛЬНАЯ СТАТИСТИКА МАЙНИНГА"
+            ws_m[f'A{row}'].font = title_font
+            ws_m[f'A{row}'].fill = title_fill
+            ws_m[f'A{row}'].alignment = title_align
+            ws_m[f'A{row}'].border = thick_border
+            ws_m.row_dimensions[row].height = 30
+            row += 1
+
+            ws_m.merge_cells(f'A{row}:D{row}')
+            ws_m[f'A{row}'] = f"Период: {stats_data.get('start_date', '?')} — {stats_data.get('end_date', '?')}"
+            ws_m[f'A{row}'].font = Font(size=11, italic=True)
+            ws_m[f'A{row}'].alignment = center_align
+            ws_m.row_dimensions[row].height = 20
+            row += 2
+
+            # ── Заголовки таблицы ─────────────────────────────────────────
+            tbl_headers = ['Категория', 'Название активности', 'Описание условия', 'Сумма Пульсов (💎)']
+            for col, hdr in zip(m_cols, tbl_headers):
+                ws_m[f'{col}{row}'] = hdr
+                ws_m[f'{col}{row}'].font = header_font
+                ws_m[f'{col}{row}'].fill = header_fill
+                ws_m[f'{col}{row}'].alignment = center_align
+                ws_m[f'{col}{row}'].border = thin_border
+            ws_m.row_dimensions[row].height = 22
+            row += 1
+
+            idx_row = 0  # для чередования
+            chart_data_rows = []  # (label, sum) для PieChart
+
+            # ── Хелпер: строка-категория (цветная полоса) ─────────────────
+            def _cat_row(label, cfill):
+                nonlocal row
+                ws_m.merge_cells(f'A{row}:D{row}')
+                ws_m[f'A{row}'] = label
+                ws_m[f'A{row}'].font = cat_font
+                ws_m[f'A{row}'].fill = cfill
+                ws_m[f'A{row}'].alignment = left_align
+                ws_m[f'A{row}'].border = thick_border
+                ws_m.row_dimensions[row].height = 24
+                row += 1
+
+            # ── Хелпер: строка данных ─────────────────────────────────────
+            def _data_row(cat, name, desc, val, font_style=green_font):
+                nonlocal row, idx_row
+                fill = even_fill if idx_row % 2 == 0 else odd_fill
+                ws_m[f'A{row}'] = cat
+                ws_m[f'B{row}'] = name
+                ws_m[f'C{row}'] = desc
+                ws_m[f'D{row}'] = _n(val, 4)
+                ws_m[f'D{row}'].font = font_style
+                ws_m[f'D{row}'].number_format = _FMT_FLOAT2
+                for c in m_cols:
+                    ws_m[f'{c}{row}'].fill = fill
+                    ws_m[f'{c}{row}'].border = thin_border
+                ws_m[f'A{row}'].alignment = left_align
+                ws_m[f'B{row}'].alignment = left_align
+                ws_m[f'C{row}'].alignment = left_align
+                ws_m[f'D{row}'].alignment = right_align
+                row += 1
+                idx_row += 1
+
+            # ══════════════════════════════════════════════════════════════
+            #  1. БАЗОВАЯ ДОБЫЧА
+            # ══════════════════════════════════════════════════════════════
+            base_sum = float(md.get('base_total', 0))
+            _cat_row("🔹 БАЗОВАЯ ДОБЫЧА", cat_fill_grn)
+            _data_row("", "Базовые начисления",
+                      "За сообщения, медиа, реакции и ответы",
+                      base_sum, green_font)
+            chart_data_rows.append(('Базовая добыча', base_sum))
+
+            # ══════════════════════════════════════════════════════════════
+            #  2. КОМБО (каждое поимённо)
+            # ══════════════════════════════════════════════════════════════
+            combos = md.get('combos', [])
+            combo_total = sum(float(c.get('sum', 0)) for c in combos)
+            _cat_row("🔥 КОМБО-БОНУСЫ", cat_fill_org)
+            if combos:
+                for c in combos:
+                    _data_row("", c.get('label', c.get('name', '?')),
+                              c.get('description', ''),
+                              c.get('sum', 0), green_font)
+            else:
+                _data_row("", "(нет данных)", "Комбо не выполнялись за период", 0, green_font)
+            chart_data_rows.append(('Комбо-бонусы', combo_total))
+
+            # ══════════════════════════════════════════════════════════════
+            #  3. СПРИНТЫ (каждый поимённо)
+            # ══════════════════════════════════════════════════════════════
+            sprints = md.get('sprints', [])
+            sprint_total = sum(float(s.get('sum', 0)) for s in sprints)
+            _cat_row("🚀 СПРИНТЫ", cat_fill_blu)
+            if sprints:
+                for s in sprints:
+                    _data_row("", s.get('label', s.get('name', '?')),
+                              s.get('description', ''),
+                              s.get('sum', 0), green_font)
+            else:
+                _data_row("", "(нет данных)", "Спринты не завершались за период", 0, green_font)
+            chart_data_rows.append(('Спринты', sprint_total))
+
+            # ══════════════════════════════════════════════════════════════
+            #  4. ШТРАФЫ (каждый поимённо)
+            # ══════════════════════════════════════════════════════════════
+            penalties = md.get('penalties', [])
+            penalty_total = sum(float(p.get('sum', 0)) for p in penalties)
+            _cat_row("⛔ ШТРАФЫ", cat_fill_red)
+            if penalties:
+                for p in penalties:
+                    _data_row("", p.get('label', p.get('name', '?')),
+                              p.get('description', ''),
+                              -float(p.get('sum', 0)), red_font)
+            else:
+                _data_row("", "(нет штрафов)", "Штрафы не применялись за период", 0, red_font)
+            chart_data_rows.append(('Штрафы', penalty_total))
+
+            # ══════════════════════════════════════════════════════════════
+            #  ИТОГО ЭМИССИЯ
+            # ══════════════════════════════════════════════════════════════
+            net = _n(Decimal(str(base_sum)) + Decimal(str(combo_total))
+                     + Decimal(str(sprint_total)) - Decimal(str(penalty_total)), 4)
+
+            row += 1
+            for c in m_cols:
+                ws_m[f'{c}{row}'].fill = total_fill
+                ws_m[f'{c}{row}'].border = thick_border
+            ws_m[f'A{row}'] = "ИТОГО ЭМИССИЯ"
+            ws_m[f'A{row}'].font = bold_font
+            ws_m[f'A{row}'].alignment = left_align
+            ws_m.merge_cells(f'B{row}:C{row}')
+            ws_m[f'B{row}'] = f"База + Комбо + Спринты − Штрафы"
+            ws_m[f'B{row}'].font = Font(size=10, italic=True)
+            ws_m[f'B{row}'].alignment = center_align
+            ws_m[f'B{row}'].fill = total_fill
+            ws_m[f'D{row}'] = net
+            ws_m[f'D{row}'].font = Font(bold=True, size=13,
+                                         color="27AE60" if net >= 0 else "E74C3C")
+            ws_m[f'D{row}'].number_format = _FMT_FLOAT2
+            ws_m[f'D{row}'].alignment = right_align
+            ws_m[f'D{row}'].fill = total_fill
+            ws_m[f'D{row}'].border = thick_border
+            row += 2
+
+            # ── Данные для PieChart (вспомогательные ячейки F2:G5) ─────────
+            try:
+                from openpyxl.chart import PieChart, Reference
+                from openpyxl.chart.series import DataPoint
+                from openpyxl.chart.label import DataLabelList
+
+                pie_start = 2
+                for pi, (lbl, val) in enumerate(chart_data_rows):
+                    ws_m[f'F{pie_start + pi}'] = lbl
+                    ws_m[f'G{pie_start + pi}'] = _n(abs(val), 4)
+                    ws_m[f'G{pie_start + pi}'].number_format = _FMT_FLOAT2
+                    # Скрываем вспомогательные ячейки (мелкий шрифт)
+                    ws_m[f'F{pie_start + pi}'].font = Font(size=1, color="FFFFFF")
+                    ws_m[f'G{pie_start + pi}'].font = Font(size=1, color="FFFFFF")
+
+                chart = PieChart()
+                chart.title = "Источники эмиссии Пульсов"
+                chart.style = 10
+                chart.width = 16
+                chart.height = 11
+
+                labels = Reference(ws_m, min_col=6, min_row=pie_start,
+                                   max_row=pie_start + len(chart_data_rows) - 1)
+                values = Reference(ws_m, min_col=7, min_row=pie_start,
+                                   max_row=pie_start + len(chart_data_rows) - 1)
+                chart.add_data(values, titles_from_data=False)
+                chart.set_categories(labels)
+
+                pie_colors = ['27AE60', 'E67E22', '3498DB', 'E74C3C']
+                for i, clr in enumerate(pie_colors[:len(chart_data_rows)]):
+                    pt = DataPoint(idx=i)
+                    pt.graphicalProperties.solidFill = clr
+                    chart.series[0].data_points.append(pt)
+
+                chart.dataLabels = DataLabelList()
+                chart.dataLabels.showPercent = True
+                chart.dataLabels.showVal = True
+                chart.dataLabels.showCatName = True
+
+                ws_m.add_chart(chart, "F8")
+
+            except Exception as chart_err:
+                logging.warning(f"Mining PieChart skipped: {chart_err}")
+
+            # ── Ширина колонок ────────────────────────────────────────────
+            ws_m.column_dimensions['A'].width = 22
+            ws_m.column_dimensions['B'].width = 28
+            ws_m.column_dimensions['C'].width = 48
+            ws_m.column_dimensions['D'].width = 22
+            ws_m.freeze_panes = 'A6'
+
         # ── СОХРАНЕНИЕ ────────────────────────────────────────────────────────
         logging.info(f"Saving Excel file to: {filename}")
         wb.save(filename)

@@ -680,7 +680,148 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                     if cm_ > 12:
                         cm_ = 1
                         cy += 1
+        
+        try:
+            db.cursor.execute('''
+                SELECT
+                    COALESCE(SUM(CASE WHEN transaction_type = 'message_reward' THEN amount ELSE 0 END), 0) AS base,
+                    COALESCE(SUM(CASE WHEN transaction_type = 'combo_reward'   THEN amount ELSE 0 END), 0) AS combo,
+                    COALESCE(SUM(CASE WHEN transaction_type = 'sprint_reward'  THEN amount ELSE 0 END), 0) AS sprint,
+                    COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalty
+                FROM transactions
+                WHERE timestamp >= ? AND timestamp <= ?
+            ''', (start_date, end_date))
+            mining_row = db.cursor.fetchone()
+            stats_data['mining_stats'] = {
+                'base':    float(mining_row['base'])    if mining_row else 0.0,
+                'combo':   float(mining_row['combo'])   if mining_row else 0.0,
+                'sprint':  float(mining_row['sprint'])  if mining_row else 0.0,
+                'penalty': float(mining_row['penalty']) if mining_row else 0.0,
+            }
+        except Exception as e:
+            logging.warning(f"Mining stats query failed: {e}")
+            stats_data['mining_stats'] = {'base': 0, 'combo': 0, 'sprint': 0, 'penalty': 0} 
+        
+        # ── Детальная статистика майнинга (поимённо) ──────────────────────
+        MINING_DESCRIPTIONS = {
+            # Комбо
+            'writer':       {'label': '✍️ Писатель',       'desc': 'Текст > 50 символов'},
+            'illustrator':  {'label': '🖼 Иллюстратор',    'desc': 'Текст > 50 символов + Фото'},
+            'reviewer':     {'label': '🎬 Обозреватель',    'desc': 'Видео + Текст > 100 слов'},
+            'dj':           {'label': '🎧 Диджей',          'desc': 'Ссылка на плейлист'},
+            'sharp_tongue': {'label': '🗡 Острый язык',     'desc': 'На сообщение ответили > 2 раз'},
+            'viral_post':   {'label': '📢 Вирусный пост',   'desc': 'Сообщение собрало > 2 лайков'},
+            'hit_post':     {'label': '💥 Хит-пост',        'desc': 'Сообщение собрало 4+ лайка'},
+            'legend_post':  {'label': '👑 Легенда',          'desc': 'Сообщение собрало 6+ лайков'},
+            # Спринты
+            'chat_core':    {'label': '💬 Основа чата',      'desc': '10 сообщений за 24 часа'},
+            'emotional':    {'label': '😍 Эмоциональный',    'desc': '10 эмодзи-сообщений за 24 часа'},
+            'photographer': {'label': '📸 Фотограф',         'desc': '3+ фото за 24 часа'},
+            'director':     {'label': '🎬 Режиссёр',         'desc': '2 видео за 24 часа (спец. ветки)'},
+            'music_lover':  {'label': '🎧 Меломан',          'desc': '5 аудио за 24 часа (ветка Музыки)'},
+            'face_seller':  {'label': '🫧 Лицом торгуешь',   'desc': '5 видео-кружков за 12 часов'},
+            'center':       {'label': '🎯 Центр внимания',   'desc': '20 ответов тебе за 12 часов'},
+            'radio':        {'label': '🎙 Радио',             'desc': '4 голосовых за 1 час'},
+            'gif_room':     {'label': '🎞 Гифошная',          'desc': '10 гифок за 1 час'},
+            'chatterbox':   {'label': '🗣 Болтун',            'desc': '20 ответов за 1 час'},
+            'generous':     {'label': '💝 Щедрая душа',      'desc': '5 лайков за 1 час'},
+            'favorite':     {'label': '⭐ Любимчик',          'desc': '10 полученных лайков за 1 час'},
+            # Штрафы
+            'copypaste':    {'label': '📋 Копипаст',          'desc': 'Дубликат сообщения за последний час'},
+            'wrong_door':   {'label': '🚪 Не та дверь',      'desc': 'Контент не по теме ветки'},
+            'toxic':        {'label': '☠️ Токсик',            'desc': 'Токсичное поведение'},
+        }
 
+        try:
+            sd_str = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            ed_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+
+            # 1. Базовая добыча
+            db.cursor.execute('''
+                SELECT COALESCE(SUM(amount), 0) AS total
+                FROM transactions
+                WHERE transaction_type = 'message_reward'
+                  AND timestamp >= ? AND timestamp <= ?
+            ''', (sd_str, ed_str))
+            base_total = float(db.cursor.fetchone()['total'])
+
+            # 2. Комбо (поимённо) — поддержка старой (date) и новой (claimed_at) схемы
+            combos = []
+            try:
+                db.cursor.execute('''
+                    SELECT combo_name, COALESCE(SUM(reward), 0) AS total
+                    FROM combo_claims
+                    WHERE claimed_at >= ? AND claimed_at <= ?
+                    GROUP BY combo_name ORDER BY total DESC
+                ''', (sd_str, ed_str))
+                combos_raw = db.cursor.fetchall()
+            except Exception:
+                # Старая схема с колонкой date
+                try:
+                    sd_date = start_date.strftime('%Y-%m-%d')
+                    ed_date = end_date.strftime('%Y-%m-%d')
+                    db.cursor.execute('''
+                        SELECT combo_name, COALESCE(SUM(reward), 0) AS total
+                        FROM combo_claims
+                        WHERE date >= ? AND date <= ?
+                        GROUP BY combo_name ORDER BY total DESC
+                    ''', (sd_date, ed_date))
+                    combos_raw = db.cursor.fetchall()
+                except Exception:
+                    combos_raw = []
+            for r in combos_raw:
+                name = r['combo_name']
+                info = MINING_DESCRIPTIONS.get(name, {'label': name, 'desc': ''})
+                combos.append({'name': name, 'label': info['label'],
+                               'description': info['desc'], 'sum': float(r['total'])})
+
+            # 3. Спринты (поимённо)
+            sprints = []
+            try:
+                db.cursor.execute('''
+                    SELECT sprint_name, COALESCE(SUM(reward), 0) AS total
+                    FROM sprint_claims
+                    WHERE claimed_at >= ? AND claimed_at <= ?
+                    GROUP BY sprint_name ORDER BY total DESC
+                ''', (sd_str, ed_str))
+                sprints_raw = db.cursor.fetchall()
+            except Exception:
+                sprints_raw = []
+            for r in sprints_raw:
+                name = r['sprint_name']
+                info = MINING_DESCRIPTIONS.get(name, {'label': name, 'desc': ''})
+                sprints.append({'name': name, 'label': info['label'],
+                                'description': info['desc'], 'sum': float(r['total'])})
+
+            # 4. Штрафы (поимённо)
+            db.cursor.execute('''
+                SELECT description, COALESCE(SUM(amount), 0) AS total
+                FROM transactions
+                WHERE transaction_type = 'penalty_deduct'
+                  AND timestamp >= ? AND timestamp <= ?
+                GROUP BY description ORDER BY total DESC
+            ''', (sd_str, ed_str))
+            penalties = []
+            key_map = {'копипаст': 'copypaste', 'не в ту дверь (нарушение)': 'wrong_door',
+                       'удаление (токсик)': 'toxic'}
+            for r in db.cursor.fetchall():
+                desc = r['description'] or ''
+                raw_key = desc.replace('Штраф: ', '').strip().lower()
+                mapped = key_map.get(raw_key, raw_key)
+                info = MINING_DESCRIPTIONS.get(mapped, {'label': desc, 'desc': ''})
+                penalties.append({'name': mapped, 'label': info['label'],
+                                  'description': info['desc'], 'sum': float(r['total'])})
+
+            stats_data['mining_detailed'] = {
+                'base_total': base_total,
+                'combos': combos,
+                'sprints': sprints,
+                'penalties': penalties,
+            }
+        except Exception as e:
+            logging.warning(f"Mining detailed stats failed: {e}")
+            stats_data['mining_detailed'] = None
+        
         # Генерация файла
         timestamp = get_moscow_time().strftime('%Y%m%d_%H%M%S')
         os.makedirs('logs', exist_ok=True)
@@ -988,7 +1129,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
                 COUNT(DISTINCT CASE WHEN us.total_messages > 0 THEN us.date END) as active_days
             FROM users u
             LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
-            WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
+            WHERE u.is_admin = 0 AND u.is_owner = 0
             GROUP BY u.user_id ORDER BY pulses_mined DESC, total_messages DESC
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
 

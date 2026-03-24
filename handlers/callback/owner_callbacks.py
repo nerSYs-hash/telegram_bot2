@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Callback-ы Пульта Владельца: дашборд, персонал, модерация, триггеры, журнал, система."""
+"""Callback-ы Пульта Владельца: дашборд, персонал, триггеры, журнал, система."""
 
 import logging
 from handlers.owner_handlers import (
     show_owner_dashboard,
     show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
-    show_moderation_menu, bl_add_start, bl_remove_start,
-    mute_start, unmute_start,
     show_system_menu, toggle_maintenance,
     send_database_backup,
 )
@@ -51,19 +49,6 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await wipe_confirm_step1(query, db, admin_id)
     elif data == "owner_wipe_confirm":
         await wipe_execute(query, db, admin_id)
-
-    # ── Модерация ──
-    elif data == "owner_moderation":
-        await show_moderation_menu(query, db, admin_id)
-    elif data == "owner_bl_add":
-        await bl_add_start(query, context, db, admin_id)
-    elif data == "owner_bl_remove":
-        await bl_remove_start(query, context, db, admin_id)
-    elif data.startswith("owner_mute_"):
-        duration_key = data.replace("owner_mute_", "")
-        await mute_start(query, context, db, admin_id, duration_key)
-    elif data == "owner_unmute_start":
-        await unmute_start(query, context, db, admin_id)
 
     # ── Система ──
     elif data == "owner_system":

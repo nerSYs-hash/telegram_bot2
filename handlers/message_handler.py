@@ -26,10 +26,6 @@ from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.bbs_handlers import process_bbs_input
 from handlers.owner_handlers import handle_owner_text_input
-from handlers.triggers_handlers import process_triggers, handle_trigger_text_input
-from handlers.exit_survey_handlers import handle_exit_survey_text
-from handlers.journal_handlers import handle_journal_text_input
-from handlers.profile_tracker import track_profile_changes
 
 
 # ═══ Тексты кнопок ReplyKeyboard (должны совпадать с system_commands.py) ═══
@@ -51,10 +47,6 @@ class MessageHandler:
         self.db = db
         self.target_chat_id = target_chat_id
         self.main_admin_id = main_admin_id
-
-        # Второй чат (чат админов/модераторов) — опционально
-        admin_chat_env = os.getenv('ADMIN_CHAT_ID', '')
-        self.admin_chat_id = int(admin_chat_env) if admin_chat_env.strip() else None
         
         # Cache for chat administrators
         self.chat_admins_cache = set()
@@ -143,11 +135,6 @@ class MessageHandler:
             return
         
         if message.chat.id != self.target_chat_id:
-            # Разрешаем сообщения из чата админов (только логируем, не обрабатываем майнинг/статистику)
-            if self.admin_chat_id and message.chat.id == self.admin_chat_id:
-                logging.info(f"📨 Message from admin chat {message.chat.id}, passing to private handler logic")
-                await self.handle_private_message(update, context)
-                return
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
         
@@ -169,12 +156,6 @@ class MessageHandler:
         # Log message processing
         logging.info(f"✅ Processing message from {user.id} (@{user.username}) in {thread_name}")
         
-        # ═══ ТРЕКЕР ПРОФИЛЯ: сравниваем до обновления ═══
-        try:
-            await track_profile_changes(context.bot, self.db, user)
-        except Exception:
-            pass
-
         # Add/update user in database
         self.db.add_user(
             user.id,
@@ -204,17 +185,6 @@ class MessageHandler:
                 _maint_check = self.db.get_user(user.id)
                 if not (_maint_check and (_maint_check['is_admin'] or _maint_check['is_owner'])):
                     return
-
-        # ═══ ТРИГГЕРЫ: проверяем сообщение на совпадение ═══
-        if self.db.is_feature_enabled('triggers'):
-            try:
-                trigger_fired = await process_triggers(
-                    update, context, self.db, self.target_chat_id, self.main_admin_id
-                )
-                if trigger_fired:
-                    return  # Сообщение обработано триггером — пропускаем всё остальное
-            except Exception as e:
-                logging.error(f"Trigger processing error: {e}")
 
         # Get today's date
         today = get_today_date_msk()
@@ -282,10 +252,6 @@ class MessageHandler:
         
         # === ПРОВЕРКА АДМИНИСТРАТОРА (ПЕРЕД ИСПОЛЬЗОВАНИЕМ is_excluded) ===
         user_data = self.db.get_user(user.id)
-        
-        if user_data and user_data.get('is_blacklisted') == 1:
-            logging.info(f"☠️ Блэклист: игнорируем сообщение от {user.id}")
-            return # Полностью прекращаем работу с этим юзером!
         
         # Get current chat administrators from Telegram
         chat_admins = await self.get_chat_administrators(context)
@@ -547,6 +513,7 @@ class MessageHandler:
         import logging
         message = update.message
         user = message.from_user
+        chat_id = message.chat.id
         
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══
         if message.text and message.text.strip() in REPLY_BUTTONS:
@@ -645,43 +612,27 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
         
-        # ═══ EXIT SURVEY FSM (свободный текст причины ухода) ═══
-        if message.text and context.user_data.get('exit_survey_awaiting'):
-            handled = await handle_exit_survey_text(update, context, self.db)
-            if handled:
-                return
-
-        # ═══ JOURNAL FSM (подключение канала — текст или пересланное сообщение) ═══
-        if context.user_data.get('owner_awaiting') == 'journal_connect':
-            handled = await handle_journal_text_input(update, context, self.db)
-            if handled:
-                return
-
-        # ═══ TRIGGERS FSM (создание триггеров) ═══
-        if message.text and context.user_data.get('owner_awaiting', '').startswith('trigger_'):
-            handled = await handle_trigger_text_input(update, context, self.db)
-            if handled:
-                return
-
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
-        if message.text and context.user_data.get('owner_awaiting'):
-            handled = await handle_owner_text_input(
-                update, context, self.db, self.main_admin_id, self.target_chat_id
-            )
-            if handled:
-                return
+        #if message.text and context.user_data.get('owner_awaiting'):
+        #    handled = await handle_owner_text_input(
+        #        update, context, self.db, self.main_admin_id, self.target_chat_id
+        #    )
+         #   if handled:
+        #        return
 
         # ═══ BBS FSM — доступен ВСЕМ пользователям в ЛС ═══
-        if await process_bbs_input(message, context, self.db):
-            return
+        #if await process_bbs_input(message, context, self.db):
+         #   return
         
         # Only admin can use private chat features
-        if user.id != self.main_admin_id:
-            await message.reply_text(
-                "👋 Привет! Я работаю в групповом чате.\n"
-                "Используй /start в чате для начала."
-            )
-            return
+       # if user.id != self.main_admin_id and not context.user_data.get('bbs_state'):
+            
+         #   pass
+        #    await message.reply_text(
+        #        "👋 Привет! Я работаю в групповом чате.\n"
+         #       "Используй /start в чате для начала."
+         #   )
+         #   return
         
         # Handle /cancel
         if message.text and message.text.strip() == '/cancel':
@@ -710,12 +661,6 @@ class MessageHandler:
             context.user_data.pop('bbs_edit_goals', None)
             # Owner panel cleanup
             context.user_data.pop('owner_awaiting', None)
-            # Trigger FSM cleanup
-            context.user_data.pop('trigger_draft', None)
-            # Exit survey cleanup
-            context.user_data.pop('exit_survey_awaiting', None)
-            context.user_data.pop('exit_survey_user_id', None)
-            context.user_data.pop('exit_interview_id', None)
             await message.reply_text("❌ Действие отменено.")
             return
         

@@ -9,15 +9,14 @@ from utils.helpers import format_number, generate_referral_link, get_moscow_time
 from datetime import datetime, timedelta
 from handlers.lottery_handlers import LotteryHandler
 from handlers.bingo_handlers import BingoHandler
-from handlers.profile_handlers import show_profile, show_profile_settings, toggle_profile_setting
+#from handlers.profile_handlers import show_profile, show_profile_settings, toggle_profile_setting
 from handlers.gift_handlers import GiftHandler
 from handlers.stats_handlers import (
     generate_export_file, show_top, show_top5_menu,
     show_top5_activists, show_top5_rich,
-    handle_stats_callback,
+    handle_stats_callback, handle_exit_interview,
     handle_stats_export, show_stats_menu, show_stats_period_menu,
 )
-
 from handlers.donate_handlers import (
     safe_name, show_donate_menu, donate_to_user_start, donate_pick_user,
     donate_user_amount, donate_user_custom, donate_user_confirm,
@@ -46,26 +45,13 @@ from handlers.horoscope_handler import (
 )
 from handlers.bbs_handlers import handle_bbs_callback
 from handlers.moderation import handle_restrict_callback
-from handlers.triggers_handlers import (
-    show_triggers_menu, handle_trigger_callback,
-)
-from handlers.exit_survey_handlers import (
-    handle_exit_reason, handle_exit_skip_reason,
-    handle_exit_improvement, handle_exit_return,
-    show_survey_results, ensure_survey_columns,
-)
-from handlers.journal_handlers import (
-    show_journal_menu, journal_connect_start,
-    journal_disconnect, journal_test,
-    ensure_journal_tables,
-)
 from handlers.owner_handlers import (
-    show_owner_dashboard,
+    show_owner_dashboard, show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_system_menu, toggle_maintenance,
     ensure_owner_columns,
 )
-from config.emojis import ICON_ALARM_STRONG
+
 
 
 class CallbackHandler:
@@ -81,10 +67,6 @@ class CallbackHandler:
         
         # Инициализация колонки is_blacklisted
         ensure_owner_columns(db)
-        # Миграция колонок exit survey
-        ensure_survey_columns(db)
-        # Инициализация журнала
-        ensure_journal_tables(db)
         
     
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -119,11 +101,6 @@ class CallbackHandler:
         # ═══ ЖАЛОБЫ BBS (Deep Link → ЛС) ═══
         if data.startswith('report_reason_') or data == 'report_cancel':
             await self._handle_report_callback(query, context, data, user)
-            return
-        
-        # ═══ КНОПКА ЖАЛОБЫ ПОД АНКЕТОЙ ═══
-        if data.startswith('bbs_report_'):
-            await self._show_report_menu(query, context, data, user)
             return
         
         # ═══ BBS CALLBACKS ═══
@@ -258,17 +235,9 @@ class CallbackHandler:
             else:
                 await handle_stats_callback(query, data, user, context, self.db, _eff_id, self.target_chat_id)
         
-        # ═══ EXIT SURVEY CALLBACKS (многошаговый опрос) ═══
-        elif data.startswith("exit_skip_reason_"):
-            await handle_exit_skip_reason(query, data, context, self.db)
+        # Exit interview callbacks
         elif data.startswith("exit_"):
-            await handle_exit_reason(query, data, context, self.db, self.main_admin_id)
-        elif data.startswith("exitimp_"):
-            await handle_exit_improvement(query, data, context, self.db)
-        elif data.startswith("exitret_"):
-            await handle_exit_return(query, data, context, self.db)
-        elif data == "owner_survey_results":
-            await show_survey_results(query, self.db, self.main_admin_id)
+            await handle_exit_interview(query, data, context, self.db)
         
         # Bank callbacks
         elif data == "bank_k_up":
@@ -448,6 +417,12 @@ class CallbackHandler:
         # ═══ OWNER DASHBOARD CALLBACKS ═══
         elif data == "owner_dashboard":
             await show_owner_dashboard(query, context, self.db, self.main_admin_id)
+        elif data == "owner_staff":
+            await show_staff_menu(query, self.db, self.main_admin_id)
+        elif data == "owner_staff_add":
+            await staff_add_start(query, context, self.db, self.main_admin_id)
+        elif data == "owner_staff_remove":
+            await staff_remove_start(query, context, self.db, self.main_admin_id)
         elif data == "owner_economy":
             await show_economy_menu(query, self.db, self.main_admin_id)
         elif data == "owner_emit":
@@ -464,22 +439,6 @@ class CallbackHandler:
         # ═══ RESTRICT PANEL CALLBACKS ═══
         elif data.startswith("restrict_"):
             await handle_restrict_callback(query, data, context, self.db, self.main_admin_id, self.target_chat_id)
-
-        # ═══ TRIGGERS CALLBACKS ═══
-        elif data == "owner_triggers":
-            await show_triggers_menu(query, self.db, self.main_admin_id)
-        elif data.startswith("trigger_"):
-            await handle_trigger_callback(query, data, context, self.db, self.main_admin_id)
-
-        # ═══ JOURNAL CALLBACKS ═══
-        elif data == "owner_journal":
-            await show_journal_menu(query, self.db, self.main_admin_id)
-        elif data == "journal_connect":
-            await journal_connect_start(query, context, self.db, self.main_admin_id)
-        elif data == "journal_disconnect":
-            await journal_disconnect(query, self.db, self.main_admin_id)
-        elif data == "journal_test":
-            await journal_test(query, context, self.db, self.main_admin_id)
 
         # ═══ DONATE CALLBACKS ═══
         elif data == "donate_menu":
@@ -999,71 +958,9 @@ class CallbackHandler:
         'nsfw': '🔞 Откровенный контент',
     }
 
-    async def _show_report_menu(self, query, context, data, user):
-        """Показ меню выбора причины жалобы (callback от кнопки ⚠️)."""
-        import html
-        
-        try:
-            # Извлекаем ID нарушителя из callback_data: bbs_report_12345
-            reported_user_id = int(data.replace('bbs_report_', ''))
-        except (ValueError, IndexError):
-            await query.answer("❌ Ошибка данных", show_alert=True)
-            return
-
-        # Сохраняем ID нарушителя в user_data
-        context.user_data['reporting_user_id'] = reported_user_id
-
-        # Получаем имя нарушителя (ЭКРАНИРУЕМ HTML!)
-        try:
-            reported_user = self.db.get_user(reported_user_id)
-            if reported_user:
-                reported_name = html.escape(reported_user['username'] or reported_user['first_name'] or str(reported_user_id))
-            else:
-                reported_name = str(reported_user_id)
-        except Exception:
-            reported_name = str(reported_user_id)
-
-        # Формируем меню
-        text = (
-            f"🚨 <b>Жалоба на пользователя</b>\n\n"
-            f"👤 <b>Нарушитель:</b> @{reported_name}\n\n"
-            f"Выберите причину жалобы:"
-        )
-
-        # Кнопки причин
-        keyboard = []
-        for reason_key, reason_text in self.REPORT_REASONS.items():
-            keyboard.append([InlineKeyboardButton(
-                reason_text,
-                callback_data=f"report_reason_{reason_key}"
-            )])
-        
-        # Кнопка отмены
-        keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="report_cancel")])
-
-        try:
-            await query.edit_message_text(
-                text=text,
-                reply_markup=InlineKeyboardMarkup(keyboard),
-                parse_mode='HTML'
-            )
-        except Exception:
-            # Если не получилось отредактировать - отправляем новое
-            try:
-                await query.message.reply_text(
-                    text=text,
-                    reply_markup=InlineKeyboardMarkup(keyboard),
-                    parse_mode='HTML'
-                )
-            except Exception as e:
-                import logging
-                logging.error(f"Failed to show report menu: {e}")
-                await query.answer("❌ Ошибка отображения меню", show_alert=True)
-
     async def _handle_report_callback(self, query, context, data, user):
         """Обработка выбора причины жалобы."""
         import logging
-        import html
 
         # ── Отмена ──
         if data == 'report_cancel':
@@ -1086,14 +983,14 @@ class CallbackHandler:
                 pass
             return
 
-        # Данные заявителя (ЭКРАНИРУЕМ HTML!)
-        reporter_name = html.escape(user.username or user.first_name or str(user.id))
+        # Данные заявителя
+        reporter_name = user.username or user.first_name or str(user.id)
 
         # Данные нарушителя + ссылка на пост
         try:
             reported_user = self.db.get_user(reported_user_id)
             if reported_user:
-                reported_name = html.escape(reported_user['username'] or reported_user['first_name'] or str(reported_user_id))
+                reported_name = reported_user['username'] or reported_user['first_name'] or str(reported_user_id)
             else:
                 reported_name = str(reported_user_id)
         except Exception:
@@ -1119,7 +1016,7 @@ class CallbackHandler:
 
         # Формируем сообщение для админа
         report_msg = (
-            f"{ICON_ALARM_STRONG} <b>НОВАЯ ЖАЛОБА (BBS)</b>\n\n"
+            f"🚨 <b>НОВАЯ ЖАЛОБА (BBS)</b>\n\n"
             f"👤 <b>От кого:</b> @{reporter_name} (<code>{user.id}</code>)\n"
             f"👤 <b>На кого:</b> @{reported_name} (<code>{reported_user_id}</code>)\n"
             f"📌 <b>Причина:</b> {reason_text}"

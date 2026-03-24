@@ -95,11 +95,11 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 message_thread_id=bbs_thread_id,
                 media=media,
             )
-            sent_message_ids = [m.message_id for m in messages]
             btn_msg = await context.bot.send_message(
                 chat_id=target_chat_id,
                 message_thread_id=bbs_thread_id,
-                text="ㅤ",
+                text=" 👆<b>Понравился ?</b>", 
+                parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
             )
             sent_message_ids.append(btn_msg.message_id)

@@ -34,7 +34,7 @@ class LotteryHandler:
         self.main_admin_id = main_admin_id
         self.bot_username = bot_username
         self._ensure_tables()
-
+#####
     # ══════════════════════════════════════════
     #  ТАБЛИЦЫ
     # ══════════════════════════════════════════
