@@ -95,15 +95,45 @@ async def init_db():
                 created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS trigger_violations (
+                user_id    INTEGER NOT NULL,
+                trigger_id INTEGER NOT NULL,
+                count      INTEGER DEFAULT 0,
+                period_start TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                last_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (user_id, trigger_id)
+            )
+        ''')
+        await db.execute('''
+            CREATE TABLE IF NOT EXISTS chat_threads (
+                thread_id  INTEGER PRIMARY KEY,
+                name       TEXT NOT NULL,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
         # ── Миграции: добавляем колонки если их нет ──
         migrations = [
-            ("users", "last_activity_at", "TIMESTAMP"),
-            ("users", "last_survey_at",   "TIMESTAMP"),
-            ("users", "survey_reason",    "TEXT"),
-            ("users", "violations",       "INTEGER DEFAULT 0"),
-            ("users", "last_exit_at",     "TIMESTAMP"),
-            ("journal_messages", "event_type", "TEXT"),
+            ("users",    "last_activity_at",      "TIMESTAMP"),
+            ("users",    "last_survey_at",         "TIMESTAMP"),
+            ("users",    "survey_reason",          "TEXT"),
+            ("users",    "violations",             "INTEGER DEFAULT 0"),
+            ("users",    "last_exit_at",           "TIMESTAMP"),
+            ("journal_messages", "event_type",     "TEXT"),
+            # triggers new columns
+            ("triggers", "keywords",              "TEXT"),
+            ("triggers", "condition",             "TEXT DEFAULT 'contains'"),
+            ("triggers", "probability",           "INTEGER DEFAULT 100"),
+            ("triggers", "delete_bot_msg",        "TEXT DEFAULT 'no'"),
+            ("triggers", "delete_bot_msg_period", "INTEGER"),
+            ("triggers", "where_fires",           "TEXT DEFAULT 'all'"),
+            ("triggers", "threads",               "TEXT DEFAULT '[]'"),
+            ("triggers", "initiator",             "TEXT DEFAULT 'all'"),
+            ("triggers", "target",                "TEXT DEFAULT 'nobody'"),
+            ("triggers", "actions",               "TEXT DEFAULT '[]'"),
+            ("triggers", "last_bot_msg_id",       "INTEGER"),
+            ("triggers", "created_by",            "INTEGER"),
         ]
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
             existing_tables = {r[0] for r in await cur.fetchall()}
@@ -560,6 +590,134 @@ async def increment_violation(tg_id: int) -> int:
 async def reset_violations(tg_id: int) -> None:
     async with aiosqlite.connect(DB_PATH) as db:
         await db.execute('UPDATE users SET violations = 0 WHERE tg_id = ?', (tg_id,))
+        await db.commit()
+
+
+async def get_all_triggers() -> List[Dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT * FROM triggers ORDER BY id') as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def get_trigger(trigger_id: int) -> Optional[Dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT * FROM triggers WHERE id = ?', (trigger_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else None
+
+
+async def create_trigger_db(name: str, keywords: str, created_by: int, **kwargs) -> int:
+    fields = {'name': name, 'keywords': keywords, 'created_by': created_by,
+              'enabled': 1, **kwargs}
+    cols = ', '.join(fields.keys())
+    placeholders = ', '.join('?' * len(fields))
+    vals = list(fields.values())
+    async with aiosqlite.connect(DB_PATH) as db:
+        cur = await db.execute(f'INSERT INTO triggers ({cols}) VALUES ({placeholders})', vals)
+        await db.commit()
+        return cur.lastrowid
+
+
+async def update_trigger(trigger_id: int, **kwargs) -> None:
+    if not kwargs:
+        return
+    cols = ', '.join(f'{k} = ?' for k in kwargs)
+    vals = list(kwargs.values()) + [trigger_id]
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(f'UPDATE triggers SET {cols} WHERE id = ?', vals)
+        await db.commit()
+
+
+async def delete_trigger_db(trigger_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM triggers WHERE id = ?', (trigger_id,))
+        await db.execute('DELETE FROM trigger_violations WHERE trigger_id = ?', (trigger_id,))
+        await db.commit()
+
+
+async def toggle_trigger(trigger_id: int) -> bool:
+    """Toggle enabled/disabled. Returns new state (True = enabled)."""
+    t = await get_trigger(trigger_id)
+    if not t:
+        return False
+    new_state = 0 if t.get('enabled') else 1
+    await update_trigger(trigger_id, enabled=new_state)
+    return bool(new_state)
+
+
+async def inc_trigger_violation(user_id: int, trigger_id: int, period_seconds: int = None) -> int:
+    """Increment violation count, respecting period. Returns new count."""
+    now = datetime.now(MSK)
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute(
+            'SELECT * FROM trigger_violations WHERE user_id = ? AND trigger_id = ?',
+            (user_id, trigger_id)
+        ) as cur:
+            row = await cur.fetchone()
+            row = dict(row) if row else None
+
+        if row:
+            # Check if period expired
+            if period_seconds:
+                try:
+                    period_start = datetime.fromisoformat(str(row['period_start']))
+                    if period_start.tzinfo is None:
+                        period_start = period_start.replace(tzinfo=MSK)
+                    if (now - period_start).total_seconds() > period_seconds:
+                        # Reset period
+                        await db.execute(
+                            'UPDATE trigger_violations SET count = 1, period_start = ?, last_at = ? '
+                            'WHERE user_id = ? AND trigger_id = ?',
+                            (now.isoformat(), now.isoformat(), user_id, trigger_id)
+                        )
+                        await db.commit()
+                        return 1
+                except Exception:
+                    pass
+            new_count = row['count'] + 1
+            await db.execute(
+                'UPDATE trigger_violations SET count = ?, last_at = ? WHERE user_id = ? AND trigger_id = ?',
+                (new_count, now.isoformat(), user_id, trigger_id)
+            )
+        else:
+            new_count = 1
+            await db.execute(
+                'INSERT INTO trigger_violations (user_id, trigger_id, count, period_start, last_at) '
+                'VALUES (?, ?, 1, ?, ?)',
+                (user_id, trigger_id, now.isoformat(), now.isoformat())
+            )
+        await db.commit()
+        return new_count
+
+
+async def reset_trigger_violations(user_id: int, trigger_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            'DELETE FROM trigger_violations WHERE user_id = ? AND trigger_id = ?',
+            (user_id, trigger_id)
+        )
+        await db.commit()
+
+
+async def get_chat_threads() -> List[Dict]:
+    async with aiosqlite.connect(DB_PATH) as db:
+        db.row_factory = aiosqlite.Row
+        async with db.execute('SELECT * FROM chat_threads ORDER BY name') as cur:
+            return [dict(r) for r in await cur.fetchall()]
+
+
+async def save_chat_threads(threads: List[dict]) -> None:
+    """Replace all chat threads."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('DELETE FROM chat_threads')
+        for t in threads:
+            await db.execute(
+                'INSERT OR REPLACE INTO chat_threads (thread_id, name) VALUES (?, ?)',
+                (t['thread_id'], t['name'])
+            )
         await db.commit()
 
 

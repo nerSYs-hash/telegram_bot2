@@ -230,7 +230,7 @@ async def handle_check_user_button(message: Message):
 
 
 @router.message(F.text == Buttons.TRIGGERS, F.chat.type == ChatType.PRIVATE)
-async def handle_triggers_button(message: Message):
+async def handle_triggers_button(message: Message, state: FSMContext):
     """Обработка нажатия на кнопку 'Триггеры'"""
     admin_id = message.from_user.id
     logger.info(f"Admin {admin_id} clicked TRIGGERS button")
@@ -239,11 +239,8 @@ async def handle_triggers_button(message: Message):
         await message.answer("❌ У вас нет доступа.")
         return
 
-    await message.answer(
-        "⚡ **Управление триггерами**\n\n"
-        "Функция в разработке.",
-        parse_mode="Markdown"
-    )
+    from handlers.triggers import show_triggers_menu
+    await show_triggers_menu(message, state)
 
 
 @router.message(F.text == Buttons.JOURNAL, F.chat.type == ChatType.PRIVATE)
