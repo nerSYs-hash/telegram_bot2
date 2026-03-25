@@ -28,11 +28,14 @@ from handlers.commands.exchange_commands import recalc_rate_command
 from utils.helpers import get_moscow_time, format_number
 from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update
 
-# Load environment variables
-load_dotenv()
+# Абсолютный путь к папке скрипта — не зависит от рабочей директории
+_BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+# Load environment variables — всегда из папки скрипта
+load_dotenv(os.path.join(_BASE_DIR, '.env'))
 
 # Ensure logs directory exists
-os.makedirs('logs', exist_ok=True)
+os.makedirs(os.path.join(_BASE_DIR, 'logs'), exist_ok=True)
 
 
 # ─── НАСТРОЙКА КРАСИВОГО ЛОГИРОВАНИЯ ───
@@ -89,7 +92,8 @@ class TelegramBot:
         self.bot_token = os.getenv('BOT_TOKEN')
         self.main_admin_id = int(os.getenv('MAIN_ADMIN_ID'))
         self.target_chat_id = int(os.getenv('TARGET_CHAT_ID'))
-        self.db_path = os.getenv('DATABASE_PATH', 'database/bot_database.db')
+        _db_rel = os.getenv('DATABASE_PATH', 'database/bot_database.db')
+        self.db_path = _db_rel if os.path.isabs(_db_rel) else os.path.join(_BASE_DIR, _db_rel)
         self.bbs_thread_id = int(os.getenv('BBS_THREAD_ID', 0))
         
         # Initialize database
@@ -678,9 +682,34 @@ class TelegramBot:
 
 def main():
     """Main entry point"""
-    # Create and run bot
-    bot = TelegramBot()
-    bot.run()
+    # ── Защита от двойного запуска (PID-файл) ───────────────────────────────
+    pid_file = os.path.join(_BASE_DIR, 'bot.pid')
+    my_pid = os.getpid()
+
+    if os.path.exists(pid_file):
+        try:
+            with open(pid_file) as f:
+                old_pid = int(f.read().strip())
+            os.kill(old_pid, 0)   # проверяем жив ли процесс (0 = не убиваем)
+            logging.critical(
+                f"⛔ Бот уже запущен (PID={old_pid})! "
+                f"Остановите предыдущий процесс перед новым запуском."
+            )
+            import sys; sys.exit(1)
+        except (ProcessLookupError, ValueError, OSError):
+            pass  # процесс мёртв — перезаписываем pid
+
+    with open(pid_file, 'w') as f:
+        f.write(str(my_pid))
+
+    try:
+        bot = TelegramBot()
+        bot.run()
+    finally:
+        try:
+            os.remove(pid_file)
+        except OSError:
+            pass
 
 if __name__ == '__main__':
     main()
