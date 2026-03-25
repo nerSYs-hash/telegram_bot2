@@ -22,7 +22,6 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, get_today_date_msk
 from handlers.bbs_handlers import handle_bbs_reaction, on_member_left_cleanup
-from handlers.journal_handlers import log_join, log_leave
 
 
 async def handle_member_left(update, context, db, admin_id, target_chat_id):
@@ -261,16 +260,35 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
 
 async def handle_user_returned(update, context, user_id, db, admin_id, target_chat_id):
     """Handle user returning to chat — unfreeze balance if within 30 days"""
+    # Удаляем сообщение с одноразовой ссылкой (если было отправлено при одобрении)
+    try:
+        from database.db_friend import get_user as get_reg_user, deactivate_invite_link, get_active_invite_link, update_user as update_reg_user
+        reg_user = await get_reg_user(user_id)
+        if reg_user:
+            invite_msg_id = reg_user.get('invite_message_id')
+            if invite_msg_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=invite_msg_id)
+                    logging.info(f"🗑 Deleted invite link message for user {user_id}")
+                except Exception:
+                    pass  # Сообщение уже удалено или недоступно
+                await update_reg_user(user_id, invite_message_id=None)
+
+            # Деактивируем ссылку в БД
+            active_link = await get_active_invite_link(user_id)
+            if active_link:
+                await deactivate_invite_link(active_link)
+                logging.info(f"🔗 Invite link deactivated for user {user_id}")
+    except Exception as e:
+        logging.error(f"Error cleaning up invite link for {user_id}: {e}")
+
     user_data = db.get_user(user_id)
     if not user_data:
         return
-    
+
     # Пометить пользователя как вернувшегося
     db.cursor.execute('UPDATE users SET is_left = 0 WHERE user_id = ?', (user_id,))
     db.conn.commit()
-    
-    # ═══ ЖУРНАЛ: логируем возврат ═══
-    await log_join(context.bot, db, user_id)
     
     # sqlite3.Row does NOT support .get() — use bracket access
     try:

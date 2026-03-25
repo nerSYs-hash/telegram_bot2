@@ -26,10 +26,6 @@ from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.bbs_handlers import process_bbs_input
 from handlers.owner_handlers import handle_owner_text_input
-from handlers.triggers_handlers import process_triggers, handle_trigger_text_input
-from handlers.exit_survey_handlers import handle_exit_survey_text
-from handlers.journal_handlers import handle_journal_text_input
-from handlers.profile_tracker import track_profile_changes
 
 
 # ═══ Тексты кнопок ReplyKeyboard (должны совпадать с system_commands.py) ═══
@@ -42,8 +38,11 @@ REPLY_BTN_ACTIVITIES = "🎯 Активности"
 REPLY_BTN_BANK = "🏦 Центробанк"
 REPLY_BTN_DETAIL = "📋 Детализация"
 REPLY_BTN_FAQ = "❓ FAQ"
+REPLY_BTN_OWNER_PANEL = "👑 Панель Владельца"
+REPLY_BTN_NEW_APPS = "📋 Новые заявки"
 REPLY_BUTTONS = {REPLY_BTN_BALANCE, REPLY_BTN_PROFILE, REPLY_BTN_COURSE, REPLY_BTN_TOP5, REPLY_BTN_MENU,
-                 REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ}
+                 REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ,
+                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_NEW_APPS}
 
 
 class MessageHandler:
@@ -160,12 +159,6 @@ class MessageHandler:
         # Log message processing
         logging.info(f"✅ Processing message from {user.id} (@{user.username}) in {thread_name}")
         
-        # ═══ ТРЕКЕР ПРОФИЛЯ: сравниваем до обновления ═══
-        try:
-            await track_profile_changes(context.bot, self.db, user)
-        except Exception:
-            pass
-
         # Add/update user in database
         self.db.add_user(
             user.id,
@@ -195,17 +188,6 @@ class MessageHandler:
                 _maint_check = self.db.get_user(user.id)
                 if not (_maint_check and (_maint_check['is_admin'] or _maint_check['is_owner'])):
                     return
-
-        # ═══ ТРИГГЕРЫ: проверяем сообщение на совпадение ═══
-        if self.db.is_feature_enabled('triggers'):
-            try:
-                trigger_fired = await process_triggers(
-                    update, context, self.db, self.target_chat_id, self.main_admin_id
-                )
-                if trigger_fired:
-                    return  # Сообщение обработано триггером — пропускаем всё остальное
-            except Exception as e:
-                logging.error(f"Trigger processing error: {e}")
 
         # Get today's date
         today = get_today_date_msk()
@@ -430,6 +412,14 @@ class MessageHandler:
                 from handlers.commands.system_commands import _show_faq_menu
                 await _show_faq_menu(message)
                 return
+            elif btn == REPLY_BTN_OWNER_PANEL:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                return
+            elif btn == REPLY_BTN_NEW_APPS:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
@@ -491,7 +481,7 @@ class MessageHandler:
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
-        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id):
+        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
 
     async def handle_forum_topic_event(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -534,6 +524,7 @@ class MessageHandler:
         import logging
         message = update.message
         user = message.from_user
+        chat_id = message.chat.id
         
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══
         if message.text and message.text.strip() in REPLY_BUTTONS:
@@ -627,48 +618,40 @@ class MessageHandler:
                 from handlers.commands.system_commands import _show_faq_menu
                 await _show_faq_menu(message)
                 return
+            elif btn == REPLY_BTN_OWNER_PANEL:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                return
+            elif btn == REPLY_BTN_NEW_APPS:
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
-        
-        # ═══ EXIT SURVEY FSM (свободный текст причины ухода) ═══
-        if message.text and context.user_data.get('exit_survey_awaiting'):
-            handled = await handle_exit_survey_text(update, context, self.db)
-            if handled:
-                return
-
-        # ═══ JOURNAL FSM (подключение канала — текст или пересланное сообщение) ═══
-        if context.user_data.get('owner_awaiting') == 'journal_connect':
-            handled = await handle_journal_text_input(update, context, self.db)
-            if handled:
-                return
-
-        # ═══ TRIGGERS FSM (создание триггеров) ═══
-        if message.text and context.user_data.get('owner_awaiting', '').startswith('trigger_'):
-            handled = await handle_trigger_text_input(update, context, self.db)
-            if handled:
-                return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
-        if message.text and context.user_data.get('owner_awaiting'):
-            handled = await handle_owner_text_input(
-                update, context, self.db, self.main_admin_id, self.target_chat_id
-            )
-            if handled:
-                return
+        #if message.text and context.user_data.get('owner_awaiting'):
+        #    handled = await handle_owner_text_input(
+        #        update, context, self.db, self.main_admin_id, self.target_chat_id
+        #    )
+         #   if handled:
+        #        return
 
         # ═══ BBS FSM — доступен ВСЕМ пользователям в ЛС ═══
-        if await process_bbs_input(message, context, self.db):
-            return
+        #if await process_bbs_input(message, context, self.db):
+         #   return
         
         # Only admin can use private chat features
-        if user.id != self.main_admin_id:
-            await message.reply_text(
-                "👋 Привет! Я работаю в групповом чате.\n"
-                "Используй /start в чате для начала."
-            )
-            return
+       # if user.id != self.main_admin_id and not context.user_data.get('bbs_state'):
+            
+         #   pass
+        #    await message.reply_text(
+        #        "👋 Привет! Я работаю в групповом чате.\n"
+         #       "Используй /start в чате для начала."
+         #   )
+         #   return
         
         # Handle /cancel
         if message.text and message.text.strip() == '/cancel':
@@ -697,12 +680,6 @@ class MessageHandler:
             context.user_data.pop('bbs_edit_goals', None)
             # Owner panel cleanup
             context.user_data.pop('owner_awaiting', None)
-            # Trigger FSM cleanup
-            context.user_data.pop('trigger_draft', None)
-            # Exit survey cleanup
-            context.user_data.pop('exit_survey_awaiting', None)
-            context.user_data.pop('exit_survey_user_id', None)
-            context.user_data.pop('exit_interview_id', None)
             await message.reply_text("❌ Действие отменено.")
             return
         
@@ -710,7 +687,7 @@ class MessageHandler:
         # process_admin_input обрабатывает: thread_id, schedule_time, press_release,
         # exchange_rate, bank_transfer, donate, а также новые: pr_photo, edit_text,
         # edit_photo, edit_time, edit_target_manual
-        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id):
+        if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
 
         # Default: suggest using menu

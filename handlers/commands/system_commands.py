@@ -17,18 +17,30 @@ from utils.helpers import format_number
 # УМНАЯ ПОСТОЯННАЯ КЛАВИАТУРА (ReplyKeyboard)
 # ═══════════════════════════════════════════════════════════
 
-def get_main_reply_keyboard(db):
+def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
     """
     Нижняя клавиатура — только базовые кнопки.
-    Всё остальное — через inline-меню (📋 Меню).
+    Владелец видит [👑 Панель Владельца], Админ — [📋 Новые заявки], остальные — [❓ FAQ].
     """
-    # Логика: если профиль включен — показываем его, иначе показываем баланс
     profile_enabled = db.is_feature_enabled('profile')
     balance_or_profile = KeyboardButton("👤 Профиль") if profile_enabled else KeyboardButton("💰 Баланс")
-    
+
+    is_owner = user_id and main_admin_id and user_id == main_admin_id
+    is_admin = False
+    if user_id and not is_owner:
+        u = db.get_user(user_id)
+        is_admin = bool(u and (u.get('is_admin') or u.get('is_owner')))
+
+    if is_owner:
+        special_btn = KeyboardButton("👑 Панель Владельца")
+    elif is_admin:
+        special_btn = KeyboardButton("📋 Новые заявки")
+    else:
+        special_btn = KeyboardButton("❓ FAQ")
+
     keyboard = [
         [balance_or_profile, KeyboardButton("📊 Курс")],
-        [KeyboardButton("❓ FAQ"), KeyboardButton("📋 Меню")],
+        [special_btn, KeyboardButton("📋 Меню")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
@@ -68,9 +80,39 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, 
             await show_bbs_menu(update, context, db)
             return
 
-        # ── Deep link: Жалоба на пользователя (report_12345) ──
+        # ── Deep link: ЖАЛОБА на анкету BBS ──
         if arg.startswith('report_'):
-            await _handle_report_deeplink(update, context, db, arg, user)
+            try:
+                reported_user_id = int(arg.replace('report_', ''))
+            except (ValueError, TypeError):
+                await update.message.reply_text("❌ Некорректная ссылка для жалобы.")
+                return
+
+            context.user_data['reporting_user_id'] = reported_user_id
+
+            # Проверяем что нарушитель существует
+            reported_user = db.get_user(reported_user_id)
+            if reported_user:
+                try:
+                    reported_name = reported_user['username'] or reported_user['first_name'] or str(reported_user_id)
+                except (KeyError, IndexError):
+                    reported_name = str(reported_user_id)
+                header = f"🚨 <b>Жалоба на пользователя</b>\n\n👤 Нарушитель: @{reported_name}\n\n"
+            else:
+                header = f"🚨 <b>Жалоба на пользователя</b>\n\n👤 ID: <code>{reported_user_id}</code>\n\n"
+
+            keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔞 Спам / Реклама", callback_data="report_reason_spam")],
+                [InlineKeyboardButton("🤡 Фейк / Мошенник", callback_data="report_reason_fake")],
+                [InlineKeyboardButton("🤬 Оскорбления / Токсичность", callback_data="report_reason_toxic")],
+                [InlineKeyboardButton("🔞 Откровенный контент", callback_data="report_reason_nsfw")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="report_cancel")],
+            ])
+            await update.message.reply_text(
+                header + "Выберите причину жалобы:",
+                parse_mode='HTML',
+                reply_markup=keyboard,
+            )
             return
 
         # New referral link format
@@ -128,12 +170,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, 
         else:
             await update.message.reply_text(
                 f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-                reply_markup=get_main_reply_keyboard(db)
+                reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
             )
     else:
         await update.message.reply_text(
             f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-            reply_markup=get_main_reply_keyboard(db)
+            reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
         )
 
 
@@ -156,7 +198,7 @@ async def _get_chat_invite_link(context, db, target_chat_id):
 
 
 async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, admin_id):
-    """Handle /menu command — shows extra items not in ReplyKeyboard"""
+    """Handle /menu command — single window mode"""
     user = update.effective_user
     user_data = db.get_user(user.id)
 
@@ -164,42 +206,54 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
         await update.message.reply_text("Сначала используй /start")
         return
 
-    is_owner = user.id == admin_id or user_data['is_owner']
+    is_owner = user.id == admin_id
+    try:
+        is_owner = is_owner or user_data['is_owner']
+    except (KeyError, IndexError):
+        pass
 
     # Обычные пользователи — только в ЛС
     if not is_owner and update.effective_chat.type != 'private':
         bot_me = await context.bot.get_me()
         await update.message.reply_text(
-            "📋 Меню доступно только в личных сообщениях с ботом.\n"
-            f"👉 @{bot_me.username}",
+            f"📋 Меню доступно только в ЛС.\n👉 @{bot_me.username}",
         )
         return
 
-    balance = user_data['balance']
+    chat_id = update.effective_chat.id
 
+    # ── Удаляем старое меню ──
+    old_msg = context.user_data.get('menu_msg_id')
+    if old_msg:
+        try:
+            await context.bot.delete_message(chat_id=chat_id, message_id=old_msg)
+        except Exception:
+            pass
+
+    # ── Удаляем сообщение пользователя (кнопку "📋 Меню") ──
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    balance = user_data['balance']
     message = f"📱 ГЛАВНОЕ МЕНЮ\n\n👤 {user.first_name}\n💰 Баланс: {format_number(balance)} 💎 Пульсов"
 
     keyboard = []
 
-    # ── Кнопки для ВСЕХ (если функция включена) ──
     if db.is_feature_enabled('profile'):
         keyboard.append([InlineKeyboardButton("👤 Профиль", callback_data="menu_profile")])
-
     if db.is_feature_enabled('top') or db.is_feature_enabled('top_commands'):
         keyboard.append([InlineKeyboardButton("🏆 ТОП-5", callback_data="menu_top5")])
-
     if db.is_feature_enabled('activities'):
         keyboard.append([InlineKeyboardButton("🎯 Активности", callback_data="menu_activities")])
-
     if db.is_feature_enabled('bank'):
         keyboard.append([InlineKeyboardButton("🏦 Центробанк", callback_data="menu_bank")])
-
     if db.is_feature_enabled('detalization'):
         keyboard.append([InlineKeyboardButton("📋 Детализация", callback_data="my_detalization")])
-
     if db.is_feature_enabled('bbs'):
         keyboard.append([InlineKeyboardButton("❣️ Pulse BBS", callback_data="menu_bbs")])
-
+    keyboard.append([InlineKeyboardButton("❓ FAQ / Помощь", callback_data="faq_menu")])
     keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
 
     # ── Статистика: для админов И владельца ──
@@ -209,15 +263,14 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
 
     # ── Владелец ──
     if is_owner:
-        keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
         keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
         keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
-
         if db.is_feature_enabled('horoscope'):
             keyboard.append([InlineKeyboardButton("🔮 Гороскоп", callback_data="horoscope_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
-    await update.message.reply_text(message, reply_markup=reply_markup)
+    sent = await context.bot.send_message(chat_id=chat_id, text=message, reply_markup=reply_markup)
+    context.user_data['menu_msg_id'] = sent.message_id
 
 
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -269,59 +322,3 @@ FAQ_FUNCTIONS = (
     "Здесь скоро появится подробное описание всех Событий.\n\n"
     "Следите за обновлениями!"
 )
-
-async def _handle_report_deeplink(update, context, db, arg, user):
-    """Обработка deep link для жалобы: /start report_12345"""
-    import html
-    
-    try:
-        # Извлекаем ID нарушителя: report_12345 → 12345
-        reported_user_id = int(arg.replace('report_', ''))
-    except (ValueError, IndexError):
-        await update.message.reply_text("❌ Неверная ссылка для жалобы.")
-        return
-
-    # Сохраняем ID в user_data
-    context.user_data['reporting_user_id'] = reported_user_id
-
-    # Получаем имя нарушителя (ЭКРАНИРУЕМ HTML!)
-    try:
-        reported_user = db.get_user(reported_user_id)
-        if reported_user:
-            reported_name = html.escape(reported_user['username'] or reported_user['first_name'] or str(reported_user_id))
-        else:
-            reported_name = str(reported_user_id)
-    except Exception:
-        reported_name = str(reported_user_id)
-
-    # Причины жалоб
-    REPORT_REASONS = {
-        'spam': '🔞 Спам / Реклама',
-        'fake': '🤡 Фейк / Мошенник',
-        'toxic': '🤬 Оскорбления / Токсичность',
-        'nsfw': '🔞 Откровенный контент',
-    }
-
-    # Формируем меню
-    text = (
-        f"🚨 <b>Жалоба на пользователя</b>\n\n"
-        f"👤 <b>Нарушитель:</b> @{reported_name}\n\n"
-        f"Выберите причину жалобы:"
-    )
-
-    # Кнопки причин
-    keyboard = []
-    for reason_key, reason_text in REPORT_REASONS.items():
-        keyboard.append([InlineKeyboardButton(
-            reason_text,
-            callback_data=f"report_reason_{reason_key}"
-        )])
-    
-    # Кнопка отмены
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="report_cancel")])
-
-    await update.message.reply_text(
-        text=text,
-        reply_markup=InlineKeyboardMarkup(keyboard),
-        parse_mode='HTML'
-    )

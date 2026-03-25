@@ -20,7 +20,7 @@ from __future__ import annotations
 
 import logging
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +92,7 @@ THREAD_IDS: dict[str, int] = {
 SPRINTS_CONFIG: dict[str, dict] = {
 
     # ── 24 ч ─────────────────────────────────────────────────────────────
-    'chat_core':    {'target': 10, 'hours': 24, 'coeff':  50, 'metric': 'messages',           'allowed_threads': 'ALL',                                                            'label': '💬 Основа чата'},
+    'chat_core':    {'target': 10, 'hours': 12, 'coeff':  50, 'metric': 'messages',           'allowed_threads': 'ALL',                                                            'label': '💬 Основа чата'},
     'emotional':    {'target': 10, 'hours': 24, 'coeff':  20, 'metric': 'emoji_messages',     'allowed_threads': 'ALL',                                                            'label': '😍 Эмоциональный'},
     'photographer': {'target':  3, 'hours': 24, 'coeff':  40, 'metric': 'photos',             'allowed_threads': 'ALL',                                                            'label': '📸 Фотограф'},
     'director':     {'target':  2, 'hours': 24, 'coeff': 140, 'metric': 'videos',             'allowed_threads': [THREAD_IDS['https://t.me/c/3890785443/762'], THREAD_IDS['https://t.me/c/3890785443/3204'], THREAD_IDS['https://t.me/c/3890785443/3206']], 'label': '🎬 Режиссёр'},
@@ -546,7 +546,11 @@ def _get_claimed_combos(db, user_id: int, now: datetime) -> dict[str, datetime]:
         result = {}
         for r in db.cursor.fetchall():
             try:
+                # Создаём naive datetime и привязываем к московскому времени
                 ca = datetime.strptime(r['claimed_at'][:19], '%Y-%m-%d %H:%M:%S')
+                # Если now имеет timezone, применяем его же к ca
+                if now.tzinfo is not None:
+                    ca = ca.replace(tzinfo=now.tzinfo)
             except (ValueError, TypeError):
                 ca = now  # fallback
             result[r['combo_name']] = ca

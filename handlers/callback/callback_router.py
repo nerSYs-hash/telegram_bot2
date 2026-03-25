@@ -17,6 +17,10 @@ from utils.helpers import format_number, generate_referral_link, get_moscow_time
 
 from handlers.lottery_handlers import LotteryHandler
 from handlers.bingo_handlers import BingoHandler
+<<<<<<< HEAD
+<<<<<<<< HEAD:handlers/callback/callback_router.py
+=======
+>>>>>>> 42e8e40
 from handlers.gift_handlers import GiftHandler
 from handlers.bbs_handlers import handle_bbs_callback
 
@@ -30,6 +34,57 @@ from handlers.callback.admin_callbacks import dispatch_admin
 from handlers.callback.owner_callbacks import dispatch_owner
 
 logger = logging.getLogger(__name__)
+<<<<<<< HEAD
+========
+#from handlers.profile_handlers import show_profile, show_profile_settings, toggle_profile_setting
+from handlers.gift_handlers import GiftHandler
+from handlers.stats_handlers import (
+    generate_export_file, show_top, show_top5_menu,
+    show_top5_activists, show_top5_rich,
+    handle_stats_callback, handle_exit_interview,
+    handle_stats_export, show_stats_menu, show_stats_period_menu,
+)
+from handlers.donate_handlers import (
+    safe_name, show_donate_menu, donate_to_user_start, donate_pick_user,
+    donate_user_amount, donate_user_custom, donate_user_confirm,
+    donate_to_bank_start, donate_bank_custom, donate_bank_amount,
+    donate_bank_confirm, donate_show_history,
+)
+from handlers.pr_handlers import (
+    show_settings, start_press_release, handle_pr_target_selection,
+    handle_pr_publish_now, handle_pr_schedule, show_scheduled_posts,
+    handle_pr_delete, handle_pr_cancel,
+    handle_pr_edit, handle_pr_edit_text, handle_pr_edit_photo,
+    handle_pr_edit_remove_photo, handle_pr_edit_time, handle_pr_edit_target,
+    handle_pr_retarget,
+    handle_pr_add_photo, handle_pr_remove_photo,
+    show_features_management, toggle_feature, handle_pr_edit_publish_now,
+    handle_pr_refresh_topics,
+)
+from handlers.bank_handlers import (
+    show_bank, show_bank_menu, adjust_difficulty, start_set_exchange_rate,
+    show_exchange_rate, start_bank_transfer,
+    select_transfer_amount, execute_bank_transfer,
+)
+from handlers.horoscope_handler import (
+    show_horoscope_menu, publish_horoscope_today, preview_horoscope,
+    diagnose_emoji,
+)
+from handlers.bbs_handlers import handle_bbs_callback
+from handlers.moderation import handle_restrict_callback
+from handlers.owner_handlers import (
+    show_owner_dashboard, show_staff_menu, staff_add_start, staff_remove_start,
+    show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
+    show_system_menu, toggle_maintenance,
+    ensure_owner_columns, show_statistics_not_in_chat,
+)
+from handlers.journal_handlers import (
+    show_journal_menu, journal_connect_start, journal_disconnect, journal_test,
+)
+
+>>>>>>>> 42e8e40:handlers/callback_handler.py
+=======
+>>>>>>> 42e8e40
 
 
 class CallbackHandler:
@@ -44,9 +99,20 @@ class CallbackHandler:
         self.gift_handler = GiftHandler(db, target_chat_id, main_admin_id)
 
         ensure_owner_columns(db)
+<<<<<<< HEAD
+<<<<<<<< HEAD:handlers/callback/callback_router.py
         ensure_survey_columns(db)
         ensure_journal_tables(db)
 
+========
+        
+    
+>>>>>>>> 42e8e40:handlers/callback_handler.py
+=======
+        ensure_survey_columns(db)
+        ensure_journal_tables(db)
+
+>>>>>>> 42e8e40
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all callback queries — dispatches to sub-modules."""
         query = update.callback_query
@@ -63,6 +129,10 @@ class CallbackHandler:
 
         # ═══ PRIVATE-ONLY для обычных пользователей ═══
         is_owner = user.id == self.main_admin_id
+<<<<<<< HEAD
+<<<<<<<< HEAD:handlers/callback/callback_router.py
+=======
+>>>>>>> 42e8e40
         if not is_owner and query.message and query.message.chat.type != 'private':
             private_callbacks = {
                 'menu_profile', 'menu_balance', 'menu_lottery', 'menu_bingo',
@@ -72,6 +142,100 @@ class CallbackHandler:
             }
             if data in private_callbacks or data.startswith(('accruals_', 'detail_export_',
                 'donate_', 'prof_notif_', 'prof_age_', 'monthly_gift_')):
+<<<<<<< HEAD
+========
+        if not is_owner and query.message.chat.type != 'private':
+            bot_me = await context.bot.get_me()
+            try:
+                await query.edit_message_text(
+                    "📋 Все функции бота доступны только в личных сообщениях.\n"
+                    f"👉 Перейдите в ЛС: @{bot_me.username}",
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💬 Перейти в ЛС", url=f"https://t.me/{bot_me.username}")]
+                    ])
+                )
+            except Exception:
+                pass
+            return
+
+        # ═══ ЖАЛОБЫ BBS (Deep Link → ЛС) ═══
+        if data.startswith('report_reason_') or data == 'report_cancel':
+            await self._handle_report_callback(query, context, data, user)
+            return
+        
+        # ═══ BBS CALLBACKS ═══
+        if data.startswith('bbs_') or data == 'menu_bbs':
+            # Проверка: фича BBS включена?
+            if not self.db.is_feature_enabled('bbs'):
+                await query.answer("📋 Pulse BBS временно отключена.", show_alert=True)
+                return
+
+            # BBS работает ТОЛЬКО в личных сообщениях
+            if query.message.chat.type != 'private':
+                bot_me = await context.bot.get_me()
+                await query.answer()
+                await query.edit_message_text(
+                    "📋 <b>Pulse BBS</b>\n\n"
+                    "Работа с анкетами доступна только в личных сообщениях с ботом.\n"
+                    "Нажмите кнопку ниже 👇",
+                    parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup([
+                        [InlineKeyboardButton("💬 Перейти в ЛС", url=f"https://t.me/{bot_me.username}?start=bbs")],
+                        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")],
+                    ])
+                )
+                return
+            handled = await handle_bbs_callback(
+                query, context, self.db, self.target_chat_id, self.bbs_thread_id
+            )
+            if handled:
+                return
+        
+        # Back to main menu
+        if data == "back_to_menu":
+            await self.show_main_menu(query, user)
+        
+        # Menu callbacks
+        elif data == "menu_balance":
+            await self.show_balance(query, user)
+        elif data == "menu_top":
+            await show_top(query, self.db, self.target_chat_id, context)
+        elif data == "menu_bank":
+            await show_bank_menu(query, user, self.db, self.main_admin_id)
+        elif data == "bank_panel":
+            await show_bank(query, user, self.db, self.main_admin_id)
+        elif data == "menu_stats":
+            # Доступ для владельца И админов
+            _u = self.db.get_user(user.id)
+            _is_staff = user.id == self.main_admin_id or (_u and (_u['is_admin'] or _u['is_owner']))
+            if _is_staff:
+                await show_stats_menu(query, user, user.id)
+            else:
+                await query.answer("⛔ Нет доступа.", show_alert=True)
+        elif data == "menu_settings":
+            await self.show_main_menu(query, user)
+        elif data == "owner_backup":
+            from handlers.owner_handlers import send_database_backup
+            await send_database_backup(query, user, self.db, self.main_admin_id, context)    
+        elif data == "menu_lottery":
+            await self.lottery_handler.show_lottery_menu(query, user)
+        elif data == "menu_bingo":
+            await self.bingo_handler.show_bingo_menu(query, user)
+        elif data == "menu_monthly_gift":
+            await self.gift_handler.show_monthly_gift_menu(query, user, context)
+        elif data == "menu_referral":
+            await self.show_referral(query, user, context)
+        elif data == "referral_refresh":
+            await self.refresh_referral_link(query, user, context)
+        # Menu callbacks
+        elif data == "menu_profile":
+            try:
+                await show_profile(query, context, self.db, user.id)
+            except Exception as e:
+                logging.error(f"[menu_profile] Ошибка: {e}", exc_info=True)
+>>>>>>>> 42e8e40:handlers/callback_handler.py
+=======
+>>>>>>> 42e8e40
                 try:
                     bot_me = await context.bot.get_me()
                     await query.edit_message_text(
@@ -79,6 +243,10 @@ class CallbackHandler:
                     )
                 except Exception:
                     pass
+<<<<<<< HEAD
+<<<<<<<< HEAD:handlers/callback/callback_router.py
+=======
+>>>>>>> 42e8e40
                 return
 
         # ═══ BBS CALLBACKS (ранний возврат) ═══
@@ -108,6 +276,286 @@ class CallbackHandler:
 
         # Неизвестный callback
         logger.warning(f"Unhandled callback: {data}")
+<<<<<<< HEAD
+========
+        elif data == "profile_settings":
+            await show_profile_settings(query, user, self.db)
+        elif data.startswith("prof_notif_") or data.startswith("prof_age_"):
+            await toggle_profile_setting(query, data, user, self.db)
+            
+        # Заглушки для профиля
+        elif data in ["stub_quests", "stub_market", "stub_settings"]:
+            await query.answer("🚧 Этот раздел находится в разработке! Следите за обновлениями.", show_alert=True)
+        
+        # Activities menu callback
+        elif data == "menu_activities":
+            await self.show_activities_menu(query, user)
+        
+        # FAQ callbacks
+        elif data == "faq_menu":
+            from handlers.commands.system_commands import _show_faq_menu
+            await _show_faq_menu(query.message)
+        elif data == "faq_commands":
+            from handlers.commands.system_commands import FAQ_COMMANDS_USER, FAQ_COMMANDS_ADMIN
+            text = FAQ_COMMANDS_USER
+            if user.id == self.main_admin_id:
+                text += FAQ_COMMANDS_ADMIN
+            kb = [
+                [InlineKeyboardButton("🔙 Назад к FAQ", callback_data="faq_back")],
+            ]
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(kb))
+        elif data == "faq_functions":
+            from handlers.commands.system_commands import FAQ_FUNCTIONS
+            kb = [
+                [InlineKeyboardButton("🔙 Назад к FAQ", callback_data="faq_back")],
+            ]
+            await query.edit_message_text(FAQ_FUNCTIONS, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(kb))
+        elif data == "faq_back":
+            text = "❓ FAQ / ПОМОЩЬ\n\nВыберите раздел:"
+            kb = [
+                [InlineKeyboardButton("📚 Команды и их описание", callback_data="faq_commands")],
+                [InlineKeyboardButton("📖 Описание функций", callback_data="faq_functions")],
+            ]
+            await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(kb))
+        
+        # TOP-5 menu callbacks
+        elif data == "menu_top5":
+            await show_top5_menu(query, user)
+        elif data == "top5_activists":
+            await show_top5_activists(query, user, self.db, context)
+        elif data == "top5_rich":
+            await show_top5_rich(query, user, self.db, context)
+        
+        # Stats callbacks
+        elif data.startswith("stats_"):
+            # Доступ для владельца И админов
+            _u = self.db.get_user(user.id)
+            _is_staff = user.id == self.main_admin_id or (_u and (_u['is_admin'] or _u['is_owner']))
+            _eff_id = user.id if _is_staff else self.main_admin_id
+            if data.startswith("stats_type_"):
+                await show_stats_period_menu(query, data, user, _eff_id)
+            elif data.startswith("stats_export_"):
+                await handle_stats_export(query, data, user, context, _eff_id)
+            else:
+                await handle_stats_callback(query, data, user, context, self.db, _eff_id, self.target_chat_id)
+        
+        # Exit interview callbacks
+        elif data.startswith("exit_"):
+            await handle_exit_interview(query, data, context, self.db)
+        
+        # Bank callbacks
+        elif data == "bank_k_up":
+            await adjust_difficulty(query, user, 'up', self.db, self.main_admin_id)
+        elif data == "bank_k_down":
+            await adjust_difficulty(query, user, 'down', self.db, self.main_admin_id)
+        elif data == "bank_refresh":
+            await show_bank(query, user, self.db, self.main_admin_id)
+        
+        # Lottery callbacks — ПОЛЬЗОВАТЕЛЬСКИЕ (покупка, мои билеты)
+        elif data.startswith("buy_ticket_"):
+            await self.lottery_handler.handle_buy_ticket(query, data, user, context)
+        elif data.startswith("my_tickets_"):
+            await self.lottery_handler.handle_my_tickets(query, data, user, context)
+        
+        # Lottery — виджет +/− в ЛС (единый обработчик lott_*)
+        elif data.startswith("lott_"):
+            await self.lottery_handler.handle_lott_callback(query, data, user, context)    
+        
+        # Lottery callbacks — АДМИНСКИЕ (создание, список, розыгрыш)
+        elif data.startswith("lottery_"):
+            await self.lottery_handler.handle_lottery_callback(query, data, user, context)
+        
+        # ═══ BINGO CALLBACKS ═══
+        elif data.startswith("bingo_"):
+            await self.bingo_handler.handle_bingo_callback(query, data, user, context)
+        elif data.startswith("bcard_"):
+            await self.bingo_handler.handle_card_callback(query, data, user, context)
+        elif data.startswith("bbingo_"):
+            await self.bingo_handler.handle_bingo_claim(query, data, user, context)
+        
+        # Press release callbacks
+        elif data == "press_release_start":
+            await start_press_release(query, user, context, self.db, self.main_admin_id)
+        elif data.startswith("pr_target_"):
+            await handle_pr_target_selection(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data == "pr_publish_now":
+            await handle_pr_publish_now(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data == "pr_schedule":
+            await handle_pr_schedule(query, user, context, self.db, self.main_admin_id)
+        elif data == "pr_scheduled_list":
+            await show_scheduled_posts(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data.startswith("pr_delete_"):
+            await handle_pr_delete(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data == "pr_cancel":
+            await handle_pr_cancel(query, user, context, self.db, self.main_admin_id)
+        elif data == "pr_refresh_topics":
+            await handle_pr_refresh_topics(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        
+        # Press release: add/remove photo
+        elif data == "pr_add_photo":
+            await handle_pr_add_photo(query, user, context, self.db, self.main_admin_id)
+        elif data == "pr_remove_photo":
+            await handle_pr_remove_photo(query, user, context, self.db, self.main_admin_id)
+        
+        # Press release: edit scheduled posts
+        elif data.startswith("pr_edit_text_"):
+            await handle_pr_edit_text(query, data, user, context, self.db, self.main_admin_id)
+        elif data.startswith("pr_edit_photo_"):
+            await handle_pr_edit_photo(query, data, user, context, self.db, self.main_admin_id)
+        elif data.startswith("pr_edit_remove_photo_"):
+            await handle_pr_edit_remove_photo(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data.startswith("pr_edit_time_"):
+            await handle_pr_edit_time(query, data, user, context, self.db, self.main_admin_id)
+        elif data.startswith("pr_edit_target_"):
+            await handle_pr_edit_target(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data.startswith("pr_edit_publishnow_"):
+            await handle_pr_edit_publish_now(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data.startswith("pr_edit_"):
+            await handle_pr_edit(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        
+        # Press release: retarget (change thread of existing post)
+        elif data.startswith("pr_retarget_"):
+            await handle_pr_retarget(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        
+        # Features management callbacks
+        elif data == "manage_features":
+            await show_features_management(query, user, self.db, self.main_admin_id)
+        elif data.startswith("feature_on_") or data.startswith("feature_off_"):
+            await toggle_feature(query, data, user, self.db, self.main_admin_id)
+        elif data == "feature_info":
+            # Just a label, do nothing
+            await query.answer()
+        
+        # Horoscope callbacks
+        elif data == "horoscope_menu":
+            await show_horoscope_menu(query, user, self.db, self.main_admin_id)
+        elif data == "horoscope_publish":
+            await publish_horoscope_today(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        elif data == "horoscope_preview":
+            await preview_horoscope(query, user, context, self.db, self.main_admin_id)
+        elif data == "horoscope_diagnose":
+            await diagnose_emoji(query, user, context, self.db, self.main_admin_id)
+        
+        # Exchange rate callbacks
+        elif data == "set_exchange_rate":
+            await start_set_exchange_rate(query, user, context, self.db, self.main_admin_id)
+        elif data == "show_exchange_rate":
+            await show_exchange_rate(query, user, self.db)
+        
+        # Monthly gift callbacks — OWNER
+        elif data == "monthly_gift_draw":
+            await self.gift_handler.handle_monthly_gift_draw(query, user, context)
+        elif data == "monthly_gift_toggle":
+            await self.gift_handler.handle_monthly_gift_toggle(query, user)
+        elif data == "monthly_gift_history":
+            await self.gift_handler.show_monthly_gift_history(query, user)
+        elif data == "monthly_gift_create":
+            await self.gift_handler.monthly_gift_create_start(query, user, context)
+        elif data.startswith("mgift_set_amount_"):
+            await self.gift_handler.monthly_gift_set_amount(query, data, user, context)
+        elif data.startswith("mgift_set_type_"):
+            await self.gift_handler.monthly_gift_set_type(query, data, user, context)
+        elif data.startswith("mgift_set_condition_"):
+            await self.gift_handler.monthly_gift_set_condition(query, data, user, context)
+        elif data.startswith("mgift_set_minmsg_"):
+            await self.gift_handler.monthly_gift_set_min_messages(query, data, user, context)
+        elif data == "monthly_gift_participants":
+            await self.gift_handler.show_monthly_gift_participants(query, user)
+        elif data == "monthly_gift_announce":
+            await self.gift_handler.monthly_gift_announce(query, user, context)
+        elif data == "monthly_gift_confirm_draw":
+            await self.gift_handler.monthly_gift_confirm_draw(query, user, context)
+        
+        # Monthly gift callbacks — USER
+        elif data == "monthly_gift_user_view":
+            await self.gift_handler.show_monthly_gift_user(query, user)
+        elif data == "monthly_gift_participate":
+            await self.gift_handler.monthly_gift_participate(query, user)
+        elif data == "monthly_gift_my_progress":
+            await self.gift_handler.monthly_gift_my_progress(query, user)
+        elif data == "monthly_gift_winners":
+            await self.gift_handler.show_monthly_gift_winners(query, user)
+        
+        # Bank transfer callbacks
+        elif data == "bank_transfer_start":
+            await start_bank_transfer(query, user, context, self.db, self.main_admin_id)
+        elif data.startswith("bt_user_"):
+            user_id = int(data.replace("bt_user_", ""))
+            await select_transfer_amount(query, user_id, user, context, self.db, self.main_admin_id)
+        elif data.startswith("bt_amount_"):
+            parts = data.replace("bt_amount_", "").split("_")
+            user_id = int(parts[0])
+            amount = float(parts[1])
+            await execute_bank_transfer(query, user_id, amount, user, context, self.db, self.main_admin_id)
+        elif data.startswith("bt_custom_"):
+            user_id = int(data.replace("bt_custom_", ""))
+            context.user_data['bt_custom_user_id'] = user_id
+            context.user_data['awaiting_bank_transfer'] = True
+            target_user = self.db.get_user(user_id)
+            username = target_user['username'] or target_user['first_name'] if target_user else "User"
+            await query.edit_message_text(
+                f"✏️ СВОЯ СУММА ДЛЯ @{username}\n\n"
+                f"Отправьте сумму (например: 250.50)\n"
+                f"Для отмены: /cancel",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("❌ Отмена", callback_data="bank_transfer_start")
+                ]])
+            )
+        
+        # Export callbacks
+        elif data.startswith("export_"):
+            await generate_export_file(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+        
+        # Accruals (начисления) callbacks
+        elif data == "my_accruals":
+            await self.show_accruals_periods(query, user)
+        elif data.startswith("accruals_"):
+            await self.show_accruals(query, data, user)
+        
+        # Detalization (детализация Excel) callbacks
+        elif data == "my_detalization":
+            await self.show_detalization_periods(query, user)
+        elif data.startswith("detail_export_"):
+            await self.export_user_detalization(query, data, user, context)
+        
+        # ═══ OWNER DASHBOARD CALLBACKS ═══
+        elif data == "owner_dashboard":
+            await show_owner_dashboard(query, context, self.db, self.main_admin_id)
+        elif data == "owner_staff":
+            await show_staff_menu(query, self.db, self.main_admin_id)
+        elif data == "owner_staff_add":
+            await staff_add_start(query, context, self.db, self.main_admin_id)
+        elif data == "owner_staff_remove":
+            await staff_remove_start(query, context, self.db, self.main_admin_id)
+        elif data == "owner_economy":
+            await show_economy_menu(query, self.db, self.main_admin_id)
+        elif data == "owner_emit":
+            await emit_start(query, context, self.db, self.main_admin_id)
+        elif data == "owner_wipe":
+            await wipe_confirm_step1(query, self.db, self.main_admin_id)
+        elif data == "owner_wipe_confirm":
+            await wipe_execute(query, self.db, self.main_admin_id)
+        elif data == "owner_system":
+            await show_system_menu(query, self.db, self.main_admin_id)
+        elif data == "owner_maintenance_toggle":
+            await toggle_maintenance(query, self.db, self.main_admin_id)
+        elif data == "owner_journal":
+            await show_journal_menu(query, self.db, self.main_admin_id)
+        elif data == "journal_connect":
+            await journal_connect_start(query, context, self.db, self.main_admin_id)
+        elif data == "journal_disconnect":
+            await journal_disconnect(query, self.db, self.main_admin_id)
+        elif data == "journal_test":
+            await journal_test(query, context, self.db, self.main_admin_id)
+        elif data == "owner_stats_not_in_chat":
+            await show_statistics_not_in_chat(query, self.main_admin_id)
+
+        # ═══ RESTRICT PANEL CALLBACKS ═══
+        elif data.startswith("restrict_"):
+            await handle_restrict_callback(query, data, context, self.db, self.main_admin_id, self.target_chat_id)
+>>>>>>>> 42e8e40:handlers/callback_handler.py
+=======
+>>>>>>> 42e8e40
 
     async def show_main_menu(self, query, user):
         """Show main menu — respects feature toggles"""
@@ -151,7 +599,6 @@ class CallbackHandler:
 
         # ── Владелец ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
@@ -603,6 +1050,11 @@ class CallbackHandler:
         'nsfw': '🔞 Откровенный контент',
     }
 
+<<<<<<< HEAD
+    async def _handle_report_callback(self, query, context, data, user):
+        """Обработка выбора причины жалобы."""
+        import logging
+=======
     async def _show_report_menu(self, query, context, data, user):
         """Показ меню выбора причины жалобы (callback от кнопки ⚠️)."""
         import html
@@ -668,6 +1120,7 @@ class CallbackHandler:
         """Обработка выбора причины жалобы."""
         import logging
         import html
+>>>>>>> 42e8e40
 
         # ── Отмена ──
         if data == 'report_cancel':
@@ -690,14 +1143,23 @@ class CallbackHandler:
                 pass
             return
 
+<<<<<<< HEAD
+        # Данные заявителя
+        reporter_name = user.username or user.first_name or str(user.id)
+=======
         # Данные заявителя (ЭКРАНИРУЕМ HTML!)
         reporter_name = html.escape(user.username or user.first_name or str(user.id))
+>>>>>>> 42e8e40
 
         # Данные нарушителя + ссылка на пост
         try:
             reported_user = self.db.get_user(reported_user_id)
             if reported_user:
+<<<<<<< HEAD
+                reported_name = reported_user['username'] or reported_user['first_name'] or str(reported_user_id)
+=======
                 reported_name = html.escape(reported_user['username'] or reported_user['first_name'] or str(reported_user_id))
+>>>>>>> 42e8e40
             else:
                 reported_name = str(reported_user_id)
         except Exception:
@@ -723,7 +1185,11 @@ class CallbackHandler:
 
         # Формируем сообщение для админа
         report_msg = (
+<<<<<<< HEAD
+            f"🚨 <b>НОВАЯ ЖАЛОБА (BBS)</b>\n\n"
+=======
             f"{ICON_ALARM_STRONG} <b>НОВАЯ ЖАЛОБА (BBS)</b>\n\n"
+>>>>>>> 42e8e40
             f"👤 <b>От кого:</b> @{reporter_name} (<code>{user.id}</code>)\n"
             f"👤 <b>На кого:</b> @{reported_name} (<code>{reported_user_id}</code>)\n"
             f"📌 <b>Причина:</b> {reason_text}"

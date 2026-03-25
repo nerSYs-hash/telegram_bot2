@@ -14,11 +14,14 @@ from telegram.ext import (
     CallbackQueryHandler,
     ChatMemberHandler,
     MessageReactionHandler,  # ← ДОБАВЛЕНО для обработки реакций
-    filters
+    filters,
+    ContextTypes
 )
+
+from handlers.admin_moderation import admin_moderation_callback
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
-from aiogram.client.telegram import TelegramAPIServer
+from handlers.moderation import mute_command, unmute_command, ban_command, restrict_command
 # Import custom modules
 from database.db_manager import Database
 from handlers.command_handler import CommandHandler as BotCommandHandler
@@ -27,7 +30,10 @@ from handlers.callback import CallbackHandler
 from handlers.commands.exchange_commands import recalc_rate_command
 from utils.helpers import get_moscow_time, format_number
 from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update
-
+from database.db_friend import init_db # Импортируем инициализацию друга
+from database.db_friend import init_db
+#from middlewares.registration_check import CheckRegistrationMiddleware
+from handlers.registration_conversation import registration_conv
 # Load environment variables
 load_dotenv()
 
@@ -83,6 +89,10 @@ logger = logging.getLogger(__name__)
 # ──────────────────────────────────────────
 
 class TelegramBot:
+    async def on_startup():
+        await init_db() # Создаем таблицы друга, если их нет
+        print("База данных друга подключена!")
+    
     def __init__(self):
         """Initialize the bot"""
         # Get configuration from environment
@@ -121,6 +131,9 @@ class TelegramBot:
     
     async def post_init(self, application: Application):
         """Post initialization hook"""
+        # --- ДОБАВЛЯЕМ ЭТО ---
+        await init_db() 
+        logger.info("✅ База данных регистрации друга инициализирована")
         bot = application.bot
         me = await bot.get_me()
         self.bot_username = me.username
@@ -423,49 +436,10 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in TOP-5 update: {e}")
 
-    async def error_handler(self, update, context):
-        """Handle errors"""
-        try:
-            logger.error(f"Exception while handling an update: {context.error}")
-            
-            # Log full traceback
-            import traceback
-            tb_list = traceback.format_exception(type(context.error), context.error, context.error.__traceback__)
-            tb_string = ''.join(tb_list)
-            logger.error(tb_string)
-            
-            # Try to notify user if it's a user update
-            if update and update.effective_user:
-                try:
-                    await context.bot.send_message(
-                        chat_id=update.effective_chat.id,
-                        text=f"❌ Произошла ошибка при обработке вашего запроса.\n\n"
-                             f"Ошибка: {str(context.error)[:200]}\n\n"
-                             f"Администратор уведомлен."
-                    )
-                except Exception as send_error:
-                    logger.error(f"Failed to notify user about error: {send_error}")
-            
-            # Notify admin
-            try:
-                error_msg = f"⚠️ ОШИБКА БОТА\n\n"
-                error_msg += f"Пользователь: {update.effective_user.first_name if update and update.effective_user else 'Unknown'}\n"
-                error_msg += f"Ошибка: {str(context.error)[:500]}\n\n"
-                error_msg += f"Время: {get_moscow_time().strftime('%d.%m.%Y %H:%M:%S')}"
-                
-                await context.bot.send_message(
-                    chat_id=self.main_admin_id,
-                    text=error_msg
-                )
-            except Exception as notify_error:
-                logger.error(f"Failed to notify admin about error: {notify_error}")
-        
-        except Exception as e:
-            logger.error(f"Error in error_handler itself: {e}")
-
     def setup_handlers(self):
         """Setup all handlers"""
         # Command handlers
+        self.application.add_handler(registration_conv)
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
         self.application.add_handler(CommandHandler("menu", self.command_handler.menu_command))
         self.application.add_handler(CommandHandler("balance", self.command_handler.balance_command))
@@ -481,14 +455,47 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("profile", self.command_handler.profile_command))
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
+        self.application.add_handler(CommandHandler("mute", lambda u, c: mute_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
+        self.application.add_handler(CommandHandler("unmute", lambda u, c: unmute_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
+        self.application.add_handler(CommandHandler("ban", lambda u, c: ban_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
+        self.application.add_handler(CommandHandler("restrict", lambda u, c: restrict_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
+        self.application.add_handler(CallbackQueryHandler(admin_moderation_callback, pattern="^adm_"))
+
+        # Панель администратора — кнопки
+        from handlers.admin_moderation import (
+            new_application_callback, send_admin_panel,
+            panel_callback, handle_panel_input, handle_reject_reason
+        )
+        self.application.add_handler(CallbackQueryHandler(new_application_callback, pattern="^new_app$"))
+        self.application.add_handler(CallbackQueryHandler(panel_callback, pattern="^panel_"))
+
+        # Ввод текста — причина отказа и ввод данных для панели владельца
+        async def _combined_text_handler(update, context):
+            if not await handle_panel_input(update, context):
+                await handle_reject_reason(update, context)
+        self.application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, _combined_text_handler),
+            group=1
+        )
+
+        # Команда /panel — отправляет панель в чат администраторов
+        async def panel_command(update, context):
+            uid = update.effective_user.id
+            is_owner = (uid == self.main_admin_id)
+            user_data = self.db.get_user(uid)
+            is_adm = is_owner or (user_data and (user_data.get('is_admin') or user_data.get('is_owner')))
+            if is_adm:
+                await send_admin_panel(context.bot, update.effective_chat.id, is_owner=is_owner)
+        self.application.add_handler(CommandHandler("panel", panel_command))
         
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
             MessageHandler(
-                filters.StatusUpdate.FORUM_TOPIC_CREATED | 
+                (filters.StatusUpdate.FORUM_TOPIC_CREATED |
                 filters.StatusUpdate.FORUM_TOPIC_EDITED |
                 filters.StatusUpdate.FORUM_TOPIC_CLOSED |
-                filters.StatusUpdate.FORUM_TOPIC_REOPENED,
+                filters.StatusUpdate.FORUM_TOPIC_REOPENED) &
+                ~filters.COMMAND,
                 self.message_handler.handle_forum_topic_event
             )
         )
@@ -516,32 +523,9 @@ class TelegramBot:
             )
         )
         
-        # Error handler (MUST be last)
-        self.application.add_error_handler(self.error_handler)
+        logger.info("✅ Handlers setup complete and ordered correctly")
         
-        logger.info("Handlers setup complete")
     
-    async def check_inactive_users_job(self):
-        """Scheduled: проверка неактивных пользователей (60+ дней)"""
-        try:
-            from handlers.reminders import check_inactive_users
-            await check_inactive_users(
-                self.application.bot, self.db,
-                self.target_chat_id, self.main_admin_id
-            )
-        except Exception as e:
-            logger.error(f"Error in check_inactive_users: {e}")
-
-    async def send_weekly_report_job(self):
-        """Scheduled: еженедельный отчёт владельцу"""
-        try:
-            from handlers.reminders import send_weekly_report
-            await send_weekly_report(
-                self.application.bot, self.db, self.main_admin_id
-            )
-        except Exception as e:
-            logger.error(f"Error in weekly report: {e}")
-
     def setup_jobs(self):
         """Setup scheduled jobs"""
         # Daily statistics DISABLED - use /top5 command instead
@@ -628,22 +612,22 @@ class TelegramBot:
             id='top5_evening'
         )
         
-        # ═══ Проверка неактивных пользователей (раз в 24 часа) ═══
+        # Сброс просроченных блокировок заявок (каждую минуту)
+        from database.db_friend import cleanup_expired_locks
         self.scheduler.add_job(
-            self.check_inactive_users_job,
+            cleanup_expired_locks,
             'interval',
-            hours=24,
-            id='check_inactive'
+            minutes=1,
+            id='cleanup_expired_locks'
         )
-        
-        # ═══ Еженедельный отчёт владельцу (воскресенье 20:00 МСК) ═══
+
+        from handlers.reminder_logic import send_registration_reminders
         self.scheduler.add_job(
-            self.send_weekly_report_job,
-            'cron',
-            day_of_week='sun',
-            hour=20,
-            minute=0,
-            id='weekly_report'
+            send_registration_reminders,
+            'interval',
+            minutes=1,
+            args=[self.application], # Передаем объект бота
+            id='registration_reminders'
         )
         
         self.scheduler.start()
@@ -652,29 +636,34 @@ class TelegramBot:
     def run(self):
         """Run the bot"""
         try:
-            # Create application without job queue (we use APScheduler instead)
             builder = Application.builder()
             builder.token(self.bot_token)
             builder.post_init(self.post_init)
             
-            # Disable job queue since we use APScheduler
             from telegram.ext import JobQueue
             builder.job_queue(None)
             
             self.application = builder.build()
             
-            logger.info("Starting bot...")
+            # Передаем базу данных в bot_data, чтобы она была доступна везде
+            self.application.bot_data['db'] = self.db
+            # Регистрируем обработчик ошибок
+            self.application.add_error_handler(self.error_handler)
             
-            # Run the bot
+            logger.info("Starting bot...")
             self.application.run_polling(allowed_updates=Update.ALL_TYPES)
             
         except Exception as e:
             logger.error(f"Error running bot: {e}")
             raise
         finally:
-            # Cleanup
             self.db.close()
             logger.info("Bot stopped")
+            
+    async def error_handler(self, update: object, context: ContextTypes.DEFAULT_TYPE) -> None:
+        import traceback
+        logger.error(f"Exception while handling an update: {context.error}")
+        traceback.print_exc()
 
 def main():
     """Main entry point"""

@@ -122,7 +122,8 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
         [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
-        [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal")],
+        [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("📊 Опросы при выходе", callback_data="owner_survey_results")],
         [InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
@@ -142,7 +143,73 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
 
 
 # ═══════════════════════════════════════════════════════════════
-#   ЭКОНОМИКА
+#  👨‍💼 ПЕРСОНАЛ
+# ═══════════════════════════════════════════════════════════════
+
+async def show_staff_menu(query, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    # Список текущих админов
+    db.cursor.execute(
+        'SELECT user_id, username, first_name FROM users WHERE is_admin = 1 OR is_owner = 1'
+    )
+    admins = db.cursor.fetchall()
+
+    lines = []
+    for a in admins:
+        name = a['username'] or a['first_name'] or f"ID:{a['user_id']}"
+        role = "👑" if a['user_id'] == admin_id else "⭐"
+        lines.append(f"  {role} @{name} (<code>{a['user_id']}</code>)")
+    admin_block = "\n".join(lines) if lines else "  — пусто —"
+
+    text = (
+        f"👨‍💼 <b>ПЕРСОНАЛ</b>\n"
+        f"{'━' * 24}\n\n"
+        f"<b>Текущие админы:</b>\n"
+        f"{admin_block}"
+    )
+
+    keyboard = [
+        [InlineKeyboardButton("➕ Назначить админа", callback_data="owner_staff_add")],
+        [InlineKeyboardButton("➖ Разжаловать", callback_data="owner_staff_remove")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
+    ]
+
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def staff_add_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    context.user_data['owner_awaiting'] = 'staff_add'
+    text = (
+        "➕ <b>Назначить админа</b>\n\n"
+        "Отправьте <b>user_id</b> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def staff_remove_start(query, context, db, admin_id: int) -> None:
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    context.user_data['owner_awaiting'] = 'staff_remove'
+    text = (
+        "➖ <b>Разжаловать админа</b>\n\n"
+        "Отправьте <b>user_id</b> пользователя:"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ═══════════════════════════════════════════════════════════════
+#  💰 ЭКОНОМИКА
 # ═══════════════════════════════════════════════════════════════
 
 async def show_economy_menu(query, db, admin_id: int) -> None:
@@ -159,7 +226,7 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton("💸 Выдать Пульсы", callback_data="owner_emit")],
         [InlineKeyboardButton("💀 Глобальный Вайп", callback_data="owner_wipe")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -210,17 +277,6 @@ async def wipe_execute(query, db, admin_id: int) -> None:
         affected = db.cursor.rowcount
         logger.warning(f"GLOBAL WIPE by {query.from_user.id}: {affected} users zeroed")
 
-        # Журнал
-        try:
-            from handlers.journal_handlers import log_admin_action
-            await log_admin_action(
-                query.message.get_bot() if hasattr(query.message, 'get_bot') else None,
-                db, query.from_user.id,
-                f"💀 Глобальный вайп балансов ({affected} пользователей)"
-            )
-        except Exception:
-            pass
-
         text = (
             f"💀 <b>ВАЙП ВЫПОЛНЕН</b>\n\n"
             f"Обнулено пользователей: <b>{affected}</b>\n"
@@ -257,7 +313,7 @@ async def show_system_menu(query, db, admin_id: int) -> None:
 
     keyboard = [
         [InlineKeyboardButton(btn_label, callback_data="owner_maintenance_toggle")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
@@ -488,7 +544,10 @@ async def handle_owner_text_input(
             await message.reply_text("⛔ Нельзя разжаловать владельца.")
             return True
         target = db.get_user(target_id)
-        if not target or not target['is_admin']:
+        if not target:
+            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            return True
+        if not target['is_admin']:
             await message.reply_text("ℹ️ Не является админом.")
             return True
         db.cursor.execute('UPDATE users SET is_admin = 0 WHERE user_id = ?', (target_id,))
@@ -546,16 +605,174 @@ async def handle_owner_text_input(
             ])
         )
         logger.info(f"EMIT: {amount} to {target_id} by {user.id}")
+        return True
 
-        # Журнал
+    # ── Добавить в блэклист ──
+    if awaiting == 'bl_add':
+        context.user_data.pop('owner_awaiting', None)
         try:
-            from handlers.journal_handlers import log_admin_action
-            await log_admin_action(
-                context.bot, db, user.id,
-                f"💸 Эмиссия: {amount} 💎 → ID {target_id}"
+            target_id = int(text)
+        except (ValueError, TypeError):
+            await message.reply_text("❌ Введите числовой user_id.")
+            return True
+
+        if target_id == admin_id:
+            await message.reply_text("⛔ Нельзя добавить владельца в блэклист.")
+            return True
+
+        ensure_owner_columns(db)
+
+        target = db.get_user(target_id)
+        if not target:
+            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            return True
+
+        db.cursor.execute('UPDATE users SET is_blacklisted = 1 WHERE user_id = ?', (target_id,))
+        db.conn.commit()
+
+        name = target['username'] or target['first_name'] or target_id
+        await message.reply_text(
+            f"🚫 @{name} (<code>{target_id}</code>) добавлен в блэклист.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
+            ])
+        )
+        logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
+        return True
+
+    # ── Убрать из блэклиста ──
+    if awaiting == 'bl_remove':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except (ValueError, TypeError):
+            await message.reply_text("❌ Введите числовой user_id.")
+            return True
+
+        ensure_owner_columns(db)
+
+        target = db.get_user(target_id)
+        if not target:
+            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            return True
+
+        db.cursor.execute('UPDATE users SET is_blacklisted = 0 WHERE user_id = ?', (target_id,))
+        db.conn.commit()
+
+        name = target['username'] or target['first_name'] or target_id
+        await message.reply_text(
+            f"✅ @{name} (<code>{target_id}</code>) убран из блэклиста.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
+            ])
+        )
+        logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
+        return True
+
+    # ── Мут по ID из ЛС ──
+    if awaiting.startswith('mute_'):
+        context.user_data.pop('owner_awaiting', None)
+        duration_key = awaiting.replace('mute_', '')
+
+        if duration_key not in MUTE_DURATIONS:
+            await message.reply_text("❌ Неизвестная длительность.")
+            return True
+
+        try:
+            target_id = int(text)
+        except (ValueError, TypeError):
+            await message.reply_text("❌ Введите числовой user_id.")
+            return True
+
+        seconds, human = MUTE_DURATIONS[duration_key]
+        until_ts = int(time.time()) + seconds
+
+        if not target_chat_id:
+            await message.reply_text("❌ Не удалось определить чат.")
+            return True
+
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id=target_chat_id,
+                user_id=target_id,
+                permissions=ChatPermissions(
+                    can_send_messages=False,
+                    can_send_audios=False,
+                    can_send_documents=False,
+                    can_send_photos=False,
+                    can_send_videos=False,
+                    can_send_video_notes=False,
+                    can_send_voice_notes=False,
+                    can_send_polls=False,
+                    can_send_other_messages=False,
+                    can_add_web_page_previews=False,
+                ),
+                until_date=until_ts,
             )
-        except Exception:
-            pass
+
+            target = db.get_user(target_id)
+            name = (target['username'] or target['first_name'] or target_id) if target else target_id
+
+            await message.reply_text(
+                f"🔇 <code>{name}</code> замучен на <b>{human}</b>",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
+                ])
+            )
+            logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
+        except Exception as e:
+            logger.error(f"Owner mute error: {e}")
+            await message.reply_text(f"❌ Не удалось замутить: {e}")
+        return True
+
+    # ── Размут по ID из ЛС ──
+    if awaiting == 'unmute':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            target_id = int(text)
+        except (ValueError, TypeError):
+            await message.reply_text("❌ Введите числовой user_id.")
+            return True
+
+        if not target_chat_id:
+            await message.reply_text("❌ Не удалось определить чат.")
+            return True
+
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id=target_chat_id,
+                user_id=target_id,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_audios=True,
+                    can_send_documents=True,
+                    can_send_photos=True,
+                    can_send_videos=True,
+                    can_send_video_notes=True,
+                    can_send_voice_notes=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True,
+                ),
+            )
+
+            target = db.get_user(target_id)
+            name = (target['username'] or target['first_name'] or target_id) if target else target_id
+
+            await message.reply_text(
+                f"🔊 <code>{name}</code> размучен",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
+                ])
+            )
+            logger.info(f"OWNER UNMUTE: {target_id} by {user.id}")
+        except Exception as e:
+            logger.error(f"Owner unmute error: {e}")
+            await message.reply_text(f"❌ Не удалось размутить: {e}")
         return True
 
     # ── Добавить в блэклист ──
@@ -698,6 +915,82 @@ async def handle_owner_text_input(
 # ═══════════════════════════════════════════════════════════════
 #  💾 БЭКАП (существующий функционал)
 # ═══════════════════════════════════════════════════════════════
+
+async def show_statistics_not_in_chat(query, admin_id: int) -> None:
+    """Статистика 4.5 — пользователи Не в чате (БЗА / НПС)."""
+    if query.from_user.id != admin_id:
+        await query.answer("⛔", show_alert=True)
+        return
+
+    import sqlite3
+
+    db_path = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+        'registration_system', 'pulse_bot.db'
+    )
+
+    bza_lines = []
+    nps_lines = []
+
+    try:
+        conn = sqlite3.connect(db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+
+        cur.execute(
+            "SELECT tg_id, first_name, last_name, username FROM users "
+            "WHERE questionnaire_state IS NOT NULL"
+        )
+        for row in cur.fetchall():
+            fn = (row['first_name'] or '').strip()
+            ln = (row['last_name'] or '').strip()
+            name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
+            bza_lines.append(f"{name}, #user{row['tg_id']}, БЗА")
+
+        cur.execute(
+            "SELECT tg_id, first_name, last_name, username FROM users "
+            "WHERE invite_link IS NOT NULL AND status = 'not_in_chat'"
+        )
+        for row in cur.fetchall():
+            fn = (row['first_name'] or '').strip()
+            ln = (row['last_name'] or '').strip()
+            name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
+            nps_lines.append(f"{name}, #user{row['tg_id']}, НПС")
+
+        conn.close()
+    except Exception as e:
+        logger.error(f"show_statistics_not_in_chat DB error: {e}")
+        await query.edit_message_text(
+            f"❌ Ошибка чтения базы регистрации:\n<code>{e}</code>\n\n"
+            f"Путь: <code>{db_path}</code>",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]
+            ])
+        )
+        return
+
+    all_lines = bza_lines + nps_lines
+    body = "\n".join(all_lines) if all_lines else "<i>Нет пользователей вне чата</i>"
+
+    text = (
+        f"📊 <b>НЕ В ЧАТЕ</b>\n"
+        f"{'━' * 24}\n\n"
+        f"🔴 БЗА (бросил анкету): <b>{len(bza_lines)}</b>\n"
+        f"🟡 НПС (не перешёл по ссылке): <b>{len(nps_lines)}</b>\n\n"
+        f"{body}"
+    )
+
+    if len(text) > 4000:
+        text = text[:3980] + "\n\n<i>...список обрезан</i>"
+
+    keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]]
+    try:
+        await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        if 'not modified' not in str(e).lower():
+            logger.error(f"show_statistics_not_in_chat error: {e}")
+
 
 async def send_database_backup(query, user, db, admin_id: int, context) -> None:
     """Отправляет файл базы данных владельцу."""

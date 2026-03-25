@@ -251,7 +251,7 @@ async def publish_press_release_to_target(bot, text, photo_file_id, chat_id, thr
 # ДИСПЕТЧЕР ОЖИДАЮЩЕГО ВВОДА АДМИНА
 # ═══════════════════════════════════════════════════════════════
 
-async def process_admin_input(message, user, context, db, admin_id, target_chat_id):
+async def process_admin_input(message, user, context, db, admin_id, target_chat_id, update=None):
     """
     Обрабатывает все awaiting_* блоки ввода.
 
@@ -315,6 +315,26 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     if donate_type:
         await _handle_awaiting_donate_amount(message, user, context, db, donate_type)
         return True
+
+    # === OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Журнал) ===
+    if context.user_data.get('owner_awaiting') and user.id == admin_id:
+        _upd = update  # may be None if caller didn't pass it
+        if context.user_data['owner_awaiting'] == 'journal_connect':
+            from handlers.journal_handlers import handle_journal_text_input
+            if _upd is not None:
+                return await handle_journal_text_input(_upd, context, db)
+            # fallback: construct minimal proxy
+            class _FakeUpdate:
+                effective_message = message
+                effective_user = user
+            return await handle_journal_text_input(_FakeUpdate(), context, db)
+        from handlers.owner_handlers import handle_owner_text_input
+        if _upd is not None:
+            return await handle_owner_text_input(_upd, context, db, admin_id, target_chat_id)
+        class _FakeUpdate2:
+            effective_message = message
+            effective_user = user
+        return await handle_owner_text_input(_FakeUpdate2(), context, db, admin_id, target_chat_id)
 
     return False
 

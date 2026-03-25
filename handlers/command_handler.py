@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from handlers.commands.economy_commands import (
     safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
 )
-from handlers.profile_handlers import show_profile
+
+from database.db_friend import get_user # Импорт из файла друга
+#from handlers.profile_handlers import show_profile
 from handlers.commands.donation_commands import donate_command as _donate_command
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.commands.top_commands import top_command as _top_command, top5_command as _top5_command
@@ -19,7 +21,7 @@ from handlers.lottery_handlers import LotteryHandler
 from utils.helpers import format_number
 from datetime import datetime
 
-
+logger = logging.getLogger(__name__)
 class CommandHandler:
     def __init__(self, db, target_chat_id, main_admin_id, bot_username=None):
         self.db = db
@@ -30,6 +32,35 @@ class CommandHandler:
 
     async def start_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /start command — delegates to system_commands"""
+        user_id = update.effective_user.id
+        user = await get_user(user_id) # Проверяем в базе друга
+
+        # Если пользователя нет в базе ИЛИ у него не заполнено имя (q_name)
+        if user_id == self.main_admin_id:
+            logger.info(f"👑 Владелец {user_id} зашел в систему")
+            # Сразу переходим к твоему обычному коду старта (лотереи и т.д.)
+            pass 
+        else:
+            # 2. Если это обычный юзер, проверяем регистрацию в базе друга
+            user = await get_user(user_id)
+   
+            if not user or not user.get('q_name'):
+                await update.message.reply_text(
+                    "Привет! Ты еще не зарегистрирован. Напиши /register"
+                )
+                return 
+            if user.get('status') != 'approved':
+                await update.message.reply_text("⏳ Твоя анкета еще на проверке у администраторов. Пожалуйста, подожди!")
+            return
+        
+        # --- ИНТЕГРАЦИЯ МОЕЙ РЕФЕРАЛКИ ---
+        if context.args:
+            token = context.args[0]
+            referrer_id = self.db.get_referrer_by_token(token) 
+            if referrer_id:
+                context.user_data['referred_by'] = referrer_id
+                logger.info(f"Юзер {user_id} пришел по токену от {referrer_id}")
+                
         # Проверяем deep link для лотереи: /start lottery_123
         if context.args and len(context.args) > 0:
             arg = context.args[0]

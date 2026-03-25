@@ -44,11 +44,10 @@ def get_bbs_data(context) -> dict:
 def clear_bbs(context):
     """Сбросить FSM и все временные данные BBS."""
     for key in (
-        'bbs_state', 'bbs_data', 'bbs_param_editing', 'bbs_bot_msg_id',
+        'bbs_state', 'bbs_data', 'bbs_param_editing', 'bbs_photo_msg_id',
         'bbs_editing_profile_id', 'bbs_edit_photos', 'bbs_edit_cities',
         'bbs_edit_goals', 'bbs_edit_roles', 'bbs_edit_params',
         'bbs_edit_param_editing', 'bbs_edit_chat_id', 'bbs_edit_thread_id',
-        'bbs_tweaking',
     ):
         context.user_data.pop(key, None)
 
@@ -165,13 +164,16 @@ def build_profile_text(data: dict) -> str:
 
 
 def write_button(user_id: int, bot_username: str = None) -> InlineKeyboardMarkup:
-    """3 кнопки под анкетой: Написать | Пожаловаться | Подать объявление."""
+    """Кнопки под анкетой: Написать | Пожаловаться | Подать объявление.
+    Пожаловаться — через Deep Link в ЛС бота (работает из группы)."""
     row1 = [
         InlineKeyboardButton("💌 Написать в ЛС", url=f"tg://user?id={user_id}"),
-        InlineKeyboardButton("⚠️ Пожаловаться", callback_data=f"bbs_report_{user_id}"),
     ]
     row2 = []
     if bot_username:
+        row1.append(
+            InlineKeyboardButton("⚠️Пожаловаться", url=f"https://t.me/{bot_username}?start=report_{user_id}")
+        )
         row2.append(InlineKeyboardButton(
             "📝 Подать объявление", url=f"https://t.me/{bot_username}?start=bbs"
         ))
