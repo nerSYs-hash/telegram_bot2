@@ -369,8 +369,8 @@ def create_survey_keyboard(options: list, row_width: int = 2) -> InlineKeyboardM
     return builder.as_markup()
 
 
-def create_return_chat_keyboard() -> InlineKeyboardMarkup:
-    """Клавиатура для возврата в чат"""
+def create_exit_push_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для пуш-уведомления при выходе (п.6.2 ТЗ)"""
     buttons = [
         [
             InlineKeyboardButton(
@@ -380,7 +380,30 @@ def create_return_chat_keyboard() -> InlineKeyboardMarkup:
         ],
         [
             InlineKeyboardButton(
-                text="⏩ Продолжить опрос",
+                text="📝 Пройти опрос",
+                callback_data="continue_survey"
+            ),
+            InlineKeyboardButton(
+                text="❌ Не хочу",
+                callback_data="decline_survey"
+            )
+        ]
+    ]
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
+
+def create_return_chat_keyboard() -> InlineKeyboardMarkup:
+    """Клавиатура для возврата в чат внутри опроса"""
+    buttons = [
+        [
+            InlineKeyboardButton(
+                text="💗 Вернуться в чат",
+                callback_data="return_to_chat"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="⏩ Продолжить",
                 callback_data="continue_survey"
             ),
             InlineKeyboardButton(

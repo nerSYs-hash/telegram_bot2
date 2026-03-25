@@ -102,6 +102,7 @@ async def init_db():
             ("users", "last_survey_at",   "TIMESTAMP"),
             ("users", "survey_reason",    "TEXT"),
             ("users", "violations",       "INTEGER DEFAULT 0"),
+            ("users", "last_exit_at",     "TIMESTAMP"),
             ("journal_messages", "event_type", "TEXT"),
         ]
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:

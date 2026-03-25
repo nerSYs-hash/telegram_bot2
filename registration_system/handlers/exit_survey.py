@@ -18,6 +18,7 @@ from database import (
 )
 from utils.keyboards import (
     create_return_chat_keyboard,
+    create_exit_push_keyboard,
     create_survey_keyboard,
     create_invite_friends_keyboard,
     create_dm_keyboard
@@ -48,36 +49,57 @@ class SurveyStates(StatesGroup):
 # ==================== ОСНОВНАЯ ЛОГИКА ====================
 
 async def send_exit_survey(bot, user_id: int, user_name: str):
-    """Отправка опроса при выходе из чата"""
+    """Отправка опроса или сообщения 'снова ушел' при выходе из чата (п.6 ТЗ)"""
     try:
-        # Проверяем, нужно ли отправлять опрос (не чаще 1 раза в 30 дней)
-        if not await should_send_survey(user_id):
-            logger.info(f"Survey not sent to user {user_id} (30 days not passed)")
-            return
-        
-        text = (
-            f"Привет, {user_name},\n"
-            f"Мы заметили, что ты вышел из чата Pulse 4ever. Нам очень жаль, что ты ушел 😔\n\n"
-            f"Возможно ты поспешил? Не исключай дополнительную возможность знакомства, "
-            f"ведь у нас есть доска BBS, где ты можешь публиковать сообщения о знакомстве, "
-            f"знакомиться с людьми на офлайн встречах, участвовать в конкурсах, а главное - "
-            f"ты всегда можешь получить консультацию равного консультанта по теме.\n\n"
-            f"Если ты вышел по ошибке, нажми [Вернуться в чат]\n\n"
-            f"Если же все же ты сделал это намеренно, пожалуйста, оставь обратную связь и "
-            f"ответь на несколько вопросов. Это поможет нам стать лучше и займет не более 5 минут!"
-        )
-        
-        await bot.send_message(
-            user_id,
-            text,
-            reply_markup=create_return_chat_keyboard()
-        )
-        
-        # Обновляем время отправки опроса
-        await update_user(user_id, survey_sent_at=datetime.now().isoformat())
-        
+        if await should_send_survey(user_id):
+            # Первый выход или прошло 30+ дней → пуш-уведомление (п.6.2)
+            text = (
+                f"Привет, {user_name},\n"
+                f"Мы заметили, что ты вышел из чата Pulse 4ever. Нам очень жаль, что ты ушел 😔\n\n"
+                f"Возможно ты поспешил? Не исключай дополнительную возможность знакомства, "
+                f"ведь у нас есть доска BBS, где ты можешь публиковать сообщения о знакомстве, "
+                f"знакомиться с людьми на офлайн встречах, участвовать в конкурсах, а главное - "
+                f"ты всегда можешь получить консультацию равного консультанта по теме.\n\n"
+                f"Если ты вышел по ошибке, нажми [Вернуться в чат]\n\n"
+                f"Если же все же ты сделал это намеренно, пожалуйста, оставь обратную связь и "
+                f"ответь на несколько вопросов. Это поможет нам стать лучше и займет не более 5 минут!"
+            )
+            await bot.send_message(
+                user_id,
+                text,
+                reply_markup=create_exit_push_keyboard()
+            )
+            await update_user(user_id, last_survey_at=datetime.now().isoformat())
+            logger.info(f"Exit survey push sent to {user_id}")
+        else:
+            # Повторный выход в течение 30 дней → сообщение "снова ушел" с одноразовой ссылкой
+            await send_again_left_message(bot, user_id, user_name)
+
     except Exception as e:
         logger.error(f"Failed to send exit survey to {user_id}: {e}")
+
+
+async def send_again_left_message(bot, user_id: int, user_name: str):
+    """Отправка сообщения при повторном выходе в течение 30 дней (п.6 ТЗ)"""
+    try:
+        link = await generate_return_link(bot, user_id)
+        if not link:
+            logger.warning(f"Could not generate return link for {user_id} (again left)")
+            return
+
+        text = (
+            f"{user_name}, привет!\n\n"
+            f"Мы заметили, что ты снова ушел 🥺\n"
+            f"Если это случайность, держи свою личную ссылку:\n"
+            f"{link}"
+        )
+        msg = await bot.send_message(user_id, text)
+
+        # Сохраняем message_id чтобы удалить сообщение при повторном вступлении
+        await update_user(user_id, invite_message_id=msg.message_id)
+        logger.info(f"'Again left' message sent to {user_id}")
+    except Exception as e:
+        logger.error(f"Failed to send 'again left' message to {user_id}: {e}")
 
 
 async def generate_return_link(bot, user_id: int) -> str:
@@ -106,30 +128,28 @@ async def generate_return_link(bot, user_id: int) -> str:
 
 @router.callback_query(F.data == "return_to_chat")
 async def return_to_chat(callback: CallbackQuery, state: FSMContext):
-    """Обработка нажатия кнопки [Вернуться в чат]"""
+    """Обработка нажатия кнопки [Вернуться в чат] — генерирует одноразовую ссылку (п.6.1 ТЗ)"""
     logger.info(f"User {callback.from_user.id} wants to return to chat")
-    
+
     await callback.answer()
-    
+
     user_id = callback.from_user.id
-    user = await get_user(user_id)
-    user_name = user.get('q_name') if user and user.get('q_name') else callback.from_user.first_name
-    
+
     # Генерируем ссылку для возврата
     link = await generate_return_link(callback.bot, user_id)
-    
+
     if link:
+        # Сохраняем message_id чтобы удалить при вступлении
+        await update_user(user_id, invite_message_id=callback.message.message_id)
         await callback.message.edit_text(
-            f"{user_name}, привет!\n\n"
-            f"Мы заметили, что ты снова ушел 🥺\n"
-            f"Если это случайность, держи свою личную ссылку:\n"
-            f"{link}"
+            f"Держи свою личную ссылку для возврата:\n{link}\n\n"
+            f"Ссылка одноразовая и действительна только для тебя."
         )
     else:
         await callback.message.edit_text(
             "❌ Не удалось создать ссылку для возврата. Обратитесь к администратору."
         )
-    
+
     await state.clear()
 
 

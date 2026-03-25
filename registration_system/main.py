@@ -39,16 +39,52 @@ except ImportError as e:
     print(f"[ERROR] Ошибка импорта основных модулей: {e}")
     sys.exit(1)
 
-# Настройка логирования
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler('bot.log', encoding='utf-8'),
-        logging.StreamHandler(sys.stdout)
-    ]
-)
+# ─── НАСТРОЙКА КРАСИВОГО ЛОГИРОВАНИЯ ───
+class ColoredFormatter(logging.Formatter):
+    """Кастомный форматер для цветной и ровной консоли"""
+    COLORS = {
+        'WARNING':  '\033[93m',
+        'INFO':     '\033[94m',
+        'DEBUG':    '\033[92m',
+        'CRITICAL': '\033[91m',
+        'ERROR':    '\033[91m',
+    }
+    RESET = '\033[0m'
+    GRAY  = '\033[90m'
+    CYAN  = '\033[36m'
+
+    def format(self, record):
+        color = self.COLORS.get(record.levelname, self.RESET)
+        time_str = self.formatTime(record, "%H:%M:%S")
+        module_name = (record.module[:13] + '..') if len(record.module) > 15 else record.module
+        return (
+            f"{self.GRAY}[{time_str}]{self.RESET} "
+            f"{color}[{record.levelname:^8}]{self.RESET} "
+            f"{self.CYAN}[{module_name:<15}]{self.RESET}: "
+            f"{record.getMessage()}"
+        )
+
+# Настраиваем корневой логгер
+_root_logger = logging.getLogger()
+_root_logger.setLevel(logging.INFO)
+
+# 1. Запись в файл (без цветов)
+_file_handler = logging.FileHandler('bot.log', encoding='utf-8')
+_file_handler.setFormatter(logging.Formatter('%(asctime)s - [%(levelname)s] - %(name)s - %(message)s'))
+_root_logger.addHandler(_file_handler)
+
+# 2. Вывод в консоль (с цветами)
+_console_handler = logging.StreamHandler(sys.stdout)
+_console_handler.setFormatter(ColoredFormatter())
+_root_logger.addHandler(_console_handler)
+
+# 3. Заглушаем шумных
+logging.getLogger('aiogram').setLevel(logging.WARNING)
+logging.getLogger('aiohttp').setLevel(logging.WARNING)
+logging.getLogger('asyncio').setLevel(logging.WARNING)
+
 logger = logging.getLogger(__name__)
+# ──────────────────────────────────────────
 
 
 async def sync_chat_members(bot: Bot):

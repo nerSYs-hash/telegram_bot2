@@ -19,6 +19,7 @@ from .keyboards import (
     create_blacklist_management_keyboard,
     create_trigger_management_keyboard,
     create_survey_keyboard,
+    create_exit_push_keyboard,
     create_return_chat_keyboard,
     create_invite_friends_keyboard,
     create_cancel_keyboard,          # Добавлено
@@ -71,6 +72,7 @@ __all__ = [
     'create_blacklist_management_keyboard',
     'create_trigger_management_keyboard',
     'create_survey_keyboard',
+    'create_exit_push_keyboard',
     'create_return_chat_keyboard',
     'create_invite_friends_keyboard',
     'create_cancel_keyboard',          # Добавлено
