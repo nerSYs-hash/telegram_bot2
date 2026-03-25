@@ -621,13 +621,31 @@ class TelegramBot:
             id='cleanup_expired_locks'
         )
 
-        from handlers.reminder_logic import send_registration_reminders
+        from handlers.reminder_logic import (
+            send_registration_reminders,
+            send_unused_link_reminders_5min,
+            send_unused_link_reminders_10days,
+        )
         self.scheduler.add_job(
             send_registration_reminders,
             'interval',
             minutes=1,
-            args=[self.application], # Передаем объект бота
+            args=[self.application],
             id='registration_reminders'
+        )
+        self.scheduler.add_job(
+            send_unused_link_reminders_5min,
+            'interval',
+            minutes=5,
+            args=[self.application],
+            id='unused_link_reminders_5min'
+        )
+        self.scheduler.add_job(
+            send_unused_link_reminders_10days,
+            'interval',
+            hours=24,
+            args=[self.application],
+            id='unused_link_reminders_10days'
         )
         
         self.scheduler.start()

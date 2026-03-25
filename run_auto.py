@@ -6,11 +6,10 @@ from watchdog.observers import Observer
 from watchdog.events import FileSystemEventHandler
 
 # --- НАСТРОЙКИ ---
-BOT_FILE    = "bot.py"               # PTB-бот (экономика, пульты)
-REG_BOT_DIR = "registration_system"  # папка aiogram-бота
+BOT_FILE = "bot.py"  # PTB-бот (основной, единственный)
 
 WATCH_EXTENSIONS = {".py", ".env"}
-IGNORE_DIRS      = {"__pycache__", ".venv", "venv", ".git", "logs"}
+IGNORE_DIRS      = {"__pycache__", ".venv", "venv", ".git", "logs", "registration_system"}
 # -----------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -29,12 +28,8 @@ def _find_python(base: str) -> str:
     for p in candidates:
         if not os.path.exists(p):
             continue
-        # Проверяем, что файл реально запускается (не AppX-заглушка)
         try:
-            result = subprocess.run(
-                [p, '--version'],
-                capture_output=True, timeout=5
-            )
+            result = subprocess.run([p, '--version'], capture_output=True, timeout=5)
             if result.returncode == 0:
                 return p
         except Exception:
@@ -43,14 +38,12 @@ def _find_python(base: str) -> str:
 
 
 _ptb_python = _find_python(BASE_DIR)
-_reg_python  = _find_python(os.path.join(BASE_DIR, REG_BOT_DIR))
 
-print(f"🐍 PTB-бот    → {_ptb_python}")
-print(f"🐍 Aiogram-бот → {_reg_python}")
+print(f"🐍 PTB-бот → {_ptb_python}")
 
 
 def _ensure_deps(python: str, req_file: str):
-    """Устанавливает зависимости через python бота, с fallback на sys.executable."""
+    """Устанавливает зависимости при старте."""
     if not os.path.exists(req_file):
         return
     for py in [python, sys.executable]:
@@ -98,19 +91,6 @@ ptb_bot = BotProcess(
     cwd=BASE_DIR,
 )
 
-reg_bot = BotProcess(
-    name="Aiogram-бот",
-    python=_reg_python,
-    script="main.py",
-    cwd=os.path.join(BASE_DIR, REG_BOT_DIR),
-)
-
-
-def _belongs_to_reg(path: str) -> bool:
-    norm = os.path.normpath(path)
-    reg  = os.path.normpath(os.path.join(BASE_DIR, REG_BOT_DIR))
-    return norm.startswith(reg)
-
 
 class Restarter(FileSystemEventHandler):
     def on_modified(self, event):
@@ -121,38 +101,27 @@ class Restarter(FileSystemEventHandler):
             return
         if not any(path.endswith(ext) for ext in WATCH_EXTENSIONS):
             return
-        print(f"🔄 Изменение: {path}")
-        if _belongs_to_reg(path):
-            print(f"   → Aiogram-бот перезапускается")
-            reg_bot.start()
-        else:
-            print(f"   → PTB-бот перезапускается")
-            ptb_bot.start()
+        print(f"🔄 Изменение: {path} → PTB-бот перезапускается")
+        ptb_bot.start()
 
 
 if __name__ == "__main__":
-    # Устанавливаем зависимости при необходимости
     _ensure_deps(_ptb_python, os.path.join(BASE_DIR, 'requirements.txt'))
-    _ensure_deps(_reg_python,  os.path.join(BASE_DIR, REG_BOT_DIR, 'requirements.txt'))
 
     ptb_bot.start()
-    reg_bot.start()
 
     handler  = Restarter()
     observer = Observer()
     observer.schedule(handler, path=BASE_DIR, recursive=True)
     observer.start()
 
-    print(f"\n👀 Наблюдатель запущен.")
-    print(f"   PTB-файлы              → перезапускается PTB-бот")
-    print(f"   registration_system/   → перезапускается Aiogram-бот\n")
+    print(f"\n👀 Наблюдатель запущен. Любое изменение .py/.env → перезапуск PTB-бота\n")
 
     try:
         while True:
             time.sleep(1)
     except KeyboardInterrupt:
-        print("\n⏹ Останавливаю оба бота...")
+        print("\n⏹ Останавливаю бот...")
         ptb_bot.stop()
-        reg_bot.stop()
         observer.stop()
     observer.join()

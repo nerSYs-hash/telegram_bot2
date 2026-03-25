@@ -22,6 +22,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, get_today_date_msk
 from handlers.bbs_handlers import handle_bbs_reaction, on_member_left_cleanup
+from handlers.journal_handlers import log_join, log_leave
 
 
 async def handle_member_left(update, context, db, admin_id, target_chat_id):
@@ -435,6 +436,12 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             )
         except Exception as e:
             logging.error(f"Error sending return notification: {e}")
+
+    # ═══ ЖУРНАЛ: логируем вход ═══
+    try:
+        await log_join(context.bot, db, user_id)
+    except Exception as e:
+        logging.error(f"Journal log_join error: {e}")
 
 async def handle_reaction(update, context, db, target_chat_id):
     """Handle message reactions"""
