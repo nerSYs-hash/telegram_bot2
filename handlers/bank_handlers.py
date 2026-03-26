@@ -16,23 +16,32 @@ db, admin_id передаются явно.
 """
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.error import BadRequest
 from utils.helpers import format_number
 
 
 async def show_bank_menu(query, user, db, admin_id):
     """Show simple bank menu (like ReplyKeyboard button)"""
     is_owner = user.id == admin_id
+    bank_balance = db.get_bank_balance()
 
     kb = [
         [InlineKeyboardButton("💱 Курс Пульса", callback_data="show_exchange_rate")],
+        [InlineKeyboardButton("🔄 Обновить", callback_data="menu_bank")],
     ]
     if is_owner:
         kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
 
-    await query.edit_message_text(
-        "🏦 ЦЕНТРОБАНК\n\nВыберите действие:",
-        reply_markup=InlineKeyboardMarkup(kb)
-    )
+    try:
+        await query.edit_message_text(
+            f"🏦 ЦЕНТРОБАНК\n\n💰 Баланс банка: {format_number(bank_balance)} 💎",
+            reply_markup=InlineKeyboardMarkup(kb)
+        )
+    except BadRequest as e:
+        if 'Message is not modified' in str(e):
+            await query.answer("Баланс не изменился")
+        else:
+            raise
 
 
 async def show_bank(query, user, db, admin_id):
