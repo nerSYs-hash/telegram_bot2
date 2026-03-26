@@ -16,8 +16,9 @@ jobs:
           username: ${{ secrets.SERVER_USER }}
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
-            cd /root/PulsBot/economybot
-            git pull origin main
+            cd /root/PulsBot
+            git fetch origin main
+            git reset --hard origin/main
             source venv/bin/activate
             pip install -r requirements.txt -q
             systemctl restart pulsbot
