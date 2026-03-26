@@ -11,6 +11,7 @@ from handlers.owner_handlers import (
     mute_start, unmute_start,
     show_system_menu, toggle_maintenance,
     send_database_backup,
+    show_statistics_not_in_chat,
 )
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
@@ -29,7 +30,7 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     target_chat_id = handler.target_chat_id
 
     # ── Дашборд ──
-    if data == "owner_dashboard":
+    if data in ("owner_dashboard", "panel_main"):
         await show_owner_dashboard(query, context, db, admin_id)
     elif data == "owner_backup":
         await send_database_backup(query, user, db, admin_id, context)
@@ -80,6 +81,17 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await show_triggers_menu(query, db, admin_id)
     elif data.startswith("trigger_"):
         await handle_trigger_callback(query, data, context, db, admin_id)
+
+    # ── Статистика "Не в чате" ──
+    elif data == "owner_stats_not_in_chat":
+        await show_statistics_not_in_chat(query, admin_id)
+
+    # ── Старая panel_* система (маршрутизация через panel_callback) ──
+    elif data.startswith("panel_"):
+        from handlers.admin_moderation import panel_callback
+        class _FakeUpdate:
+            callback_query = query
+        await panel_callback(_FakeUpdate(), context)
 
     # ── Журнал ──
     elif data == "owner_journal":

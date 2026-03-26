@@ -46,7 +46,7 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
     elif data == "bank_refresh":
         await show_bank(query, user, db, admin_id)
     elif data == "show_exchange_rate":
-        await show_exchange_rate(query, user, db, admin_id)
+        await show_exchange_rate(query, user, db)
 
     # ── Статистика ──
     elif data == "menu_stats":
@@ -83,7 +83,7 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
     elif data == "pr_schedule":
         await handle_pr_schedule(query, user, context, db, admin_id)
     elif data == "pr_scheduled_list":
-        await show_scheduled_posts(query, user, db, admin_id)
+        await show_scheduled_posts(query, user, context, db, admin_id)
     elif data.startswith("pr_delete_"):
         await handle_pr_delete(query, data, user, db, admin_id)
     elif data == "pr_cancel":

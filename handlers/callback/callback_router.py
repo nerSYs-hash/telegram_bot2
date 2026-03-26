@@ -93,7 +93,7 @@ class CallbackHandler:
             return
 
         if data.startswith('bbs_') or data == 'menu_bbs':
-            await handle_bbs_callback(query, data, context, self.db, self.target_chat_id, self.bbs_thread_id, user.id, self.main_admin_id)
+            await handle_bbs_callback(query, context, self.db, self.target_chat_id, self.bbs_thread_id)
             return
 
         # ═══ DISPATCH TO SUB-MODULES ═══

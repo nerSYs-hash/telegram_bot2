@@ -18,12 +18,11 @@ from telegram.ext import (
 )
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
-from aiogram.client.telegram import TelegramAPIServer
 # Import custom modules
 from database.db_manager import Database
 from handlers.command_handler import CommandHandler as BotCommandHandler
 from handlers.message_handler import MessageHandler as BotMessageHandler
-from handlers.callback_handler import CallbackHandler
+from handlers.callback import CallbackHandler
 from handlers.commands.exchange_commands import recalc_rate_command
 from utils.helpers import get_moscow_time, format_number
 from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update

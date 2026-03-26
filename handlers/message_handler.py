@@ -411,12 +411,12 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.owner_handlers import show_owner_dashboard
+                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                from handlers.owner_handlers import show_owner_dashboard
+                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
@@ -615,12 +615,12 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.owner_handlers import show_owner_dashboard
+                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=False)
+                from handlers.owner_handlers import show_owner_dashboard
+                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command

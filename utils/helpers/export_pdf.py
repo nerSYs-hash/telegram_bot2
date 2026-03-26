@@ -55,15 +55,15 @@ if PATH_NORMAL:
         else:
             font_bold = 'DejaVu'
     except Exception as e:
-        print(f"❌ Ошибка DejaVu: {e}")
+        print(f"[PDF] Ошибка DejaVu: {e}")
 
 if PATH_SYMB:
     try:
         pdfmetrics.registerFont(TTFont('Symbola', PATH_SYMB))
         font_symbol = 'Symbola'
-        print(f"✅ Шрифт Symbola для эмодзи загружен")
+        print("[PDF] Symbola загружен")
     except Exception as e:
-        print(f"❌ Ошибка Symbola: {e}")
+        print(f"[PDF] Ошибка Symbola: {e}")
 
 styles = getSampleStyleSheet()
 styles['Normal'].fontName = font_normal

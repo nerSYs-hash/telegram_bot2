@@ -35,7 +35,7 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         if not db.is_feature_enabled('profile'):
             await query.answer("👤 Профиль отключён.", show_alert=True)
             return True
-        await show_profile(query, user, db)
+        await show_profile(query, context, db, user.id)
     elif data == "profile_settings":
         await show_profile_settings(query, user, db)
     elif data.startswith("prof_notif_") or data.startswith("prof_age_"):
@@ -44,6 +44,9 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         await query.answer(f"{ICON_ALARM_STRONG} В разработке!", show_alert=True)
     elif data == "menu_activities":
         await handler.show_activities_menu(query, user)
+    elif data == "faq_menu":
+        from handlers.commands.system_commands import _show_faq_menu
+        await _show_faq_menu(query.message)
     elif data == "faq_commands":
         from handlers.commands.system_commands import FAQ_COMMANDS_USER, FAQ_COMMANDS_ADMIN
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup

@@ -72,7 +72,7 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
 
     # ── Банковские переводы ──
     elif data == "bank_transfer_start":
-        await start_bank_transfer(query, user, db, handler.main_admin_id)
+        await start_bank_transfer(query, user, context, db, handler.main_admin_id)
     elif data.startswith("bt_user_"):
         target_id = int(data.replace("bt_user_", ""))
         await select_transfer_amount(query, user, db, handler.main_admin_id, target_id)
