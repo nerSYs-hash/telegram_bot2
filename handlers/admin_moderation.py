@@ -106,83 +106,17 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
     applied_at = _fmt_date(app_data.get('created_at')) if app_data else "—"
 
     if action == "app":
-        joined_at = _msk_now()
-
-        # 1. Одобряем в базе регистрации
-        await approve_application(app_id, query.from_user.id)
-        await update_user(target_user_id, status='approved')
-
-        # 2. Регистрируем в основной базе (майнинг и т.д.)
-        referrer_id = reg_data.get('referred_by') if reg_data else None
-        if main_db:
-            main_db.add_user(
-                target_user_id,
-                username=reg_data.get('username'),
-                first_name=reg_data.get('first_name'),
-                last_name=reg_data.get('last_name'),
-            )
-            if referrer_id:
-                try:
-                    main_db.cursor.execute(
-                        'UPDATE users SET referrer_id = ? WHERE user_id = ?',
-                        (referrer_id, target_user_id)
-                    )
-                    main_db.conn.commit()
-                    logger.info(f"✅ Реферал {referrer_id} привязан к {target_user_id}")
-                except Exception as e:
-                    logger.error(f"⚠️ Не удалось привязать реферала: {e}")
-
-        # 3. Уведомляем пользователя + отправляем одноразовую ссылку
-        user_name = reg_data.get('q_name') or reg_data.get('first_name') or 'Друг'
-        try:
-            await context.bot.send_message(
-                chat_id=target_user_id,
-                text="🎉 Поздравляем! Твоя заявка одобрена."
-            )
-        except Exception as e:
-            logger.error(f"Не смог написать юзеру {target_user_id}: {e}")
-
-        # Отправляем одноразовую ссылку
-        await _send_invite_link(context.bot, target_user_id, user_name)
-
-        # Через 1 минуту — сообщение "Приглашай друзей"
-        asyncio.create_task(
-            _send_invite_friends_after_delay(context.bot, target_user_id, user_name, delay=60)
+        from handlers.approval_handlers import approve_application as _approve_full
+        await _approve_full(
+            query=query,
+            context=context,
+            app_id=app_id,
+            target_user_id=target_user_id,
+            app_data=app_data,
+            reg_data=reg_data,
+            applied_at=applied_at,
+            main_db=main_db,
         )
-
-        # 4. Карточка 3.3.3 в чате администраторов
-        admin_name = f"@{query.from_user.username}" if query.from_user.username else str(query.from_user.id)
-        is_returning = bool(reg_data.get('last_exit_at'))
-        block_b = "#Возвращение" if is_returning else "#Новый"
-        username_str = f"@{reg_data.get('username')}" if reg_data.get('username') else "нет"
-        full_name = html.escape(
-            f"{reg_data.get('first_name') or ''} {reg_data.get('last_name') or ''}".strip()
-            or reg_data.get('q_name') or '—'
-        )
-        user_link = f'<a href="tg://user?id={target_user_id}">{full_name}</a>'
-        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">Pulse 4ever</a>'
-
-        card_text = (
-            f"#Одобрено\n"
-            f"{block_b}\n"
-            f"Заявка одобрена {admin_name}\n\n"
-            f"Группа: {group_link}\n"
-            f"Пользователь: {user_link}\n"
-            f"Никнейм: {username_str}\n"
-            f"ID: <code>{target_user_id}</code>\n\n"
-            f"<b>Анкета:</b>\n"
-            f"Имя: {html.escape(reg_data.get('q_name') or '—')}\n"
-            f"Возраст: {reg_data.get('q_age') or '—'}\n"
-            f"Город: {html.escape(reg_data.get('q_city') or '—')}\n"
-            f"Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n\n"
-            f"📅 Дата заявки: {applied_at}\n"
-            f"✅ Дата вступления: {joined_at}"
-        )
-        card_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}")]
-        ])
-        await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
-                                      disable_web_page_preview=True)
 
     elif action == "rej":
         # Сохраняем данные и ждём причину от администратора
@@ -291,11 +225,13 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
             [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
             [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
              InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
-            [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+            [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats_panel"),
              InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
             [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
              InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
             [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
+            [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu"),
+             InlineKeyboardButton("❌ Закрыть", callback_data="owner_close")],
         ])
         text = "👑 <b>Панель владельца</b>\n\nВыберите раздел:"
     else:

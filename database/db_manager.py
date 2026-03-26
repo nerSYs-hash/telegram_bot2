@@ -16,6 +16,7 @@ from database.db_settings import (
 from database.db_users import (
     add_user as _add_user,
     get_user as _get_user,
+    get_user_by_username as _get_user_by_username,
     update_user_balance as _update_user_balance,
     get_top_users_by_balance as _get_top_users_by_balance,
     get_top_daily_earners as _get_top_daily_earners,
@@ -508,6 +509,9 @@ class Database:
 
     def get_user(self, user_id):
         return _get_user(self, user_id)
+
+    def get_user_by_username(self, username):
+        return _get_user_by_username(self, username)
 
     def update_user_balance(self, user_id, amount, operation='add'):
         return _update_user_balance(self, user_id, amount, operation)

@@ -12,7 +12,7 @@ from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
-from handlers.BBS.constants_bbs import BBS, EDITABLE_FIELDS
+from handlers.BBS.constants_bbs import BBS, EDITABLE_FIELDS, PARAM_OPTIONS, ROLE_OPTIONS, GOAL_OPTIONS
 from handlers.BBS.helpers_bbs import set_bbs_state
 from handlers.BBS.database_bbs import get_profile
 from handlers.BBS.publishing_bbs import delete_profile_chat_messages, republish_profile, safe_answer
@@ -190,3 +190,50 @@ async def apply_edit(query, context, db, target_chat_id, bbs_thread_id, field, v
         query, context, db, target_chat_id, bbs_thread_id,
         field_name=field, db_column=field, value=value,
     )
+
+
+# ═══════════════════════════════════════════════════════════════
+# КЛАВИАТУРЫ ДЛЯ РЕДАКТИРОВАНИЯ (bbs_e* префиксы)
+# ═══════════════════════════════════════════════════════════════
+
+def _build_edit_params_keyboard(params: dict) -> list:
+    keyboard = []
+    for key, label in PARAM_OPTIONS.items():
+        val = params.get(key)
+        check = f" ✅ {val}" if val else ""
+        keyboard.append([InlineKeyboardButton(f"{label}{check}", callback_data=f"bbs_eparam_{key}")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_eparam_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_role_keyboard(selected: list) -> list:
+    keyboard = []
+    for role in ROLE_OPTIONS:
+        check = "✅ " if role in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{role}", callback_data=f"bbs_erole_{role}")])
+    # УБРАНА кнопка "Сохранить", так как выбор роли теперь сохраняет ее сразу
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_city_keyboard(selected: list) -> list:
+    presets = [('Санкт-Петербург', '#Спб'), ('Москва', '#Мск')]
+    keyboard = []
+    for label, tag in presets:
+        check = "✅ " if tag in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{label}", callback_data=f"bbs_ecity_{tag}")])
+    keyboard.append([InlineKeyboardButton("🏙 Другой город", callback_data="bbs_ecity_custom")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_ecity_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_goal_keyboard(selected: list) -> list:
+    keyboard = []
+    for goal in GOAL_OPTIONS:
+        check = "✅ " if goal in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{goal}", callback_data=f"bbs_egoal_{goal}")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_egoal_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard

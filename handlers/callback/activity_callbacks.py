@@ -75,7 +75,7 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
         await start_bank_transfer(query, user, context, db, handler.main_admin_id)
     elif data.startswith("bt_user_"):
         target_id = int(data.replace("bt_user_", ""))
-        await select_transfer_amount(query, user, db, handler.main_admin_id, target_id)
+        await select_transfer_amount(query, target_id, user, context, db, handler.main_admin_id)
     elif data.startswith("bt_amount_"):
         parts = data.replace("bt_amount_", "").split("_")
         target_id, amount = int(parts[0]), float(parts[1])
@@ -85,6 +85,12 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
         context.user_data['awaiting_bank_transfer'] = True
         context.user_data['bt_custom_user_id'] = target_id
         await query.edit_message_text("💰 Введите сумму перевода:")
+    elif data == "bt_username_input":
+        if user.id != handler.main_admin_id:
+            await query.answer("Нет доступа.", show_alert=True)
+            return True
+        context.user_data['awaiting_bt_username'] = True
+        await query.edit_message_text("✏️ Введите @username получателя:")
 
     else:
         return False

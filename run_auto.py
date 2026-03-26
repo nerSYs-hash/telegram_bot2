@@ -15,6 +15,46 @@ IGNORE_DIRS      = {"__pycache__", ".venv", "venv", ".git", "logs", "registratio
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
+def _kill_orphan_bots(script_name: str):
+    """Убивает зависшие процессы бота перед запуском."""
+    current_pid = os.getpid()
+    killed = 0
+    try:
+        import psutil
+        for proc in psutil.process_iter(['pid', 'name', 'cmdline']):
+            try:
+                if proc.info['pid'] == current_pid:
+                    continue
+                cmdline = proc.info.get('cmdline') or []
+                if any(script_name in arg for arg in cmdline):
+                    proc.kill()
+                    killed += 1
+                    print(f"💀 Убит зависший процесс бота PID={proc.info['pid']}")
+            except Exception:
+                pass
+    except ImportError:
+        # Fallback: wmic (Windows)
+        try:
+            result = subprocess.run(
+                ['wmic', 'process', 'where',
+                 f'commandline like "%{script_name}%"',
+                 'get', 'processid', '/format:list'],
+                capture_output=True, text=True, timeout=10
+            )
+            for line in result.stdout.splitlines():
+                if line.startswith('ProcessId='):
+                    pid_str = line.split('=')[1].strip()
+                    if pid_str and pid_str.isdigit() and int(pid_str) != current_pid:
+                        subprocess.run(['taskkill', '/F', '/PID', pid_str],
+                                       capture_output=True, timeout=5)
+                        killed += 1
+                        print(f"💀 Убит зависший процесс бота PID={pid_str}")
+        except Exception as e:
+            print(f"⚠️  Не удалось проверить процессы: {e}")
+    if killed:
+        time.sleep(0.5)  # Даём ОС время освободить порты/соединения
+
+
 def _find_python(base: str) -> str:
     """
     Ищет python.exe в порядке приоритета:
@@ -107,6 +147,9 @@ class Restarter(FileSystemEventHandler):
 
 if __name__ == "__main__":
     _ensure_deps(_ptb_python, os.path.join(BASE_DIR, 'requirements.txt'))
+
+    print("🔍 Проверяю зависшие процессы бота...")
+    _kill_orphan_bots(BOT_FILE)
 
     ptb_bot.start()
 

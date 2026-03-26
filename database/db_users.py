@@ -36,6 +36,13 @@ def get_user(db, user_id):
     return db.cursor.fetchone()
 
 
+def get_user_by_username(db, username):
+    """Get user by username (без @, без учёта регистра)"""
+    clean = username.lstrip('@').lower()
+    db.cursor.execute('SELECT * FROM users WHERE LOWER(username) = ?', (clean,))
+    return db.cursor.fetchone()
+
+
 def update_user_balance(db, user_id, amount, operation='add'):
     """Update user balance (with decimal support, rounded to 2 places)"""
     user = get_user(db, user_id)

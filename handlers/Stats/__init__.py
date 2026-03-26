@@ -8,12 +8,13 @@ handlers/Stats/__init__.py — обратная совместимость.
 →   from handlers.Stats import show_top, generate_export_file
 """
 
-# Меню
+# Меню, коллбэки, интервью при выходе
 from handlers.Stats.stats_controller import (
     show_stats_menu,
     show_stats_period_menu,
     handle_stats_export,
     handle_stats_callback,
+    handle_exit_interview,
 )
 
 # Топы
@@ -38,7 +39,8 @@ from handlers.Stats.stats_calculators import (
 
 __all__ = [
     'show_stats_menu', 'show_stats_period_menu', 'handle_stats_export',
-    'handle_stats_callback', 'show_top', 'show_top5_menu',
+    'handle_stats_callback', 'handle_exit_interview',
+    'show_top', 'show_top5_menu',
     'show_top5_activists', 'show_top5_rich', '_filter_active_users',
     'generate_export_file', '_add_rate_sheet_to_excel',
     'calculate_chat_health_indices',

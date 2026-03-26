@@ -190,12 +190,23 @@ async def publish_press_release(message, context, target_chat_id):
         # Check if message has photo
         if message.photo:
             photo = message.photo[-1]  # Get highest quality
-            await context.bot.send_photo(
-                chat_id=target_chat_id,
-                photo=photo.file_id,
-                caption=press_release,
-                parse_mode='HTML'
-            )
+            if len(press_release) <= 1024:
+                await context.bot.send_photo(
+                    chat_id=target_chat_id,
+                    photo=photo.file_id,
+                    caption=press_release,
+                    parse_mode='HTML'
+                )
+            else:
+                await context.bot.send_photo(
+                    chat_id=target_chat_id,
+                    photo=photo.file_id,
+                )
+                await context.bot.send_message(
+                    chat_id=target_chat_id,
+                    text=press_release,
+                    parse_mode='HTML'
+                )
         else:
             await context.bot.send_message(
                 chat_id=target_chat_id,
@@ -212,7 +223,8 @@ async def publish_press_release(message, context, target_chat_id):
 
 
 async def publish_press_release_to_target(bot, text, photo_file_id, chat_id, thread_id=None):
-    """Publish formatted press release to specific chat/thread (used by both instant and scheduled)"""
+    """Publish formatted press release to specific chat/thread (used by scheduler)"""
+    CAPTION_LIMIT = 1024
     try:
         kwargs = {'chat_id': chat_id, 'parse_mode': 'HTML'}
         if thread_id:
@@ -221,22 +233,34 @@ async def publish_press_release_to_target(bot, text, photo_file_id, chat_id, thr
         if photo_file_id:
             is_video = False
             raw_file_id = photo_file_id
-            
-            # Проверяем, фото это или видео
+
             if str(photo_file_id).startswith('video:'):
                 is_video = True
                 raw_file_id = photo_file_id.split(':', 1)[1]
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
-                
-            if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = text
-                await bot.send_video(**kwargs)
+
+            if len(text) > CAPTION_LIMIT:
+                # Автоматический планировщик — предупреждаем в лог, разбиваем на 2 сообщения
+                logging.warning(
+                    f"Scheduled PR: caption too long ({len(text)} chars), splitting into 2 messages"
+                )
+                media_kwargs = {'chat_id': chat_id, 'message_thread_id': thread_id}
+                if is_video:
+                    await bot.send_video(video=raw_file_id, **media_kwargs)
+                else:
+                    await bot.send_photo(photo=raw_file_id, **media_kwargs)
+                await bot.send_message(chat_id=chat_id, text=text,
+                                       parse_mode='HTML', message_thread_id=thread_id)
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = text
-                await bot.send_photo(**kwargs)
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = text
+                    await bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = text
+                    await bot.send_photo(**kwargs)
         else:
             kwargs['text'] = text
             await bot.send_message(**kwargs)
@@ -303,6 +327,11 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     # === ОБРАБОТКА УСТАНОВКИ КУРСА ===
     if context.user_data.get('awaiting_exchange_rate') and user.id == admin_id:
         await _handle_awaiting_exchange_rate(message, context, db)
+        return True
+
+    # === ОБРАБОТКА ВВОДА @USERNAME ДЛЯ БАНКОВОГО ПЕРЕВОДА ===
+    if context.user_data.get('awaiting_bt_username') and user.id == admin_id:
+        await _handle_awaiting_bt_username(message, user, context, db)
         return True
 
     # === ОБРАБОТКА ПЕРЕВОДА ИЗ БАНКА ===
@@ -520,6 +549,49 @@ async def _handle_awaiting_exchange_rate(message, context, db):
 
     except ValueError:
         await message.reply_text("❌ Неверный формат. Введите число (например: 0.5)")
+
+
+async def _handle_awaiting_bt_username(message, user, context, db):
+    """Обработка ввода @username получателя банкового перевода."""
+    context.user_data.pop('awaiting_bt_username', None)
+
+    if message.text == '/cancel':
+        await message.reply_text("Ввод отменён.")
+        return
+
+    username = message.text.strip().lstrip('@')
+    target_user = db.get_user_by_username(username)
+
+    if not target_user:
+        await message.reply_text(f"❌ Пользователь @{username} не найден в базе.\nПопробуйте ещё раз или выберите из списка: /bank")
+        return
+
+    from handlers.bank_handlers import select_transfer_amount
+    # Перенаправляем на выбор суммы через фейковый query — проще отправить сообщение
+    target_id = target_user['user_id']
+    display = target_user['username'] or target_user['first_name'] or str(target_id)
+    bank_balance = db.get_bank_balance()
+
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    from utils.helpers import format_number
+    keyboard = [
+        [
+            InlineKeyboardButton("50 💎", callback_data=f"bt_amount_{target_id}_50"),
+            InlineKeyboardButton("100 💎", callback_data=f"bt_amount_{target_id}_100")
+        ],
+        [
+            InlineKeyboardButton("500 💎", callback_data=f"bt_amount_{target_id}_500"),
+            InlineKeyboardButton("1000 💎", callback_data=f"bt_amount_{target_id}_1000")
+        ],
+        [InlineKeyboardButton("✏️ Своя сумма", callback_data=f"bt_custom_{target_id}")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="bank_transfer_start")],
+    ]
+    await message.reply_text(
+        f"💸 ПЕРЕВОД ДЛЯ @{display}\n\n"
+        f"💰 Баланс банка: {format_number(bank_balance)} 💎\n\n"
+        f"Выберите сумму:",
+        reply_markup=InlineKeyboardMarkup(keyboard)
+    )
 
 
 async def _handle_awaiting_bank_transfer(message, user, context, db):

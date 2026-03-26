@@ -139,8 +139,9 @@ async def start_bank_transfer(query, user, context, db, admin_id):
             )
         ])
     
+    keyboard.append([InlineKeyboardButton("✏️ Ввести @username", callback_data="bt_username_input")])
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")])
-    
+
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def select_transfer_amount(query, user_id, user, context, db, admin_id):

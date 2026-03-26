@@ -29,6 +29,14 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     admin_id = handler.main_admin_id
     target_chat_id = handler.target_chat_id
 
+    # ── Закрыть панель ──
+    if data == "owner_close":
+        try:
+            await query.message.delete()
+        except Exception:
+            await query.answer("Закрыто.", show_alert=False)
+        return True
+
     # ── Дашборд ──
     if data in ("owner_dashboard", "panel_main"):
         await show_owner_dashboard(query, context, db, admin_id)

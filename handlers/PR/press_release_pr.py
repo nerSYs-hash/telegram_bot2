@@ -231,6 +231,20 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
         f"<i>© Сообщество Pulse</i>"
     )
 
+    CAPTION_LIMIT = 1024
+    if photo_file_id and len(press_release) > CAPTION_LIMIT:
+        await query.edit_message_text(
+            f"⚠️ <b>Текст слишком длинный для подписи под медиа.</b>\n\n"
+            f"Лимит Telegram: 1024 символа\n"
+            f"Ваш текст: {len(press_release)} символов\n\n"
+            f"Сократите текст и попробуйте снова.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")
+            ]])
+        )
+        return
+
     try:
         kwargs = {
             'chat_id': target_chat_id,
@@ -249,27 +263,14 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            CAPTION_LIMIT = 1024
             if is_video:
-                if len(press_release) <= CAPTION_LIMIT:
-                    kwargs['video'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_video(**kwargs)
-                else:
-                    await context.bot.send_video(video=raw_file_id, chat_id=kwargs['chat_id'],
-                                                  message_thread_id=kwargs.get('message_thread_id'))
-                    await context.bot.send_message(chat_id=kwargs['chat_id'], text=press_release,
-                                                   message_thread_id=kwargs.get('message_thread_id'))
+                kwargs['video'] = raw_file_id
+                kwargs['caption'] = press_release
+                await context.bot.send_video(**kwargs)
             else:
-                if len(press_release) <= CAPTION_LIMIT:
-                    kwargs['photo'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_photo(**kwargs)
-                else:
-                    await context.bot.send_photo(photo=raw_file_id, chat_id=kwargs['chat_id'],
-                                                  message_thread_id=kwargs.get('message_thread_id'))
-                    await context.bot.send_message(chat_id=kwargs['chat_id'], text=press_release,
-                                                   message_thread_id=kwargs.get('message_thread_id'))
+                kwargs['photo'] = raw_file_id
+                kwargs['caption'] = press_release
+                await context.bot.send_photo(**kwargs)
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
@@ -645,6 +646,21 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         f"{formatted_text}\n\n"
         f"<i>© Сообщество Pulse</i>"
     )
+
+    CAPTION_LIMIT = 1024
+    if photo_file_id and len(press_release) > CAPTION_LIMIT:
+        await query.edit_message_text(
+            f"⚠️ <b>Текст слишком длинный для подписи под медиа.</b>\n\n"
+            f"Лимит Telegram: 1024 символа\n"
+            f"Ваш текст: {len(press_release)} символов\n\n"
+            f"Сократите текст через редактирование и попробуйте снова.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✏️ Редактировать", callback_data=f"pr_edit_{post_id}"),
+                InlineKeyboardButton("🔙 К списку", callback_data="pr_scheduled_list"),
+            ]])
+        )
+        return
 
     try:
         kwargs = {

@@ -135,40 +135,47 @@ class CommandHandler:
 
     async def fix_left_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Разовая чистка: проверить всех пользователей с is_left=0 через Telegram API и пометить вышедших"""
-        user_data = self.db.get_user(update.effective_user.id)
-        is_allowed = (update.effective_user.id == self.main_admin_id or
-                      (user_data and (user_data['is_owner'] or user_data['is_admin'])))
-        if not is_allowed:
-            return
-        import asyncio
-        self.db.cursor.execute('SELECT user_id FROM users WHERE is_left = 0 AND is_owner = 0')
-        users = self.db.cursor.fetchall()
-        total = len(users)
-        await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
+        try:
+            user_data = self.db.get_user(update.effective_user.id)
+            is_allowed = (update.effective_user.id == self.main_admin_id or
+                          (user_data and (user_data['is_owner'] or user_data['is_admin'])))
+            if not is_allowed:
+                await update.message.reply_text("❌ Нет доступа.")
+                return
+            import asyncio
+            rows = self.db.conn.execute(
+                'SELECT user_id FROM users WHERE is_left = 0 AND is_owner = 0'
+            ).fetchall()
+            users = list(rows)
+            total = len(users)
+            await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
 
-        async def check_user(uid):
-            try:
-                member = await context.bot.get_chat_member(self.target_chat_id, uid, read_timeout=5, write_timeout=5)
-                return uid if member.status in ('left', 'kicked') else None
-            except Exception:
-                return None
+            async def check_user(uid):
+                try:
+                    member = await context.bot.get_chat_member(self.target_chat_id, uid, read_timeout=5, write_timeout=5)
+                    return uid if member.status in ('left', 'kicked') else None
+                except Exception:
+                    return None
 
-        marked = 0
-        batch_size = 30
-        for i in range(0, total, batch_size):
-            batch = [row['user_id'] for row in users[i:i + batch_size]]
-            results = await asyncio.gather(*[check_user(uid) for uid in batch])
-            for uid in results:
-                if uid:
-                    self.db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
-                    marked += 1
-            self.db.conn.commit()
-            await asyncio.sleep(1)
+            marked = 0
+            batch_size = 30
+            for i in range(0, total, batch_size):
+                batch = [row[0] for row in users[i:i + batch_size]]
+                results = await asyncio.gather(*[check_user(uid) for uid in batch])
+                for uid in results:
+                    if uid:
+                        self.db.conn.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
+                        marked += 1
+                self.db.conn.commit()
+                await asyncio.sleep(1)
 
-        await update.message.reply_text(
-            f"✅ Готово!\n"
-            f"Помечено как вышедших: {marked} из {total}"
-        )
+            await update.message.reply_text(
+                f"✅ Готово!\n"
+                f"Помечено как вышедших: {marked} из {total}"
+            )
+        except Exception as e:
+            logger.error(f"fix_left_command error: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
 
     async def _show_lottery_deeplink(self, update: Update, context: ContextTypes.DEFAULT_TYPE, lottery_id: int):
         """Показать виджет покупки лотереи при переходе по deep link."""
