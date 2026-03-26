@@ -386,8 +386,7 @@ async def show_survey_results(query, db, admin_id: int) -> None:
     recent = db.cursor.fetchall()
 
     text = (
-        f"📊 <b>ОПРОСЫ ПРИ ВЫХОДЕ</b>\n"
-        f"{'━' * 24}\n\n"
+        f"📊 <b>ОПРОСЫ ПРИ ВЫХОДЕ</b>\n\n"
         f"📋 Всего ответов: <b>{total}</b>\n\n"
     )
 

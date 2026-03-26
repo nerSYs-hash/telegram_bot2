@@ -4,25 +4,16 @@
 
 import logging
 from handlers.bank_handlers import (
-    show_bank, show_bank_menu, adjust_difficulty,
-    start_set_exchange_rate, show_exchange_rate,
+    show_bank, show_bank_menu,
+    show_exchange_rate,
 )
-<<<<<<< HEAD
 from handlers.Stats.stats_controller import (
-    show_stats_menu, 
-    show_stats_period_menu, 
-    handle_stats_callback, 
+    show_stats_menu,
+    show_stats_period_menu,
+    handle_stats_callback,
     handle_stats_export,
     generate_export_file
 )
-
-=======
-from handlers.Stats import (
-    show_stats_menu, show_stats_period_menu,
-    handle_stats_export, handle_stats_callback,
-    generate_export_file,
-)
->>>>>>> 42e8e40
 from handlers.pr_handlers import (
     show_settings, start_press_release, handle_pr_target_selection,
     handle_pr_publish_now, handle_pr_schedule, show_scheduled_posts,
@@ -52,14 +43,8 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
         await show_bank_menu(query, user, db, admin_id)
     elif data == "bank_panel":
         await show_bank(query, user, db, admin_id)
-    elif data == "bank_k_up":
-        await adjust_difficulty(query, user, 'up', db, admin_id)
-    elif data == "bank_k_down":
-        await adjust_difficulty(query, user, 'down', db, admin_id)
     elif data == "bank_refresh":
         await show_bank(query, user, db, admin_id)
-    elif data == "set_exchange_rate":
-        await start_set_exchange_rate(query, user, context, db, admin_id)
     elif data == "show_exchange_rate":
         await show_exchange_rate(query, user, db, admin_id)
 

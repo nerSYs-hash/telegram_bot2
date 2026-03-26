@@ -56,8 +56,7 @@ async def show_features_management(query, user, db, admin_id):
     features = [
         ('👤 Личный кабинет (Профиль)', 'profile'),
         ('📊 Статистика', 'statistics'),
-        ('🏆 Топ-5', 'top'),
-        ('⚡ Команды "ТОП-5"', 'top_commands'),
+        ('🏆 ТОП-5 и команды', 'top'),
         ('🏦 Центробанк', 'bank'),
         ('🎯 Активности', 'activities'),
         ('📋 Детализация', 'detalization'),
@@ -78,6 +77,9 @@ async def show_features_management(query, user, db, admin_id):
 
     for feature_name, feature_id in features:
         is_enabled = db.is_feature_enabled(feature_id)
+        # Объединённый переключатель: показываем Вкл только если обе части активны
+        if feature_id == 'top':
+            is_enabled = is_enabled and db.is_feature_enabled('top_commands')
 
         if is_enabled:
             toggle_btn = InlineKeyboardButton("🟢 Вкл", callback_data=f"feature_off_{feature_id}")
@@ -107,9 +109,13 @@ async def toggle_feature(query, data, user, db, admin_id):
 
     if action == 'on':
         db.set_setting(f'feature_{feature_id}', '1')
+        if feature_id == 'top':
+            db.set_setting('feature_top_commands', '1')
         await query.answer("✅ Функция включена!", show_alert=False)
     elif action == 'off':
         db.set_setting(f'feature_{feature_id}', '0')
+        if feature_id == 'top':
+            db.set_setting('feature_top_commands', '0')
         await query.answer("❌ Функция отключена!", show_alert=False)
 
     await show_features_management(query, user, db, admin_id)

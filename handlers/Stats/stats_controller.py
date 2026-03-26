@@ -458,7 +458,20 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
         )
         stats_data['act_count'] = db.cursor.fetchone()['act']
         g['👥 Активных пользователей'] = stats_data['act_count']
-        g['💎 Добыто Пульсов']         = format_number(raw['pulses'])
+
+        # Майнинг: chat_stats + транзакции новой системы (message_reward, combo/sprint - penalty)
+        db.cursor.execute(
+            "SELECT COALESCE(SUM(CASE WHEN transaction_type IN "
+            "('message_reward','combo_reward','sprint_reward') THEN amount ELSE 0 END), 0) AS earned, "
+            "COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalized "
+            "FROM transactions WHERE timestamp >= ? AND timestamp <= ?",
+            (start_date, end_date)
+        )
+        _mining_row = db.cursor.fetchone()
+        _mining_earned = float(_mining_row['earned'])
+        _mining_penalty = float(_mining_row['penalized'])
+        _mining_net = max(_mining_earned - _mining_penalty, 0)
+        g['💎 Добыто Пульсов']         = _mining_net
 
         for t_type, t_label in [
             ('donate_to_user',   '🎁 Донатов пользователям'),
@@ -1008,8 +1021,6 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                 InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")
             ]])
         )
-<<<<<<<< HEAD:handlers/Stats/stats_controller.py
-========
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1377,12 +1388,28 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
 
     # Пульсов добыто
     db.cursor.execute('''
-        SELECT SUM(amount) as total FROM transactions
-        WHERE to_user_id IS NOT NULL AND transaction_type = 'message_reward' AND timestamp >= ?
+        SELECT
+            COALESCE(SUM(CASE WHEN transaction_type IN ('message_reward','combo_reward','sprint_reward') THEN amount ELSE 0 END), 0) AS earned,
+            COALESCE(SUM(CASE WHEN transaction_type = 'message_reward' THEN amount ELSE 0 END), 0) AS base_earned,
+            COALESCE(SUM(CASE WHEN transaction_type = 'combo_reward' THEN amount ELSE 0 END), 0) AS combo_earned,
+            COALESCE(SUM(CASE WHEN transaction_type = 'sprint_reward' THEN amount ELSE 0 END), 0) AS sprint_earned,
+            COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalized
+        FROM transactions WHERE timestamp >= ?
     ''', (start_date,))
     r = db.cursor.fetchone()
-    total_pulses = _d(r['total']) if r['total'] else Decimal('0')       # Decimal
-    stats_message += f"💎 Добыто Пульсов: {format_number(total_pulses)}\n"
+    _base   = _d(r['base_earned'])
+    _combo  = _d(r['combo_earned'])
+    _sprint = _d(r['sprint_earned'])
+    _penalty = _d(r['penalized'])
+    total_pulses = max(_d(r['earned']) - _penalty, Decimal('0'))
+    detail_parts = [f"база: {format_number(_base)}"]
+    if _combo > 0:
+        detail_parts.append(f"комбо: +{format_number(_combo)}")
+    if _sprint > 0:
+        detail_parts.append(f"спринт: +{format_number(_sprint)}")
+    if _penalty > 0:
+        detail_parts.append(f"штрафы: -{format_number(_penalty)}")
+    stats_message += f"💎 Добыто Пульсов: {format_number(total_pulses)} ({' | '.join(detail_parts)})\n"
 
     # Вовлечённость
     try:
@@ -1572,4 +1599,3 @@ async def show_stats_period_menu(query, data, user, admin_id):
         f"📊 СТАТИСТИКА\n{type_names.get(stats_type, 'Статистика')}\n\nВыберите период:",
         reply_markup=InlineKeyboardMarkup(keyboard)
     )
->>>>>>>> 42e8e40:handlers/stats_handlers.py

@@ -368,8 +368,7 @@ async def show_triggers_menu(query, db, admin_id: int) -> None:
     enabled = sum(1 for t in triggers if t['is_enabled'])
 
     text = (
-        f"{ICON_HIGH_VOLTAGE} <b>ТРИГГЕРЫ</b>\n"
-        f"{'━' * 24}\n\n"
+        f"{ICON_HIGH_VOLTAGE} <b>ТРИГГЕРЫ</b>\n\n"
         f"📊 Всего: <b>{total}</b> | Активных: <b>{enabled}</b>\n\n"
     )
 
@@ -411,7 +410,7 @@ async def show_trigger_list(query, db, admin_id: int) -> None:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
         return
 
-    text = f"{ICON_HIGH_VOLTAGE} <b>УПРАВЛЕНИЕ ТРИГГЕРАМИ</b>\n{'━' * 24}\n\n"
+    text = f"{ICON_HIGH_VOLTAGE} <b>УПРАВЛЕНИЕ ТРИГГЕРАМИ</b>\n\n"
 
     keyboard = []
     for t in triggers:
@@ -442,8 +441,7 @@ async def show_trigger_detail(query, db, trigger_id: int) -> None:
     cond_label = CONDITIONS.get(t['condition'], t['condition'])
 
     text = (
-        f"{ICON_HIGH_VOLTAGE} <b>{t['name']}</b>\n"
-        f"{'━' * 24}\n\n"
+        f"{ICON_HIGH_VOLTAGE} <b>{t['name']}</b>\n\n"
         f"📝 Ключевые слова: <code>{t['keywords']}</code>\n"
         f"🔍 Условие: {cond_label}\n"
         f" {ICON_HIGH_VOLTAGE} Действие: {action_label}\n"

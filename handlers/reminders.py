@@ -171,8 +171,7 @@ async def send_weekly_report(bot, db, admin_id: int) -> None:
             pass
 
         text = (
-            f"📊 <b>ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ</b>\n"
-            f"{'━' * 24}\n\n"
+            f"📊 <b>ЕЖЕНЕДЕЛЬНЫЙ ОТЧЁТ</b>\n\n"
             f"👥 Новых пользователей: <b>{new_users}</b>\n"
             f"🚪 Покинули чат: <b>{left_users}</b>\n"
             f"💬 Активных за неделю: <b>{active_users}</b>\n"

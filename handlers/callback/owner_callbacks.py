@@ -1,21 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-<<<<<<< HEAD
 """Callback-ы Пульта Владельца: дашборд, персонал, модерация, триггеры, журнал, система."""
-=======
-"""Callback-ы Пульта Владельца: дашборд, персонал, триггеры, журнал, система."""
->>>>>>> 42e8e40
 
 import logging
 from handlers.owner_handlers import (
     show_owner_dashboard,
     show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
-<<<<<<< HEAD
     show_moderation_menu, bl_add_start, bl_remove_start,
     mute_start, unmute_start,
-=======
->>>>>>> 42e8e40
     show_system_menu, toggle_maintenance,
     send_database_backup,
 )
@@ -59,7 +52,6 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     elif data == "owner_wipe_confirm":
         await wipe_execute(query, db, admin_id)
 
-<<<<<<< HEAD
     # ── Модерация ──
     elif data == "owner_moderation":
         await show_moderation_menu(query, db, admin_id)
@@ -73,8 +65,6 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     elif data == "owner_unmute_start":
         await unmute_start(query, context, db, admin_id)
 
-=======
->>>>>>> 42e8e40
     # ── Система ──
     elif data == "owner_system":
         await show_system_menu(query, db, admin_id)

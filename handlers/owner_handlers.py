@@ -109,8 +109,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
     maint_text = "ВКЛ" if stats['maintenance'] else "ВЫКЛ"
 
     text = (
-        f"🎛 <b>ПУЛЬТ ВЛАДЕЛЬЦА</b>\n"
-        f"{'━' * 24}\n\n"
+        f"🎛 <b>ПУЛЬТ ВЛАДЕЛЬЦА</b>\n\n"
         f"👥 Людей в базе: <b>{stats['total']}</b>\n"
         f"👨‍💼 Админов: <b>{stats['admins']}</b>\n"
         f"🚫 В блэклисте: <b>{stats['blacklisted']}</b>\n"
@@ -219,8 +218,7 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
 
     bank = db.get_bank_balance()
     text = (
-        f"💰 <b>ЭКОНОМИКА</b>\n"
-        f"{'━' * 24}\n\n"
+        f"💰 <b>ЭКОНОМИКА</b>\n\n"
         f"🏦 Центробанк: <b>{format_number(bank)}</b> 💎"
     )
     keyboard = [
@@ -304,8 +302,7 @@ async def show_system_menu(query, db, admin_id: int) -> None:
     btn_label = "🟢 Выключить техобслуживание" if maintenance else "🔴 Включить техобслуживание"
 
     text = (
-        f"⚙️ <b>СИСТЕМА</b>\n"
-        f"{'━' * 24}\n\n"
+        f"⚙️ <b>СИСТЕМА</b>\n\n"
         f"🔧 Режим техобслуживания: <b>{icon}</b>\n\n"
         f"<i>Когда включён — бот не обрабатывает\n"
         f"сообщения обычных пользователей.</i>"

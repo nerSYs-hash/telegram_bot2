@@ -287,8 +287,7 @@ async def show_journal_menu(query, db, admin_id: int) -> None:
     today = db.cursor.fetchone()['cnt']
 
     text = (
-        f"📢 <b>ЖУРНАЛ СОБЫТИЙ</b>\n"
-        f"{'━' * 24}\n\n"
+        f"📢 <b>ЖУРНАЛ СОБЫТИЙ</b>\n\n"
         f"📡 Статус: {status}\n"
         f"📊 Всего записей: <b>{total}</b>\n"
         f"📅 За 24 часа: <b>{today}</b>\n\n"
