@@ -249,14 +249,27 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
+            CAPTION_LIMIT = 1024
             if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_video(**kwargs)
+                if len(press_release) <= CAPTION_LIMIT:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_video(**kwargs)
+                else:
+                    await context.bot.send_video(video=raw_file_id, chat_id=kwargs['chat_id'],
+                                                  message_thread_id=kwargs.get('message_thread_id'))
+                    await context.bot.send_message(chat_id=kwargs['chat_id'], text=press_release,
+                                                   message_thread_id=kwargs.get('message_thread_id'))
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_photo(**kwargs)
+                if len(press_release) <= CAPTION_LIMIT:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_photo(**kwargs)
+                else:
+                    await context.bot.send_photo(photo=raw_file_id, chat_id=kwargs['chat_id'],
+                                                  message_thread_id=kwargs.get('message_thread_id'))
+                    await context.bot.send_message(chat_id=kwargs['chat_id'], text=press_release,
+                                                   message_thread_id=kwargs.get('message_thread_id'))
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
@@ -270,13 +283,20 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             ]])
         )
     except Exception as e:
-        await query.edit_message_text(
-            f"❌ Ошибка при публикации: {e}",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔁 Попробовать снова", callback_data="pr_publish_now"),
-                InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")
-            ]])
-        )
+        err_text = str(e)
+        if 'Message is not modified' in err_text:
+            await query.answer("⚠️ Та же ошибка. Исправьте данные и попробуйте снова.", show_alert=True)
+            return
+        try:
+            await query.edit_message_text(
+                f"❌ Ошибка при публикации: {err_text}",
+                reply_markup=InlineKeyboardMarkup([[
+                    InlineKeyboardButton("🔁 Попробовать снова", callback_data="pr_publish_now"),
+                    InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")
+                ]])
+            )
+        except Exception:
+            await query.answer(f"❌ Ошибка: {err_text}", show_alert=True)
 
 
 async def handle_pr_schedule(query, user, context, db, admin_id):
