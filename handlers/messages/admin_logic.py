@@ -294,6 +294,11 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
         await _handle_awaiting_pr_photo(message, context, db, target_chat_id)
         return True
 
+    # === ОБРАБОТКА ИЗМЕНЕНИЯ ТЕКСТА ТЕКУЩЕГО ПРЕСС-РЕЛИЗА ===
+    if context.user_data.get('awaiting_pr_current_text_edit') and user.id == admin_id:
+        await _handle_awaiting_pr_current_text_edit(message, context, db, target_chat_id)
+        return True
+
     # === ОБРАБОТКА РЕДАКТИРОВАНИЯ ТЕКСТА ===
     if context.user_data.get('awaiting_edit_text') and user.id == admin_id:
         await _handle_awaiting_edit_text(message, context, db)
@@ -521,6 +526,34 @@ async def _handle_awaiting_press_release(message, context, db, target_chat_id):
             preview_msg += "\n🎥 С видео\n"
         else:
             preview_msg += "\n📷 С фото\n"
+    preview_msg += "\n🎯 Выберите куда опубликовать:"
+
+    await message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def _handle_awaiting_pr_current_text_edit(message, context, db, target_chat_id):
+    """Обновление текста текущего (несохранённого) пресс-релиза после предупреждения о длине."""
+    if message.text == '/cancel':
+        context.user_data.pop('awaiting_pr_current_text_edit', None)
+        await message.reply_text("❌ Редактирование отменено.")
+        return
+
+    new_text = message.text or message.caption or ""
+    if not new_text:
+        await message.reply_text("❌ Отправьте новый текст. Для отмены: /cancel")
+        return
+
+    pr_data = context.user_data.get('pr_data', {})
+    pr_data['text'] = new_text
+    context.user_data['pr_data'] = pr_data
+    context.user_data.pop('awaiting_pr_current_text_edit', None)
+
+    keyboard = await build_topic_keyboard(context, db, target_chat_id)
+    photo_file_id = pr_data.get('photo_file_id')
+    preview = new_text[:200] + "..." if len(new_text) > 200 else new_text
+    preview_msg = f"📰 ПРЕДПРОСМОТР ПРЕСС-РЕЛИЗА\n\n{preview}\n"
+    if photo_file_id:
+        preview_msg += "\n🎥 С видео\n" if str(photo_file_id).startswith('video:') else "\n📷 С фото\n"
     preview_msg += "\n🎯 Выберите куда опубликовать:"
 
     await message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
