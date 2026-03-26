@@ -133,6 +133,31 @@ class CommandHandler:
         """Handle /wipe_balances command"""
         await wipe_balances_command(update, context, self.db, self.main_admin_id)
 
+    async def fix_left_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Разовая чистка: проверить всех пользователей с is_left=0 через Telegram API и пометить вышедших"""
+        if update.effective_user.id != self.main_admin_id:
+            return
+        await update.message.reply_text("⏳ Проверяю участников чата, подожди...")
+        self.db.cursor.execute('SELECT user_id FROM users WHERE is_left = 0 AND is_owner = 0')
+        users = self.db.cursor.fetchall()
+        marked = 0
+        errors = 0
+        for row in users:
+            uid = row['user_id']
+            try:
+                member = await context.bot.get_chat_member(self.target_chat_id, uid)
+                if member.status in ('left', 'kicked'):
+                    self.db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
+                    marked += 1
+            except Exception:
+                errors += 1
+        self.db.conn.commit()
+        await update.message.reply_text(
+            f"✅ Готово!\n"
+            f"Помечено как вышедших: {marked}\n"
+            f"Ошибок API (не критично): {errors}"
+        )
+
     async def _show_lottery_deeplink(self, update: Update, context: ContextTypes.DEFAULT_TYPE, lottery_id: int):
         """Показать виджет покупки лотереи при переходе по deep link."""
         user = update.effective_user
