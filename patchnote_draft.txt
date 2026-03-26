@@ -1,0 +1,89 @@
+ШПАРГАЛКА (изменено сегодня):
+  - bot.py
+  - config.py
+  - constants.py
+  - db_update.py
+  - fix_user.py
+  - run_auto.py
+  - config/emojis.py
+  - handlers/admin_moderation.py
+  - handlers/command_handler.py
+  - handlers/journal_handlers.py
+  - handlers/lottery_handlers.py
+  - handlers/message_handler.py
+  - handlers/moderation.py
+  - handlers/owner_handlers.py
+  - handlers/profile_handlers.py
+  - handlers/registration.py
+  - handlers/registration_conversation.py
+  - handlers/reminder_logic.py
+  - handlers/triggers_handlers.py
+  - handlers/__init__.py
+  - handlers/BBS/helpers_bbs.py
+  - handlers/BBS/publishing_bbs.py
+  - handlers/BBS/reactions_bbs.py
+  - handlers/callback/activity_callbacks.py
+  - handlers/callback/admin_callbacks.py
+  - handlers/callback/callback_router.py
+  - handlers/callback/owner_callbacks.py
+  - handlers/callback/user_callbacks.py
+  - handlers/callback/__init__.py
+  - handlers/commands/donation_commands.py
+  - handlers/commands/system_commands.py
+  - handlers/messages/admin_logic.py
+  - handlers/messages/events_logic.py
+  - handlers/messages/mining_logic.py
+  - handlers/PR/setting_function_pr.py
+  - handlers/Stats/stats_calculators.py
+  - handlers/Stats/stats_controller.py
+  - handlers/Stats/stats_exporters.py
+  - handlers/Stats/stats_messages.py
+  - handlers/Stats/stats_tops.py
+  - handlers/Stats/__init__.py
+  - registration_system/config.py
+  - registration_system/constants.py
+  - registration_system/database.py
+  - registration_system/main.py
+  - registration_system/run.py
+  - registration_system/test.py
+  - registration_system/__init__.py
+  - registration_system/handlers/admin.py
+  - registration_system/handlers/chat_member.py
+  - registration_system/handlers/exit_survey.py
+  - registration_system/handlers/owner.py
+  - registration_system/handlers/registration.py
+  - registration_system/handlers/reminder.py
+  - registration_system/handlers/reminder_all.py
+  - registration_system/handlers/triggers.py
+  - registration_system/handlers/__init__.py
+  - registration_system/middlewares/profile_tracker.py
+  - registration_system/middlewares/registration_check.py
+  - registration_system/middlewares/__init__.py
+  - registration_system/mnt/user-data/outputs/middlewares/__init__.py
+  - registration_system/mnt/user-data/outputs/utils/__init__.py
+  - script/cleanup_reg.py
+  - script/migrate_db.py
+  - utils/helpers.py
+  - utils/journal_logger.py
+  - utils/helpers/export_excel.py
+=================================================
+ИНСТРУКЦИЯ: 
+1. Напишите ваши обновления после дефисов. 
+2. Вы можете добавлять новые дефисы с новой строки.
+3. Пустые разделы скрипт удалит сам!
+4. Сохраните файл (Ctrl+S) и вернитесь в консоль.
+=================================================
+
+📦 ВЕРСИЯ: 26.03.2026
+
+🚀 НОВЫЙ ФУНКЦИОНАЛ:
+- 
+
+🎨 ВИЗУАЛ И УДОБСТВО:
+- 
+
+🛠 ИСПРАВЛЕНИЯ:
+- 
+
+⚙️ ПОД КАПОТОМ:
+- 
