@@ -409,8 +409,6 @@ class MessageHandler:
                 ]
                 is_owner = user.id == self.main_admin_id
                 if is_owner:
-                    kb.append([InlineKeyboardButton("⚙️ Сложность ±", callback_data="bank_refresh")])
-                    kb.append([InlineKeyboardButton("💱 Установить курс", callback_data="set_exchange_rate")])
                     kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
                 await context.bot.send_message(chat_id=message.chat.id, text="🏦 ЦЕНТРОБАНК\n\nВыберите действие:", reply_markup=InlineKeyboardMarkup(kb))
                 return
@@ -602,8 +600,6 @@ class MessageHandler:
                 ]
                 is_owner = user.id == self.main_admin_id
                 if is_owner:
-                    kb.append([InlineKeyboardButton("⚙️ Сложность ±", callback_data="bank_refresh")])
-                    kb.append([InlineKeyboardButton("💱 Установить курс", callback_data="set_exchange_rate")])
                     kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
                 kb.append([InlineKeyboardButton("🔙 Меню", callback_data="back_to_menu")])
                 sent = await context.bot.send_message(chat_id=chat_id, text="🏦 ЦЕНТРОБАНК\n\nВыберите действие:", reply_markup=InlineKeyboardMarkup(kb))

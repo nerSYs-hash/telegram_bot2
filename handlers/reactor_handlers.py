@@ -250,8 +250,7 @@ async def show_reactor_menu(query, context, db, user_id, is_owner=False):
 
     # ── Собираем сообщение ──
     text = (
-        f"{status_emoji} <b>РЕАКТОР 2.0</b> — {status_text}\n"
-        f"{'━' * 26}\n\n"
+        f"{status_emoji} <b>РЕАКТОР 2.0</b> — {status_text}\n\n"
         f"{bar}  <b>{percent:.1f}%</b>\n"
         f"💰 {format_number(current)} / {format_number(target)} 💎\n\n"
         f"<b>Награды:</b>\n"
@@ -343,8 +342,7 @@ async def handle_reactor_feature(query, data, db, user_id):
 
     # Показываем заглушку
     text = (
-        f"{title}\n"
-        f"{'━' * 26}\n\n"
+        f"{title}\n\n"
         f"🔑 Ключ Доступа: ✅\n\n"
         f"{description}"
     )
@@ -468,9 +466,7 @@ async def _check_thresholds(context, db, user_id, old_pct, new_pct, target_chat_
 
                 epic_text = (
                     f"💥💥💥 <b>РЕАКТОР АКТИВИРОВАН!</b> 💥💥💥\n\n"
-                    f"{'━' * 28}\n"
-                    f"🔋 Цель {format_number(state['target_pool'])} 💎 — <b>ДОСТИГНУТА!</b>\n"
-                    f"{'━' * 28}\n\n"
+                    f"🔋 Цель {format_number(state['target_pool'])} 💎 — <b>ДОСТИГНУТА!</b>\n\n"
                     f"🏆 <b>Детонатор / Спаситель:</b>\n"
                     f"⚡ {donor_name}\n\n"
                     f"Разблокированы ВСЕ награды цикла:\n"
@@ -700,8 +696,7 @@ async def show_reactor_admin(query, context, db, user_id, admin_id):
     status_map = {'charging': '🔋 Заряжается', 'active': '⚡ Активен', 'cooldown': '❄️ Перезарядка'}
 
     text = (
-        f"⚙️ <b>УПРАВЛЕНИЕ РЕАКТОРОМ</b>\n"
-        f"{'━' * 28}\n\n"
+        f"⚙️ <b>УПРАВЛЕНИЕ РЕАКТОРОМ</b>\n\n"
         f"📊 Цикл: <b>#{cycle_id}</b>\n"
         f"📡 Статус: {status_map.get(status, status)}\n"
         f"{_build_progress_bar(percent)}  <b>{percent:.1f}%</b>\n"

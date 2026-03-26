@@ -962,16 +962,18 @@ def process_mining_reward(
             )
 
         db.cursor.execute('''
-            UPDATE user_stats
-            SET pulses_mined = pulses_mined + ?
-            WHERE user_id = ? AND date = ?
-        ''', (total_reward, user_id, today_str))
+            INSERT INTO user_stats (user_id, date, pulses_mined)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, date) DO UPDATE SET
+                pulses_mined = pulses_mined + excluded.pulses_mined
+        ''', (user_id, today_str, total_reward))
 
         db.cursor.execute('''
-            UPDATE chat_stats
-            SET total_pulses_mined = total_pulses_mined + ?
-            WHERE date = ?
-        ''', (total_reward, today_str))
+            INSERT INTO chat_stats (date, total_pulses_mined)
+            VALUES (?, ?)
+            ON CONFLICT(date) DO UPDATE SET
+                total_pulses_mined = total_pulses_mined + excluded.total_pulses_mined
+        ''', (today_str, total_reward))
 
         db.conn.commit()
 

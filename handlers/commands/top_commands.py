@@ -33,7 +33,7 @@ async def show_top_rich(message, context, db):
             FROM users u
             LEFT JOIN user_stats us_today 
                 ON u.user_id = us_today.user_id AND us_today.date = ?
-            WHERE u.is_admin = 0 AND u.is_owner = 0
+            WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
             ORDER BY u.balance DESC
             LIMIT 5
         ''', (today,))
@@ -131,9 +131,9 @@ async def show_top_activists(message, context, db):
                 ) / ? as activity_index
             FROM user_stats us
             JOIN users u ON us.user_id = u.user_id
-            WHERE us.date = ? 
-              AND u.is_admin = 0 AND u.is_owner = 0
-              AND (us.total_messages > 0 OR us.reactions_given > 0 
+            WHERE us.date = ?
+              AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
+              AND (us.total_messages > 0 OR us.reactions_given > 0
                    OR us.reactions_received > 0 OR us.replies_sent > 0)
             ORDER BY activity_index DESC
             LIMIT 5
@@ -189,7 +189,7 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
         FROM users u
         LEFT JOIN user_stats us_today ON u.user_id = us_today.user_id AND us_today.date = ?
         LEFT JOIN user_stats us_all ON u.user_id = us_all.user_id
-        WHERE (u.is_admin = 0 AND u.is_owner = 0)
+        WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         GROUP BY u.user_id
         ORDER BY pulses_today DESC, pulses_total DESC, u.balance DESC
         LIMIT 5

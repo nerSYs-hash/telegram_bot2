@@ -39,6 +39,7 @@ def migrate_to_decimal_balances(db):
                     is_qualified BOOLEAN DEFAULT 0,
                     frozen_balance REAL DEFAULT 0.0,
                     freeze_until TIMESTAMP,
+                    is_left INTEGER DEFAULT 0,
                     FOREIGN KEY (referrer_id) REFERENCES users(user_id)
                 )
             ''')
@@ -59,11 +60,12 @@ def migrate_to_decimal_balances(db):
 
             # 4. Copy data back
             db.cursor.execute('''
-                INSERT INTO users 
-                SELECT user_id, username, first_name, last_name, 
-                       CAST(balance AS REAL), is_admin, is_owner, 
-                       joined_at, last_active, referrer_id, referral_code, 
-                       is_qualified, CAST(frozen_balance AS REAL), freeze_until
+                INSERT INTO users
+                SELECT user_id, username, first_name, last_name,
+                       CAST(balance AS REAL), is_admin, is_owner,
+                       joined_at, last_active, referrer_id, referral_code,
+                       is_qualified, CAST(frozen_balance AS REAL), freeze_until,
+                       COALESCE(is_left, 0)
                 FROM users_backup
             ''')
 

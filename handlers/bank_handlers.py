@@ -9,7 +9,7 @@ db, admin_id передаются явно.
 
 Использование в callback_handler.py:
     from handlers.bank_handlers import (
-        show_bank, adjust_difficulty, start_set_exchange_rate,
+        show_bank, show_bank_menu,
         show_exchange_rate, start_bank_transfer,
         select_transfer_amount, execute_bank_transfer,
     )
@@ -22,15 +22,13 @@ from utils.helpers import format_number
 async def show_bank_menu(query, user, db, admin_id):
     """Show simple bank menu (like ReplyKeyboard button)"""
     is_owner = user.id == admin_id
-    
+
     kb = [
         [InlineKeyboardButton("💱 Курс Пульса", callback_data="show_exchange_rate")],
     ]
     if is_owner:
-        kb.append([InlineKeyboardButton("⚙️ Сложность ±", callback_data="bank_panel")])
-        kb.append([InlineKeyboardButton("💱 Установить курс", callback_data="set_exchange_rate")])
         kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
-    
+
     await query.edit_message_text(
         "🏦 ЦЕНТРОБАНК\n\nВыберите действие:",
         reply_markup=InlineKeyboardMarkup(kb)
@@ -45,23 +43,12 @@ async def show_bank(query, user, db, admin_id):
     if is_owner:
         # Full panel for owner
         bank_balance = db.get_bank_balance()
-        difficulty_k = float(db.get_setting('difficulty_k', 5.0))
-        
-        from utils.helpers import get_today_date_msk, calculate_mining_reward
-        today = get_today_date_msk()
-        active_core = db.get_active_core_count(today)
-        current_reward = calculate_mining_reward(active_core, difficulty_k)
-        
+
         message = f"🏦 ПАНЕЛЬ ЦЕНТРОБАНКА\n\n"
-        message += f"💰 Баланс Банка: {format_number(bank_balance)} 💎\n"
-        message += f"⚙️ Сложность (K): {difficulty_k}\n"
-        message += f"👥 Активное ядро: {active_core} чел.\n"
-        message += f"💎 Текущая награда: {current_reward} Пульсов/сообщение"
-        
-        keyboard = [[
-                InlineKeyboardButton("⬆️ K Up", callback_data="bank_k_up"),
-                InlineKeyboardButton("⬇️ K Down", callback_data="bank_k_down")
-            ],[InlineKeyboardButton("💱 Текущий курс", callback_data="show_exchange_rate")],
+        message += f"💰 Баланс Банка: {format_number(bank_balance)} 💎"
+
+        keyboard = [
+            [InlineKeyboardButton("💱 Текущий курс", callback_data="show_exchange_rate")],
             [InlineKeyboardButton("🔄 Обновить", callback_data="bank_refresh")],
             [InlineKeyboardButton("🔙 Назад", callback_data="menu_bank")]
         ]
@@ -85,44 +72,6 @@ async def show_bank(query, user, db, admin_id):
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
 
-async def adjust_difficulty(query, user, direction, db, admin_id):
-    """Adjust mining difficulty"""
-    if user.id != admin_id:
-        await query.answer("У вас нет доступа к этой функции.", show_alert=True)
-        return
-    
-    current_k = float(db.get_setting('difficulty_k', 5.0))
-    
-    if direction == 'up':
-        new_k = round(current_k + 0.5, 1)
-    else:
-        new_k = max(0.5, round(current_k - 0.5, 1))
-    
-    db.set_setting('difficulty_k', new_k)
-    
-    await query.answer(f"Сложность изменена: {current_k} → {new_k}", show_alert=True)
-    await show_bank(query, user, db, admin_id)
-
-async def start_set_exchange_rate(query, user, context, db, admin_id):
-    """Start setting exchange rate (owner only)"""
-    if user.id != admin_id:
-        await query.answer("У вас нет доступа к этой функции.", show_alert=True)
-        return
-    
-    current_rate = db.get_exchange_rate()
-    
-    context.user_data['awaiting_exchange_rate'] = True
-    
-    await query.edit_message_text(
-        f"💱 УСТАНОВКА КУРСА\n\n"
-        f"Текущий курс: 1 💎 = {current_rate} ₽\n\n"
-        f"Отправьте новый курс (число).\n"
-        f"Например: 0.5 (если 1 Пульс = 0.5 рублей)\n\n"
-        f"Для отмены отправьте /cancel",
-        reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("❌ Отмена", сallback_data="menu_bank")
-        ]])
-    )
 
 async def show_exchange_rate(query, user, db):
     """Show current exchange rate (for all users)"""

@@ -35,7 +35,7 @@ from handlers.pr_handlers import (
     handle_pr_refresh_topics,
 )
 from handlers.bank_handlers import (
-    show_bank, show_bank_menu, adjust_difficulty, start_set_exchange_rate,
+    show_bank, show_bank_menu,
     show_exchange_rate, start_bank_transfer,
     select_transfer_amount, execute_bank_transfer,
 )
@@ -270,10 +270,6 @@ class CallbackHandler:
             await show_survey_results(query, self.db, self.main_admin_id)
         
         # Bank callbacks
-        elif data == "bank_k_up":
-            await adjust_difficulty(query, user, 'up', self.db, self.main_admin_id)
-        elif data == "bank_k_down":
-            await adjust_difficulty(query, user, 'down', self.db, self.main_admin_id)
         elif data == "bank_refresh":
             await show_bank(query, user, self.db, self.main_admin_id)
         
@@ -363,11 +359,9 @@ class CallbackHandler:
             await diagnose_emoji(query, user, context, self.db, self.main_admin_id)
         
         # Exchange rate callbacks
-        elif data == "set_exchange_rate":
-            await start_set_exchange_rate(query, user, context, self.db, self.main_admin_id)
         elif data == "show_exchange_rate":
             await show_exchange_rate(query, user, self.db)
-        
+
         # Monthly gift callbacks — OWNER
         elif data == "monthly_gift_draw":
             await self.gift_handler.handle_monthly_gift_draw(query, user, context)
