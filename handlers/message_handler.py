@@ -628,16 +628,16 @@ class MessageHandler:
                 return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
-        #if message.text and context.user_data.get('owner_awaiting'):
-        #    handled = await handle_owner_text_input(
-        #        update, context, self.db, self.main_admin_id, self.target_chat_id
-        #    )
-         #   if handled:
-        #        return
+        if message.text and context.user_data.get('owner_awaiting'):
+            handled = await handle_owner_text_input(
+                update, context, self.db, self.main_admin_id, self.target_chat_id
+            )
+            if handled:
+                return
 
         # ═══ BBS FSM — доступен ВСЕМ пользователям в ЛС ═══
-        #if await process_bbs_input(message, context, self.db):
-         #   return
+        if await process_bbs_input(message, context, self.db):
+            return
         
         # Only admin can use private chat features
        # if user.id != self.main_admin_id and not context.user_data.get('bbs_state'):

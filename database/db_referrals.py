@@ -36,6 +36,16 @@ def get_or_create_referral_link(db, user_id):
     return token
 
 
+def get_referrer_by_token(db, token):
+    """Get referrer user_id by token without marking it as used"""
+    db.cursor.execute('''
+        SELECT user_id FROM referral_links
+        WHERE token = ? AND is_used = 0
+    ''', (token,))
+    result = db.cursor.fetchone()
+    return result['user_id'] if result else None
+
+
 def use_referral_link(db, token, used_by_user_id):
     """Mark referral link as used and return referrer_id"""
     db.cursor.execute('''

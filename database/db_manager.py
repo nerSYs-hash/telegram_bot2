@@ -55,6 +55,7 @@ from database.db_referrals import (
     create_referral_link as _create_referral_link,
     get_active_referral_link as _get_active_referral_link,
     get_or_create_referral_link as _get_or_create_referral_link,
+    get_referrer_by_token as _get_referrer_by_token,
     use_referral_link as _use_referral_link,
     get_referral_link_stats as _get_referral_link_stats,
     record_user_join as _record_user_join,
@@ -605,6 +606,9 @@ class Database:
 
     def get_or_create_referral_link(self, user_id):
         return _get_or_create_referral_link(self, user_id)
+
+    def get_referrer_by_token(self, token):
+        return _get_referrer_by_token(self, token)
 
     def use_referral_link(self, token, used_by_user_id):
         return _use_referral_link(self, token, used_by_user_id)
