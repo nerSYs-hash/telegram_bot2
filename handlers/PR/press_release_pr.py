@@ -18,6 +18,26 @@ from utils.helpers import get_moscow_time
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ═══════════════════════════════════════════════════════════════
 
+MSG_LIMIT = 4096
+
+
+async def _send_long_text(bot, chat_id, text, parse_mode='HTML', thread_id=None):
+    """Отправляет длинный текст, разбивая на части по MSG_LIMIT (4096)."""
+    base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode}
+    if thread_id:
+        base_kw['message_thread_id'] = thread_id
+    # Разбиваем по \n чтобы не резать посреди строки
+    while text:
+        if len(text) <= MSG_LIMIT:
+            await bot.send_message(**base_kw, text=text)
+            break
+        # Ищем последний перенос строки в пределах лимита
+        cut = text.rfind('\n', 0, MSG_LIMIT)
+        if cut == -1:
+            cut = MSG_LIMIT
+        await bot.send_message(**base_kw, text=text[:cut])
+        text = text[cut:].lstrip('\n')
+
 def _resolve_thread_name(db, target_chat_id, thread_id):
     """Получить человекочитаемое имя ветки из БД по thread_id."""
     if not thread_id:
@@ -257,10 +277,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
                 else:
                     kwargs['photo'] = raw_file_id
                     await context.bot.send_photo(**kwargs)
-                text_kw = {'chat_id': target_chat_id, 'text': press_release, 'parse_mode': 'HTML'}
-                if thread_id:
-                    text_kw['message_thread_id'] = thread_id
-                await context.bot.send_message(**text_kw)
+                await _send_long_text(context.bot, target_chat_id, press_release, thread_id=thread_id)
             else:
                 if is_video:
                     kwargs['video'] = raw_file_id
@@ -271,8 +288,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
                     kwargs['caption'] = press_release
                     await context.bot.send_photo(**kwargs)
         else:
-            kwargs['text'] = press_release
-            await context.bot.send_message(**kwargs)
+            await _send_long_text(context.bot, target_chat_id, press_release, thread_id=thread_id)
 
         context.user_data.pop('pr_data', None)
 
@@ -664,10 +680,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
                 else:
                     kwargs['photo'] = raw_file_id
                     await context.bot.send_photo(**kwargs)
-                text_kw = {'chat_id': chat_id_for_topic, 'text': press_release, 'parse_mode': 'HTML'}
-                if thread_id:
-                    text_kw['message_thread_id'] = thread_id
-                await context.bot.send_message(**text_kw)
+                await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
             else:
                 if is_video:
                     kwargs['video'] = raw_file_id
@@ -678,8 +691,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
                     kwargs['caption'] = press_release
                     await context.bot.send_photo(**kwargs)
         else:
-            kwargs['text'] = press_release
-            await context.bot.send_message(**kwargs)
+            await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
 
         db.delete_scheduled_post(post_id)
         await query.answer("✅ Пресс-релиз успешно опубликован!", show_alert=True)
