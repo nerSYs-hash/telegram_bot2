@@ -152,13 +152,32 @@ class MessageHandler:
             return
         
         if message.chat.id != self.target_chat_id:
-            # Исключение: сообщение из ADMIN_CHAT_ID когда ждём причину отказа
-            if message.text and context.user_data.get('awaiting_reject_reason'):
-                from config import ADMIN_CHAT_ID
-                if message.chat.id == ADMIN_CHAT_ID:
+            from config import ADMIN_CHAT_ID
+            if message.chat.id == ADMIN_CHAT_ID:
+                # Исключение: сообщения из ADMIN_CHAT_ID — обрабатываем кнопки и причину отказа
+                if message.text and context.user_data.get('awaiting_reject_reason'):
                     from handlers.admin_moderation import handle_reject_reason
                     await handle_reject_reason(update, context)
                     return
+                # Обработка ReplyKeyboard кнопок в админском чате
+                if message.text and message.text.strip() in REPLY_BUTTONS:
+                    btn = message.text.strip()
+                    if btn == REPLY_BTN_NEW_APPS:
+                        from handlers.admin_moderation import handle_new_apps_text
+                        await handle_new_apps_text(update, context)
+                        return
+                    elif btn in (REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
+                                 REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
+                                 REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM,
+                                 REPLY_BTN_BACKUP):
+                        from handlers.admin_moderation import handle_owner_panel_button
+                        await handle_owner_panel_button(update, context, btn)
+                        return
+                    elif btn == REPLY_BTN_OWNER_PANEL:
+                        from handlers.admin_moderation import send_admin_panel
+                        await send_admin_panel(context.bot, message.chat.id, is_owner=(user.id == self.main_admin_id))
+                        return
+                return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
         
