@@ -232,18 +232,6 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
     )
 
     CAPTION_LIMIT = 1024
-    if photo_file_id and len(press_release) > CAPTION_LIMIT:
-        await query.edit_message_text(
-            f"⚠️ <b>Текст слишком длинный для подписи под медиа.</b>\n\n"
-            f"Лимит Telegram: 1024 символа\n"
-            f"Ваш текст: {len(press_release)} символов\n\n"
-            f"Сократите текст и попробуйте снова.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")
-            ]])
-        )
-        return
 
     try:
         kwargs = {
@@ -263,14 +251,27 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_video(**kwargs)
+            if len(press_release) > CAPTION_LIMIT:
+                # Caption > 1024: медиа без подписи + текст отдельно
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    await context.bot.send_photo(**kwargs)
+                text_kw = {'chat_id': target_chat_id, 'text': press_release, 'parse_mode': 'HTML'}
+                if thread_id:
+                    text_kw['message_thread_id'] = thread_id
+                await context.bot.send_message(**text_kw)
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_photo(**kwargs)
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_photo(**kwargs)
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
@@ -648,19 +649,6 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
     )
 
     CAPTION_LIMIT = 1024
-    if photo_file_id and len(press_release) > CAPTION_LIMIT:
-        await query.edit_message_text(
-            f"⚠️ <b>Текст слишком длинный для подписи под медиа.</b>\n\n"
-            f"Лимит Telegram: 1024 символа\n"
-            f"Ваш текст: {len(press_release)} символов\n\n"
-            f"Сократите текст через редактирование и попробуйте снова.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("✏️ Редактировать", callback_data=f"pr_edit_{post_id}"),
-                InlineKeyboardButton("🔙 К списку", callback_data="pr_scheduled_list"),
-            ]])
-        )
-        return
 
     try:
         kwargs = {
@@ -680,14 +668,27 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_video(**kwargs)
+            if len(press_release) > CAPTION_LIMIT:
+                # Caption > 1024: медиа без подписи + текст отдельно
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    await context.bot.send_photo(**kwargs)
+                text_kw = {'chat_id': chat_id_for_topic, 'text': press_release, 'parse_mode': 'HTML'}
+                if thread_id:
+                    text_kw['message_thread_id'] = thread_id
+                await context.bot.send_message(**text_kw)
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_photo(**kwargs)
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_photo(**kwargs)
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
