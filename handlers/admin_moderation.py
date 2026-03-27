@@ -396,7 +396,13 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
     if prev_app_id:
         apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
-        await query.answer("Новых заявок нет.", show_alert=True)
+        try:
+            await query.edit_message_text(
+                "✅ <b>Новых заявок нет.</b>\n\nВсе заявки обработаны.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
         return
 
     app = apps[0]
@@ -458,21 +464,30 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
     ])
 
+    # Редактируем текущее сообщение вместо отправки нового
     try:
-        await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            message_thread_id=APPLICATIONS_THREAD_ID,
+        await query.edit_message_text(
             text=text,
             reply_markup=keyboard,
             parse_mode="HTML"
         )
     except Exception:
-        await context.bot.send_message(
-            chat_id=query.message.chat.id,
-            text=text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
+        # Если не удалось отредактировать — отправляем новое
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=APPLICATIONS_THREAD_ID,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception:
+            await context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
 
 
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
