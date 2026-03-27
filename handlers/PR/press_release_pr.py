@@ -305,7 +305,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             try:
                 kwargs.pop('message_thread_id', None)
                 if photo_file_id:
-                    if len(press_release) > CAPTION_LIMIT:
+                    if len(press_release) > 1024:
                         if 'video' in kwargs:
                             await context.bot.send_video(**kwargs)
                         elif 'photo' in kwargs:
@@ -737,7 +737,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
             try:
                 kwargs.pop('message_thread_id', None)
                 if photo_file_id:
-                    if len(press_release) > CAPTION_LIMIT:
+                    if len(press_release) > 1024:
                         if 'video' in kwargs:
                             await context.bot.send_video(**kwargs)
                         elif 'photo' in kwargs:
