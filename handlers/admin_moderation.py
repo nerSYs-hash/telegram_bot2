@@ -9,7 +9,7 @@ from database.db_friend import (
     approve_application, reject_application, update_user,
     get_user, get_application, create_invite_link
 )
-from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID
+from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID, APPLICATIONS_THREAD_ID
 from utils.face_detector import has_human_face
 
 logger = logging.getLogger(__name__)
@@ -456,12 +456,21 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
     ])
 
-    await context.bot.send_message(
-        chat_id=query.message.chat.id,
-        text=text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+    try:
+        await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            message_thread_id=APPLICATIONS_THREAD_ID,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    except Exception:
+        await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
 
 
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
