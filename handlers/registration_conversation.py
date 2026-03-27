@@ -318,6 +318,7 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"📅 <b>Блок Е:</b>\n"
         f"Дата заявки: {now_msk}"
     )
+    sent = None
     try:
         sent = await context.bot.send_message(
             chat_id=ADMIN_CHAT_ID,
@@ -327,14 +328,18 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
             parse_mode="HTML"
         )
     except Exception as e:
-        logger.warning(f"Не удалось отправить в тред {APPLICATIONS_THREAD_ID}: {e}. Отправляем без треда.")
-        sent = await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            text=admin_text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
-    await save_application_message_id(app_id, sent.message_id)
+        logger.warning(f"Не удалось отправить в тред {APPLICATIONS_THREAD_ID}: {e}. Пробуем без треда.")
+        try:
+            sent = await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                text=admin_text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception as e2:
+            logger.error(f"Не удалось отправить заявку админам: {e2}")
+    if sent:
+        await save_application_message_id(app_id, sent.message_id)
     return ConversationHandler.END
 
 
