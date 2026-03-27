@@ -5,17 +5,57 @@ from dateutil.relativedelta import relativedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
-from database.db_friend import get_user, create_user, update_user, create_application
-from config import OWNER_ID, ADMIN_CHAT_ID
+from database.db_friend import get_user, create_user, update_user, create_application, save_application_message_id
+from config import OWNER_ID, ADMIN_CHAT_ID, APPLICATIONS_THREAD_ID
 
 logger = logging.getLogger(__name__)
 
 NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(6)
 
 
+def _build_form(data: dict, next_question: str, keyboard=None) -> str:
+    """Строит текст анкеты с заполненными полями и следующим вопросом."""
+    lines = ["📋 <b>Анкета регистрации</b>\n"]
+    if data.get('reg_name'):
+        lines.append(f"А. Имя: <b>{data['reg_name']}</b> ✅")
+    if data.get('reg_age') is not None:
+        lines.append(f"Б. Возраст: <b>{data['reg_age']}</b> ✅")
+    if data.get('reg_city'):
+        lines.append(f"В. Город: <b>{data['reg_city']}</b> ✅")
+    if data.get('reg_therapy'):
+        lines.append(f"Г. Терапия: <b>{data['reg_therapy']}</b> ✅")
+    lines.append(f"\n✍️ {next_question}")
+    return "\n".join(lines)
+
+
+async def _edit_form(context, chat_id: int, msg_id: int, text: str, keyboard=None):
+    """Редактирует окно анкеты."""
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id,
+            message_id=msg_id,
+            text=text,
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+    except Exception as e:
+        logger.warning(f"_edit_form error: {e}")
+
+
+async def _delete_user_msg(message):
+    """Удаляет сообщение пользователя."""
+    try:
+        await message.delete()
+    except Exception:
+        pass
+
+
 async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from database.db_friend import is_blacklisted, get_blacklist_reason
     user_id = update.effective_user.id
+
+    # Удаляем команду /register
+    await _delete_user_msg(update.message)
 
     # Проверка чёрного списка
     if await is_blacklisted(user_id):
@@ -25,77 +65,114 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             owner_name = owner_chat.full_name or str(OWNER_ID)
         except Exception:
             owner_name = str(OWNER_ID)
-        await update.message.reply_text(
-            f"{update.effective_user.first_name}, мы сожалеем, но ты заблокирован администрацией "
-            f"чата Pulse 4ever из-за: {reason}.\n\n"
-            f"Если считаешь, что попал в ЧС по ошибке, свяжись с администратором: "
-            f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>',
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                f"{update.effective_user.first_name}, мы сожалеем, но ты заблокирован администрацией "
+                f"чата Pulse 4ever из-за: {reason}.\n\n"
+                f"Если считаешь, что попал в ЧС по ошибке, свяжись с администратором: "
+                f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>'
+            ),
             parse_mode="HTML"
         )
         return ConversationHandler.END
 
     user = await get_user(user_id)
 
-    # Возврат к незавершённой анкете
+    # Если уже есть незавершённая анкета — восстанавливаем окно
     if user and user.get('questionnaire_state'):
         state = user['questionnaire_state']
-        if state == "AGE":
-            await update.message.reply_text("Продолжаем! Сколько тебе полных лет?")
-            return AGE
-        elif state == "CITY":
-            await update.message.reply_text("Продолжаем! В каком городе ты проживаешь?")
-            return CITY
-        elif state == "THERAPY":
-            await update.message.reply_text("Продолжаем! Какую терапию ты принимаешь?")
-            return THERAPY
-        elif state == "REF_CODE":
-            await update.message.reply_text("Продолжаем! Введи реф. код или нажми пропустить.")
-            return REF_CODE
+        data = context.user_data
+        questions = {
+            "AGE": "Б. Сколько тебе полных лет?",
+            "CITY": "В. В каком городе ты проживаешь?",
+            "THERAPY": "Г. Какую терапию ты принимаешь?\n(Укажи точное наименование препаратов)",
+            "REF_CODE": "Д. Реф. код (ник пользователя)\nЕсли тебя кто-то пригласил, введи его ник. Если нет — нажми кнопку.",
+        }
+        # Загружаем уже сохранённые поля из БД
+        if user.get('q_name') and 'reg_name' not in data:
+            data['reg_name'] = user['q_name']
+        if user.get('q_age') and 'reg_age' not in data:
+            data['reg_age'] = user['q_age']
+        if user.get('q_city') and 'reg_city' not in data:
+            data['reg_city'] = user['q_city']
+
+        next_q = questions.get(state, "А. Как тебя зовут?")
+        keyboard = None
+        if state == "REF_CODE":
+            keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_ref")]])
+
+        sent = await context.bot.send_message(
+            chat_id=user_id,
+            text=_build_form(data, next_q),
+            parse_mode="HTML",
+            reply_markup=keyboard
+        )
+        context.user_data['reg_msg_id'] = sent.message_id
+
+        state_map = {"AGE": AGE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
+        return state_map.get(state, NAME)
 
     if not user:
         await create_user(user_id, update.effective_user.username, update.effective_user.first_name, "")
 
-    await update.message.reply_text("📝 Начнем регистрацию!\n\n<b>А. Как тебя зовут?</b>", parse_mode="HTML")
+    text = _build_form({}, "А. Как тебя зовут?")
+    sent = await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+    context.user_data['reg_msg_id'] = sent.message_id
     return NAME
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    await _delete_user_msg(update.message)
     await update_user(user_id, questionnaire_state="AGE")
     context.user_data['reg_name'] = update.message.text
-    await update.message.reply_text("<b>Б. Сколько тебе полных лет?</b>", parse_mode="HTML")
+
+    msg_id = context.user_data.get('reg_msg_id')
+    if msg_id:
+        await _edit_form(context, user_id, msg_id, _build_form(context.user_data, "Б. Сколько тебе полных лет?"))
     return AGE
 
 
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     age_text = update.message.text
+
     if not age_text.isdigit():
-        await update.message.reply_text("Пожалуйста, введи возраст числом.")
+        await _delete_user_msg(update.message)
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data, "Б. Сколько тебе полных лет?\n\n❌ Введи возраст числом."))
         return AGE
 
     age = int(age_text)
+    await _delete_user_msg(update.message)
     context.user_data['reg_age'] = age
 
     if age < 18:
         await update_user(user_id, questionnaire_state="BIRTH_DATE")
-        await update.message.reply_text(
-            "⚠️ Внимание! Доступ разрешен только совершеннолетним.\n\n"
-            "<b>Е. Укажи точную дату своего рождения в формате ДД.ММ.ГГГГ</b>\n"
-            "(Например: 15.05.2010)",
-            parse_mode="HTML"
-        )
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data,
+                    "⚠️ Доступ разрешён только совершеннолетним.\n\n"
+                    "Е. Укажи точную дату рождения в формате ДД.ММ.ГГГГ\n(Например: 15.05.2010)"))
         return BIRTH_DATE
 
     await update_user(user_id, questionnaire_state="CITY")
-    await update.message.reply_text("<b>В. В каком городе ты проживаешь?</b>", parse_mode="HTML")
+    msg_id = context.user_data.get('reg_msg_id')
+    if msg_id:
+        await _edit_form(context, user_id, msg_id,
+            _build_form(context.user_data, "В. В каком городе ты проживаешь?"))
     return CITY
 
 
 async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Пункт Е: Проверка даты рождения для несовершеннолетних"""
     date_text = update.message.text.strip()
     user_id = update.effective_user.id
+    await _delete_user_msg(update.message)
+    msg_id = context.user_data.get('reg_msg_id')
 
     try:
         birth_date = datetime.strptime(date_text, "%d.%m.%Y").date()
@@ -104,63 +181,70 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
         if real_age < 18:
             unlock_date = (birth_date + relativedelta(years=18)).strftime("%d.%m.%Y")
-            await update_user(user_id, birth_date=date_text, blocked_until=unlock_date, status='blocked',
-                              questionnaire_state=None)
-            await update.message.reply_text(
-                f"⛔️ Доступ в чат разрешен только с 18 лет.\n\n"
-                f"🔓 Доступ будет автоматически открыт: {unlock_date}\n"
-                f"Мы уведомим тебя, когда это произойдет."
-            )
+            await update_user(user_id, birth_date=date_text, blocked_until=unlock_date,
+                              status='blocked', questionnaire_state=None)
+            if msg_id:
+                await _edit_form(context, user_id, msg_id,
+                    f"⛔️ <b>Доступ в чат разрешён только с 18 лет.</b>\n\n"
+                    f"🔓 Доступ будет открыт: {unlock_date}\n"
+                    f"Мы уведомим тебя, когда это произойдет.")
             return ConversationHandler.END
         else:
             context.user_data['reg_age'] = real_age
             await update_user(user_id, questionnaire_state="CITY")
-            await update.message.reply_text(
-                "✅ Возраст подтвержден. Продолжаем.\n\n<b>В. В каком городе ты проживаешь?</b>",
-                parse_mode="HTML"
-            )
+            if msg_id:
+                await _edit_form(context, user_id, msg_id,
+                    _build_form(context.user_data, "В. В каком городе ты проживаешь?"))
             return CITY
 
     except ValueError:
-        await update.message.reply_text("❌ Неверный формат! Введи дату в формате ДД.ММ.ГГГГ (например: 01.01.2010)")
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data,
+                    "Е. Укажи точную дату рождения в формате ДД.ММ.ГГГГ\n\n"
+                    "❌ Неверный формат! Например: 01.01.2010"))
         return BIRTH_DATE
 
 
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    await _delete_user_msg(update.message)
     await update_user(user_id, questionnaire_state="THERAPY")
     context.user_data['reg_city'] = update.message.text
-    await update.message.reply_text(
-        "<b>Г. Какую терапию ты принимаешь?</b>\n(Укажи точное наименование препаратов)",
-        parse_mode="HTML"
-    )
+
+    msg_id = context.user_data.get('reg_msg_id')
+    if msg_id:
+        await _edit_form(context, user_id, msg_id,
+            _build_form(context.user_data,
+                "Г. Какую терапию ты принимаешь?\n(Укажи точное наименование препаратов)"))
     return THERAPY
 
 
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    await _delete_user_msg(update.message)
     await update_user(user_id, questionnaire_state="REF_CODE")
     context.user_data['reg_therapy'] = update.message.text
 
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_ref")]])
-    await update.message.reply_text(
-        "<b>Д. Реф. код (ник пользователя)</b>\n"
-        "Если тебя кто-то пригласил, введи его ник. Если нет — нажми кнопку ниже.",
-        reply_markup=keyboard,
-        parse_mode="HTML",
-    )
+    msg_id = context.user_data.get('reg_msg_id')
+    if msg_id:
+        await _edit_form(context, user_id, msg_id,
+            _build_form(context.user_data,
+                "Д. Реф. код (ник пользователя)\n"
+                "Если тебя кто-то пригласил, введи его ник. Если нет — нажми кнопку."),
+            keyboard=keyboard)
     return REF_CODE
 
 
 async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    ref_code = update.message.text
-    return await finish_registration(update, context, ref_code)
+    await _delete_user_msg(update.message)
+    return await finish_registration(update, context, update.message.text)
 
 
 async def skip_ref_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
-    await query.edit_message_text("Реф. код пропущен.")
     return await finish_registration(update, context, None)
 
 
@@ -181,13 +265,24 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     app_id = await create_application(user_id)
 
-    msg_text = "✅ Анкета заполнена и отправлена администраторам! Жди уведомления об одобрении."
-    if update.callback_query:
-        await update.callback_query.message.reply_text(msg_text)
+    # Обновляем окно анкеты — итоговое сообщение
+    msg_id = context.user_data.get('reg_msg_id')
+    final_text = (
+        f"📋 <b>Анкета регистрации</b>\n\n"
+        f"А. Имя: <b>{data['reg_name']}</b> ✅\n"
+        f"Б. Возраст: <b>{data['reg_age']}</b> ✅\n"
+        f"В. Город: <b>{data['reg_city']}</b> ✅\n"
+        f"Г. Терапия: <b>{data['reg_therapy']}</b> ✅\n"
+        f"Д. Реф. код: <b>{ref_code or 'нет'}</b> ✅\n\n"
+        f"✅ <b>Анкета отправлена администраторам!</b>\n"
+        f"Ожидай уведомления об одобрении."
+    )
+    if msg_id:
+        await _edit_form(context, user_id, msg_id, final_text)
     else:
-        await update.message.reply_text(msg_text)
+        await context.bot.send_message(chat_id=user_id, text=final_text, parse_mode="HTML")
 
-    # Формируем карточку для чата администраторов
+    # Карточка для администраторов
     msk = pytz.timezone('Europe/Moscow')
     now_msk = datetime.now(msk).strftime("%d %B %Y г. %H:%M:%S МСК")
 
@@ -211,28 +306,51 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={user_id}")]
     ])
 
-    await context.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        text=(
-            f"📢 <b>НОВАЯ ЗАЯВКА #{app_id}</b>"
-            f"{block_d}\n"
-            f"👤 Имя: {data['reg_name']} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
-            f"🎂 Возраст: {data['reg_age']}\n"
-            f"🏙 Город: {data['reg_city']}\n"
-            f"💊 Терапия: {data['reg_therapy']}\n"
-            f"🤝 Реферал: {ref_code or 'Нет'}\n"
-            f"🆔 Никнейм: {username_str}\n\n"
-            f"📅 <b>Блок Е:</b>\n"
-            f"Дата заявки: {now_msk}"
-        ),
-        reply_markup=keyboard,
-        parse_mode="HTML"
+    admin_text = (
+        f"📢 <b>НОВАЯ ЗАЯВКА #{app_id}</b>"
+        f"{block_d}\n"
+        f"👤 Имя: {data['reg_name']} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
+        f"🎂 Возраст: {data['reg_age']}\n"
+        f"🏙 Город: {data['reg_city']}\n"
+        f"💊 Терапия: {data['reg_therapy']}\n"
+        f"🤝 Реферал: {ref_code or 'Нет'}\n"
+        f"🆔 Никнейм: {username_str}\n\n"
+        f"📅 <b>Блок Е:</b>\n"
+        f"Дата заявки: {now_msk}"
     )
+    try:
+        sent = await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            message_thread_id=APPLICATIONS_THREAD_ID,
+            text=admin_text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    except Exception as e:
+        logger.warning(f"Не удалось отправить в тред {APPLICATIONS_THREAD_ID}: {e}. Отправляем без треда.")
+        sent = await context.bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            text=admin_text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    await save_application_message_id(app_id, sent.message_id)
     return ConversationHandler.END
 
 
 async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Регистрация отменена.", reply_markup=ReplyKeyboardRemove())
+    msg_id = context.user_data.get('reg_msg_id')
+    if msg_id:
+        try:
+            await context.bot.edit_message_text(
+                chat_id=update.effective_user.id,
+                message_id=msg_id,
+                text="❌ Регистрация отменена.",
+                parse_mode="HTML"
+            )
+        except Exception:
+            pass
+    await _delete_user_msg(update.message)
     return ConversationHandler.END
 
 

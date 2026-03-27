@@ -138,6 +138,13 @@ class MessageHandler:
             return
         
         if message.chat.id != self.target_chat_id:
+            # Исключение: сообщение из ADMIN_CHAT_ID когда ждём причину отказа
+            if message.text and context.user_data.get('awaiting_reject_reason'):
+                from config import ADMIN_CHAT_ID
+                if message.chat.id == ADMIN_CHAT_ID:
+                    from handlers.admin_moderation import handle_reject_reason
+                    await handle_reject_reason(update, context)
+                    return
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
         

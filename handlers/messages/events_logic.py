@@ -169,11 +169,14 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         except Exception as e:
             logging.error(f"Error sending leave notification: {e}")
     
-    # ═══ ЖУРНАЛ: логируем выход ═══
+    # ═══ db_friend: сохраняем last_exit_at (для метки #Возвращение при повторной заявке) ═══
     try:
-        await log_leave(context.bot, db, user_id)
+        from database.db_friend import update_user as update_reg_user
+        await update_reg_user(user_id, last_exit_at=datetime.now().isoformat(), status='left')
     except Exception as e:
-        logging.error(f"Journal log_leave error: {e}")
+        logging.error(f"db_friend last_exit_at update error: {e}")
+
+    # log_leave отключён — уход из чата не публикуется в журнал
 
     # ═══ BBS: удалить анкету покинувшего пользователя ═══
     try:

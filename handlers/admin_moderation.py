@@ -211,7 +211,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             f"Группа: {group_link}\n"
             f"Пользователь: {user_link}\n"
             f"Никнейм: {username_str}\n"
-            f"ID: <code>{target_user_id}</code>\n\n"
+            f"ID: <code>{target_user_id}</code> <b>#user{target_user_id}</b>\n\n"
             f"<b>Анкета:</b>\n"
             f"Имя: {html.escape(reg_data.get('q_name') or '—')}\n"
             f"Возраст: {reg_data.get('q_age') or '—'}\n"
@@ -226,7 +226,19 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
                                       disable_web_page_preview=True)
 
-        # 5. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
+        # 5. Удаляем карточку заявки из треда APPLICATIONS_THREAD_ID
+        app_msg_id = app_data.get('message_id') if app_data else None
+        logger.info(f"Удаляем заявку #{app_id}: message_id={app_msg_id}, chat={ADMIN_CHAT_ID}")
+        if app_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
+                logger.info(f"✅ Сообщение заявки {app_msg_id} удалено из треда")
+            except Exception as e:
+                logger.error(f"❌ Не удалось удалить сообщение заявки {app_msg_id}: {e}")
+        else:
+            logger.warning(f"⚠️ message_id не сохранён для заявки #{app_id} — удаление пропущено")
+
+        # 6. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
         asyncio.create_task(
             _send_dossier(context.bot, target_user_id, card_text, card_kb)
         )
@@ -260,11 +272,20 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text("↩️ Отклонение отменено. Заявка снова доступна.")
 
     elif action == "skip":
+        # Ставим статус 'skipped' — заявка возвращается в очередь отдельным статусом
+        from database.db_friend import set_application_skipped
+        await set_application_skipped(app_id)
+        context.user_data.pop('current_app_id', None)
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Следующая заявка", callback_data="new_app")]
+        ])
         await query.edit_message_text(
             f"⏳ <b>Заявка #{app_id} — ОТЛОЖЕНА</b>\n\n"
-            f"👤 <code>{target_user_id}</code> пока не уведомлен.\n"
-            f"Заявка вернётся в очередь автоматически.",
-            parse_mode="HTML"
+            f"👤 <code>{target_user_id}</code> #user{target_user_id} пока не уведомлен.\n"
+            f"Заявка возвращена в очередь.",
+            parse_mode="HTML",
+            reply_markup=kb
         )
         
 async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -394,10 +415,12 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer("Ошибка: данные пользователя не найдены.", show_alert=True)
         return
 
-    # Блок Д — предыдущий отказ
+    # Блок Д — статус заявки
     last_rejection = reg_data.get('last_rejection_reason')
     block_d = ""
-    if last_rejection:
+    if app.get('status') == 'skipped':
+        block_d = "\n⏳ <b>Заявка была отложена ранее.</b>\n"
+    elif last_rejection:
         block_d = (
             f"\n🚨 <b>Внимание! Пользователь уже подавал заявку.</b>\n"
             f"Причина отказа: {last_rejection}\n"

@@ -127,8 +127,12 @@ class TelegramBot:
         bot = application.bot
         me = await bot.get_me()
         self.bot_username = me.username
-        
+
         logger.info(f"Bot username: @{self.bot_username}")
+
+        # Инициализация БД регистрации (применяет миграции)
+        from database.db_friend import init_db as init_friend_db
+        await init_friend_db()
         
         # Initialize handlers with bot username
         self.command_handler = BotCommandHandler(
@@ -488,6 +492,11 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("profile", self.command_handler.profile_command))
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
+        self.application.add_handler(CommandHandler("panel", self.command_handler.panel_command))
+        # [DEV ONLY] Сброс тестовых пользователей за 24ч
+        self.application.add_handler(CommandHandler("test_wipe", self.command_handler.test_wipe_command))
+        # [DEV ONLY] Удалить конкретного пользователя по ID
+        self.application.add_handler(CommandHandler("wipe_user", self.command_handler.wipe_user_command))
         
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
