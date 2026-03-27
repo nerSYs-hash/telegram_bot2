@@ -134,27 +134,35 @@ class CommandHandler:
         await wipe_balances_command(update, context, self.db, self.main_admin_id)
 
     async def fix_left_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Разовая чистка: проверить всех пользователей с is_left=0 через Telegram API и пометить вышедших"""
+        """Проверить всех пользователей через Telegram API и пометить вышедших (is_left=1)"""
         try:
             user_data = self.db.get_user(update.effective_user.id)
             is_allowed = (update.effective_user.id == self.main_admin_id or
-                          (user_data and (user_data['is_owner'] or user_data['is_admin'])))
+                          (user_data and (user_data.get('is_owner') or user_data.get('is_admin'))))
             if not is_allowed:
                 await update.message.reply_text("❌ Нет доступа.")
                 return
+
             import asyncio
             rows = self.db.conn.execute(
                 'SELECT user_id FROM users WHERE is_left = 0 AND is_owner = 0'
             ).fetchall()
             users = list(rows)
             total = len(users)
-            await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
+            msg = await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
+
+            errors = 0
 
             async def check_user(uid):
+                nonlocal errors
                 try:
                     member = await context.bot.get_chat_member(self.target_chat_id, uid, read_timeout=5, write_timeout=5)
-                    return uid if member.status in ('left', 'kicked') else None
-                except Exception:
+                    if member.status in ('left', 'kicked'):
+                        return uid
+                    return None
+                except Exception as e:
+                    errors += 1
+                    logger.warning(f"fix_left: не удалось проверить {uid}: {e}")
                     return None
 
             marked = 0
@@ -169,9 +177,11 @@ class CommandHandler:
                 self.db.conn.commit()
                 await asyncio.sleep(1)
 
-            await update.message.reply_text(
+            await msg.edit_text(
                 f"✅ Готово!\n"
-                f"Помечено как вышедших: {marked} из {total}"
+                f"Проверено: {total}\n"
+                f"Помечено как вышедших: {marked}\n"
+                f"Ошибок API: {errors}"
             )
         except Exception as e:
             logger.error(f"fix_left_command error: {e}", exc_info=True)
