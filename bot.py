@@ -133,6 +133,10 @@ class TelegramBot:
         # Инициализация БД регистрации (применяет миграции)
         from database.db_friend import init_db as init_friend_db
         await init_friend_db()
+
+        # Отправляем кнопку "Новые заявки" в тред заявок
+        from handlers.admin_moderation import send_applications_button
+        await send_applications_button(bot)
         
         # Initialize handlers with bot username
         self.command_handler = BotCommandHandler(

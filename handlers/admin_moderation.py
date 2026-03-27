@@ -375,6 +375,24 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
+async def send_applications_button(bot):
+    """Отправляет постоянную кнопку 'Новые заявки' в тред заявок при старте бота"""
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
+    ])
+    try:
+        await bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            message_thread_id=APPLICATIONS_THREAD_ID,
+            text="👨‍💼 <b>Панель заявок</b>\n\nНажмите кнопку для просмотра новых заявок.",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        logger.info(f"✅ Кнопка заявок отправлена в тред {APPLICATIONS_THREAD_ID}")
+    except Exception as e:
+        logger.warning(f"Не удалось отправить кнопку в тред заявок: {e}")
+
+
 async def new_application_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки 'Новые заявки'"""
     from database.db_friend import get_new_applications, lock_application, unlock_application
@@ -396,10 +414,14 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
     if prev_app_id:
         apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
+        ])
         try:
             await query.edit_message_text(
-                "✅ <b>Новых заявок нет.</b>\n\nВсе заявки обработаны.",
-                parse_mode="HTML"
+                "✅ <b>Все заявки обработаны.</b>\n\nНажмите кнопку когда появятся новые.",
+                parse_mode="HTML",
+                reply_markup=kb
             )
         except Exception:
             pass
