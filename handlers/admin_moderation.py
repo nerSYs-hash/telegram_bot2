@@ -391,8 +391,10 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         context.user_data.pop('current_app_id', None)
         logger.info(f"Admin {admin_id} released app {prev_app_id}")
 
-    # Берём следующую свободную заявку
+    # Берём следующую свободную заявку (исключая ту что только что смотрели)
     apps = await get_new_applications(exclude_locked=True)
+    if prev_app_id:
+        apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
         await query.answer("Новых заявок нет.", show_alert=True)
         return
