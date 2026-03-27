@@ -215,8 +215,8 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
     logger.info(f"Application #{app_id} rejected by {update.effective_user.id}, reason: {reason}")
 
 
-async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
-    """Отправляет панель администратора/владельца в чат"""
+async def send_admin_panel(bot, chat_id: int, is_owner: bool = False, thread_id: int = None):
+    """Отправляет панель администратора/владельца в чат (с учётом ветки)"""
     if is_owner:
         keyboard = InlineKeyboardMarkup([
             [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
@@ -240,7 +240,10 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
         ])
         text = "👨‍💼 <b>Панель администратора</b>\n\nНажмите кнопку, чтобы получить следующую заявку."
 
-    await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML")
+    kw = {'chat_id': chat_id, 'text': text, 'reply_markup': keyboard, 'parse_mode': 'HTML'}
+    if thread_id:
+        kw['message_thread_id'] = thread_id
+    await bot.send_message(**kw)
 
 
 async def new_application_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

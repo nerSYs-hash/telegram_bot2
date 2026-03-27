@@ -201,6 +201,139 @@ class CommandHandler:
             logger.error(f"fix_left_command error: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
+    async def panel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /panel — открыть Панель Владельца из любого чата"""
+        user_id = update.effective_user.id
+        from database.db_friend import is_admin as is_reg_admin
+        is_owner = user_id == self.main_admin_id
+        user_data = self.db.get_user(user_id)
+        is_admin = is_owner or (user_data and (user_data.get('is_admin') or user_data.get('is_owner')))
+        if not is_admin:
+            return
+        from handlers.admin_moderation import send_admin_panel
+        chat_id = update.effective_chat.id
+        thread_id = update.message.message_thread_id if update.message and update.message.message_thread_id else None
+        await send_admin_panel(context.bot, chat_id, is_owner=is_owner, thread_id=thread_id)
+
+    async def test_wipe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """[DEV ONLY] /test_wipe — удалить тестовых пользователей за последние 24 часа из обеих БД"""
+        if update.effective_user.id != self.main_admin_id:
+            return
+
+        from datetime import timedelta
+        import aiosqlite
+        from database.db_friend import DB_PATH as FRIEND_DB_PATH
+
+        cutoff = (datetime.now() - timedelta(hours=24)).isoformat()
+
+        # 1. Берём ID из db_friend (pulse_bot.db) — там регистрация, колонка tg_id
+        friend_ids = []
+        try:
+            async with aiosqlite.connect(FRIEND_DB_PATH) as db:
+                db.row_factory = aiosqlite.Row
+                async with db.execute(
+                    "SELECT tg_id FROM users WHERE created_at >= ? AND tg_id != ?",
+                    (cutoff, self.main_admin_id)
+                ) as cur:
+                    rows = await cur.fetchall()
+                    friend_ids = [r['tg_id'] for r in rows]
+
+                if friend_ids:
+                    ph = ','.join('?' * len(friend_ids))
+                    await db.execute(f"DELETE FROM applications WHERE user_id IN ({ph})", friend_ids)
+                    await db.execute(f"DELETE FROM users WHERE tg_id IN ({ph})", friend_ids)
+                    await db.commit()
+        except Exception as e:
+            logger.error(f"test_wipe db_friend error: {e}")
+
+        # 2. Удаляем те же ID из основной БД (bot_database.db)
+        main_deleted = 0
+        if friend_ids:
+            ph = ','.join('?' * len(friend_ids))
+            for table in ('transactions', 'user_activity', 'messages'):
+                try:
+                    self.db.cursor.execute(f"DELETE FROM {table} WHERE user_id IN ({ph})", friend_ids)
+                except Exception:
+                    pass
+            self.db.cursor.execute(f"DELETE FROM users WHERE user_id IN ({ph})", friend_ids)
+            main_deleted = self.db.cursor.rowcount
+            self.db.conn.commit()
+
+        # 3. Кикаем из Telegram-группы (иначе новая invite link будет недействительна)
+        kicked = 0
+        for uid in friend_ids:
+            try:
+                await context.bot.ban_chat_member(self.target_chat_id, uid)
+                await context.bot.unban_chat_member(self.target_chat_id, uid)  # снимаем бан сразу (soft kick)
+                kicked += 1
+            except Exception:
+                pass
+
+        await update.message.reply_text(
+            f"🧹 [DEV] Из db_friend удалено: {len(friend_ids)} польз.\n"
+            f"Из основной БД удалено: {main_deleted} польз.\n"
+            f"Из Telegram-группы кикнуто: {kicked} польз."
+        )
+
+    async def wipe_user_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """[DEV ONLY] /wipe_user USER_ID — полностью удалить пользователя из обеих БД + кикнуть из чата"""
+        if update.effective_user.id != self.main_admin_id:
+            return
+
+        if not context.args:
+            await update.message.reply_text("Использование: /wipe_user USER_ID")
+            return
+
+        try:
+            target_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ USER_ID должен быть числом")
+            return
+
+        import aiosqlite
+        from database.db_friend import DB_PATH as FRIEND_DB_PATH
+
+        # 1. Удаляем из db_friend (pulse_bot.db)
+        friend_deleted = 0
+        try:
+            async with aiosqlite.connect(FRIEND_DB_PATH) as db:
+                await db.execute("DELETE FROM applications WHERE user_id = ?", (target_id,))
+                await db.execute("DELETE FROM users WHERE tg_id = ?", (target_id,))
+                friend_deleted = db.total_changes
+                await db.commit()
+        except Exception as e:
+            logger.error(f"wipe_user db_friend error: {e}")
+
+        # 2. Удаляем из основной БД
+        main_deleted = 0
+        try:
+            for table in ('transactions', 'user_activity', 'messages'):
+                try:
+                    self.db.cursor.execute(f"DELETE FROM {table} WHERE user_id = ?", (target_id,))
+                except Exception:
+                    pass
+            self.db.cursor.execute("DELETE FROM users WHERE user_id = ?", (target_id,))
+            main_deleted = self.db.cursor.rowcount
+            self.db.conn.commit()
+        except Exception as e:
+            logger.error(f"wipe_user main db error: {e}")
+
+        # 3. Кикаем из Telegram-группы
+        kicked = False
+        try:
+            await context.bot.ban_chat_member(self.target_chat_id, target_id)
+            await context.bot.unban_chat_member(self.target_chat_id, target_id)
+            kicked = True
+        except Exception as e:
+            logger.warning(f"wipe_user kick error: {e}")
+
+        await update.message.reply_text(
+            f"🧹 [DEV] Пользователь {target_id}:\n"
+            f"  db_friend: {'удалён' if friend_deleted else 'не найден'}\n"
+            f"  основная БД: {'удалён' if main_deleted else 'не найден'}\n"
+            f"  Telegram-группа: {'кикнут' if kicked else 'ошибка/не в группе'}"
+        )
+
     async def _show_lottery_deeplink(self, update: Update, context: ContextTypes.DEFAULT_TYPE, lottery_id: int):
         """Показать виджет покупки лотереи при переходе по deep link."""
         user = update.effective_user
