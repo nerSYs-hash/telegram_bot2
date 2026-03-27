@@ -41,7 +41,7 @@ def _load_badge():
         return None
 
 
-async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.25) -> bytes:
+async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.50) -> bytes:
     """
     Скачивает фото по file_id, накладывает VIP-бейдж в правый верхний угол.
 
