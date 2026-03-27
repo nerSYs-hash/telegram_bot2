@@ -300,7 +300,8 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
         )
     except Exception as e:
         # Если тред не найден — пробуем без треда
-        if 'thread not found' in str(e).lower():
+        err_lower = str(e).lower()
+        if 'thread not found' in err_lower or 'topic_closed' in err_lower or 'topic closed' in err_lower or 'forum topic' in err_lower:
             try:
                 kwargs.pop('message_thread_id', None)
                 if photo_file_id:
@@ -731,6 +732,31 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
 
     except Exception as e:
         import logging
+        err_lower = str(e).lower()
+        if 'thread not found' in err_lower or 'topic_closed' in err_lower or 'topic closed' in err_lower or 'forum topic' in err_lower:
+            try:
+                kwargs.pop('message_thread_id', None)
+                if photo_file_id:
+                    if len(press_release) > CAPTION_LIMIT:
+                        if 'video' in kwargs:
+                            await context.bot.send_video(**kwargs)
+                        elif 'photo' in kwargs:
+                            await context.bot.send_photo(**kwargs)
+                        await _send_long_text(context.bot, chat_id_for_topic, press_release)
+                    else:
+                        kwargs['caption'] = press_release
+                        if 'video' in kwargs:
+                            await context.bot.send_video(**kwargs)
+                        else:
+                            await context.bot.send_photo(**kwargs)
+                else:
+                    await _send_long_text(context.bot, chat_id_for_topic, press_release)
+                db.delete_scheduled_post(post_id)
+                await query.answer("✅ Опубликовано в основной чат (тред закрыт/не найден)", show_alert=True)
+                await show_scheduled_posts(query, user, context, db, admin_id, target_chat_id)
+                return
+            except Exception as e2:
+                e = e2
         logging.error(f"Error publishing scheduled post now: {e}")
         await query.answer(f"❌ Ошибка при публикации: {e}", show_alert=True)
 
