@@ -105,16 +105,20 @@ async def _send_invite_link(bot, user_id: int, user_name: str):
     # Сохраняем ссылку в БД
     await create_invite_link(user_id, invite_link)
 
-    # Отправляем пуш
+    # Отправляем пуш (ссылка скрыта в кнопке, защита от пересылки)
     try:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚪 Войти в чат Pulse 4ever", url=invite_link)]
+        ])
         msg = await bot.send_message(
             chat_id=user_id,
             text=(
-                f"{user_name}, ты на пороге входа в чат Pulse 4ever!\n\n"
-                f"Просто используй свою личную одноразовую ссылку:\n"
-                f"{invite_link}\n\n"
+                f"{user_name}, ты на пороге входа в чат Pulse 4ever! 🎉\n\n"
+                f"Нажми кнопку ниже, чтобы присоединиться.\n\n"
                 f"⚠️ Ссылка одноразовая и только для тебя — никому не передавай!"
-            )
+            ),
+            reply_markup=keyboard,
+            protect_content=True
         )
         # Сохраняем message_id чтобы удалить его после вступления
         await update_user(user_id, invite_message_id=msg.message_id)
