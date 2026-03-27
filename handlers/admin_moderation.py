@@ -2,16 +2,90 @@ import html
 import asyncio
 from datetime import datetime
 import pytz
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
 import logging
 from database.db_friend import (
     approve_application, reject_application, update_user,
     get_user, get_application, create_invite_link
 )
-from config import CHAT_ID
+from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID, APPLICATIONS_THREAD_ID
+from utils.face_detector import has_human_face
 
 logger = logging.getLogger(__name__)
+
+# Текст кнопок для ReplyKeyboard в треде заявок
+BTN_NEW_APPS = "📋 Новые заявки"
+BTN_ADMINS = "👥 Админы"
+BTN_BLACKLIST = "🚫 Черный список"
+BTN_CHECK_USER = "🔍 Проверка ника"
+BTN_TRIGGERS = "⚡ Триггеры"
+BTN_JOURNAL = "📓 Журнал"
+BTN_STATS = "📊 Статистика"
+BTN_NOT_IN_CHAT = "📊 Не в чате"
+BTN_ECONOMY = "💰 Экономика"
+BTN_SYSTEM = "⚙️ Система"
+BTN_BACKUP = "💾 Скачать БД"
+
+
+def get_applications_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
+    """Возвращает ReplyKeyboard для треда заявок в зависимости от роли"""
+    if is_owner:
+        buttons = [
+            [KeyboardButton(BTN_NEW_APPS)],
+            [KeyboardButton(BTN_ADMINS), KeyboardButton(BTN_BLACKLIST)],
+            [KeyboardButton(BTN_CHECK_USER)],
+            [KeyboardButton(BTN_TRIGGERS), KeyboardButton(BTN_JOURNAL)],
+            [KeyboardButton(BTN_STATS), KeyboardButton(BTN_NOT_IN_CHAT)],
+            [KeyboardButton(BTN_ECONOMY), KeyboardButton(BTN_SYSTEM)],
+            [KeyboardButton(BTN_BACKUP)],
+        ]
+    else:
+        buttons = [
+            [KeyboardButton(BTN_NEW_APPS)],
+        ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True, selective=True)
+
+
+async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
+    """Отправляет досье с фото (если найдено лицо) в тред администраторов."""
+    try:
+        photos = await bot.get_user_profile_photos(user_id, limit=3)
+        face_photo = None
+
+        for photo_size_list in (photos.photos or []):
+            try:
+                file = await bot.get_file(photo_size_list[-1].file_id)
+                byte_array = await file.download_as_bytearray()
+                if await has_human_face(byte_array):
+                    face_photo = photo_size_list[-1].file_id
+                    break
+            except Exception as e:
+                logger.warning(f"_send_dossier: ошибка обработки фото: {e}")
+                continue
+
+        if face_photo:
+            await bot.send_photo(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=DOSSIER_THREAD_ID,
+                photo=face_photo,
+                caption=dossier_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        else:
+            no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
+            await bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=DOSSIER_THREAD_ID,
+                text=no_face_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                disable_web_page_preview=True,
+            )
+    except Exception as e:
+        logger.error(f"_send_dossier: ошибка отправки досье для {user_id}: {e}")
+
 
 async def _send_invite_link(bot, user_id: int, user_name: str):
     """Генерирует одноразовую ссылку и отправляет пуш пользователю. Возвращает message_id."""
@@ -31,16 +105,20 @@ async def _send_invite_link(bot, user_id: int, user_name: str):
     # Сохраняем ссылку в БД
     await create_invite_link(user_id, invite_link)
 
-    # Отправляем пуш
+    # Отправляем пуш (ссылка скрыта в кнопке, защита от пересылки)
     try:
+        keyboard = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🚪 Войти в чат Pulse 4ever", url=invite_link)]
+        ])
         msg = await bot.send_message(
             chat_id=user_id,
             text=(
-                f"{user_name}, ты на пороге входа в чат Pulse 4ever!\n\n"
-                f"Просто используй свою личную одноразовую ссылку:\n"
-                f"{invite_link}\n\n"
+                f"{user_name}, ты на пороге входа в чат Pulse 4ever! 🎉\n\n"
+                f"Нажми кнопку ниже, чтобы присоединиться.\n\n"
                 f"⚠️ Ссылка одноразовая и только для тебя — никому не передавай!"
-            )
+            ),
+            reply_markup=keyboard,
+            protect_content=True
         )
         # Сохраняем message_id чтобы удалить его после вступления
         await update_user(user_id, invite_message_id=msg.message_id)
@@ -169,7 +247,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             f"Группа: {group_link}\n"
             f"Пользователь: {user_link}\n"
             f"Никнейм: {username_str}\n"
-            f"ID: <code>{target_user_id}</code>\n\n"
+            f"ID: <code>{target_user_id}</code> <b>#user{target_user_id}</b>\n\n"
             f"<b>Анкета:</b>\n"
             f"Имя: {html.escape(reg_data.get('q_name') or '—')}\n"
             f"Возраст: {reg_data.get('q_age') or '—'}\n"
@@ -183,6 +261,23 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         ])
         await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
                                       disable_web_page_preview=True)
+
+        # 5. Удаляем карточку заявки из треда APPLICATIONS_THREAD_ID
+        app_msg_id = app_data.get('message_id') if app_data else None
+        logger.info(f"Удаляем заявку #{app_id}: message_id={app_msg_id}, chat={ADMIN_CHAT_ID}")
+        if app_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
+                logger.info(f"✅ Сообщение заявки {app_msg_id} удалено из треда")
+            except Exception as e:
+                logger.error(f"❌ Не удалось удалить сообщение заявки {app_msg_id}: {e}")
+        else:
+            logger.warning(f"⚠️ message_id не сохранён для заявки #{app_id} — удаление пропущено")
+
+        # 6. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
+        asyncio.create_task(
+            _send_dossier(context.bot, target_user_id, card_text, card_kb)
+        )
 
     elif action == "rej":
         # Сохраняем данные и ждём причину от администратора
@@ -213,11 +308,20 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text("↩️ Отклонение отменено. Заявка снова доступна.")
 
     elif action == "skip":
+        # Ставим статус 'skipped' — заявка возвращается в очередь отдельным статусом
+        from database.db_friend import set_application_skipped
+        await set_application_skipped(app_id)
+        context.user_data.pop('current_app_id', None)
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔄 Следующая заявка", callback_data="new_app")]
+        ])
         await query.edit_message_text(
             f"⏳ <b>Заявка #{app_id} — ОТЛОЖЕНА</b>\n\n"
-            f"👤 <code>{target_user_id}</code> пока не уведомлен.\n"
-            f"Заявка вернётся в очередь автоматически.",
-            parse_mode="HTML"
+            f"👤 <code>{target_user_id}</code> #user{target_user_id} пока не уведомлен.\n"
+            f"Заявка возвращена в очередь.",
+            parse_mode="HTML",
+            reply_markup=kb
         )
         
 async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -307,6 +411,191 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
+def _owner_inline_panel() -> InlineKeyboardMarkup:
+    """InlineKeyboard полной панели владельца для треда заявок"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+        [InlineKeyboardButton("👥 Админы", callback_data="panel_admins"),
+         InlineKeyboardButton("🚫 Черный список", callback_data="panel_blacklist")],
+        [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
+        [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
+         InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
+        [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
+         InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
+    ])
+
+
+def _admin_inline_panel() -> InlineKeyboardMarkup:
+    """InlineKeyboard панели админа для треда заявок"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+    ])
+
+
+async def send_applications_button(bot):
+    """Отправляет InlineKeyboard панель в тред заявок при старте бота"""
+    keyboard = _owner_inline_panel()
+    try:
+        await bot.send_message(
+            chat_id=ADMIN_CHAT_ID,
+            message_thread_id=APPLICATIONS_THREAD_ID,
+            text="👑 <b>Панель заявок</b>\n\nИспользуйте кнопки для управления.",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+        logger.info(f"✅ InlineKeyboard панели отправлена в тред {APPLICATIONS_THREAD_ID}")
+    except Exception as e:
+        logger.warning(f"Не удалось отправить панель в тред заявок: {e}")
+
+
+async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAULT_TYPE, btn_text: str):
+    """Обработчик текстовых кнопок панели владельца в треде заявок"""
+    from config import OWNER_ID
+    user_id = update.effective_user.id
+
+    if user_id != OWNER_ID:
+        return
+
+    # Удаляем сообщение с текстом кнопки
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Маппинг текстовых кнопок → callback_data для panel_callback
+    btn_map = {
+        BTN_ADMINS: "panel_admins",
+        BTN_BLACKLIST: "panel_blacklist",
+        BTN_CHECK_USER: "panel_check_user",
+        BTN_TRIGGERS: "owner_triggers",
+        BTN_JOURNAL: "owner_journal",
+        BTN_STATS: "menu_stats",
+        BTN_NOT_IN_CHAT: "owner_stats_not_in_chat",
+        BTN_ECONOMY: "owner_economy",
+        BTN_SYSTEM: "owner_system",
+        BTN_BACKUP: "owner_backup",
+    }
+
+    callback_data = btn_map.get(btn_text)
+    if not callback_data:
+        return
+
+    # Отправляем inline-панель владельца с подсветкой нужного раздела
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+        [InlineKeyboardButton("👥 Админы", callback_data="panel_admins"),
+         InlineKeyboardButton("🚫 Черный список", callback_data="panel_blacklist")],
+        [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
+        [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
+         InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
+        [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
+         InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
+    ])
+    sent = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        message_thread_id=update.message.message_thread_id,
+        text=f"👑 <b>Панель владельца</b>\n\nВыберите раздел:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
+
+
+async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Обработчик текстовой кнопки '📋 Новые заявки' — показывает первую заявку inline"""
+    from database.db_friend import get_new_applications, lock_application, is_admin as is_reg_admin
+
+    user_id = update.effective_user.id
+    # Удаляем сообщение с текстом кнопки
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    apps = await get_new_applications(exclude_locked=True)
+    if not apps:
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
+        ])
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            message_thread_id=update.message.message_thread_id,
+            text="✅ <b>Все заявки обработаны.</b>\n\nНажмите кнопку когда появятся новые.",
+            reply_markup=kb,
+            parse_mode="HTML"
+        )
+        return
+
+    app = apps[0]
+    app_id = app['id']
+    target_user_id = app['user_id']
+
+    locked = await lock_application(app_id, user_id, duration_minutes=2)
+    if not locked:
+        await context.bot.send_message(
+            chat_id=update.effective_chat.id,
+            text="⏳ Заявку уже взял другой администратор.",
+            parse_mode="HTML"
+        )
+        return
+
+    context.user_data['current_app_id'] = app_id
+
+    reg_data = await get_user(target_user_id)
+    if not reg_data:
+        return
+
+    last_rejection = reg_data.get('last_rejection_reason')
+    block_d = ""
+    if app.get('status') == 'skipped':
+        block_d = "\n⏳ <b>Заявка была отложена ранее.</b>\n"
+    elif last_rejection:
+        block_d = (
+            f"\n🚨 <b>Внимание! Пользователь уже подавал заявку.</b>\n"
+            f"Причина отказа: {last_rejection}\n"
+        )
+
+    applied_at = _fmt_date(app.get('created_at'))
+    username_str = f"@{reg_data.get('username')}" if reg_data.get('username') else "нет"
+
+    text = (
+        f"📋 <b>ЗАЯВКА #{app_id}</b>"
+        f"{block_d}\n"
+        f"👤 Имя: {html.escape(reg_data.get('q_name') or '—')} | <code>{target_user_id}</code> | <b>#user{target_user_id}</b>\n"
+        f"🎂 Возраст: {reg_data.get('q_age') or '—'}\n"
+        f"🏙 Город: {html.escape(reg_data.get('q_city') or '—')}\n"
+        f"💊 Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n"
+        f"🤝 Реферал: {html.escape(str(reg_data.get('referred_by') or 'Нет'))}\n"
+        f"🆔 Никнейм: {username_str}\n\n"
+        f"📅 <b>Блок Е:</b>\n"
+        f"Дата заявки: {applied_at}\n\n"
+        f"⏳ <i>Заявка заблокирована на 2 минуты для вас</i>"
+    )
+
+    keyboard = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("✅ Одобрить", callback_data=f"adm_app_{target_user_id}_{app_id}"),
+            InlineKeyboardButton("❌ Отклонить", callback_data=f"adm_rej_{target_user_id}_{app_id}"),
+            InlineKeyboardButton("⏳ Отложить", callback_data=f"adm_skip_{target_user_id}_{app_id}"),
+        ],
+        [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}")],
+        [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
+    ])
+
+    await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        message_thread_id=update.message.message_thread_id,
+        text=text,
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+
 async def new_application_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопки 'Новые заявки'"""
     from database.db_friend import get_new_applications, lock_application, unlock_application
@@ -323,10 +612,22 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         context.user_data.pop('current_app_id', None)
         logger.info(f"Admin {admin_id} released app {prev_app_id}")
 
-    # Берём следующую свободную заявку
+    # Берём следующую свободную заявку (исключая ту что только что смотрели)
     apps = await get_new_applications(exclude_locked=True)
+    if prev_app_id:
+        apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
-        await query.answer("Новых заявок нет.", show_alert=True)
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
+        ])
+        try:
+            await query.edit_message_text(
+                "✅ <b>Все заявки обработаны.</b>\n\nНажмите кнопку когда появятся новые.",
+                parse_mode="HTML",
+                reply_markup=kb
+            )
+        except Exception:
+            pass
         return
 
     app = apps[0]
@@ -347,10 +648,12 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer("Ошибка: данные пользователя не найдены.", show_alert=True)
         return
 
-    # Блок Д — предыдущий отказ
+    # Блок Д — статус заявки
     last_rejection = reg_data.get('last_rejection_reason')
     block_d = ""
-    if last_rejection:
+    if app.get('status') == 'skipped':
+        block_d = "\n⏳ <b>Заявка была отложена ранее.</b>\n"
+    elif last_rejection:
         block_d = (
             f"\n🚨 <b>Внимание! Пользователь уже подавал заявку.</b>\n"
             f"Причина отказа: {last_rejection}\n"
@@ -386,12 +689,30 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
     ])
 
-    await context.bot.send_message(
-        chat_id=query.message.chat.id,
-        text=text,
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+    # Редактируем текущее сообщение вместо отправки нового
+    try:
+        await query.edit_message_text(
+            text=text,
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    except Exception:
+        # Если не удалось отредактировать — отправляем новое
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=APPLICATIONS_THREAD_ID,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception:
+            await context.bot.send_message(
+                chat_id=query.message.chat.id,
+                text=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
 
 
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):

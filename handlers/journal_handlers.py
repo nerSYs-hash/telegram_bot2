@@ -157,7 +157,7 @@ async def log_join(bot, db, user_id: int) -> None:
     tag = _user_tag(db, user_id)
     await log_event(
         bot, db, 'join',
-        f"👋 {tag} вступил(а) в чат\n🆔 <code>{user_id}</code>",
+        f"👋 {tag} вступил(а) в чат",
         user_id=user_id, hashtag="#Вход"
     )
 
@@ -165,7 +165,7 @@ async def log_join(bot, db, user_id: int) -> None:
 async def log_leave(bot, db, user_id: int, reason: str = None) -> None:
     """Логирует выход пользователя из чата."""
     tag = _user_tag(db, user_id)
-    text = f"🚪 {tag} покинул(а) чат\n🆔 <code>{user_id}</code>"
+    text = f"🚪 {tag} покинул(а) чат"
     if reason:
         text += f"\n📝 Причина: {reason}"
     await log_event(bot, db, 'leave', text, user_id=user_id, hashtag="#Выход")

@@ -38,6 +38,27 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
     admin_id = handler.main_admin_id
     target_chat_id = handler.target_chat_id
 
+    # ── Модерация заявок (adm_app_, adm_rej_, adm_skip_) и новые заявки ──
+    if data == "new_app":
+        from handlers.admin_moderation import new_application_callback
+
+        class _FakeUpdateNew:
+            callback_query = query
+            effective_user = query.from_user
+
+        await new_application_callback(_FakeUpdateNew(), context)
+        return True
+
+    if data.startswith("adm_app_") or data.startswith("adm_rej_") or data.startswith("adm_skip_"):
+        from handlers.admin_moderation import admin_moderation_callback
+
+        class _FakeUpdate:
+            callback_query = query
+            effective_user = query.from_user
+
+        await admin_moderation_callback(_FakeUpdate(), context)
+        return True
+
     # ── Банк ──
     if data == "menu_bank":
         await show_bank_menu(query, user, db, admin_id)

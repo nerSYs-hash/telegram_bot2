@@ -201,6 +201,13 @@ async def init_db():
             )
         """)
         
+        # Миграция: добавляем message_id если нет
+        try:
+            await db.execute("ALTER TABLE applications ADD COLUMN message_id INTEGER")
+            await db.commit()
+        except Exception:
+            pass  # колонка уже есть
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_locked_until ON applications(locked_until)")
@@ -614,15 +621,15 @@ async def get_new_applications(exclude_locked: bool = True) -> List[dict]:
         
         if exclude_locked:
             query = """
-                SELECT * FROM applications 
-                WHERE status = ? 
+                SELECT * FROM applications
+                WHERE status IN (?, ?)
                 AND (locked_until IS NULL OR locked_until < ?)
-                ORDER BY created_at ASC
+                ORDER BY status ASC, created_at ASC
             """
-            params = (ApplicationStatus.NEW, now)
+            params = (ApplicationStatus.NEW, ApplicationStatus.SKIPPED, now)
         else:
-            query = "SELECT * FROM applications WHERE status = ? ORDER BY created_at ASC"
-            params = (ApplicationStatus.NEW,)
+            query = "SELECT * FROM applications WHERE status IN (?, ?) ORDER BY status ASC, created_at ASC"
+            params = (ApplicationStatus.NEW, ApplicationStatus.SKIPPED)
         
         async with db.execute(query, params) as cursor:
             rows = await cursor.fetchall()
@@ -636,22 +643,50 @@ async def lock_application(app_id: int, admin_id: int, duration_minutes: int = 2
         result = await db.execute(
             """UPDATE applications 
                SET status = ?, locked_by = ?, locked_until = ?, updated_at = ?
-               WHERE id = ? AND (status = ? OR (locked_until IS NOT NULL AND locked_until < ?))""",
+               WHERE id = ? AND (status IN (?, ?) OR (locked_until IS NOT NULL AND locked_until < ?))""",
             (ApplicationStatus.IN_WORK, admin_id, locked_until, datetime.now().isoformat(),
-             app_id, ApplicationStatus.NEW, datetime.now().isoformat())
+             app_id, ApplicationStatus.NEW, ApplicationStatus.SKIPPED, datetime.now().isoformat())
         )
         await db.commit()
         
         return result.rowcount > 0
 
 async def unlock_application(app_id: int):
-    """Разблокировка заявки"""
+    """Разблокировка заявки (возврат в NEW после истечения lock)"""
     async with db_pool.get_connection() as db:
         await db.execute(
-            """UPDATE applications 
+            """UPDATE applications
                SET status = ?, locked_by = NULL, locked_until = NULL, updated_at = ?
                WHERE id = ?""",
             (ApplicationStatus.NEW, datetime.now().isoformat(), app_id)
+        )
+        await db.commit()
+
+
+async def save_application_message_id(app_id: int, message_id: int):
+    """Сохраняет message_id карточки заявки в треде администраторов"""
+    async with db_pool.get_connection() as db:
+        # Гарантируем наличие колонки (на случай если init_db не запускался)
+        try:
+            await db.execute("ALTER TABLE applications ADD COLUMN message_id INTEGER")
+            await db.commit()
+        except Exception:
+            pass
+        await db.execute(
+            "UPDATE applications SET message_id = ? WHERE id = ?",
+            (message_id, app_id)
+        )
+        await db.commit()
+
+
+async def set_application_skipped(app_id: int):
+    """Отложить заявку (SKIPPED) — возвращается в очередь с особым статусом"""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            """UPDATE applications
+               SET status = ?, locked_by = NULL, locked_until = NULL, updated_at = ?
+               WHERE id = ?""",
+            (ApplicationStatus.SKIPPED, datetime.now().isoformat(), app_id)
         )
         await db.commit()
 
@@ -696,6 +731,27 @@ async def get_application(app_id: int) -> Optional[dict]:
         async with db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)) as cursor:
             row = await cursor.fetchone()
             return row_to_dict(row)
+
+async def cancel_user_applications(user_id: int):
+    """Отменяет все активные заявки пользователя (при перезапуске регистрации)."""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            "UPDATE applications SET status = 'cancelled' WHERE user_id = ? AND status IN ('pending', 'locked')",
+            (user_id,)
+        )
+        await db.commit()
+
+
+async def get_user_pending_application(user_id: int) -> Optional[dict]:
+    """Возвращает активную (pending/locked) заявку пользователя, если она есть."""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT * FROM applications WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped') ORDER BY created_at DESC LIMIT 1",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row_to_dict(row)
+
 
 async def cleanup_expired_locks():
     """Очистка истекших блокировок заявок"""

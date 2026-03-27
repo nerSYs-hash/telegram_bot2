@@ -127,8 +127,16 @@ class TelegramBot:
         bot = application.bot
         me = await bot.get_me()
         self.bot_username = me.username
-        
+
         logger.info(f"Bot username: @{self.bot_username}")
+
+        # Инициализация БД регистрации (применяет миграции)
+        from database.db_friend import init_db as init_friend_db
+        await init_friend_db()
+
+        # Отправляем кнопку "Новые заявки" в тред заявок
+        from handlers.admin_moderation import send_applications_button
+        await send_applications_button(bot)
         
         # Initialize handlers with bot username
         self.command_handler = BotCommandHandler(
@@ -468,6 +476,10 @@ class TelegramBot:
 
     def setup_handlers(self):
         """Setup all handlers"""
+        # Registration conversation handler (MUST be before general message handler)
+        from handlers.registration_conversation import registration_conv
+        self.application.add_handler(registration_conv)
+
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
         self.application.add_handler(CommandHandler("menu", self.command_handler.menu_command))
@@ -484,6 +496,11 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("profile", self.command_handler.profile_command))
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
+        self.application.add_handler(CommandHandler("panel", self.command_handler.panel_command))
+        # [DEV ONLY] Сброс тестовых пользователей за 24ч
+        self.application.add_handler(CommandHandler("test_wipe", self.command_handler.test_wipe_command))
+        # [DEV ONLY] Удалить конкретного пользователя по ID
+        self.application.add_handler(CommandHandler("wipe_user", self.command_handler.wipe_user_command))
         
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(

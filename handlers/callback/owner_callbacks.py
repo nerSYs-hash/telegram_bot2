@@ -4,7 +4,6 @@
 
 import logging
 from handlers.owner_handlers import (
-    show_owner_dashboard,
     show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_moderation_menu, bl_add_start, bl_remove_start,
@@ -13,6 +12,7 @@ from handlers.owner_handlers import (
     send_database_backup,
     show_statistics_not_in_chat,
 )
+from handlers.admin_moderation import send_admin_panel
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
 from handlers.journal_handlers import (
@@ -29,9 +29,9 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     admin_id = handler.main_admin_id
     target_chat_id = handler.target_chat_id
 
-    # ── Дашборд ──
+    # ── Панель ──
     if data in ("owner_dashboard", "panel_main"):
-        await show_owner_dashboard(query, context, db, admin_id)
+        await send_admin_panel(query.message._bot, query.message.chat.id, is_owner=True)
     elif data == "owner_backup":
         await send_database_backup(query, user, db, admin_id, context)
 
