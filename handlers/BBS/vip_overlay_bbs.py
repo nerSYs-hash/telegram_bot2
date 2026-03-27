@@ -25,7 +25,16 @@ def _load_badge():
     if _badge_cache is not None:
         return _badge_cache
     try:
-        _badge_cache = Image.open(VIP_BADGE_PATH).convert('RGBA')
+        img = Image.open(VIP_BADGE_PATH).convert('RGBA')
+        # Убираем полупрозрачные артефакты — alpha < 128 → полностью прозрачный
+        pixels = img.load()
+        w, h = img.size
+        for y in range(h):
+            for x in range(w):
+                r, g, b, a = pixels[x, y]
+                if a < 128:
+                    pixels[x, y] = (0, 0, 0, 0)
+        _badge_cache = img
         return _badge_cache
     except Exception as e:
         logger.error(f"VIP badge load error: {e}")
