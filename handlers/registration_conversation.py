@@ -10,7 +10,7 @@ from config import OWNER_ID, ADMIN_CHAT_ID, APPLICATIONS_THREAD_ID
 
 logger = logging.getLogger(__name__)
 
-NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(6)
+WELCOME, RULES, NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(8)
 
 
 def _build_form(data: dict, next_question: str, keyboard=None) -> str:
@@ -50,12 +50,54 @@ async def _delete_user_msg(message):
         pass
 
 
+WELCOME_TEXT = (
+    "Приветствуем, {name}!\n"
+    "Ты на пороге входа в чат <b>PULSE 4ever 18+</b>\n\n"
+    "<b>ЗДЕСЬ ТЫ:</b>\n"
+    "🔥Найдёшь друзей МСМ, которые реально поймут\n"
+    "🔥Закрутишь роман или просто приятное общение\n"
+    "🔥Будешь в курсе всего самого интересного\n"
+    "🔥Найдешь интересную информацию, касающуюся темы ВИЧ.\n\n"
+    "Чат не является сообществом ЛГБТ*, не призывает и не пропагандирует "
+    "никакие нетрадиционные ценности и соблюдает законодательство РФ.\n\n"
+    "Если ты не являешься мужчиной практикующим секс с мужчиной и ты не достиг "
+    "18-летия, незамедлительно прекрати работу с ботом!\n\n"
+    "<i>*ЛГБТ - запрещено на территории РФ.</i>"
+)
+
+RULES_TEXT = (
+    '<b>ПРАВИЛА ЧАТА "PULSE ❣️"</b>\n\n'
+    "При заполнении анкеты, вы подтверждаете:\n"
+    "✔️ Положительный статус;\n"
+    "✔️ Совершенолетие (18+);\n"
+    "✔️ Относитесь к МСМ-группе.\n\n"
+    "Если это не про вас — немедленно покиньте чат.\n"
+    "——————————\n\n"
+    "<b>❌ Строгие запреты:</b>\n\n"
+    "1. ВИЧ- — если знаете о нарушении, сообщите админам.\n"
+    "2. Оскорбления, конфликты — никаких разборок и хамства.\n"
+    "3. Запрещённые темы: расизм, экстремизм, наркотики, насилие, религия, политика.\n"
+    "4. ЛГБТ*-атрибутика — даже намёки (флаги, символы и прочее).\n"
+    "5. 18+ контент — порно, эротика (включая GIF/анимации).\n"
+    "6. Спам, флуд, агрессия, попрошайничество.\n"
+    "7. Реклама (в том числе затрагивание тем других чатов, ресурсов) и ссылки — только с разрешения админов.\n"
+    "8. Личная информация о третьих лицах без их согласия, в том числе личная переписка и фотографии участников чата!\n"
+    "9. Несовершеннолетние — возраст проверяется (при подозрениях или жалобах!)\n"
+    "10. Caps Lock — злоупотребление = мут.\n"
+    "——————————\n\n"
+    "Незнание правил не освобождает от ответственности и ведут к бану.\n"
+    "<i>*ЛГБТ - запрещено на территории РФ.</i>"
+)
+
+
 async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from database.db_friend import is_blacklisted, get_blacklist_reason
     user_id = update.effective_user.id
+    user_name = update.effective_user.first_name or "Друг"
 
-    # Удаляем команду /register
-    await _delete_user_msg(update.message)
+    # Удаляем команду /register или /start
+    if update.message:
+        await _delete_user_msg(update.message)
 
     # Проверка чёрного списка
     if await is_blacklisted(user_id):
@@ -68,7 +110,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await context.bot.send_message(
             chat_id=user_id,
             text=(
-                f"{update.effective_user.first_name}, мы сожалеем, но ты заблокирован администрацией "
+                f"{user_name}, мы сожалеем, но ты заблокирован администрацией "
                 f"чата Pulse 4ever из-за: {reason}.\n\n"
                 f"Если считаешь, что попал в ЧС по ошибке, свяжись с администратором: "
                 f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>'
@@ -89,7 +131,6 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "THERAPY": "Г. Какую терапию ты принимаешь?\n(Укажи точное наименование препаратов)",
             "REF_CODE": "Д. Реф. код (ник пользователя)\nЕсли тебя кто-то пригласил, введи его ник. Если нет — нажми кнопку.",
         }
-        # Загружаем уже сохранённые поля из БД
         if user.get('q_name') and 'reg_name' not in data:
             data['reg_name'] = user['q_name']
         if user.get('q_age') and 'reg_age' not in data:
@@ -109,16 +150,60 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
         context.user_data['reg_msg_id'] = sent.message_id
-
         state_map = {"AGE": AGE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
         return state_map.get(state, NAME)
 
     if not user:
-        await create_user(user_id, update.effective_user.username, update.effective_user.first_name, "")
+        await create_user(user_id, update.effective_user.username, user_name, "")
 
-    text = _build_form({}, "А. Как тебя зовут?")
-    sent = await context.bot.send_message(chat_id=user_id, text=text, parse_mode="HTML")
+    # 1.1 Приветствие с кнопкой "Мне уже есть 18"
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("✅ Мне уже есть 18", callback_data="reg_age_confirm")]
+    ])
+    sent = await context.bot.send_message(
+        chat_id=user_id,
+        text=WELCOME_TEXT.format(name=user_name),
+        parse_mode="HTML",
+        reply_markup=keyboard
+    )
     context.user_data['reg_msg_id'] = sent.message_id
+    return WELCOME
+
+
+async def welcome_age_confirm(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка '18+' нажата → меняем на 'Правила чата'"""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📜 Правила чата", callback_data="reg_show_rules")]
+    ])
+    await query.edit_message_reply_markup(reply_markup=keyboard)
+    return RULES
+
+
+async def show_rules(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка 'Правила чата' → показываем правила с кнопкой 'Подать заявку'"""
+    query = update.callback_query
+    await query.answer()
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📝 Подать заявку", callback_data="reg_start_form")]
+    ])
+    msg_id = context.user_data.get('reg_msg_id')
+    await _edit_form(context, query.from_user.id, msg_id, RULES_TEXT, keyboard)
+    return RULES
+
+
+async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка 'Подать заявку' → начинаем анкету"""
+    query = update.callback_query
+    await query.answer()
+    user_id = query.from_user.id
+
+    msg_id = context.user_data.get('reg_msg_id')
+    text = _build_form({}, "А. Как тебя зовут?")
+    await _edit_form(context, user_id, msg_id, text)
     return NAME
 
 
@@ -360,8 +445,18 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 registration_conv = ConversationHandler(
-    entry_points=[CommandHandler("register", start_reg)],
+    entry_points=[
+        CommandHandler("register", start_reg),
+        CommandHandler("start", start_reg),
+    ],
     states={
+        WELCOME: [
+            CallbackQueryHandler(welcome_age_confirm, pattern="^reg_age_confirm$"),
+        ],
+        RULES: [
+            CallbackQueryHandler(show_rules, pattern="^reg_show_rules$"),
+            CallbackQueryHandler(start_form_callback, pattern="^reg_start_form$"),
+        ],
         NAME: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_name)],
         AGE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_age)],
         BIRTH_DATE: [MessageHandler(filters.TEXT & ~filters.COMMAND, get_birth_date)],
