@@ -171,11 +171,16 @@ class CommandHandler:
                     return None
                 except Exception as e:
                     errors += 1
+                    err_str = str(e).lower()
+                    # Если юзер не найден, удалён, заблокировал бота — помечаем как вышедшего
+                    if any(kw in err_str for kw in ('not found', 'forbidden', 'kicked', 'deactivated', 'blocked')):
+                        logger.info(f"fix_left: {uid} помечен (ошибка API: {e})")
+                        return uid
                     logger.warning(f"fix_left: не удалось проверить {uid}: {e}")
                     return None
 
             marked = 0
-            batch_size = 30
+            batch_size = 10
             for i in range(0, total, batch_size):
                 batch = [row[0] for row in users[i:i + batch_size]]
                 results = await asyncio.gather(*[check_user(uid) for uid in batch])
@@ -184,7 +189,7 @@ class CommandHandler:
                         self.db.conn.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
                         marked += 1
                 self.db.conn.commit()
-                await asyncio.sleep(1)
+                await asyncio.sleep(2)
 
             await msg.edit_text(
                 f"✅ Готово!\n"
