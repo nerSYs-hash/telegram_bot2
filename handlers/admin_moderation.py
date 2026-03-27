@@ -407,20 +407,44 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
     await bot.send_message(chat_id=chat_id, text=text, reply_markup=keyboard, parse_mode="HTML")
 
 
+def _owner_inline_panel() -> InlineKeyboardMarkup:
+    """InlineKeyboard полной панели владельца для треда заявок"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+        [InlineKeyboardButton("👥 Админы", callback_data="panel_admins"),
+         InlineKeyboardButton("🚫 Черный список", callback_data="panel_blacklist")],
+        [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
+        [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
+         InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
+        [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
+         InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
+    ])
+
+
+def _admin_inline_panel() -> InlineKeyboardMarkup:
+    """InlineKeyboard панели админа для треда заявок"""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+    ])
+
+
 async def send_applications_button(bot):
-    """Отправляет стартовое сообщение в тред заявок при запуске бота"""
-    keyboard = get_applications_keyboard(is_owner=True)
+    """Отправляет InlineKeyboard панель в тред заявок при старте бота"""
+    keyboard = _owner_inline_panel()
     try:
         await bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             message_thread_id=APPLICATIONS_THREAD_ID,
-            text="👨‍💼 <b>Панель заявок запущена</b>\n\nИспользуйте кнопки ниже.",
+            text="👑 <b>Панель заявок</b>\n\nИспользуйте кнопки для управления.",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
-        logger.info(f"✅ ReplyKeyboard заявок отправлена в тред {APPLICATIONS_THREAD_ID}")
+        logger.info(f"✅ InlineKeyboard панели отправлена в тред {APPLICATIONS_THREAD_ID}")
     except Exception as e:
-        logger.warning(f"Не удалось отправить кнопку в тред заявок: {e}")
+        logger.warning(f"Не удалось отправить панель в тред заявок: {e}")
 
 
 async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAULT_TYPE, btn_text: str):
