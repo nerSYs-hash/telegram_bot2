@@ -105,7 +105,31 @@ class Restarter(FileSystemEventHandler):
         ptb_bot.start()
 
 
+def _kill_old_bot():
+    """Убивает старый процесс бота по bot.pid и удаляет PID-файл."""
+    pid_file = os.path.join(BASE_DIR, 'bot.pid')
+    if not os.path.exists(pid_file):
+        return
+    try:
+        with open(pid_file) as f:
+            old_pid = int(f.read().strip())
+        import signal
+        os.kill(old_pid, signal.SIGTERM)
+        print(f"🔪 Убит старый процесс бота (PID={old_pid})")
+        time.sleep(1)
+    except (ProcessLookupError, ValueError):
+        pass  # Процесс уже мёртв
+    except Exception as e:
+        print(f"⚠️ Не удалось убить PID: {e}")
+    try:
+        os.remove(pid_file)
+        print(f"🗑 Удалён bot.pid")
+    except Exception:
+        pass
+
+
 if __name__ == "__main__":
+    _kill_old_bot()
     _ensure_deps(_ptb_python, os.path.join(BASE_DIR, 'requirements.txt'))
 
     ptb_bot.start()
