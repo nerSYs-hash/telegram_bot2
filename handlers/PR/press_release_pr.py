@@ -249,14 +249,27 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_video(**kwargs)
+            if len(press_release) > 1024:
+                # Caption > 1024: медиа без подписи + текст отдельно
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    await context.bot.send_photo(**kwargs)
+                text_kw = {'chat_id': target_chat_id, 'text': press_release, 'parse_mode': 'HTML'}
+                if thread_id:
+                    text_kw['message_thread_id'] = thread_id
+                await context.bot.send_message(**text_kw)
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_photo(**kwargs)
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_photo(**kwargs)
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
@@ -644,14 +657,26 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if is_video:
-                kwargs['video'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_video(**kwargs)
+            if len(press_release) > 1024:
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    await context.bot.send_photo(**kwargs)
+                text_kw = {'chat_id': chat_id_for_topic, 'text': press_release, 'parse_mode': 'HTML'}
+                if thread_id:
+                    text_kw['message_thread_id'] = thread_id
+                await context.bot.send_message(**text_kw)
             else:
-                kwargs['photo'] = raw_file_id
-                kwargs['caption'] = press_release
-                await context.bot.send_photo(**kwargs)
+                if is_video:
+                    kwargs['video'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_video(**kwargs)
+                else:
+                    kwargs['photo'] = raw_file_id
+                    kwargs['caption'] = press_release
+                    await context.bot.send_photo(**kwargs)
         else:
             kwargs['text'] = press_release
             await context.bot.send_message(**kwargs)
