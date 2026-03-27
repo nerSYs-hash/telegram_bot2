@@ -300,20 +300,45 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             ]])
         )
     except Exception as e:
-        err_text = str(e)
-        if 'Message is not modified' in err_text:
-            await query.answer("⚠️ Та же ошибка. Исправьте данные и попробуйте снова.", show_alert=True)
-            return
+        # Если тред не найден — пробуем без треда
+        if 'thread not found' in str(e).lower():
+            try:
+                kwargs.pop('message_thread_id', None)
+                if photo_file_id:
+                    if len(press_release) > CAPTION_LIMIT:
+                        if 'video' in kwargs:
+                            await context.bot.send_video(**kwargs)
+                        elif 'photo' in kwargs:
+                            await context.bot.send_photo(**kwargs)
+                        await _send_long_text(context.bot, target_chat_id, press_release)
+                    else:
+                        kwargs['caption'] = press_release
+                        if 'video' in kwargs:
+                            await context.bot.send_video(**kwargs)
+                        else:
+                            await context.bot.send_photo(**kwargs)
+                else:
+                    await _send_long_text(context.bot, target_chat_id, press_release)
+                context.user_data.pop('pr_data', None)
+                await query.edit_message_text(
+                    "✅ Пресс-релиз опубликован! (тред не найден — отправлено в основной чат)",
+                    reply_markup=InlineKeyboardMarkup([[
+                        InlineKeyboardButton("🔙 В меню", callback_data="back_to_menu")
+                    ]])
+                )
+                return
+            except Exception as e2:
+                e = e2
         try:
             await query.edit_message_text(
-                f"❌ Ошибка при публикации: {err_text}",
+                f"❌ Ошибка при публикации: {e}",
                 reply_markup=InlineKeyboardMarkup([[
                     InlineKeyboardButton("🔁 Попробовать снова", callback_data="pr_publish_now"),
                     InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")
                 ]])
             )
         except Exception:
-            await query.answer(f"❌ Ошибка: {err_text}", show_alert=True)
+            pass
 
 
 async def handle_pr_schedule(query, user, context, db, admin_id):
