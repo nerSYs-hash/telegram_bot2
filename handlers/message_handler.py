@@ -422,8 +422,8 @@ class MessageHandler:
                 await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.admin_moderation import handle_new_apps_text
+                await handle_new_apps_text(update, context)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
@@ -644,8 +644,8 @@ class MessageHandler:
                 await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.admin_moderation import handle_new_apps_text
+                await handle_new_apps_text(update, context)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
