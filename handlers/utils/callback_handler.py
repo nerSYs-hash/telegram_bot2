@@ -169,7 +169,7 @@ class CallbackHandler:
                 return
         
         # Перезапуск регистрации (если заявка потерялась)
-        if data == "restart_registration":
+        if data in ("restart_registration", "reapply"):
             from database.db_friend import update_user, cancel_user_applications
             from handlers.registration_conversation import start_reg
             await cancel_user_applications(user.id)
