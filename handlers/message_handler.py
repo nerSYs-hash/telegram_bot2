@@ -40,9 +40,23 @@ REPLY_BTN_DETAIL = "📋 Детализация"
 REPLY_BTN_FAQ = "❓ FAQ"
 REPLY_BTN_OWNER_PANEL = "👑 Панель Владельца"
 REPLY_BTN_NEW_APPS = "📋 Новые заявки"
+# Кнопки панели владельца в треде заявок
+REPLY_BTN_ADMINS = "👥 Админы"
+REPLY_BTN_BLACKLIST = "🚫 Черный список"
+REPLY_BTN_CHECK_USER = "🔍 Проверка ника"
+REPLY_BTN_TRIGGERS = "⚡ Триггеры"
+REPLY_BTN_JOURNAL = "📓 Журнал"
+REPLY_BTN_STATS = "📊 Статистика"
+REPLY_BTN_NOT_IN_CHAT = "📊 Не в чате"
+REPLY_BTN_ECONOMY = "💰 Экономика"
+REPLY_BTN_SYSTEM = "⚙️ Система"
+REPLY_BTN_BACKUP = "💾 Скачать БД"
 REPLY_BUTTONS = {REPLY_BTN_BALANCE, REPLY_BTN_PROFILE, REPLY_BTN_COURSE, REPLY_BTN_TOP5, REPLY_BTN_MENU,
                  REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ,
-                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_NEW_APPS}
+                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_NEW_APPS,
+                 REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
+                 REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
+                 REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM, REPLY_BTN_BACKUP}
 
 
 class MessageHandler:
@@ -425,6 +439,13 @@ class MessageHandler:
                 from handlers.admin_moderation import handle_new_apps_text
                 await handle_new_apps_text(update, context)
                 return
+            elif btn in (REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
+                         REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
+                         REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM,
+                         REPLY_BTN_BACKUP):
+                from handlers.admin_moderation import handle_owner_panel_button
+                await handle_owner_panel_button(update, context, btn)
+                return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
@@ -646,6 +667,13 @@ class MessageHandler:
             elif btn == REPLY_BTN_NEW_APPS:
                 from handlers.admin_moderation import handle_new_apps_text
                 await handle_new_apps_text(update, context)
+                return
+            elif btn in (REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
+                         REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
+                         REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM,
+                         REPLY_BTN_BACKUP):
+                from handlers.admin_moderation import handle_owner_panel_button
+                await handle_owner_panel_button(update, context, btn)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command

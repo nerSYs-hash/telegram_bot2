@@ -2,7 +2,7 @@ import html
 import asyncio
 from datetime import datetime
 import pytz
-from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import Update, InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 from telegram.ext import ContextTypes
 import logging
 from database.db_friend import (
@@ -13,6 +13,38 @@ from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID, APPLICATIONS_THREA
 from utils.face_detector import has_human_face
 
 logger = logging.getLogger(__name__)
+
+# Текст кнопок для ReplyKeyboard в треде заявок
+BTN_NEW_APPS = "📋 Новые заявки"
+BTN_ADMINS = "👥 Админы"
+BTN_BLACKLIST = "🚫 Черный список"
+BTN_CHECK_USER = "🔍 Проверка ника"
+BTN_TRIGGERS = "⚡ Триггеры"
+BTN_JOURNAL = "📓 Журнал"
+BTN_STATS = "📊 Статистика"
+BTN_NOT_IN_CHAT = "📊 Не в чате"
+BTN_ECONOMY = "💰 Экономика"
+BTN_SYSTEM = "⚙️ Система"
+BTN_BACKUP = "💾 Скачать БД"
+
+
+def get_applications_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
+    """Возвращает ReplyKeyboard для треда заявок в зависимости от роли"""
+    if is_owner:
+        buttons = [
+            [KeyboardButton(BTN_NEW_APPS)],
+            [KeyboardButton(BTN_ADMINS), KeyboardButton(BTN_BLACKLIST)],
+            [KeyboardButton(BTN_CHECK_USER)],
+            [KeyboardButton(BTN_TRIGGERS), KeyboardButton(BTN_JOURNAL)],
+            [KeyboardButton(BTN_STATS), KeyboardButton(BTN_NOT_IN_CHAT)],
+            [KeyboardButton(BTN_ECONOMY), KeyboardButton(BTN_SYSTEM)],
+            [KeyboardButton(BTN_BACKUP)],
+        ]
+    else:
+        buttons = [
+            [KeyboardButton(BTN_NEW_APPS)],
+        ]
+    return ReplyKeyboardMarkup(buttons, resize_keyboard=True, selective=True)
 
 
 async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
@@ -376,23 +408,74 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False):
 
 
 async def send_applications_button(bot):
-    """Отправляет ReplyKeyboard 'Новые заявки' в тред заявок при старте бота"""
-    from telegram import ReplyKeyboardMarkup, KeyboardButton
-    keyboard = ReplyKeyboardMarkup(
-        [[KeyboardButton("📋 Новые заявки")]],
-        resize_keyboard=True
-    )
+    """Отправляет стартовое сообщение в тред заявок при запуске бота"""
+    keyboard = get_applications_keyboard(is_owner=True)
     try:
         await bot.send_message(
             chat_id=ADMIN_CHAT_ID,
             message_thread_id=APPLICATIONS_THREAD_ID,
-            text="👨‍💼 <b>Панель заявок запущена</b>\n\nИспользуйте кнопку ниже для просмотра заявок.",
+            text="👨‍💼 <b>Панель заявок запущена</b>\n\nИспользуйте кнопки ниже.",
             reply_markup=keyboard,
             parse_mode="HTML"
         )
         logger.info(f"✅ ReplyKeyboard заявок отправлена в тред {APPLICATIONS_THREAD_ID}")
     except Exception as e:
         logger.warning(f"Не удалось отправить кнопку в тред заявок: {e}")
+
+
+async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAULT_TYPE, btn_text: str):
+    """Обработчик текстовых кнопок панели владельца в треде заявок"""
+    from config import OWNER_ID
+    user_id = update.effective_user.id
+
+    if user_id != OWNER_ID:
+        return
+
+    # Удаляем сообщение с текстом кнопки
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
+
+    # Маппинг текстовых кнопок → callback_data для panel_callback
+    btn_map = {
+        BTN_ADMINS: "panel_admins",
+        BTN_BLACKLIST: "panel_blacklist",
+        BTN_CHECK_USER: "panel_check_user",
+        BTN_TRIGGERS: "owner_triggers",
+        BTN_JOURNAL: "owner_journal",
+        BTN_STATS: "menu_stats",
+        BTN_NOT_IN_CHAT: "owner_stats_not_in_chat",
+        BTN_ECONOMY: "owner_economy",
+        BTN_SYSTEM: "owner_system",
+        BTN_BACKUP: "owner_backup",
+    }
+
+    callback_data = btn_map.get(btn_text)
+    if not callback_data:
+        return
+
+    # Отправляем inline-панель владельца с подсветкой нужного раздела
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")],
+        [InlineKeyboardButton("👥 Админы", callback_data="panel_admins"),
+         InlineKeyboardButton("🚫 Черный список", callback_data="panel_blacklist")],
+        [InlineKeyboardButton("🔍 Проверка ника", callback_data="panel_check_user")],
+        [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers"),
+         InlineKeyboardButton("📓 Журнал", callback_data="owner_journal")],
+        [InlineKeyboardButton("📊 Статистика", callback_data="menu_stats"),
+         InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
+        [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
+         InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
+    ])
+    sent = await context.bot.send_message(
+        chat_id=update.effective_chat.id,
+        message_thread_id=update.message.message_thread_id,
+        text=f"👑 <b>Панель владельца</b>\n\nВыберите раздел:",
+        reply_markup=kb,
+        parse_mode="HTML"
+    )
 
 
 async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYPE):
