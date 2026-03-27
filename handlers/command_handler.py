@@ -136,10 +136,19 @@ class CommandHandler:
     async def fix_left_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Проверить всех пользователей через Telegram API и пометить вышедших (is_left=1)"""
         try:
-            user_data = self.db.get_user(update.effective_user.id)
-            is_allowed = (update.effective_user.id == self.main_admin_id or
-                          (user_data and (user_data.get('is_owner') or user_data.get('is_admin'))))
-            if not is_allowed:
+            from database.db_friend import is_admin as is_reg_admin
+            user_id = update.effective_user.id
+            is_owner = user_id == self.main_admin_id
+            user_data = self.db.get_user(user_id)
+            # Проверяем: владелец, админ в основной БД, или админ в db_friend
+            is_main_admin = False
+            if user_data:
+                try:
+                    is_main_admin = bool(user_data['is_owner'] or user_data['is_admin'])
+                except (KeyError, IndexError):
+                    pass
+            is_friend_admin = await is_reg_admin(user_id)
+            if not (is_owner or is_main_admin or is_friend_admin):
                 await update.message.reply_text("❌ Нет доступа.")
                 return
 
