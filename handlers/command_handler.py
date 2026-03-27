@@ -7,7 +7,7 @@ from handlers.commands.economy_commands import (
     safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
 )
 
-from database.db_friend import get_user # Импорт из файла друга
+from database.db_friend import get_user, get_user_pending_application
 #from handlers.profile_handlers import show_profile
 from handlers.commands.donation_commands import donate_command as _donate_command
 from handlers.commands.exchange_commands import course_command as _course_command
@@ -50,8 +50,21 @@ class CommandHandler:
                 )
                 return 
             if user.get('status') != 'approved':
-                await update.message.reply_text("⏳ Твоя анкета еще на проверке у администраторов. Пожалуйста, подожди!")
-            return
+                # Проверяем есть ли активная заявка
+                pending_app = await get_user_pending_application(user_id)
+                if pending_app:
+                    await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
+                else:
+                    # Заявка потерялась — предлагаем пройти заново
+                    kb = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
+                    ]])
+                    await update.message.reply_text(
+                        "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
+                        "Нажми кнопку ниже, чтобы пройти анкету заново:",
+                        reply_markup=kb
+                    )
+                return
         
         # --- ИНТЕГРАЦИЯ МОЕЙ РЕФЕРАЛКИ ---
         if context.args:

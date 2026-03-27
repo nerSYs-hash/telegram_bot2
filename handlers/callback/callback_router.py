@@ -106,6 +106,17 @@ class CallbackHandler:
         if await dispatch_owner(self, query, data, user, context):
             return
 
+        # Перезапуск регистрации
+        if data == "restart_registration":
+            from database.db_friend import update_user, cancel_user_applications
+            await cancel_user_applications(user.id)
+            await update_user(user.id, status='new', questionnaire_state=None)
+            await query.answer()
+            await query.edit_message_text(
+                "✅ Готово! Теперь отправь команду /register чтобы заполнить анкету заново."
+            )
+            return
+
         # Неизвестный callback
         logger.warning(f"Unhandled callback: {data}")
 

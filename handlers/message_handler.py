@@ -411,12 +411,12 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.owner_handlers import show_owner_dashboard
-                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.owner_handlers import show_owner_dashboard
-                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
@@ -523,7 +523,25 @@ class MessageHandler:
         message = update.message
         user = message.from_user
         chat_id = message.chat.id
-        
+
+        # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец ═══
+        if user.id != self.main_admin_id:
+            try:
+                from telegram import ChatMemberStatus
+                member = await context.bot.get_chat_member(self.target_chat_id, user.id)
+                is_member = member.status in (
+                    ChatMemberStatus.MEMBER,
+                    ChatMemberStatus.ADMINISTRATOR,
+                    ChatMemberStatus.OWNER,
+                )
+            except Exception:
+                is_member = False
+
+            if not is_member:
+                if message.text and not message.text.strip().startswith(('/start', '/register')):
+                    await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
+                return
+
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══
         if message.text and message.text.strip() in REPLY_BUTTONS:
             btn = message.text.strip()
@@ -615,12 +633,12 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.owner_handlers import show_owner_dashboard
-                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
-                from handlers.owner_handlers import show_owner_dashboard
-                await show_owner_dashboard(update, context, self.db, self.main_admin_id)
+                from handlers.admin_moderation import send_admin_panel
+                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
                 return
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
@@ -628,16 +646,16 @@ class MessageHandler:
                 return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
-        #if message.text and context.user_data.get('owner_awaiting'):
-        #    handled = await handle_owner_text_input(
-        #        update, context, self.db, self.main_admin_id, self.target_chat_id
-        #    )
-         #   if handled:
-        #        return
+        if message.text and context.user_data.get('owner_awaiting'):
+            handled = await handle_owner_text_input(
+                update, context, self.db, self.main_admin_id, self.target_chat_id
+            )
+            if handled:
+                return
 
-        # ═══ BBS FSM — доступен ВСЕМ пользователям в ЛС ═══
-        #if await process_bbs_input(message, context, self.db):
-         #   return
+        # ═══ BBS FSM — только для одобренных пользователей ═══
+        if await process_bbs_input(message, context, self.db):
+            return
         
         # Only admin can use private chat features
        # if user.id != self.main_admin_id and not context.user_data.get('bbs_state'):

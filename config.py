@@ -12,6 +12,7 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 OWNER_ID: int = int(os.getenv("MAIN_ADMIN_ID", 7536752126))
 CHAT_ID: int = int(os.getenv("CHAT_ID", 0))  # ID основного чата
 ADMIN_CHAT_ID: int = int(os.getenv("ADMIN_CHAT_ID", 3794322036))  # ID чата администраторов
+DOSSIER_THREAD_ID: int = int(os.getenv("DOSSIER_THREAD_ID", 176))  # Тред для досье после одобрения
 JOURNAL_CHANNEL_ID: Optional[str] = os.getenv("JOURNAL_CHANNEL_ID")  # Устанавливается через бота
 
 # Проверка обязательных параметров

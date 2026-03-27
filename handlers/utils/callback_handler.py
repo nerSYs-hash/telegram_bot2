@@ -59,7 +59,6 @@ from handlers.journal_handlers import (
     ensure_journal_tables,
 )
 from handlers.owner_handlers import (
-    show_owner_dashboard,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_system_menu, toggle_maintenance,
     ensure_owner_columns,
@@ -147,12 +146,42 @@ class CallbackHandler:
                     ])
                 )
                 return
+            # Проверка: пользователь состоит в чате?
+            if user.id != self.main_admin_id:
+                try:
+                    from telegram import ChatMemberStatus
+                    member = await context.bot.get_chat_member(self.target_chat_id, user.id)
+                    in_chat = member.status in (
+                        ChatMemberStatus.MEMBER,
+                        ChatMemberStatus.ADMINISTRATOR,
+                        ChatMemberStatus.OWNER,
+                    )
+                except Exception:
+                    in_chat = False
+                if not in_chat:
+                    await query.answer("⏳ Доступ к BBS открывается после вступления в чат.", show_alert=True)
+                    return
+
             handled = await handle_bbs_callback(
                 query, context, self.db, self.target_chat_id, self.bbs_thread_id
             )
             if handled:
                 return
         
+        # Перезапуск регистрации (если заявка потерялась)
+        if data == "restart_registration":
+            from database.db_friend import update_user, cancel_user_applications
+            from handlers.registration_conversation import start_reg
+            await cancel_user_applications(user.id)
+            await update_user(user.id, status='new', questionnaire_state=None)
+            await query.answer()
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await start_reg(update, context)
+            return
+
         # Back to main menu
         if data == "back_to_menu":
             await self.show_main_menu(query, user)
@@ -439,9 +468,13 @@ class CallbackHandler:
         elif data.startswith("detail_export_"):
             await self.export_user_detalization(query, data, user, context)
         
-        # ═══ OWNER DASHBOARD CALLBACKS ═══
-        elif data == "owner_dashboard":
-            await show_owner_dashboard(query, context, self.db, self.main_admin_id)
+        # ═══ OWNER / ADMIN PANEL CALLBACKS ═══
+        elif data in ("owner_dashboard", "panel_main"):
+            from handlers.admin_moderation import send_admin_panel
+            await send_admin_panel(context.bot, query.message.chat.id, is_owner=True)
+        elif data == "new_app":
+            from handlers.admin_moderation import new_application_callback
+            await new_application_callback(update, context)
         elif data == "owner_economy":
             await show_economy_menu(query, self.db, self.main_admin_id)
         elif data == "owner_emit":
@@ -541,7 +574,6 @@ class CallbackHandler:
 
         # ── Владелец ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 

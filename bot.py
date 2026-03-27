@@ -468,6 +468,10 @@ class TelegramBot:
 
     def setup_handlers(self):
         """Setup all handlers"""
+        # Registration conversation handler (MUST be before general message handler)
+        from handlers.registration_conversation import registration_conv
+        self.application.add_handler(registration_conv)
+
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
         self.application.add_handler(CommandHandler("menu", self.command_handler.menu_command))

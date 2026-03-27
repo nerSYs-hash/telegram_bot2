@@ -697,6 +697,27 @@ async def get_application(app_id: int) -> Optional[dict]:
             row = await cursor.fetchone()
             return row_to_dict(row)
 
+async def cancel_user_applications(user_id: int):
+    """Отменяет все активные заявки пользователя (при перезапуске регистрации)."""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            "UPDATE applications SET status = 'cancelled' WHERE user_id = ? AND status IN ('pending', 'locked')",
+            (user_id,)
+        )
+        await db.commit()
+
+
+async def get_user_pending_application(user_id: int) -> Optional[dict]:
+    """Возвращает активную (pending/locked) заявку пользователя, если она есть."""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT * FROM applications WHERE user_id = ? AND status IN ('pending', 'locked') ORDER BY created_at DESC LIMIT 1",
+            (user_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return row_to_dict(row)
+
+
 async def cleanup_expired_locks():
     """Очистка истекших блокировок заявок"""
     async with db_pool.get_connection() as db:

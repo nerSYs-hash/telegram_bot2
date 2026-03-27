@@ -9,9 +9,51 @@ from database.db_friend import (
     approve_application, reject_application, update_user,
     get_user, get_application, create_invite_link
 )
-from config import CHAT_ID
+from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID
+from utils.face_detector import has_human_face
 
 logger = logging.getLogger(__name__)
+
+
+async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
+    """Отправляет досье с фото (если найдено лицо) в тред администраторов."""
+    try:
+        photos = await bot.get_user_profile_photos(user_id, limit=3)
+        face_photo = None
+
+        for photo_size_list in (photos.photos or []):
+            try:
+                file = await bot.get_file(photo_size_list[-1].file_id)
+                byte_array = await file.download_as_bytearray()
+                if await has_human_face(byte_array):
+                    face_photo = photo_size_list[-1].file_id
+                    break
+            except Exception as e:
+                logger.warning(f"_send_dossier: ошибка обработки фото: {e}")
+                continue
+
+        if face_photo:
+            await bot.send_photo(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=DOSSIER_THREAD_ID,
+                photo=face_photo,
+                caption=dossier_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+            )
+        else:
+            no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
+            await bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=DOSSIER_THREAD_ID,
+                text=no_face_text,
+                parse_mode="HTML",
+                reply_markup=keyboard,
+                disable_web_page_preview=True,
+            )
+    except Exception as e:
+        logger.error(f"_send_dossier: ошибка отправки досье для {user_id}: {e}")
+
 
 async def _send_invite_link(bot, user_id: int, user_name: str):
     """Генерирует одноразовую ссылку и отправляет пуш пользователю. Возвращает message_id."""
@@ -183,6 +225,11 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         ])
         await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
                                       disable_web_page_preview=True)
+
+        # 5. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
+        asyncio.create_task(
+            _send_dossier(context.bot, target_user_id, card_text, card_kb)
+        )
 
     elif action == "rej":
         # Сохраняем данные и ждём причину от администратора
