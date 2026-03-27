@@ -158,7 +158,8 @@ class CommandHandler:
             ).fetchall()
             users = list(rows)
             total = len(users)
-            msg = await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
+            batch_size = 10
+            msg = await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по {batch_size}...")
 
             errors = 0
 
@@ -180,7 +181,6 @@ class CommandHandler:
                     return None
 
             marked = 0
-            batch_size = 10
             for i in range(0, total, batch_size):
                 batch = [row[0] for row in users[i:i + batch_size]]
                 results = await asyncio.gather(*[check_user(uid) for uid in batch])
