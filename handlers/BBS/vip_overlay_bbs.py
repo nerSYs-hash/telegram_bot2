@@ -29,13 +29,15 @@ def _load_badge():
         w, h = img.size
 
         # Создаём треугольную маску: верхний правый угол
-        mask = Image.new('L', (w, h), 0)
-        draw = ImageDraw.Draw(mask)
-        # Треугольник: верх-лево, верх-право, низ-право
+        tri_mask = Image.new('L', (w, h), 0)
+        draw = ImageDraw.Draw(tri_mask)
         draw.polygon([(0, 0), (w, 0), (w, h)], fill=255)
 
-        # Применяем маску — всё за пределами треугольника = прозрачное
-        img.putalpha(mask)
+        # Совмещаем с оригинальным альфа-каналом (min — оба должны быть непрозрачны)
+        orig_alpha = img.split()[3]
+        from PIL import ImageChops
+        combined = ImageChops.multiply(orig_alpha, tri_mask)
+        img.putalpha(combined)
 
         _badge_cache = img
         return _badge_cache
