@@ -14,6 +14,7 @@ from handlers.BBS.database_bbs import get_profile
 from handlers.BBS.helpers_bbs import (
     get_bbs_data, clear_bbs, build_profile_text, write_button,
 )
+from handlers.BBS.vip_overlay_bbs import apply_vip_badge
 from utils.helpers import get_moscow_time
 
 
@@ -73,21 +74,32 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
             context.bot, db, old_profile, target_chat_id, bbs_thread_id
         )
 
+    # Наложение VIP-бейджа на первое фото (TODO: проверка VIP-допуска)
+    vip_enabled = True  # Временно для всех — потом заменить на проверку VIP
+    vip_photo = None
+    if photos and vip_enabled:
+        try:
+            vip_photo = await apply_vip_badge(context.bot, photos[0])
+        except Exception as e:
+            logging.warning(f"BBS: VIP badge overlay failed: {e}")
+
     sent_message_ids = []
     try:
         if len(photos) == 1:
+            photo_to_send = vip_photo if vip_photo else photos[0]
             msg = await context.bot.send_photo(
                 chat_id=target_chat_id,
                 message_thread_id=bbs_thread_id,
-                photo=photos[0],
+                photo=photo_to_send,
                 caption=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
             )
             sent_message_ids.append(msg.message_id)
         elif len(photos) > 1:
+            first_photo = vip_photo if vip_photo else photos[0]
             media = [
-                InputMediaPhoto(media=photos[0], caption=profile_text, parse_mode='HTML')
+                InputMediaPhoto(media=first_photo, caption=profile_text, parse_mode='HTML')
             ]
             media += [InputMediaPhoto(media=fid) for fid in photos[1:]]
             messages = await context.bot.send_media_group(
@@ -98,7 +110,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
             btn_msg = await context.bot.send_message(
                 chat_id=target_chat_id,
                 message_thread_id=bbs_thread_id,
-                text=" 👆<b>Понравился ?</b>", 
+                text=" 👆<b>Понравился ?</b>",
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
             )
