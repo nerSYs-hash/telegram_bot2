@@ -149,6 +149,52 @@ class CommandHandler:
         """Handle /wipe_balances command"""
         await wipe_balances_command(update, context, self.db, self.main_admin_id)
 
+    async def fix_left_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Проверить всех пользователей через Telegram API и пометить вышедших (is_left=1)"""
+        try:
+            user_data = self.db.get_user(update.effective_user.id)
+            is_allowed = (update.effective_user.id == self.main_admin_id or
+                          (user_data and (user_data.get('is_owner') or user_data.get('is_admin'))))
+            if not is_allowed:
+                await update.message.reply_text("❌ Нет доступа.")
+                return
+
+            import asyncio
+            rows = self.db.conn.execute(
+                'SELECT user_id FROM users WHERE is_left = 0 AND is_owner = 0'
+            ).fetchall()
+            users = list(rows)
+            total = len(users)
+            msg = await update.message.reply_text(f"⏳ Проверяю {total} участников батчами по 30...")
+
+            async def check_user(uid):
+                try:
+                    member = await context.bot.get_chat_member(self.target_chat_id, uid, read_timeout=5, write_timeout=5)
+                    return uid if member.status in ('left', 'kicked') else None
+                except Exception:
+                    return None
+
+            marked = 0
+            batch_size = 30
+            for i in range(0, total, batch_size):
+                batch = [row[0] for row in users[i:i + batch_size]]
+                results = await asyncio.gather(*[check_user(uid) for uid in batch])
+                for uid in results:
+                    if uid:
+                        self.db.conn.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
+                        marked += 1
+                self.db.conn.commit()
+                await asyncio.sleep(1)
+
+            await msg.edit_text(
+                f"✅ Готово!\n"
+                f"Проверено: {total}\n"
+                f"Помечено как вышедших: {marked}"
+            )
+        except Exception as e:
+            logger.error(f"fix_left_command error: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+
     async def panel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /panel — открыть Панель Владельца из любого чата"""
         user_id = update.effective_user.id
