@@ -448,6 +448,11 @@ registration_conv = ConversationHandler(
     entry_points=[
         CommandHandler("register", start_reg),
         CommandHandler("start", start_reg),
+        # Fallback entry points — если бот перезапустился и потерял состояние
+        CallbackQueryHandler(welcome_age_confirm, pattern="^reg_age_confirm$"),
+        CallbackQueryHandler(show_rules, pattern="^reg_show_rules$"),
+        CallbackQueryHandler(start_form_callback, pattern="^reg_start_form$"),
+        CallbackQueryHandler(skip_ref_callback, pattern="^skip_ref$"),
     ],
     states={
         WELCOME: [
