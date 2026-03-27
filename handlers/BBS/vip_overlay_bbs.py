@@ -41,21 +41,13 @@ def _load_badge():
         return None
 
 
-async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.50) -> bytes:
+async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.35) -> bytes:
     """
     Скачивает фото по file_id, накладывает VIP-бейдж в правый верхний угол.
-
-    Args:
-        bot: экземпляр telegram.Bot
-        photo_file_id: file_id фото из Telegram
-        badge_ratio: размер бейджа относительно ширины фото (0.25 = 25%)
-
-    Returns:
-        bytes — обработанное фото в формате JPEG
+    Адаптивный: масштаб по меньшей стороне фото (работает и для квадратных, и прямоугольных).
     """
     badge = _load_badge()
     if badge is None:
-        # Если бейдж не загрузился — возвращаем оригинал
         file = await bot.get_file(photo_file_id)
         buf = io.BytesIO()
         await file.download_to_memory(buf)
@@ -71,11 +63,11 @@ async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.50) ->
     photo = Image.open(photo_buf).convert('RGBA')
     pw, ph = photo.size
 
-    # Масштабируем бейдж
-    badge_size = int(pw * badge_ratio)
+    # Адаптивный размер: по меньшей стороне фото
+    badge_size = int(min(pw, ph) * badge_ratio)
     resized_badge = badge.resize((badge_size, badge_size), Image.LANCZOS)
 
-    # Позиция: правый верхний угол
+    # Позиция: правый верхний угол (впритык к краю)
     x = pw - badge_size
     y = 0
 
