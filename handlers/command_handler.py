@@ -206,7 +206,8 @@ class CommandHandler:
             return
         from handlers.admin_moderation import send_admin_panel
         chat_id = update.effective_chat.id
-        await send_admin_panel(context.bot, chat_id, is_owner=is_owner)
+        thread_id = update.message.message_thread_id if update.message and update.message.message_thread_id else None
+        await send_admin_panel(context.bot, chat_id, is_owner=is_owner, thread_id=thread_id)
 
     async def test_wipe_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """[DEV ONLY] /test_wipe — удалить тестовых пользователей за последние 24 часа из обеих БД"""
