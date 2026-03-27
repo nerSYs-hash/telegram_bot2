@@ -26,13 +26,14 @@ def _load_badge():
         return _badge_cache
     try:
         img = Image.open(VIP_BADGE_PATH).convert('RGBA')
-        # Убираем полупрозрачные артефакты — alpha < 128 → полностью прозрачный
+        # Убираем полупрозрачные артефакты — alpha < 200 → полностью прозрачный
         pixels = img.load()
         w, h = img.size
         for y in range(h):
             for x in range(w):
                 r, g, b, a = pixels[x, y]
-                if a < 128:
+                # Белые/светлые пиксели с любой прозрачностью → убираем
+                if a < 200 or (r > 220 and g > 220 and b > 220):
                     pixels[x, y] = (0, 0, 0, 0)
         _badge_cache = img
         return _badge_cache
