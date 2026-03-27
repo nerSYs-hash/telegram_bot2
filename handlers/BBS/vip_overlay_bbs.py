@@ -2,13 +2,13 @@
 # -*- coding: utf-8 -*-
 """
 Наложение VIP-бейджа на фото анкеты BBS.
-Бейдж накладывается в правый верхний угол.
+Бейдж накладывается в правый верхний угол (треугольник).
 """
 
 import io
 import os
 import logging
-from PIL import Image
+from PIL import Image, ImageDraw
 
 logger = logging.getLogger(__name__)
 
@@ -20,21 +20,23 @@ _badge_cache = None
 
 
 def _load_badge():
-    """Загружает VIP-бейдж из файла (с кешем)."""
+    """Загружает VIP-бейдж и вырезает треугольник через маску."""
     global _badge_cache
     if _badge_cache is not None:
         return _badge_cache
     try:
         img = Image.open(VIP_BADGE_PATH).convert('RGBA')
-        pixels = img.load()
         w, h = img.size
-        # Маска: оставляем только верхний правый треугольник
-        # Диагональ идёт от (0,0) до (w,h) — выше диагонали = видимая часть
-        for y in range(h):
-            for x in range(w):
-                # Пиксель ниже диагонали → прозрачный
-                if x / w + (1 - y / h) <= 1.0:
-                    pixels[x, y] = (0, 0, 0, 0)
+
+        # Создаём треугольную маску: верхний правый угол
+        mask = Image.new('L', (w, h), 0)
+        draw = ImageDraw.Draw(mask)
+        # Треугольник: верх-лево, верх-право, низ-право
+        draw.polygon([(0, 0), (w, 0), (w, h)], fill=255)
+
+        # Применяем маску — всё за пределами треугольника = прозрачное
+        img.putalpha(mask)
+
         _badge_cache = img
         return _badge_cache
     except Exception as e:
@@ -45,7 +47,7 @@ def _load_badge():
 async def apply_vip_badge(bot, photo_file_id: str, badge_ratio: float = 0.35) -> bytes:
     """
     Скачивает фото по file_id, накладывает VIP-бейдж в правый верхний угол.
-    Адаптивный: масштаб по меньшей стороне фото (работает и для квадратных, и прямоугольных).
+    Адаптивный: масштаб по меньшей стороне фото.
     """
     badge = _load_badge()
     if badge is None:
