@@ -158,8 +158,11 @@ class TelegramBot:
             self.bot_username
         )
         
+        # Записываем db в bot_data — для доступа из ConversationHandler/admin_moderation
+        application.bot_data['db'] = self.db
+
         logger.info("Handlers initialized")
-        
+
         # Setup handlers after initialization
         self.setup_handlers()
         

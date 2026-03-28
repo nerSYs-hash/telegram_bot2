@@ -134,7 +134,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception:
         is_member = False
 
-    # Если пользователь уже одобрен или находится в чате — перенаправляем в меню
+    # Если пользователь уже одобрен или находится в чате — ��еренаправляем в меню
     if is_member or (user and user.get('status') in ('approved', 'in_chat', 'registered')):
         if is_member and user and user.get('status') not in ('approved', 'in_chat', 'registered'):
             try:
@@ -142,13 +142,27 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 await update_reg_user(user_id, status='in_chat')
             except Exception:
                 pass
-                
-        # Получаем основную БД из bot_data (там её хранит CallbackRouter/Bot.py)
+
+        # Закрываем все висящие заявки (если есть)
+        try:
+            from database.db_friend import close_user_applications
+            await close_user_applications(user_id, status='approved')
+        except Exception:
+            pass
+
+        # Получаем основную БД из bot_data
         main_db = context.bot_data.get('db')
-        
-        from handlers.commands.system_commands import menu_command
-        from config import OWNER_ID
-        await menu_command(update, context, main_db, OWNER_ID)
+
+        if main_db:
+            from handlers.commands.system_commands import menu_command
+            from config import OWNER_ID
+            await menu_command(update, context, main_db, OWNER_ID)
+        else:
+            logger.error("main_db is None in start_reg — bot_data['db'] not set!")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="✅ Ты уже участник чата! Используй /menu для открытия меню."
+            )
         return ConversationHandler.END
 
     # Если уже есть незавершённая анкета — восстанавливаем окно

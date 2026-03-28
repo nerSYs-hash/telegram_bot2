@@ -616,9 +616,12 @@ async def create_application(user_id: int) -> int:
 
 async def get_new_applications(exclude_locked: bool = True) -> List[dict]:
     """Получение новых заявок - возвращает список словарей"""
+    # Сначала чистим просроченные блокировки (IN_WORK → NEW)
+    await cleanup_expired_locks()
+
     async with db_pool.get_connection() as db:
         now = datetime.now().isoformat()
-        
+
         if exclude_locked:
             query = """
                 SELECT * FROM applications
@@ -736,7 +739,7 @@ async def cancel_user_applications(user_id: int):
     """Отменяет все активные заявки пользователя (при перезапуске регистрации)."""
     async with db_pool.get_connection() as db:
         await db.execute(
-            "UPDATE applications SET status = 'cancelled' WHERE user_id = ? AND status IN ('pending', 'locked')",
+            "UPDATE applications SET status = 'cancelled', locked_by = NULL, locked_until = NULL WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped')",
             (user_id,)
         )
         await db.commit()
