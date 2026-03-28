@@ -99,7 +99,7 @@ async def show_top_rich(message, context, db):
         logging.error(f"Error showing top rich: {e}")
 
 
-CHARS_NORMALIZER = 100
+CHARS_NORM = 100
 
 async def show_top_activists(message, context, db):
     try:
@@ -107,6 +107,10 @@ async def show_top_activists(message, context, db):
         admin_ids = await _get_admin_ids(context, message.chat.id)
         bot_count = int(os.getenv('BOT_COUNT', 1))
         
+        from datetime import timedelta
+        now = get_moscow_time()
+        date_30 = (now - timedelta(days=30)).strftime('%Y-%m-%d')
+
         try:
             member_count = await context.bot.get_chat_member_count(message.chat.id)
             divisor = max(member_count - bot_count - 1, 1)
