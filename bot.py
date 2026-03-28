@@ -503,7 +503,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("wipe_user", self.command_handler.wipe_user_command))
         # Пометить вышедших из чата (is_left=1) — чистка ТОПов
         self.application.add_handler(CommandHandler("fix_left", self.command_handler.fix_left_command))
-        
+        # Убрать пользователя из топов по @username или ID
+        self.application.add_handler(CommandHandler("remove_from_top", self.command_handler.remove_from_top_command))
+
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
             MessageHandler(
