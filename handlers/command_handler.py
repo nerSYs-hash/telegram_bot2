@@ -6,7 +6,7 @@ from telegram.ext import ContextTypes
 from handlers.commands.economy_commands import (
     safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
 )
-
+from utils.ai_core import ask_ai
 from database.db_friend import get_user, get_user_pending_application
 #from handlers.profile_handlers import show_profile
 from handlers.commands.donation_commands import donate_command as _donate_command
@@ -235,6 +235,30 @@ class CommandHandler:
         except Exception as e:
             logger.error(f"fix_left_command error: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Ошибка: {e}")
+
+    async def ask_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /ask command - Общение с ИИ"""
+        # Проверяем, написал ли юзер текст после команды
+        if not context.args:
+            await update.message.reply_text(
+                "❓ Напиши свой вопрос после команды.\nПример: <code>/ask Придумай шутку про программистов</code>", 
+                parse_mode='HTML'
+            )
+            return
+
+        question = " ".join(context.args)
+        
+        # Включаем статус "печатает..." в чате
+        await context.bot.send_chat_action(chat_id=update.effective_chat.id, action='typing')
+        
+        # Ждем ответ от нейросети
+        answer = await ask_ai(question)
+        
+        # Отправляем ответ пользователю
+        await update.message.reply_text(
+            f"🤖 <b>ИИ:</b>\n\n{answer}", 
+            parse_mode='HTML'
+        )
 
     async def remove_from_top_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Убрать пользователя из топов по @username или user_id. Доступно @Nersys и владельцу."""
