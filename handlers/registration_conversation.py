@@ -121,6 +121,36 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = await get_user(user_id)
 
+    # Проверка фактического членства в чате (is_member)
+    try:
+        from telegram import ChatMemberStatus
+        from config import CHAT_ID
+        member = await context.bot.get_chat_member(CHAT_ID, user_id)
+        is_member = member.status in (
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.OWNER,
+        ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
+    except Exception:
+        is_member = False
+
+    # Если пользователь уже одобрен или находится в чате — перенаправляем в меню
+    if is_member or (user and user.get('status') in ('approved', 'in_chat', 'registered')):
+        if is_member and user and user.get('status') not in ('approved', 'in_chat', 'registered'):
+            try:
+                from database.db_friend import update_user as update_reg_user
+                await update_reg_user(user_id, status='in_chat')
+            except Exception:
+                pass
+                
+        # Получаем основную БД из bot_data (там её хранит CallbackRouter/Bot.py)
+        main_db = context.bot_data.get('db')
+        
+        from handlers.commands.system_commands import menu_command
+        from config import OWNER_ID
+        await menu_command(update, context, main_db, OWNER_ID)
+        return ConversationHandler.END
+
     # Если уже есть незавершённая анкета — восстанавливаем окно
     if user and user.get('questionnaire_state'):
         state = user['questionnaire_state']

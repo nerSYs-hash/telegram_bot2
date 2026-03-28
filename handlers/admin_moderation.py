@@ -172,9 +172,32 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
     if len(parts) < 4:
         return
 
-    action = parts[1]  # app, rej или skip
-    target_user_id = int(parts[2])
-    app_id = int(parts[3])
+    # Обработка случая "Отмена" при вводе причины
+    # Формат: adm_rej_cancel_USERID_APPID -> len(parts) == 5
+    is_cancel = False
+    if len(parts) == 5 and parts[2] == "cancel":
+        is_cancel = True
+        action = parts[1]
+        target_user_id = int(parts[3])
+        app_id = int(parts[4])
+    else:
+        action = parts[1]  # app, rej или skip
+        target_user_id = int(parts[2])
+        app_id = int(parts[3])
+
+    if is_cancel:
+        # Сбрасываем флаги ожидания
+        context.user_data.pop('awaiting_reject_reason', None)
+        context.user_data.pop('rej_app_id', None)
+        
+        # Показываем карточку заявки заново
+        app_data = await get_application(app_id)
+        reg_data = await get_user(target_user_id)
+        if app_data and reg_data:
+            await _show_app_card(query, context, app_data, reg_data)
+        else:
+            await query.edit_message_text("❌ Ошибка: Данные заявки не найдены.")
+        return
 
     main_db = context.bot_data.get('db')
 
@@ -343,6 +366,9 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
         return
 
     # Сохраняем отказ в БД
+    from database.db_friend import get_application
+    app_data = await get_application(app_id)
+    
     await reject_application(app_id, update.effective_user.id, reason)
     await update_user(target_user_id, status='rejected')
 
@@ -374,14 +400,29 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
         f"Никнейм: @{reg_data.get('username') or 'нет'}\n\n"
         f"📋 <b>Анкета:</b>\n"
         f"Имя: {html.escape(reg_data.get('q_name') or '—')}\n"
-        f"Возраст: {reg_data.get('q_age') or '—'}\n"
-        f"Город: {html.escape(reg_data.get('q_city') or '—')}\n"
-        f"Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n\n"
+        f"🎂 Возраст: {reg_data.get('q_age') or '—'}\n"
+        f"🏙 Город: {html.escape(reg_data.get('q_city') or '—')}\n"
+        f"💊 Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n\n"
         f"📅 Дата заявки: {applied_at}\n\n"
         f"🚫 <b>Причина отказа:</b> {html.escape(reason)}\n\n"
         f"👨‍💼 Обработал: {admin_name}",
         parse_mode="HTML"
     )
+
+    # 3.4.3 УДАЛЯЕМ старую карточку заявки из треда заявок
+    from config import ADMIN_CHAT_ID
+    app_msg_id = app_data.get('message_id') if app_id else None
+    if not app_msg_id:
+        # Пытаемся взять из текущей сессии если не сохранили в БД
+        app_msg_id = context.user_data.get('current_app_msg_id')
+
+    if app_msg_id:
+        try:
+            await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
+            logger.info(f"✅ Сообщение заявки {app_msg_id} удалено после ОТКАЗА")
+        except Exception as e:
+            logger.error(f"❌ Не удалось удалить сообщение заявки {app_msg_id} при отказе: {e}")
+
     logger.info(f"Application #{app_id} rejected by {update.effective_user.id}, reason: {reason}")
 
 
@@ -651,6 +692,17 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         await query.answer("Ошибка: данные пользователя не найдены.", show_alert=True)
         return
 
+    # Отрисовка карточки
+    await _show_app_card(query, context, app, reg_data)
+
+
+async def _show_app_card(query, context, app, reg_data):
+    """Вспомогательная функция для отрисовки карточки заявки admin-у"""
+    from config import ADMIN_CHAT_ID, APPLICATIONS_THREAD_ID
+    
+    app_id = app['id']
+    user_id = app['user_id']
+    
     # Блок Д — статус заявки
     last_rejection = reg_data.get('last_rejection_reason')
     block_d = ""

@@ -134,9 +134,9 @@ class TelegramBot:
         from database.db_friend import init_db as init_friend_db
         await init_friend_db()
 
-        # Отправляем кнопку "Новые заявки" в тред заявок
-        from handlers.admin_moderation import send_applications_button
-        await send_applications_button(bot)
+        # Отправляем кнопку "Новые заявки" в тред заявок (ОТКЛЮЧЕНО ПО ПРОСЬБЕ ЮЗЕРА, ЧТОБЫ НЕ СПАМИТЬ ПРИ ОБНОВЛЕНИЯХ)
+        # from handlers.admin_moderation import send_applications_button
+        # await send_applications_button(bot)
         
         # Initialize handlers with bot username
         self.command_handler = BotCommandHandler(
@@ -540,10 +540,33 @@ class TelegramBot:
             )
         )
         
+        # Заявки на вступление (ChatJoinRequest)
+        from telegram.ext import ChatJoinRequestHandler
+        self.application.add_handler(ChatJoinRequestHandler(self.handle_join_request))
+        
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
         
         logger.info("Handlers setup complete")
+    
+    async def handle_join_request(self, update: Update, context):
+        """Обработка заявок на вступление по одноразовым ссылкам"""
+        request = update.chat_join_request
+        user_id = request.from_user.id
+        
+        try:
+            from database.db_friend import get_user as get_reg_user
+            reg_user = await get_reg_user(user_id)
+            # Автоматически одобряем, если пользователь есть в базе и не забанен
+            if reg_user and not reg_user.get('is_banned'):
+                await request.approve()
+                logger.info(f"✅ Авто-одобрена заявка на вступление от пользователя {user_id}")
+            else:
+                # Отклоняем, если пользователя нет в базе (попытка входа по чужой ссылке)
+                await request.decline()
+                logger.info(f"❌ Отклонена заявка на вступление от неизвестного пользователя {user_id}")
+        except Exception as e:
+            logger.error(f"Ошибка при обработке заявки на вступление: {e}")
     
     async def check_inactive_users_job(self):
         """Scheduled: проверка неактивных пользователей (60+ дней)"""

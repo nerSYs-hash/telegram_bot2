@@ -112,7 +112,7 @@ async def generate_return_link(bot, user_id: int) -> str:
         if chat_id:
             invite_link_obj = await bot.create_chat_invite_link(
                 chat_id=int(chat_id),
-                member_limit=1,
+                creates_join_request=True,
                 name=f"return_{user_id}_{datetime.now().timestamp()}"
             )
             

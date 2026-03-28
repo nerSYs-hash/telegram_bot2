@@ -39,37 +39,31 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
     
     # ═══ ОПРЕДЕЛЯЕМ ТИП СОБЫТИЯ ═══
     
-    # 1. Мут / ограничение (restricted, но пользователь ещё в чате)
-    #    → НЕ считается уходом
-    if new_status == 'restricted' and getattr(new_member, 'is_member', True):
-        logging.info(f"🔇 User {user_id} was MUTED/RESTRICTED (still in chat) — ignoring")
-        return
+    is_now_in_chat = new_status in ('member', 'creator', 'administrator') or (new_status == 'restricted' and getattr(new_member, 'is_member', True))
+    was_in_chat = old_status in ('member', 'creator', 'administrator') or (old_status == 'restricted' and getattr(update.chat_member.old_chat_member, 'is_member', True))
     
-    # 2. Временный бан (kicked с until_date) — модботы так делают мут
-    #    → НЕ считается уходом
-    if new_status == 'kicked' and getattr(new_member, 'until_date', None):
-        logging.info(
-            f"🔇 User {user_id} got TEMPORARY BAN until {new_member.until_date} "
-            f"— treating as mute, ignoring"
-        )
+    # 1. Мут / ограничение (пользователь осталось в чате)
+    if is_now_in_chat and was_in_chat and old_status != new_status:
+        logging.info(f"🔊/🔇 User {user_id} permissions changed (still in chat) — ignoring")
         return
-    
-    # 3. Снятие ограничений (restricted → member) — просто размут
-    #    → НЕ считается возвращением
-    if new_status == 'member' and old_status == 'restricted':
-        logging.info(f"🔊 User {user_id} was UNMUTED (restricted → member) — ignoring")
+        
+    # 2. Временный бан (kicked с until_date) — рассматривается как мут
+    if new_status == 'kicked' and getattr(new_member, 'until_date', None) and was_in_chat:
+        logging.info(f"🔇 User {user_id} got TEMPORARY BAN until {new_member.until_date} — treating as mute, ignoring")
         return
-    
+        
     # === ПОЛЬЗОВАТЕЛЬ УШЁЛ ===
-    if new_status in ('left', 'kicked') and old_status in ('member', 'restricted', 'administrator', 'creator'):
+    if not is_now_in_chat and was_in_chat:
+        logging.info(f"👋 Triggering LEAVE logic for user {user_id}")
         await handle_user_left(update, context, user_id, db, admin_id, target_chat_id)
     
     # === ПОЛЬЗОВАТЕЛЬ ВЕРНУЛСЯ ===
-    elif new_status in ('member', 'restricted') and old_status in ('left', 'kicked'):
+    elif is_now_in_chat and not was_in_chat:
+        logging.info(f"🔄 Triggering RETURN logic for user {user_id}")
         await handle_user_returned(update, context, user_id, db, admin_id, target_chat_id)
 
 async def get_chat_invite_link(context, target_chat_id, chat_id=None, user_name=None):
-    """Generate a ONE-TIME invite link (member_limit=1) for a specific user leaving the chat"""
+    """Generate a ONE-TIME invite link (creates_join_request=True) for a specific user leaving the chat"""
     target_chat = chat_id or target_chat_id
     
     # Generate a unique one-time link via Telegram API
@@ -78,8 +72,7 @@ async def get_chat_invite_link(context, target_chat_id, chat_id=None, user_name=
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=target_chat,
             name=link_name[:32],  # Telegram limit 32 chars
-            member_limit=1,  # ← одноразовая ссылка!
-            creates_join_request=False
+            creates_join_request=True
         )
         invite_link = link_obj.invite_link
         logging.info(f"🔗 Generated ONE-TIME invite for chat {target_chat}: {invite_link}")
@@ -102,7 +95,15 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     """Handle user leaving the chat — freeze balance for 30 days"""
     user_data = db.get_user(user_id)
     if not user_data:
-        return
+        try:
+            user = update.chat_member.new_chat_member.user
+            db.add_user(user.id, user.username, user.first_name, user.last_name)
+            user_data = db.get_user(user_id)
+        except Exception as e:
+            logging.error(f"Error adding missing user {user_id} on leave: {e}")
+            return
+        if not user_data:
+            return
     
     balance = user_data['balance']
     
@@ -186,16 +187,31 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
 
     # ═══ EXIT SURVEY: отправляем опрос ═══
     try:
+        from database.db_friend import (
+            should_send_survey, 
+            update_user as update_reg_user
+        )
+        
+        # Проверяем, нужно ли отправлять опрос (ограничение 1 раз в 30 дней)
+        if not await should_send_survey(user_id):
+            logging.info(f"⏭ Skip exit survey for user {user_id} (already sent recently)")
+            return
+
         user_link = f"@{username}" if username else (user_data['first_name'] or 'Друг')
 
         # Генерируем одноразовую ссылку возврата
         chat_id = update.chat_member.chat.id
         invite_link = await get_chat_invite_link(context, target_chat_id, chat_id, user_link)
 
-        # Сохраняем в user_data — используется в Q5 опроса
-        context.user_data['exit_survey_chat_id'] = target_chat_id
-        if invite_link:
-            context.user_data['exit_survey_invite_link'] = invite_link
+        context.bot_data['exit_survey_chat_id'] = target_chat_id
+        
+        try:
+            target_user_data = context.application.user_data.setdefault(user_id, {})
+            target_user_data['exit_survey_chat_id'] = target_chat_id
+            if invite_link:
+                target_user_data['exit_survey_invite_link'] = invite_link
+        except Exception:
+            pass
 
         # ── 15 кнопок причин (2 в ряд) ──────────────────────────
         reasons = [
@@ -242,7 +258,7 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         )
 
         try:
-            await context.bot.send_message(
+            msg = await context.bot.send_message(
                 chat_id=user_id,
                 text=(
                     f"Привет, {user_link}! Мы заметили, что ты покинул чат Pulse 😔\n\n"
@@ -254,7 +270,13 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
                 ),
                 reply_markup=reply_markup
             )
-            logging.info(f"✅ Exit survey sent to user {user_id}")
+            # Сохраняем дату отправки и ID сообщения для очистки истории
+            await update_reg_user(
+                user_id, 
+                survey_sent_at=datetime.now().isoformat(),
+                invite_message_id=msg.message_id
+            )
+            logging.info(f"✅ Exit survey sent to user {user_id}, msg_id={msg.message_id}")
 
         except telegram.error.Forbidden:
             logging.warning(f"❌ Cannot send exit survey to {user_id} - bot not started by user")
@@ -293,6 +315,10 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             if active_link:
                 await deactivate_invite_link(active_link)
                 logging.info(f"🔗 Invite link deactivated for user {user_id}")
+            
+            # СИНХРОНИЗАЦИЯ: помечаем пользователя как 'in_chat' в базе регистраций
+            await update_reg_user(user_id, status='in_chat')
+            logging.info(f"✅ Status synchronized to 'in_chat' for user {user_id}")
     except Exception as e:
         logging.error(f"Error cleaning up invite link for {user_id}: {e}")
 

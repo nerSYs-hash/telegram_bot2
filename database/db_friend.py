@@ -753,6 +753,18 @@ async def get_user_pending_application(user_id: int) -> Optional[dict]:
             return row_to_dict(row)
 
 
+async def close_user_applications(user_id: int, status: str = 'approved'):
+    """Переводит все активные заявки пользователя в указанный статус (авто-закрытие)."""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            """UPDATE applications 
+               SET status = ?, updated_at = ?, locked_by = NULL, locked_until = NULL 
+               WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped')""",
+            (status, datetime.now().isoformat(), user_id)
+        )
+        await db.commit()
+
+
 async def cleanup_expired_locks():
     """Очистка истекших блокировок заявок"""
     async with db_pool.get_connection() as db:

@@ -153,14 +153,20 @@ def _make_love_place_kb(user_id: int) -> InlineKeyboardMarkup:
 
 
 async def _generate_invite_link(context, user_id: int) -> str | None:
-    """Генерирует одноразовую ссылку возврата из сохранённого chat_id."""
-    chat_id = context.user_data.get('exit_survey_chat_id')
+    """Генерирует защищённую ссылку возврата (по заявке) из сохранённого chat_id."""
+    from config import CHAT_ID
+    chat_id = CHAT_ID
+    if not chat_id:
+        chat_id = context.user_data.get('exit_survey_chat_id')
+    if not chat_id:
+        chat_id = context.bot_data.get('exit_survey_chat_id')
     if not chat_id:
         return None
     try:
+        # Используем creates_join_request=True для безопасности (только по одобрению)
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=int(chat_id),
-            member_limit=1,
+            creates_join_request=True,
             name=f"return_{user_id}"[:32],
         )
         return link_obj.invite_link
@@ -501,7 +507,7 @@ async def handle_exit_final(query, data: str, context, db) -> None:
         return
 
     await query.answer()
-    await _show_thanks(query.message, user_id, db)
+    await _show_thanks(query.message, user_id, db, context)
 
 
 async def _make_q5_kb(user_id: int, context) -> InlineKeyboardMarkup:
@@ -519,7 +525,7 @@ async def _make_q5_kb(user_id: int, context) -> InlineKeyboardMarkup:
     return InlineKeyboardMarkup(rows)
 
 
-async def _show_thanks(message, user_id: int, db) -> None:
+async def _show_thanks(message, user_id: int, db, context) -> None:
     try:
         user_data = db.get_user(user_id)
         frozen = 0
@@ -538,6 +544,14 @@ async def _show_thanks(message, user_id: int, db) -> None:
             f"Вернись — и они вернутся к тебе!"
         )
 
+    # Генерируем ссылку для финальной кнопки
+    invite_link = await _generate_invite_link(context, user_id)
+    keyboard = []
+    if invite_link:
+        keyboard.append([InlineKeyboardButton("🔄 Вернуться в чат", url=invite_link)])
+    
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
     await message.edit_text(
         "🙏 <b>Спасибо за обратную связь!</b>\n\n"
         "Мы ценим каждое мнение и обязательно учтём твои слова "
@@ -545,6 +559,7 @@ async def _show_thanks(message, user_id: int, db) -> None:
         f"{frozen_text}\n\n"
         "Двери всегда открыты 💙",
         parse_mode='HTML',
+        reply_markup=reply_markup
     )
 
 

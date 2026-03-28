@@ -49,10 +49,33 @@ class CommandHandler:
                     "Привет! Ты еще не зарегистрирован. Напиши /register"
                 )
                 return
-            # Вышедший из чата — уже одобрен, просто вернулся
-            if user.get('status') == 'left':
+            # Проверяем фактическое нахождение в чате
+            try:
+                from telegram import ChatMemberStatus
+                member = await context.bot.get_chat_member(self.target_chat_id, user_id)
+                is_member = member.status in (
+                    ChatMemberStatus.MEMBER,
+                    ChatMemberStatus.ADMINISTRATOR,
+                    ChatMemberStatus.OWNER,
+                ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
+            except Exception:
+                is_member = False
+
+            # Вышедший из чата — уже одобрен, просто вернулся; ИЛИ фактически в чате
+            if is_member or user.get('status') in ('approved', 'in_chat', 'registered', 'left'):
+                # Если он фактически в чате, но статус старый, починим
+                try:
+                    from database.db_friend import close_user_applications
+                    # Всегда закрываем старые анкеты, если доступ уже есть
+                    await close_user_applications(user_id)
+                    
+                    if is_member and user.get('status') not in ('approved', 'in_chat', 'registered'):
+                        from database.db_friend import update_user as update_reg_user
+                        await update_reg_user(user_id, status='in_chat')
+                except Exception as e:
+                    logger.error(f"Failed to sync status/close apps for {user_id}: {e}")
                 pass  # пропускаем проверку, продолжаем обычный /start
-            elif user.get('status') != 'approved':
+            else:
                 # Проверяем есть ли активная заявка
                 pending_app = await get_user_pending_application(user_id)
                 if pending_app:

@@ -478,7 +478,7 @@ async def approve_app(callback: CallbackQuery):
         if chat_id:
             invite_link_obj = await callback.bot.create_chat_invite_link(
                 chat_id=int(chat_id),
-                member_limit=1,
+                creates_join_request=True,
                 name=f"Invite_{user_dict['tg_id']}_{datetime.now().timestamp()}"
             )
             invite_link = invite_link_obj.invite_link
