@@ -252,11 +252,17 @@ class CallbackHandler:
             ]
             await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(kb))
         elif data == "faq_functions":
-            from handlers.commands.system_commands import FAQ_FUNCTIONS
-            kb = [
-                [InlineKeyboardButton("🔙 Назад к FAQ", callback_data="faq_back")],
-            ]
-            await query.edit_message_text(FAQ_FUNCTIONS, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(kb))
+            from handlers.commands.system_commands import show_faq_functions
+            await show_faq_functions(query, self.db)
+        elif data.startswith("faq_feat_"):
+            from handlers.commands.system_commands import FAQ_FEATURES
+            feat_id = data.replace("faq_feat_", "")
+            feat = FAQ_FEATURES.get(feat_id)
+            if feat:
+                await query.edit_message_text(feat['text'], parse_mode='HTML',
+                    reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 К списку", callback_data="faq_functions")]]))
+            else:
+                await query.answer("Функция не найдена", show_alert=True)
         elif data == "faq_back":
             text = "❓ FAQ / ПОМОЩЬ\n\nВыберите раздел:"
             kb = [
