@@ -345,6 +345,7 @@ class BingoHandler:
             price = game['ticket_price']
             for c in cards:
                 uid = c['user_id']
+                self.db.update_bank_balance(price, 'subtract')
                 self.db.update_user_balance(uid, price, 'add')
                 self.db.add_transaction(None, uid, price, 'bingo_refund',
                                         f"Возврат за Бинго #{gid}")
@@ -399,6 +400,7 @@ class BingoHandler:
         # Списываем и создаём карточку
         try:
             self.db.update_user_balance(user.id, price, 'subtract')
+            self.db.update_bank_balance(price, 'add')
             self.db.add_transaction(user.id, None, price, 'bingo_ticket',
                                     f"Карточка Бинго #{gid}")
 
@@ -501,6 +503,7 @@ class BingoHandler:
             # ШТРАФ за хитрость
             try:
                 self.db.update_user_balance(user.id, CHEAT_PENALTY, 'subtract')
+                self.db.update_bank_balance(CHEAT_PENALTY, 'add')
                 self.db.add_transaction(user.id, None, CHEAT_PENALTY, 'bingo_penalty',
                                         f"Штраф Бинго #{gid}: число {num} не выпадало")
                 self.db.conn.commit()
@@ -560,6 +563,7 @@ class BingoHandler:
         # Забираем банк
         prize = game['total_pool']
         try:
+            self.db.update_bank_balance(prize, 'subtract')
             self.db.update_user_balance(user.id, prize, 'add')
             self.db.add_transaction(None, user.id, prize, 'bingo_win',
                                     f"Выигрыш Бинго #{gid}")

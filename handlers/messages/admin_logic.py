@@ -697,6 +697,7 @@ async def _handle_awaiting_donate_amount(message, user, context, db, donate_type
         # ── Донат в реактор ──
         elif donate_type == 'reactor':
             db.update_user_balance(user.id, amount, 'subtract')
+            db.update_bank_balance(amount, 'add')
             db.cursor.execute('INSERT INTO reactor (user_id, amount) VALUES (?, ?)', (user.id, amount))
             current_reactor = float(db.get_setting('reactor_balance', 0))
             db.set_setting('reactor_balance', current_reactor + amount)

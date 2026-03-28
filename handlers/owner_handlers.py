@@ -217,11 +217,47 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
         return
 
     bank = db.get_bank_balance()
+
+    # Сумма балансов всех пользователей
+    try:
+        db.cursor.execute('SELECT COALESCE(SUM(balance), 0) AS total, COALESCE(SUM(frozen_balance), 0) AS frozen FROM users')
+        row = db.cursor.fetchone()
+        users_total = float(row['total']) if row else 0
+        frozen_total = float(row['frozen']) if row else 0
+    except Exception:
+        users_total = 0
+        frozen_total = 0
+
+    # Общая масса = банк + на руках + заморожено
+    total_supply = bank + users_total + frozen_total
+    # Дефицит/профицит
+    target = 10_000_000
+    delta = total_supply - target
+    if abs(delta) < 0.01:
+        status_line = "✅ Контур замкнут"
+    else:
+        sign = "+" if delta > 0 else ""
+        status_line = f"⚠️ Δ {sign}{format_number(delta)}"
+
+    # Процент банка
+    bank_pct = (bank / target * 100) if target > 0 else 0
+
+    from utils.helpers import get_moscow_time
+    now = get_moscow_time()
+    time_str = now.strftime('%H:%M:%S')
+
     text = (
-        f"💰 <b>ЭКОНОМИКА</b>\n\n"
-        f"🏦 Центробанк: <b>{format_number(bank)}</b> 💎"
+        f"💰 <b>ЭКОНОМИКА</b>\n"
+        f"🕐 <i>{time_str} МСК</i>\n\n"
+        f"🏦 Центробанк: <b>{format_number(bank)}</b> 💎 ({bank_pct:.1f}%)\n"
+        f"👥 На руках: <b>{format_number(users_total)}</b> 💎\n"
+        f"🧊 Заморожено: <b>{format_number(frozen_total)}</b> 💎\n"
+        f"━━━━━━━━━━━━━━━━━\n"
+        f"📊 Всего: <b>{format_number(total_supply)}</b> / {format_number(target)} 💎\n"
+        f"{status_line}"
     )
     keyboard = [
+        [InlineKeyboardButton("🔄 Обновить", callback_data="owner_economy")],
         [InlineKeyboardButton("💸 Выдать Пульсы", callback_data="owner_emit")],
         [InlineKeyboardButton("💀 Глобальный Вайп", callback_data="owner_wipe")],
         [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
@@ -270,6 +306,7 @@ async def wipe_execute(query, db, admin_id: int) -> None:
 
     try:
         db.cursor.execute('UPDATE users SET balance = 0, frozen_balance = 0')
+        db.cursor.execute("UPDATE settings SET value = '10000000' WHERE key = 'bank_balance'")
         db.conn.commit()
 
         affected = db.cursor.rowcount
@@ -278,7 +315,8 @@ async def wipe_execute(query, db, admin_id: int) -> None:
         text = (
             f"💀 <b>ВАЙП ВЫПОЛНЕН</b>\n\n"
             f"Обнулено пользователей: <b>{affected}</b>\n"
-            f"Все балансы и замороженные средства = 0."
+            f"Все балансы и замороженные средства = 0.\n"
+            f"🏦 Банк восстановлен: 10 000 000 💎"
         )
     except Exception as e:
         logger.error(f"wipe_execute error: {e}")
@@ -585,17 +623,30 @@ async def handle_owner_text_input(
             await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
             return True
 
+        # Проверяем баланс банка
+        bank_balance = db.get_bank_balance()
+        if bank_balance < amount:
+            await message.reply_text(
+                f"❌ Недостаточно средств в Банке!\n"
+                f"🏦 В банке: {format_number(bank_balance)} 💎\n"
+                f"💸 Нужно: {format_number(amount)} 💎",
+                parse_mode='HTML')
+            return True
+
+        db.update_bank_balance(amount, 'subtract')
         db.update_user_balance(target_id, amount, operation='add')
         db.add_transaction(None, target_id, amount, 'admin_give', f'Эмиссия от владельца')
 
         name = target['username'] or target['first_name'] or target_id
         new_balance = float(target['balance']) + amount
+        new_bank = db.get_bank_balance()
 
         await message.reply_text(
             f"✅ <b>Эмиссия</b>\n\n"
             f"👤 @{name} (<code>{target_id}</code>)\n"
             f"💎 +{format_number(amount)} Пульсов\n"
-            f"💰 Новый баланс: ~{format_number(new_balance)} 💎",
+            f"💰 Новый баланс: ~{format_number(new_balance)} 💎\n"
+            f"🏦 Банк: {format_number(new_bank)} 💎",
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("💰 К экономике", callback_data="owner_economy")]

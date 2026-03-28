@@ -98,7 +98,7 @@ class TelegramBot:
         # Initialize database
         self.db = Database(self.db_path)
         self.db.initialize_settings(
-            initial_bank_balance=int(os.getenv('INITIAL_BANK_BALANCE', 1000000)),
+            initial_bank_balance=int(os.getenv('INITIAL_BANK_BALANCE', 10000000)),
             initial_difficulty_k=float(os.getenv('INITIAL_DIFFICULTY_K', 5.0))
         )
         

@@ -21,10 +21,10 @@ def add_transaction(db, from_user_id, to_user_id, amount, transaction_type, desc
 def get_bank_balance(db):
     """Get central bank balance"""
     try:
-        val = get_setting(db, 'bank_balance', '1000000')
+        val = get_setting(db, 'bank_balance', '10000000')
         return float(val)
     except (ValueError, TypeError):
-        return 1000000.0
+        return 10000000.0
 
 
 def update_bank_balance(db, amount, operation='subtract'):

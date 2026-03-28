@@ -242,15 +242,16 @@ async def wipe_balances_command(update, context, db, admin_id):
     try:
         # Сбрасываем основной баланс и замороженный баланс у всех юзеров
         db.cursor.execute("UPDATE users SET balance = 0, frozen_balance = 0")
-        
-        # Обнуляем баланс самого Центробанка (опционально)
-        db.cursor.execute("UPDATE settings SET value = '0' WHERE key = 'bank_balance'")
-        
+
+        # Восстанавливаем баланс Центробанка до полной эмиссии (10 000 000)
+        db.cursor.execute("UPDATE settings SET value = '10000000' WHERE key = 'bank_balance'")
+
         db.conn.commit()
 
         await update.message.reply_text(
             "✅ <b>ЭКОНОМИКА УСПЕШНО ОБНУЛЕНА!</b>\n\n"
-            "Все тестовые балансы сброшены. У всех пользователей теперь 0 Пульсов. "
+            "Все тестовые балансы сброшены. У всех пользователей теперь 0 Пульсов.\n"
+            "🏦 Банк восстановлен: 10 000 000 💎\n"
             "Бот готов к официальному старту! 🚀",
             parse_mode='HTML'
         )
