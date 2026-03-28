@@ -107,7 +107,7 @@ class CallbackHandler:
             return
 
         # Перезапуск регистрации
-        if data == "restart_registration":
+        if data in ("restart_registration", "reapply"):
             from database.db_friend import update_user, cancel_user_applications
             await cancel_user_applications(user.id)
             await update_user(user.id, status='new', questionnaire_state=None)

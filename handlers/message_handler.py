@@ -576,11 +576,12 @@ class MessageHandler:
             try:
                 from telegram import ChatMemberStatus
                 member = await context.bot.get_chat_member(self.target_chat_id, user.id)
+                # Разрешаем стандартные статусы + RESTRICTED (если пользователь все еще в чате)
                 is_member = member.status in (
                     ChatMemberStatus.MEMBER,
                     ChatMemberStatus.ADMINISTRATOR,
                     ChatMemberStatus.OWNER,
-                )
+                ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
             except Exception:
                 is_member = False
 

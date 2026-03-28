@@ -121,6 +121,84 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = await get_user(user_id)
 
+    # Проверка фактического членства в чате (is_member)
+    is_member = False
+    try:
+        from telegram import ChatMemberStatus
+        from config import CHAT_ID
+        if CHAT_ID and CHAT_ID != 0:
+            member = await context.bot.get_chat_member(CHAT_ID, user_id)
+            is_member = member.status in (
+                ChatMemberStatus.MEMBER,
+                ChatMemberStatus.ADMINISTRATOR,
+                ChatMemberStatus.OWNER,
+            ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
+            logger.debug(f"start_reg: user {user_id} member status={member.status}, is_member={is_member}")
+        else:
+            logger.warning("start_reg: CHAT_ID not set, skipping API membership check")
+    except Exception as e:
+        logger.warning(f"start_reg: API membership check failed for {user_id}: {e}")
+        is_member = False
+
+    # Фоллбэк: проверяем основную БД если API не подтвердил
+    if not is_member:
+        main_db = context.bot_data.get('db')
+        if main_db:
+            try:
+                main_user = main_db.get_user(user_id)
+                if main_user:
+                    try:
+                        is_left = main_user['is_left']
+                    except (KeyError, IndexError):
+                        is_left = 1
+                    if not is_left:
+                        is_member = True
+                        logger.info(f"start_reg: user {user_id} found in main DB (is_left=0)")
+            except Exception as e:
+                logger.warning(f"start_reg: main DB fallback failed for {user_id}: {e}")
+
+    # Если пользователь уже одобрен или находится в чате — ��еренаправляем в меню
+    if is_member or (user and user.get('status') in ('approved', 'in_chat', 'registered')):
+        if is_member and user and user.get('status') not in ('approved', 'in_chat', 'registered'):
+            try:
+                from database.db_friend import update_user as update_reg_user
+                await update_reg_user(user_id, status='in_chat')
+            except Exception:
+                pass
+
+        # Закрываем все висящие заявки (если есть)
+        try:
+            from database.db_friend import close_user_applications
+            await close_user_applications(user_id, status='approved')
+        except Exception:
+            pass
+
+        # Получаем основную БД из bot_data
+        main_db = context.bot_data.get('db')
+
+        if main_db:
+            from handlers.commands.system_commands import menu_command
+            from config import OWNER_ID
+            await menu_command(update, context, main_db, OWNER_ID)
+        else:
+            logger.error("main_db is None in start_reg — bot_data['db'] not set!")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="✅ Ты уже участник чата! Используй /menu для открытия меню."
+            )
+        return ConversationHandler.END
+
+    # Если есть активная заявка на рассмотрении — сообщаем
+    if user and user.get('status') in ('pending', 'in_work', 'locked'):
+        from database.db_friend import get_user_pending_application
+        pending_app = await get_user_pending_application(user_id)
+        if pending_app:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!"
+            )
+            return ConversationHandler.END
+
     # Если уже есть незавершённая анкета — восстанавливаем окно
     if user and user.get('questionnaire_state'):
         state = user['questionnaire_state']
