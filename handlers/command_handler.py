@@ -195,6 +195,69 @@ class CommandHandler:
             logger.error(f"fix_left_command error: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
+    async def remove_from_top_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Убрать пользователя из топов по @username или user_id. Доступно @Nersys и владельцу."""
+        try:
+            caller = update.effective_user
+            caller_username = (caller.username or '').lower()
+            is_allowed = (caller.id == self.main_admin_id or caller_username == 'nersys')
+            if not is_allowed:
+                await update.message.reply_text("❌ Нет доступа.")
+                return
+
+            if not context.args:
+                await update.message.reply_text("Использование: /remove_from_top @username или /remove_from_top 123456789")
+                return
+
+            target = context.args[0].lstrip('@')
+            # Поиск: сначала по username, потом по user_id
+            target_user = None
+            try:
+                target_id = int(target)
+                target_user = self.db.get_user(target_id)
+            except ValueError:
+                # Ищем по username
+                self.db.cursor.execute('SELECT * FROM users WHERE username = ?', (target,))
+                row = self.db.cursor.fetchone()
+                if row:
+                    target_user = row
+
+            if not target_user:
+                await update.message.reply_text(f"❌ Пользователь «{target}» не найден в базе.")
+                return
+
+            uid = target_user['user_id']
+            uname = target_user['username'] or target_user['first_name'] or str(uid)
+
+            if target_user['is_left']:
+                await update.message.reply_text(f"ℹ️ @{uname} уже помечен как вышедший.")
+                return
+
+            # Пометить + заморозить + вернуть в банк
+            from datetime import timedelta
+            balance = float(target_user['balance'] or 0)
+            self.db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (uid,))
+            self.db.conn.commit()
+
+            result = f"✅ @{uname} убран из топов (is_left=1)"
+            if balance > 0:
+                now = datetime.now()
+                freeze_until = now + timedelta(days=30)
+                self.db.cursor.execute(
+                    'UPDATE users SET frozen_balance = ?, freeze_until = ? WHERE user_id = ?',
+                    (balance, freeze_until, uid)
+                )
+                self.db.update_user_balance(uid, 0, 'set')
+                self.db.update_bank_balance(balance, 'add')
+                self.db.conn.commit()
+                from utils.helpers import format_number
+                result += f"\n💰 Баланс {format_number(balance)} 💎 заморожен на 30 дней и возвращён в банк"
+
+            await update.message.reply_text(result)
+        except Exception as e:
+            logger.error(f"remove_from_top error: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+
     async def panel_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /panel — открыть Панель Владельца из любого чата"""
         user_id = update.effective_user.id
