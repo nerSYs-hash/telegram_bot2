@@ -19,7 +19,7 @@ def set_setting(db, key, value):
     db.conn.commit()
 
 
-def initialize_settings(db, initial_bank_balance=1000000, initial_difficulty_k=5.0):
+def initialize_settings(db, initial_bank_balance=10000000, initial_difficulty_k=5.0):
     """Initialize default settings"""
     settings = [
         ('bank_balance', str(initial_bank_balance)),

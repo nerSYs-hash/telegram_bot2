@@ -379,12 +379,13 @@ async def donate_reactor_confirm(query, data, user, context, db):
         return
     
     db.update_user_balance(user.id, amount, 'subtract')
+    db.update_bank_balance(amount, 'add')
     db.cursor.execute('INSERT INTO reactor (user_id, amount) VALUES (?, ?)', (user.id, amount))
     current_reactor = float(db.get_setting('reactor_balance', 0))
     db.set_setting('reactor_balance', current_reactor + amount)
     db.add_transaction(user.id, None, amount, 'reactor_donation', 'Донат в Реактор')
     db.conn.commit()
-    
+
     reactor_balance = float(db.get_setting('reactor_balance', 0))
     reactor_goal = float(db.get_setting('reactor_goal', 10000))
     progress = (reactor_balance / reactor_goal) * 100 if reactor_goal > 0 else 0

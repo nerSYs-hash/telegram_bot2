@@ -585,7 +585,16 @@ class GiftHandler:
         winner_username = winner['username']
         gift_amount = gift['prize_amount']
         
-        # Award the prize
+        # Award the prize (from bank)
+        bank_balance = self.db.get_bank_balance()
+        if bank_balance < gift_amount:
+            await query.edit_message_text(
+                f"❌ Недостаточно средств в Банке!\n"
+                f"🏦 В банке: {format_number(bank_balance)} 💎\n"
+                f"🎁 Нужно: {format_number(gift_amount)} 💎")
+            return
+
+        self.db.update_bank_balance(gift_amount, 'subtract')
         self.db.update_user_balance(winner_id, gift_amount, 'add')
         self.db.add_transaction(
             None,
