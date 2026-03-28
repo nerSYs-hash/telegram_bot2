@@ -56,10 +56,18 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         await query.edit_message_text(text, parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="faq_back")]]))
     elif data == "faq_functions":
-        from handlers.commands.system_commands import FAQ_FUNCTIONS
+        from handlers.commands.system_commands import show_faq_functions
+        await show_faq_functions(query, db)
+    elif data.startswith("faq_feat_"):
+        from handlers.commands.system_commands import FAQ_FEATURES
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        await query.edit_message_text(FAQ_FUNCTIONS, parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="faq_back")]]))
+        feat_id = data.replace("faq_feat_", "")
+        feat = FAQ_FEATURES.get(feat_id)
+        if feat:
+            await query.edit_message_text(feat['text'], parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 К списку", callback_data="faq_functions")]]))
+        else:
+            await query.answer("Функция не найдена", show_alert=True)
     elif data == "faq_back":
         from handlers.commands.system_commands import _show_faq_menu
         try: await query.message.delete()
