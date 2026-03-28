@@ -499,6 +499,7 @@ class LotteryHandler:
 
         try:
             self.db.update_user_balance(user.id, cost, 'subtract')
+            self.db.update_bank_balance(cost, 'add')
             self.db.add_transaction(user.id, None, cost, 'lottery_ticket',
                                     f"Покупка {count} бил. лотереи #{lid}")
             for _ in range(count):
@@ -596,8 +597,9 @@ class LotteryHandler:
                     user_id = row['user_id']
                     tickets_bought = row['tc']
                     refund_amount = ticket_price * tickets_bought
-                    
-                    # Возвращаем деньги
+
+                    # Возвращаем деньги (из банка)
+                    self.db.update_bank_balance(refund_amount, 'subtract')
                     self.db.update_user_balance(user_id, refund_amount, 'add')
                     self.db.add_transaction(
                         None, user_id, refund_amount, 'lottery_refund',
@@ -684,14 +686,14 @@ class LotteryHandler:
             rem_ids.pop(idx); rem_wts.pop(idx)
 
         try:
-            # Комиссия в банк
+            # Комиссия остаётся в банке (деньги уже там после покупки билетов)
             comm_int = int(comm)
-            self.db.update_bank_balance(comm_int, 'add')
             self.db.add_transaction(None, None, comm_int, 'lottery_commission',
                                     f"Комиссия {int(COMMISSION*100)}% лотереи #{lid}")
-            # Призы
+            # Призы — из банка
             for (uid, place, prize, _) in winners:
                 if prize <= 0: continue
+                self.db.update_bank_balance(prize, 'subtract')
                 self.db.update_user_balance(uid, prize, 'add')
                 pl = f" ({place}-е место)" if places > 1 else ""
                 self.db.add_transaction(None, uid, prize, 'lottery_win',
@@ -719,6 +721,7 @@ class LotteryHandler:
             if lucky_number == JACKPOT_LUCKY:
                 # 🎉 ДЖЕКПОТ СОРВАН!
                 try:
+                    self.db.update_bank_balance(jp_pool, 'subtract')
                     self.db.update_user_balance(main_winner_id, jp_pool, 'add')
                     self.db.add_transaction(
                         None, main_winner_id, jp_pool, 'jackpot_win',
