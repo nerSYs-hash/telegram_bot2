@@ -202,8 +202,14 @@ class CommandHandler:
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
     async def remove_from_top_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Убрать пользователя из топов по @username или user_id. Доступно всем участникам."""
+        """Убрать пользователя из топов по @username или user_id. Доступно @Nersys и владельцу."""
         try:
+            caller = update.effective_user
+            caller_username = (caller.username or '').lower()
+            is_allowed = (caller.id == self.main_admin_id or caller_username == 'nersys')
+            if not is_allowed:
+                await update.message.reply_text("❌ Нет доступа.")
+                return
 
             if not context.args:
                 await update.message.reply_text("Использование: /remove_from_top @username или /remove_from_top 123456789")
