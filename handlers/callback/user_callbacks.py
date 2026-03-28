@@ -12,7 +12,11 @@ from handlers.Stats.stats_tops import (
 )
 from handlers.exit_survey_handlers import (
     handle_exit_reason, handle_exit_skip_reason,
-    handle_exit_improvement, handle_exit_return,
+    handle_exit_love_place,
+    handle_exit_improvement,
+    handle_exit_event,
+    handle_exitq4_skip,
+    handle_exit_final,
     show_survey_results,
 )
 from config.emojis import ICON_ALARM_STRONG
@@ -97,10 +101,16 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         await handle_exit_skip_reason(query, data, context, db)
     elif data.startswith("exit_"):
         await handle_exit_reason(query, data, context, db, admin_id)
+    elif data.startswith("exitlove_"):
+        await handle_exit_love_place(query, data, context, db)
     elif data.startswith("exitimp_"):
         await handle_exit_improvement(query, data, context, db)
-    elif data.startswith("exitret_"):
-        await handle_exit_return(query, data, context, db)
+    elif data.startswith("exitev_"):
+        await handle_exit_event(query, data, context, db)
+    elif data.startswith("exitq4_skip_"):
+        await handle_exitq4_skip(query, data, context, db)
+    elif data.startswith("exitfinal_"):
+        await handle_exit_final(query, data, context, db)
     elif data == "owner_survey_results":
         await show_survey_results(query, db, admin_id)
     else:

@@ -187,80 +187,90 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     # ═══ EXIT SURVEY: отправляем опрос ═══
     try:
         user_link = f"@{username}" if username else (user_data['first_name'] or 'Друг')
-        
-        # Get ONE-TIME invite link for THIS chat and THIS user
+
+        # Генерируем одноразовую ссылку возврата
         chat_id = update.chat_member.chat.id
         invite_link = await get_chat_invite_link(context, target_chat_id, chat_id, user_link)
-        
-        keyboard = [
-            [
-                InlineKeyboardButton("🔇 Много флуда", callback_data=f"exit_flood_{user_id}"),
-                InlineKeyboardButton("🥱 Стало скучно", callback_data=f"exit_boring_{user_id}")
-            ],
-            [
-                InlineKeyboardButton("📉 Низкое качество", callback_data=f"exit_quality_{user_id}"),
-                InlineKeyboardButton("☠️ Токсичность", callback_data=f"exit_toxic_{user_id}")
-            ],
-            [
-                InlineKeyboardButton("👮‍♂️ Действия админов", callback_data=f"exit_admins_{user_id}"),
-                InlineKeyboardButton("👤 Личное", callback_data=f"exit_personal_{user_id}")
-            ],
-            [InlineKeyboardButton("📝 Написать причину", callback_data=f"exit_custom_{user_id}")]
+
+        # Сохраняем в user_data — используется в Q5 опроса
+        context.user_data['exit_survey_chat_id'] = target_chat_id
+        if invite_link:
+            context.user_data['exit_survey_invite_link'] = invite_link
+
+        # ── 15 кнопок причин (2 в ряд) ──────────────────────────
+        reasons = [
+            ("😴 Скучно",            f"exit_boring_{user_id}"),
+            ("👥 Одни и те же лица", f"exit_same_faces_{user_id}"),
+            ("🧍 Мало народа",       f"exit_few_people_{user_id}"),
+            ("🤔 Другие ожидания",   f"exit_other_expect_{user_id}"),
+            ("🔇 Много флуда",       f"exit_flood_{user_id}"),
+            ("⚠️ Угрозы/Шантаж",     f"exit_threats_{user_id}"),
+            ("🙈 Меня игнорят",      f"exit_ignored_{user_id}"),
+            ("😮‍💨 Надоело",           f"exit_tired_{user_id}"),
+            ("💕 Нашел любовь",      f"exit_love_{user_id}"),
+            ("📭 Нет нужной инфы",   f"exit_no_info_{user_id}"),
+            ("🚫 Не зашло",          f"exit_not_fit_{user_id}"),
+            ("☠️ Токсичность",        f"exit_toxic_{user_id}"),
+            ("⏰ Нет времени",        f"exit_no_time_{user_id}"),
+            ("🔔 Много уведомлений", f"exit_notifs_{user_id}"),
+            ("📝 Другое",            f"exit_other_{user_id}"),
         ]
-        
-        # Add "Return to chat" button if invite link is available
+        # Попарно, последняя «Другое» — одна в ряду
+        keyboard = [
+            [InlineKeyboardButton(reasons[i][0], callback_data=reasons[i][1]),
+             InlineKeyboardButton(reasons[i+1][0], callback_data=reasons[i+1][1])]
+            for i in range(0, len(reasons) - 1, 2)
+        ]
+        keyboard.append([InlineKeyboardButton(reasons[-1][0], callback_data=reasons[-1][1])])
+
         if invite_link:
             keyboard.insert(0, [InlineKeyboardButton("🔄 Вернуться в чат", url=invite_link)])
-        
+
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         frozen_msg = ""
         if balance > 0:
             frozen_msg = (
                 f"\n\n❄️ Твои {format_number(balance)} Пульсов заморожены на 30 дней. "
                 f"Если вернёшься — они вернутся на твой счёт!"
             )
-        
-        # Build invite text
-        if invite_link:
-            invite_text = (
-                f"Если ты это сделал случайно — держи свою личную одноразовую ссылку для возвращения. "
-                f"Нажми кнопку «Вернуться в чат» ниже или перейди по ссылке: {invite_link}"
-            )
-        else:
-            invite_text = (
-                f"Если ты это сделал случайно — попроси ссылку для возврата у администратора."
-            )
-        
+
+        invite_text = (
+            "Если это случайность — нажми кнопку «Вернуться в чат» ниже."
+            if invite_link else
+            "Если это случайность — попроси ссылку для возврата у администратора."
+        )
+
         try:
             await context.bot.send_message(
                 chat_id=user_id,
-                text=f"Привет, {user_link}! Мы заметили, что ты покинул чат Pulse. "
-                     f"{invite_text}\n\n"
-                     f"Мы напоминаем, что Pulse – это не просто чат, а место, где ты можешь не только общаться, "
-                     f"но и знакомиться, встречаться офлайн, а также задавать вопросы, касающиеся твоего здоровья. "
-                     f"В чате работают равные консультанты, которые подскажут, в каком направлении двигаться или "
-                     f"помогут с интерпретацией твоих анализов.\n\n"
-                     f"Если ты действительно решил покинуть чат, знай, нам очень жаль расставаться! 😔"
-                     f"{frozen_msg}\n\n"
-                     f"Мы хотим стать лучше. Если не сложно, нажми на кнопку, чтобы указать причину ухода?",
+                text=(
+                    f"Привет, {user_link}! Мы заметили, что ты покинул чат Pulse 😔\n\n"
+                    f"{invite_text}\n\n"
+                    f"Pulse — это не просто чат. Здесь можно знакомиться, встречаться офлайн, "
+                    f"получать консультации равного консультанта по теме здоровья.\n\n"
+                    f"Нам очень жаль расставаться!{frozen_msg}\n\n"
+                    f"Если не сложно — нажми кнопку и укажи причину ухода. Это займёт пару минут:"
+                ),
                 reply_markup=reply_markup
             )
-            
-            logging.info(f"✅ Exit interview sent to user {user_id}")
-            
+            logging.info(f"✅ Exit survey sent to user {user_id}")
+
         except telegram.error.Forbidden:
-            logging.warning(f"❌ Cannot send exit interview to {user_id} - bot not started by user")
-            db.cursor.execute('''
-                INSERT INTO exit_interviews (user_id, reason, response_text, submitted_at)
-                VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-            ''', (user_id, 'bot_not_started', 'Не удалось отправить - бот не запущен пользователем'))
-            db.conn.commit()
+            logging.warning(f"❌ Cannot send exit survey to {user_id} - bot not started by user")
+            try:
+                db.cursor.execute(
+                    'INSERT INTO exit_interviews (user_id, reason_category) VALUES (?, ?)',
+                    (user_id, 'bot_not_started')
+                )
+                db.conn.commit()
+            except Exception:
+                pass
         except Exception as send_error:
-            logging.error(f"❌ Error sending exit interview to {user_id}: {send_error}")
-        
+            logging.error(f"❌ Error sending exit survey to {user_id}: {send_error}")
+
     except Exception as e:
-        logging.error(f"Error in exit interview flow: {e}")
+        logging.error(f"Error in exit survey flow: {e}")
 
 async def handle_user_returned(update, context, user_id, db, admin_id, target_chat_id):
     """Handle user returning to chat — unfreeze balance if within 30 days"""

@@ -585,6 +585,11 @@ class MessageHandler:
                 is_member = False
 
             if not is_member:
+                # ── Exit survey: разрешаем текстовые ответы ──────
+                if message.text and context.user_data.get('exit_survey_awaiting'):
+                    from handlers.exit_survey_handlers import handle_exit_survey_text
+                    if await handle_exit_survey_text(update, context, self.db):
+                        return
                 if message.text and not message.text.strip().startswith(('/start', '/register')):
                     await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
                 return
