@@ -664,6 +664,121 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                         cm_ = 1
                         cy += 1
 
+        # ── Детальная статистика майнинга (для листа "СтатМайнинг") ────
+        from handlers.messages.mining_logic import (
+            COMBO_LABELS, SPRINTS_CONFIG, PENALTY_LABELS,
+        )
+
+        MINING_DESCRIPTIONS = {
+            # Комбо
+            'writer':       {'label': '✍️ Писатель',       'desc': 'Текст > 50 символов'},
+            'illustrator':  {'label': '🖼 Иллюстратор',    'desc': 'Текст > 50 символов + Фото'},
+            'reviewer':     {'label': '🎬 Обозреватель',    'desc': 'Видео + Текст > 100 слов'},
+            'dj':           {'label': '🎧 Диджей',          'desc': 'Ссылка на плейлист'},
+            'sharp_tongue': {'label': '🗡 Острый язык',     'desc': '> 2 ответов на пост'},
+            'viral_post':   {'label': '📢 Вирусный пост',   'desc': '> 2 лайков'},
+            'hit_post':     {'label': '💥 Хит-пост',        'desc': '4+ лайка'},
+            'legend_post':  {'label': '👑 Легенда',          'desc': '6+ лайков'},
+            # Спринты
+            'chat_core':    {'label': '💬 Основа чата',      'desc': '10 сообщений за 24ч'},
+            'emotional':    {'label': '😍 Эмоциональный',    'desc': '10 эмодзи за 24ч'},
+            'photographer': {'label': '📸 Фотограф',         'desc': '3+ фото за 24ч'},
+            'director':     {'label': '🎬 Режиссёр',         'desc': '2 видео за 24ч (спец. ветки)'},
+            'music_lover':  {'label': '🎧 Меломан',          'desc': '5 аудио за 24ч (Музыка)'},
+            'face_seller':  {'label': '🫧 Лицом торгуешь',   'desc': '5 кружков за 12ч'},
+            'center':       {'label': '🎯 Центр внимания',   'desc': '20 ответов за 12ч'},
+            'radio':        {'label': '🎙 Радио',             'desc': '4 голосовых за 1ч'},
+            'gif_room':     {'label': '🎞 Гифошная',          'desc': '10 гифок за 1ч'},
+            'chatterbox':   {'label': '🗣 Болтун',            'desc': '20 ответов за 1ч'},
+            'generous':     {'label': '💝 Щедрая душа',      'desc': '5 лайков за 1ч'},
+            'favorite':     {'label': '⭐ Любимчик',          'desc': '10 полученных лайков за 1ч'},
+            # Штрафы
+            'copypaste':    {'label': '📋 Копипаст',          'desc': 'Дубликат сообщения за час'},
+            'wrong_door':   {'label': '🚪 Не та дверь',      'desc': 'Контент не по теме ветки'},
+            'toxic':        {'label': '☠️ Токсик',            'desc': 'Токсичное поведение'},
+        }
+
+        try:
+            sd_str = start_date.strftime('%Y-%m-%d %H:%M:%S')
+            ed_str = end_date.strftime('%Y-%m-%d %H:%M:%S')
+
+            # 1. Базовая добыча
+            db.cursor.execute('''
+                SELECT COALESCE(SUM(amount), 0) AS total
+                FROM transactions
+                WHERE transaction_type = 'message_reward'
+                  AND timestamp >= ? AND timestamp <= ?
+            ''', (sd_str, ed_str))
+            base_total = float(db.cursor.fetchone()['total'])
+
+            # 2. Комбо (поимённо)
+            combos = []
+            try:
+                db.cursor.execute('''
+                    SELECT combo_name, COALESCE(SUM(reward), 0) AS total
+                    FROM combo_claims
+                    WHERE claimed_at >= ? AND claimed_at <= ?
+                    GROUP BY combo_name ORDER BY total DESC
+                ''', (sd_str, ed_str))
+                combos_raw = db.cursor.fetchall()
+            except Exception:
+                combos_raw = []
+            for r in combos_raw:
+                name = r['combo_name']
+                info = MINING_DESCRIPTIONS.get(name, {'label': name, 'desc': ''})
+                combos.append({'name': name, 'label': info['label'],
+                               'description': info['desc'], 'sum': float(r['total'])})
+
+            # 3. Спринты (поимённо)
+            sprints = []
+            try:
+                db.cursor.execute('''
+                    SELECT sprint_name, COALESCE(SUM(reward), 0) AS total
+                    FROM sprint_claims
+                    WHERE claimed_at >= ? AND claimed_at <= ?
+                    GROUP BY sprint_name ORDER BY total DESC
+                ''', (sd_str, ed_str))
+                sprints_raw = db.cursor.fetchall()
+            except Exception:
+                sprints_raw = []
+            for r in sprints_raw:
+                name = r['sprint_name']
+                info = MINING_DESCRIPTIONS.get(name, {'label': name, 'desc': ''})
+                sprints.append({'name': name, 'label': info['label'],
+                                'description': info['desc'], 'sum': float(r['total'])})
+
+            # 4. Штрафы (поимённо)
+            penalties = []
+            try:
+                db.cursor.execute('''
+                    SELECT description, COALESCE(SUM(amount), 0) AS total
+                    FROM transactions
+                    WHERE transaction_type = 'penalty_deduct'
+                      AND timestamp >= ? AND timestamp <= ?
+                    GROUP BY description ORDER BY total DESC
+                ''', (sd_str, ed_str))
+                key_map = {'копипаст': 'copypaste', 'не в ту дверь (нарушение)': 'wrong_door',
+                           'удаление (токсик)': 'toxic'}
+                for r in db.cursor.fetchall():
+                    desc = r['description'] or ''
+                    raw_key = desc.replace('Штраф: ', '').strip().lower()
+                    mapped = key_map.get(raw_key, raw_key)
+                    info = MINING_DESCRIPTIONS.get(mapped, {'label': desc, 'desc': ''})
+                    penalties.append({'name': mapped, 'label': info['label'],
+                                      'description': info['desc'], 'sum': float(r['total'])})
+            except Exception:
+                pass
+
+            stats_data['mining_detailed'] = {
+                'base_total': base_total,
+                'combos': combos,
+                'sprints': sprints,
+                'penalties': penalties,
+            }
+        except Exception as e:
+            logging.warning(f"Mining detailed stats failed: {e}")
+            stats_data['mining_detailed'] = None
+
         # Генерация файла
         timestamp = get_moscow_time().strftime('%Y%m%d_%H%M%S')
         os.makedirs('logs', exist_ok=True)
