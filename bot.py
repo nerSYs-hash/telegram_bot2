@@ -485,7 +485,9 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
         self.application.add_handler(CommandHandler("fix_left", self.command_handler.fix_left_command))
-        
+        # Убрать пользователя из топов по @username или ID
+        self.application.add_handler(CommandHandler("remove_from_top", self.command_handler.remove_from_top_command))
+
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
             MessageHandler(
