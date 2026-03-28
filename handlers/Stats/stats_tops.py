@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 import os
+import logging
 from decimal import Decimal
 from datetime import timedelta
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -10,20 +11,28 @@ from handlers.donate_handlers import safe_name
 def _d(val): return to_decimal(val)
 
 async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limit=5):
+    """Живая проверка через Telegram API: в топе только те, кто реально в чате."""
     active_users = []
     if not context:
         return [u for u in users_list if u['user_id'] not in admin_ids][:limit]
     for u in users_list:
-        if u['user_id'] in admin_ids: continue
+        if u['user_id'] in admin_ids:
+            continue
         try:
             member = await context.bot.get_chat_member(chat_id, u['user_id'])
             if member.status in ('left', 'kicked'):
+                logging.info(f"🚫 TOP filter: user {u['user_id']} status={member.status} → is_left=1")
                 db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
                 db.conn.commit()
                 continue
-        except: continue
+        except Exception as e:
+            logging.warning(f"⚠️ TOP filter: user {u['user_id']} API error ({e}) → is_left=1")
+            db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
+            db.conn.commit()
+            continue
         active_users.append(u)
-        if len(active_users) == limit: break
+        if len(active_users) == limit:
+            break
     return active_users
 
 async def show_top(query, db, target_chat_id, context=None):
