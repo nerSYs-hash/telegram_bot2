@@ -731,38 +731,50 @@ def export_stats_to_excel(stats_data, filename):
                 from openpyxl.chart.series import DataPoint
                 from openpyxl.chart.label import DataLabelList
 
+                # Фильтруем нулевые доли — не показываем на пироге
+                active_rows = [(lbl, abs(val)) for lbl, val in chart_data_rows if abs(val) > 0]
+                if not active_rows:
+                    active_rows = [('Нет данных', 1)]
+
                 pie_start = 2
-                for pi, (lbl, val) in enumerate(chart_data_rows):
+                for pi, (lbl, val) in enumerate(active_rows):
                     ws_m[f'F{pie_start + pi}'] = lbl
-                    ws_m[f'G{pie_start + pi}'] = _n(abs(val), 4)
+                    ws_m[f'G{pie_start + pi}'] = _n(val, 4)
                     ws_m[f'G{pie_start + pi}'].number_format = _FMT_FLOAT2
-                    # Скрываем вспомогательные ячейки (мелкий шрифт)
+                    # Скрываем вспомогательные ячейки
                     ws_m[f'F{pie_start + pi}'].font = Font(size=1, color="FFFFFF")
                     ws_m[f'G{pie_start + pi}'].font = Font(size=1, color="FFFFFF")
 
                 chart = PieChart()
                 chart.title = "Источники эмиссии Пульсов"
-                chart.style = 10
-                chart.width = 16
-                chart.height = 11
+                chart.style = 26
+                chart.width = 20
+                chart.height = 14
 
                 labels = Reference(ws_m, min_col=6, min_row=pie_start,
-                                   max_row=pie_start + len(chart_data_rows) - 1)
+                                   max_row=pie_start + len(active_rows) - 1)
                 values = Reference(ws_m, min_col=7, min_row=pie_start,
-                                   max_row=pie_start + len(chart_data_rows) - 1)
+                                   max_row=pie_start + len(active_rows) - 1)
                 chart.add_data(values, titles_from_data=False)
                 chart.set_categories(labels)
 
                 pie_colors = ['27AE60', 'E67E22', '3498DB', 'E74C3C']
-                for i, clr in enumerate(pie_colors[:len(chart_data_rows)]):
+                for i in range(len(active_rows)):
                     pt = DataPoint(idx=i)
-                    pt.graphicalProperties.solidFill = clr
+                    pt.graphicalProperties.solidFill = pie_colors[i % len(pie_colors)]
                     chart.series[0].data_points.append(pt)
 
                 chart.dataLabels = DataLabelList()
                 chart.dataLabels.showPercent = True
-                chart.dataLabels.showVal = True
+                chart.dataLabels.showVal = False
                 chart.dataLabels.showCatName = True
+                chart.dataLabels.showSerName = False
+                chart.dataLabels.showLeaderLines = True
+                chart.dataLabels.numFmt = '0.0%'
+
+                # Легенда справа
+                from openpyxl.chart.layout import Layout, ManualLayout
+                chart.legend.position = 'r'
 
                 ws_m.add_chart(chart, "F8")
 
