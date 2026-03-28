@@ -1027,12 +1027,36 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
 # ТОП, ЛИДЕРБОРДЫ, МЕНЮ СТАТИСТИКИ
 # ═══════════════════════════════════════════════════════════════
 
+def _mark_user_left(db, user_id):
+    """Пометить ушедшего: is_left=1 + заморозить баланс + вернуть пульсы в банк."""
+    from datetime import datetime, timedelta
+    db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (user_id,))
+    db.conn.commit()
+    user_data = db.get_user(user_id)
+    if not user_data:
+        return
+    try:
+        balance = float(user_data['balance'] or 0)
+    except (KeyError, IndexError):
+        balance = 0
+    if balance > 0:
+        now = datetime.now()
+        freeze_until = now + timedelta(days=30)
+        db.cursor.execute(
+            'UPDATE users SET frozen_balance = ?, freeze_until = ? WHERE user_id = ?',
+            (balance, freeze_until, user_id)
+        )
+        db.update_user_balance(user_id, 0, 'set')
+        db.update_bank_balance(balance, 'add')
+        db.conn.commit()
+        logging.info(f"💰 TOP filter: user {user_id} balance {balance} → frozen 30d, returned to bank")
+
 async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limit=5):
     """Живая проверка: фильтрует ушедших и чинит БД."""
-    active_users =[]
+    active_users = []
     if not context:
         return [u for u in users_list if u['user_id'] not in admin_ids][:limit]
-        
+
     for u in users_list:
         if u['user_id'] in admin_ids:
             continue
@@ -1040,15 +1064,13 @@ async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limi
             member = await context.bot.get_chat_member(chat_id, u['user_id'])
             if member.status in ('left', 'kicked'):
                 logging.info(f"🚫 TOP filter: user {u['user_id']} status={member.status} → is_left=1")
-                db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
-                db.conn.commit()
+                _mark_user_left(db, u['user_id'])
                 continue
         except Exception as e:
             logging.warning(f"⚠️ TOP filter: user {u['user_id']} API error ({e}) → is_left=1")
-            db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
-            db.conn.commit()
+            _mark_user_left(db, u['user_id'])
             continue
-        
+
         active_users.append(u)
         if len(active_users) == limit:
             break
