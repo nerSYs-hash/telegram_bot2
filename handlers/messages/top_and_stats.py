@@ -37,15 +37,14 @@ async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limi
             continue
         
         try:
-            # Спрашиваем у Телеграма, в чате ли человек
             member = await context.bot.get_chat_member(chat_id, u['user_id'])
             if member.status in ('left', 'kicked'):
-                # Человек вышел -> чиним базу данных
+                logging.info(f"🚫 TOP filter: user {u['user_id']} status={member.status} → is_left=1")
                 db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
                 db.conn.commit()
                 continue
-        except Exception:
-            # Ошибка API (пользователь не найден) -> значит он точно ушел
+        except Exception as e:
+            logging.warning(f"⚠️ TOP filter: user {u['user_id']} API error ({e}) → is_left=1")
             db.cursor.execute('UPDATE users SET is_left = 1 WHERE user_id = ?', (u['user_id'],))
             db.conn.commit()
             continue
