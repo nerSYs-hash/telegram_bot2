@@ -8,3 +8,5 @@ openpyxl
 aiohttp
 reportlab
 python-dateutil
+fastapi==0.115.12
+uvicorn==0.30.6
