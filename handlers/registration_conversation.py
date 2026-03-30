@@ -178,9 +178,14 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         main_db = context.bot_data.get('db')
 
         if main_db:
-            from handlers.commands.system_commands import menu_command
-            from config import OWNER_ID
-            await menu_command(update, context, main_db, OWNER_ID)
+            # Важно: сообщение /register могло быть удалено выше, поэтому не используем reply_text.
+            # Явно отправляем новое сообщение и восстанавливаем постоянную нижнюю клавиатуру.
+            from handlers.commands.system_commands import get_main_reply_keyboard
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="✅ Ты уже участник чата! Нижнее меню восстановлено.",
+                reply_markup=get_main_reply_keyboard(main_db, user_id, OWNER_ID)
+            )
         else:
             logger.error("main_db is None in start_reg — bot_data['db'] not set!")
             await context.bot.send_message(
