@@ -83,61 +83,13 @@ def calculate_combined_quality_multiplier(score_A, score_B):
     return round(max(0.5, min(1.3, multiplier)), 3)
 
 
-def calculate_user_activity_score(user_stats, chat_stats):
+def calculate_user_activity_score(user_stats, chat_stats=None):
     """
-    Calculate user activity score (АктП) based on formula
+    Calculate user activity score (АктП) по ЕДИНОЙ формуле из exchange_rate.py.
+    chat_stats больше не используется — формула абсолютная, не относительная.
     """
-    if not chat_stats or chat_stats['total_messages'] == 0:
-        return 0.0
-    
-    score = 0.0
-    
-    # 1. ОКСП - Total characters (1%)
-    if user_stats.get('total_chars', 0) > 0 and chat_stats.get('total_chars', 0) > 0:
-        score += 0.01 * (chat_stats['total_chars'] / user_stats['total_chars'])
-    
-    # 2. СДСП - Average message length (7%)
-    user_avg_len = user_stats.get('total_chars', 0) / max(user_stats.get('total_messages', 1), 1)
-    chat_avg_len = chat_stats.get('total_chars', 0) / max(chat_stats.get('total_messages', 1), 1)
-    if user_avg_len > 0 and chat_avg_len > 0:
-        score += 0.07 * (chat_avg_len / user_avg_len)
-    
-    # 3. КСП - Word count (1%)
-    if user_stats.get('total_words', 0) > 0 and chat_stats.get('total_words', 0) > 0:
-        score += 0.01 * (chat_stats['total_words'] / user_stats['total_words'])
-    
-    # 4. КОРП - Reactions given (8%)
-    if user_stats.get('reactions_given', 0) > 0 and chat_stats.get('total_reactions', 0) > 0:
-        score += 0.08 * (chat_stats['total_reactions'] / user_stats['reactions_given'])
-    
-    # 5. КПРП - Reactions received (8%)
-    if user_stats.get('reactions_received', 0) > 0 and chat_stats.get('total_reactions', 0) > 0:
-        score += 0.08 * (chat_stats['total_reactions'] / user_stats['reactions_received'])
-    
-    # 6. КОПЮП - Replies received (20%)
-    if user_stats.get('replies_received', 0) > 0 and chat_stats.get('total_replies', 0) > 0:
-        score += 0.20 * (chat_stats['total_replies'] / user_stats['replies_received'])
-    
-    # 7. КОПЯП - Replies sent (20%)
-    if user_stats.get('replies_sent', 0) > 0 and chat_stats.get('total_replies', 0) > 0:
-        score += 0.20 * (chat_stats['total_replies'] / user_stats['replies_sent'])
-    
-    # 8. КУПП - Mentions received (20%)
-    if user_stats.get('mentions_received', 0) > 0 and chat_stats.get('total_mentions', 0) > 0:
-        score += 0.20 * (chat_stats['total_mentions'] / user_stats['mentions_received'])
-    
-    # 9. МедиаП - Media sent (7%)
-    if user_stats.get('media_sent', 0) > 0 and chat_stats.get('total_media', 0) > 0:
-        score += 0.07 * (chat_stats['total_media'] / user_stats['media_sent'])
-    
-    # 10. ПИВДВП - Other threads posts (8%)
-    if user_stats.get('other_threads_posts', 0) > 0 and chat_stats.get('other_threads_posts', 0) > 0:
-        score += 0.08 * (chat_stats['other_threads_posts'] / user_stats['other_threads_posts'])
-    
-    # 11. ПЗП - Warnings penalty (REMOVED - no longer affects activity)
-    # Warnings are tracked but do NOT reduce activity score
-    
-    return round(score, 2)
+    from utils.exchange_rate import calculate_index
+    return calculate_index(user_stats)
 
 def calculate_heat_multiplier(messages_last_10min, avg_per_10min):
     """
