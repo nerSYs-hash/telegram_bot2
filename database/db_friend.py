@@ -655,13 +655,19 @@ async def lock_application(app_id: int, admin_id: int, duration_minutes: int = 2
         return result.rowcount > 0
 
 async def unlock_application(app_id: int):
-    """Разблокировка заявки (возврат в NEW после истечения lock)"""
+    """Разблокировка заявки (возврат в предыдущий статус после истечения lock)"""
     async with db_pool.get_connection() as db:
+        # Сначала проверяем, была ли заявка SKIPPED до блокировки
+        async with db.execute("SELECT status FROM applications WHERE id = ?", (app_id,)) as cursor:
+            row = await cursor.fetchone()
+        # Если заявка уже одобрена/отклонена — не трогаем
+        if row and row[0] not in (ApplicationStatus.IN_WORK,):
+            return
         await db.execute(
             """UPDATE applications
                SET status = ?, locked_by = NULL, locked_until = NULL, updated_at = ?
-               WHERE id = ?""",
-            (ApplicationStatus.NEW, datetime.now().isoformat(), app_id)
+               WHERE id = ? AND status = ?""",
+            (ApplicationStatus.NEW, datetime.now().isoformat(), app_id, ApplicationStatus.IN_WORK)
         )
         await db.commit()
 
@@ -669,12 +675,6 @@ async def unlock_application(app_id: int):
 async def save_application_message_id(app_id: int, message_id: int):
     """Сохраняет message_id карточки заявки в треде администраторов"""
     async with db_pool.get_connection() as db:
-        # Гарантируем наличие колонки (на случай если init_db не запускался)
-        try:
-            await db.execute("ALTER TABLE applications ADD COLUMN message_id INTEGER")
-            await db.commit()
-        except Exception:
-            pass
         await db.execute(
             "UPDATE applications SET message_id = ? WHERE id = ?",
             (message_id, app_id)
@@ -739,18 +739,21 @@ async def cancel_user_applications(user_id: int):
     """Отменяет все активные заявки пользователя (при перезапуске регистрации)."""
     async with db_pool.get_connection() as db:
         await db.execute(
-            "UPDATE applications SET status = 'cancelled', locked_by = NULL, locked_until = NULL WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped')",
-            (user_id,)
+            """UPDATE applications SET status = ?, locked_by = NULL, locked_until = NULL
+               WHERE user_id = ? AND status IN (?, ?, ?)""",
+            (ApplicationStatus.CANCELLED, user_id,
+             ApplicationStatus.NEW, ApplicationStatus.IN_WORK, ApplicationStatus.SKIPPED)
         )
         await db.commit()
 
 
 async def get_user_pending_application(user_id: int) -> Optional[dict]:
-    """Возвращает активную (pending/locked) заявку пользователя, если она есть."""
+    """Возвращает активную заявку пользователя, если она есть."""
     async with db_pool.get_connection() as db:
         async with db.execute(
-            "SELECT * FROM applications WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped') ORDER BY created_at DESC LIMIT 1",
-            (user_id,)
+            """SELECT * FROM applications WHERE user_id = ? AND status IN (?, ?, ?)
+               ORDER BY created_at DESC LIMIT 1""",
+            (user_id, ApplicationStatus.NEW, ApplicationStatus.IN_WORK, ApplicationStatus.SKIPPED)
         ) as cursor:
             row = await cursor.fetchone()
             return row_to_dict(row)
@@ -762,8 +765,9 @@ async def close_user_applications(user_id: int, status: str = 'approved'):
         await db.execute(
             """UPDATE applications 
                SET status = ?, updated_at = ?, locked_by = NULL, locked_until = NULL 
-               WHERE user_id = ? AND status IN ('pending', 'locked', 'new', 'in_work', 'skipped')""",
-            (status, datetime.now().isoformat(), user_id)
+               WHERE user_id = ? AND status IN (?, ?, ?)""",
+            (status, datetime.now().isoformat(), user_id,
+             ApplicationStatus.NEW, ApplicationStatus.IN_WORK, ApplicationStatus.SKIPPED)
         )
         await db.commit()
 

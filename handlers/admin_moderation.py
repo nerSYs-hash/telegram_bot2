@@ -89,17 +89,16 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
 
 async def _send_invite_link(bot, user_id: int, user_name: str):
     """Генерирует одноразовую ссылку и отправляет пуш пользователю. Возвращает message_id."""
-    from handlers.messages.events_logic import get_chat_invite_link
 
-    # Создаём одноразовую ссылку через Telegram API
-    class _FakeContext:
-        pass
-    fake_ctx = _FakeContext()
-    fake_ctx.bot = bot
-
-    invite_link = await get_chat_invite_link(fake_ctx, CHAT_ID, CHAT_ID, user_name)
-    if not invite_link:
-        logger.error(f"Не удалось создать ссылку для {user_id}")
+    try:
+        link_obj = await bot.create_chat_invite_link(
+            chat_id=CHAT_ID,
+            name=f"Approve: {user_name}"[:32],
+            creates_join_request=True
+        )
+        invite_link = link_obj.invite_link
+    except Exception as e:
+        logger.error(f"Не удалось создать ссылку для {user_id}: {e}")
         return None
 
     # Сохраняем ссылку в БД
@@ -186,9 +185,12 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         app_id = int(parts[3])
 
     if is_cancel:
-        # Сбрасываем флаги ожидания
+        # Сбрасываем все флаги ожидания
         context.user_data.pop('awaiting_reject_reason', None)
         context.user_data.pop('rej_app_id', None)
+        context.user_data.pop('rej_user_id', None)
+        context.user_data.pop('rej_reg_data', None)
+        context.user_data.pop('rej_applied_at', None)
         
         # Показываем карточку заявки заново
         app_data = await get_application(app_id)
@@ -303,6 +305,10 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         )
 
     elif action == "rej":
+        # Продлеваем блокировку на 5 минут для ввода причины
+        from database.db_friend import lock_application
+        await lock_application(app_id, query.from_user.id, duration_minutes=5)
+
         # Сохраняем данные и ждём причину от администратора
         context.user_data['rej_app_id'] = app_id
         context.user_data['rej_user_id'] = target_user_id
@@ -320,15 +326,6 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             reply_markup=keyboard,
             parse_mode="HTML"
         )
-
-    elif action == "rej_cancel":
-        # Отмена ввода причины
-        context.user_data.pop('awaiting_reject_reason', None)
-        context.user_data.pop('rej_app_id', None)
-        context.user_data.pop('rej_user_id', None)
-        context.user_data.pop('rej_reg_data', None)
-        context.user_data.pop('rej_applied_at', None)
-        await query.edit_message_text("↩️ Отклонение отменено. Заявка снова доступна.")
 
     elif action == "skip":
         # Ставим статус 'skipped' — заявка возвращается в очередь отдельным статусом
@@ -354,6 +351,12 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
 
     if not context.user_data.get('awaiting_reject_reason'):
         return  # не ждём причины — игнорируем
+
+    # Удаляем сообщение админа с причиной из чата
+    try:
+        await update.message.delete()
+    except Exception:
+        pass
 
     reason = update.message.text.strip()
     app_id = context.user_data.pop('rej_app_id', None)
