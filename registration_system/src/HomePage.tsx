@@ -1,10 +1,11 @@
-import type {BootstrapResponse} from './types';
+﻿import type {BootstrapResponse} from './types';
 
 type Props = {
   loading: boolean;
   error: string | null;
   data: BootstrapResponse | null;
   onGoProfile: () => void;
+  onGoBbs: () => void;
 };
 
 function fmt(v: number) {
@@ -17,9 +18,14 @@ const SECTION_ICONS: Record<string, string> = {
   economy: '💎',
 };
 
-export default function HomePage({loading, error, data, onGoProfile}: Props) {
+export default function HomePage({loading, error, data, onGoProfile, onGoBbs}: Props) {
   const platform = window.Telegram?.WebApp?.platform ?? 'browser';
   const version = window.Telegram?.WebApp?.version ?? 'dev';
+
+  function handleSectionClick(id: string) {
+    if (id === 'profile') onGoProfile();
+    else if (id === 'bbs') onGoBbs();
+  }
 
   return (
     <main className="min-h-screen bg-[radial-gradient(circle_at_top,_#22324b_0%,_#101826_45%,_#090d14_100%)] px-4 py-6 text-stone-100">
@@ -91,7 +97,7 @@ export default function HomePage({loading, error, data, onGoProfile}: Props) {
                 {data.sections.map((s) => (
                   <button
                     key={s.id}
-                    onClick={s.id === 'profile' && s.state === 'ready' ? onGoProfile : undefined}
+                    onClick={s.state === 'ready' ? () => handleSectionClick(s.id) : undefined}
                     disabled={s.state !== 'ready'}
                     className={`w-full rounded-[22px] border p-4 text-left transition-all ${
                       s.state === 'ready'

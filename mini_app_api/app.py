@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import os
 import sqlite3
@@ -125,8 +125,8 @@ def mini_app_bootstrap(
             {
                 'id': 'bbs',
                 'title': 'BBS',
-                'description': 'Следующим шагом подключим анкету, публикацию и удаление без провала в callback-меню бота.',
-                'state': 'next',
+                'description': 'Анкета, статус публикации и удаление BBS-профиля прямо из Mini App.',
+                'state': 'ready',
             },
             {
                 'id': 'economy',
@@ -219,3 +219,82 @@ def mini_app_profile(user_id: int) -> dict[str, Any]:
             'hasBbsProfile': has_bbs,
         },
     }
+
+
+
+@app.get('/api/mini-app/bbs/{user_id}')
+def mini_app_bbs_get(user_id: int) -> dict[str, Any]:
+    if not DB_PATH.exists():
+        return {'ok': False, 'hasProfile': False, 'error': 'database not found'}
+
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    try:
+        row = connection.execute(
+            """
+            SELECT id, user_id, username, name, age, city, roles, goals,
+                   about, params, photos, reaction_count, published_at,
+                   created_at, message_ids, thread_id
+            FROM bbs_profiles WHERE user_id = ?
+            """,
+            (user_id,),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return {'ok': True, 'hasProfile': False}
+    finally:
+        connection.close()
+
+    if row is None:
+        return {'ok': True, 'hasProfile': False}
+
+    import json as _json
+
+    def _parse_list(raw):
+        if not raw:
+            return []
+        try:
+            result = _json.loads(raw)
+            return result if isinstance(result, list) else []
+        except Exception:
+            return []
+
+    is_published = bool(row['published_at'] and row['message_ids'])
+
+    return {
+        'ok': True,
+        'hasProfile': True,
+        'profile': {
+            'id': row['id'],
+            'userId': row['user_id'],
+            'username': row['username'],
+            'name': row['name'],
+            'age': row['age'],
+            'city': _parse_list(row['city']),
+            'roles': _parse_list(row['roles']),
+            'goals': _parse_list(row['goals']),
+            'about': row['about'],
+            'params': row['params'],
+            'photos': _parse_list(row['photos']),
+            'reactionCount': int(row['reaction_count'] or 0),
+            'publishedAt': row['published_at'],
+            'createdAt': row['created_at'],
+            'isPublished': is_published,
+        },
+    }
+
+
+@app.delete('/api/mini-app/bbs/{user_id}')
+def mini_app_bbs_delete(user_id: int) -> dict[str, Any]:
+    if not DB_PATH.exists():
+        return {'ok': False, 'error': 'database not found'}
+
+    connection = sqlite3.connect(DB_PATH)
+    try:
+        connection.execute('DELETE FROM bbs_profiles WHERE user_id = ?', (user_id,))
+        connection.commit()
+    except sqlite3.OperationalError as exc:
+        return {'ok': False, 'error': str(exc)}
+    finally:
+        connection.close()
+
+    return {'ok': True}

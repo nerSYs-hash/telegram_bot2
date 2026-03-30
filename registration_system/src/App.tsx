@@ -3,6 +3,7 @@ import type {BootstrapResponse} from './types';
 import {API_BASE} from './api';
 import HomePage from './HomePage';
 import ProfilePage from './ProfilePage';
+import BbsPage from './BbsPage';
 
 declare global {
   interface Window {
@@ -20,7 +21,7 @@ declare global {
   }
 }
 
-type Page = 'home' | 'profile';
+type Page = 'home' | 'profile' | 'bbs';
 
 function resolveUserId(): number | undefined {
   const q = new URLSearchParams(window.location.search).get('tgUserId');
@@ -58,6 +59,16 @@ export default function App() {
   if (page === 'profile' && data?.user?.userId != null) {
     return <ProfilePage userId={data.user.userId} onBack={() => setPage('home')} />;
   }
-  return <HomePage loading={loading} error={error} data={data} onGoProfile={() => setPage('profile')} />;
+  if (page === 'bbs' && data?.user?.userId != null) {
+    return <BbsPage userId={data.user.userId} onBack={() => setPage('home')} />;
+  }
+  return (
+    <HomePage
+      loading={loading}
+      error={error}
+      data={data}
+      onGoProfile={() => setPage('profile')}
+      onGoBbs={() => setPage('bbs')}
+    />
+  );
 }
-

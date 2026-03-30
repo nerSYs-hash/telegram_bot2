@@ -1,4 +1,4 @@
-// Shared types for Pulse Mini App frontend.
+﻿// Shared types for Pulse Mini App frontend.
 
 export type MiniAppUser = {
   userId: number | null;
@@ -56,5 +56,68 @@ export type ProfileData = {
 export type ProfileResponse = {
   ok: boolean;
   profile?: ProfileData;
+  error?: string;
+};
+
+// -- BBS ---------------------------------------------------------------------
+
+export type BbsProfile = {
+  id: number;
+  userId: number;
+  username: string | null;
+  name: string;
+  age: number;
+  city: string[];
+  roles: string[];
+  goals: string[];
+  about: string | null;
+  params: string | null;
+  photos: string[];
+  reactionCount: number;
+  publishedAt: string | null;
+  createdAt: string;
+  isPublished: boolean;
+};
+
+export type BbsResponse = {
+  ok: boolean;
+  profile?: BbsProfile;
+  hasProfile: boolean;
+  error?: string;
+};
+
+export type BbsActionResponse = {
+  ok: boolean;
+  error?: string;
+};
+// -- BBS ---------------------------------------------------------------------
+
+export type BbsProfile = {
+  id: number;
+  userId: number;
+  username: string | null;
+  name: string;
+  age: number;
+  city: string[];
+  roles: string[];
+  goals: string[];
+  about: string | null;
+  params: string | null;
+  photos: string[];
+  reactionCount: number;
+  publishedAt: string | null;
+  createdAt: string;
+  isPublished: boolean;
+};
+
+export type BbsResponse = {
+  ok: boolean;
+  profile?: BbsProfile;
+  hasProfile: boolean;
+  error?: string;
+};
+
+export type BbsActionResponse = {
+  ok: boolean;
   error?: string;
 };
