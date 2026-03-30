@@ -97,19 +97,11 @@ async def show_top5_menu(query, user):
     await query.edit_message_text("🏆 ТОП-5\nВыберите категорию:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_top5_activists(query, user, db, context=None):
-    CHARS_NORM = Decimal('100')
+    from utils.exchange_rate import ACTIVITY_INDEX_SQL
     now = get_moscow_time()
     date_30 = (now - timedelta(days=30)).strftime('%Y-%m-%d')
-    bot_count = int(os.getenv('BOT_COUNT', 1))
     target_chat_id = int(os.getenv('TARGET_CHAT_ID'))
 
-    try:
-        member_count = await context.bot.get_chat_member_count(target_chat_id)
-    except Exception:
-        db.cursor.execute('SELECT COUNT(*) as cnt FROM users')
-        member_count = db.cursor.fetchone()['cnt']
-
-    divisor = Decimal(max(member_count - bot_count - 1, 1))
     admin_ids = set()
     if context:
         try:
@@ -118,14 +110,14 @@ async def show_top5_activists(query, user, db, context=None):
         except Exception:
             pass
 
-    db.cursor.execute('''
+    db.cursor.execute(f'''
         SELECT u.user_id, u.username, u.first_name,
-            (0.05*(SUM(us.total_chars)*1.0/?)+0.05*(CASE WHEN SUM(us.total_messages)>0 THEN (SUM(us.total_chars)*1.0/SUM(us.total_messages))/? ELSE 0 END)+0.05*SUM(us.total_words)+0.08*SUM(us.reactions_given)+0.10*SUM(us.reactions_received)+0.18*SUM(us.replies_received)+0.15*SUM(us.replies_sent)+0.15*SUM(us.mentions_received)+0.07*SUM(us.media_sent)+0.12*SUM(us.other_threads_posts))/? as activity_index
+            ({ACTIVITY_INDEX_SQL}) as activity_index
         FROM user_stats us JOIN users u ON us.user_id = u.user_id
         WHERE us.date >= ? AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         GROUP BY us.user_id HAVING SUM(us.total_messages)>0 OR SUM(us.reactions_given)>0 OR SUM(us.reactions_received)>0 OR SUM(us.replies_sent)>0
         ORDER BY activity_index DESC LIMIT 20
-    ''', (float(CHARS_NORM), float(CHARS_NORM), float(divisor), date_30))
+    ''', (date_30,))
 
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)

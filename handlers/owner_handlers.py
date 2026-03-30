@@ -52,6 +52,18 @@ def _is_owner(db, user_id: int, admin_id: int) -> bool:
     return bool(user_data and user_data['is_owner'])
 
 
+async def _edit_panel(context, chat_id: int, msg_id: int, text: str, markup) -> None:
+    """Редактирует панельное сообщение (единое окно)."""
+    try:
+        await context.bot.edit_message_text(
+            chat_id=chat_id, message_id=msg_id,
+            text=text, parse_mode='HTML', reply_markup=markup
+        )
+    except Exception as e:
+        if 'not modified' not in str(e).lower():
+            logger.error(f'_edit_panel error: {e}')
+
+
 def _get_stats(db) -> dict:
     """Статистика для дашборда."""
     try:
@@ -137,78 +149,14 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
             if 'not modified' not in str(e).lower():
                 logger.error(f"show_owner_dashboard error: {e}")
     else:
-        msg = query_or_update.effective_message or query_or_update.message
-        await msg.reply_text(text, parse_mode='HTML', reply_markup=markup)
+        msg_obj = query_or_update.effective_message or query_or_update.message
+        sent = await msg_obj.reply_text(text, parse_mode='HTML', reply_markup=markup)
+        context.user_data['owner_panel_msg_id'] = sent.message_id
+        context.user_data['owner_panel_chat_id'] = sent.chat_id
 
 
 # ═══════════════════════════════════════════════════════════════
-#  👨‍💼 ПЕРСОНАЛ
-# ═══════════════════════════════════════════════════════════════
-
-async def show_staff_menu(query, db, admin_id: int) -> None:
-    if not _is_owner(db, query.from_user.id, admin_id):
-        await query.answer("⛔", show_alert=True)
-        return
-
-    # Список текущих админов
-    db.cursor.execute(
-        'SELECT user_id, username, first_name FROM users WHERE is_admin = 1 OR is_owner = 1'
-    )
-    admins = db.cursor.fetchall()
-
-    lines = []
-    for a in admins:
-        name = a['username'] or a['first_name'] or f"ID:{a['user_id']}"
-        role = "👑" if a['user_id'] == admin_id else "⭐"
-        lines.append(f"  {role} @{name} (<code>{a['user_id']}</code>)")
-    admin_block = "\n".join(lines) if lines else "  — пусто —"
-
-    text = (
-        f"👨‍💼 <b>ПЕРСОНАЛ</b>\n"
-        f"{'━' * 24}\n\n"
-        f"<b>Текущие админы:</b>\n"
-        f"{admin_block}"
-    )
-
-    keyboard = [
-        [InlineKeyboardButton("➕ Назначить админа", callback_data="owner_staff_add")],
-        [InlineKeyboardButton("➖ Разжаловать", callback_data="owner_staff_remove")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
-    ]
-
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-async def staff_add_start(query, context, db, admin_id: int) -> None:
-    if not _is_owner(db, query.from_user.id, admin_id):
-        await query.answer("⛔", show_alert=True)
-        return
-
-    context.user_data['owner_awaiting'] = 'staff_add'
-    text = (
-        "➕ <b>Назначить админа</b>\n\n"
-        "Отправьте <b>user_id</b> пользователя:"
-    )
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-async def staff_remove_start(query, context, db, admin_id: int) -> None:
-    if not _is_owner(db, query.from_user.id, admin_id):
-        await query.answer("⛔", show_alert=True)
-        return
-
-    context.user_data['owner_awaiting'] = 'staff_remove'
-    text = (
-        "➖ <b>Разжаловать админа</b>\n\n"
-        "Отправьте <b>user_id</b> пользователя:"
-    )
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_staff")]]
-    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
-
-
-# ═══════════════════════════════════════════════════════════════
-#  💰 ЭКОНОМИКА
+#   ЭКОНОМИКА
 # ═══════════════════════════════════════════════════════════════
 
 async def show_economy_menu(query, db, admin_id: int) -> None:
@@ -525,6 +473,7 @@ async def handle_owner_text_input(
 ) -> bool:
     """
     Обработчик текстового ввода для FSM пульта владельца.
+    Все ответы редактируют одно панельное сообщение (режим 1 окна).
     Вызывается из message_handler → handle_private_message.
     Возвращает True если сообщение обработано, False если нет.
     """
@@ -541,29 +490,44 @@ async def handle_owner_text_input(
 
     text = message.text.strip() if message.text else ''
 
+    # Хелпер: удаляем входящее сообщение и редактируем панель
+    panel_msg_id = context.user_data.get('owner_panel_msg_id')
+    panel_chat_id = context.user_data.get('owner_panel_chat_id')
+
+    async def reply(resp_text: str, markup=None) -> None:
+        try:
+            await message.delete()
+        except Exception:
+            pass
+        if panel_msg_id and panel_chat_id:
+            await _edit_panel(context, panel_chat_id, panel_msg_id, resp_text, markup)
+        else:
+            await message.reply_text(resp_text, parse_mode='HTML', reply_markup=markup)
+
     # ── Назначить админа ──
     if awaiting == 'staff_add':
         context.user_data.pop('owner_awaiting', None)
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_staff_add")]]))
             return True
         target = db.get_user(target_id)
         if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            await reply(f"❌ Пользователь <code>{target_id}</code> не найден.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_staff")]]))
             return True
         if target['is_admin'] or target['is_owner']:
-            await message.reply_text("ℹ️ Уже админ.")
+            await reply("ℹ️ Уже является админом.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_staff")]]))
             return True
         db.cursor.execute('UPDATE users SET is_admin = 1 WHERE user_id = ?', (target_id,))
         db.conn.commit()
         name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
+        await reply(
             f"✅ @{name} (<code>{target_id}</code>) назначен админом.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]])
-        )
+            InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]]))
         logger.info(f"STAFF ADD: {target_id} by {user.id}")
         return True
 
@@ -573,26 +537,28 @@ async def handle_owner_text_input(
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_staff_remove")]]))
             return True
         if target_id == admin_id:
-            await message.reply_text("⛔ Нельзя разжаловать владельца.")
+            await reply("⛔ Нельзя разжаловать владельца.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_staff")]]))
             return True
         target = db.get_user(target_id)
         if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            await reply(f"❌ Пользователь <code>{target_id}</code> не найден.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_staff")]]))
             return True
         if not target['is_admin']:
-            await message.reply_text("ℹ️ Не является админом.")
+            await reply("ℹ️ Не является админом.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_staff")]]))
             return True
         db.cursor.execute('UPDATE users SET is_admin = 0 WHERE user_id = ?', (target_id,))
         db.conn.commit()
         name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
+        await reply(
             f"✅ @{name} (<code>{target_id}</code>) разжалован.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]])
-        )
+            InlineKeyboardMarkup([[InlineKeyboardButton("👨‍💼 К персоналу", callback_data="owner_staff")]]))
         logger.info(f"STAFF REMOVE: {target_id} by {user.id}")
         return True
 
@@ -601,57 +567,46 @@ async def handle_owner_text_input(
         context.user_data.pop('owner_awaiting', None)
         parts = text.split()
         if len(parts) != 2:
-            await message.reply_text(
-                "❌ Формат: <code>user_id сумма</code>",
-                parse_mode='HTML',
-            )
+            await reply("❌ Формат: <code>user_id сумма</code>",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_emit")]]))
             return True
-
         try:
             target_id = int(parts[0])
             amount = round(float(parts[1].replace(',', '.')), 2)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Некорректные данные. Нужно: <code>user_id сумма</code>", parse_mode='HTML')
+            await reply("❌ Некорректные данные. Нужно: <code>user_id сумма</code>",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_emit")]]))
             return True
-
         if amount <= 0:
-            await message.reply_text("❌ Сумма должна быть > 0.")
+            await reply("❌ Сумма должна быть > 0.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_emit")]]))
             return True
-
         target = db.get_user(target_id)
         if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            await reply(f"❌ Пользователь <code>{target_id}</code> не найден.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_economy")]]))
             return True
-
-        # Проверяем баланс банка
         bank_balance = db.get_bank_balance()
         if bank_balance < amount:
-            await message.reply_text(
+            await reply(
                 f"❌ Недостаточно средств в Банке!\n"
                 f"🏦 В банке: {format_number(bank_balance)} 💎\n"
                 f"💸 Нужно: {format_number(amount)} 💎",
-                parse_mode='HTML')
+                InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_economy")]]))
             return True
-
         db.update_bank_balance(amount, 'subtract')
         db.update_user_balance(target_id, amount, operation='add')
-        db.add_transaction(None, target_id, amount, 'admin_give', f'Эмиссия от владельца')
-
+        db.add_transaction(None, target_id, amount, 'admin_give', 'Эмиссия от владельца')
         name = target['username'] or target['first_name'] or target_id
         new_balance = float(target['balance']) + amount
         new_bank = db.get_bank_balance()
-
-        await message.reply_text(
-            f"✅ <b>Эмиссия</b>\n\n"
+        await reply(
+            f"✅ <b>Эмиссия выполнена</b>\n\n"
             f"👤 @{name} (<code>{target_id}</code>)\n"
             f"💎 +{format_number(amount)} Пульсов\n"
             f"💰 Новый баланс: ~{format_number(new_balance)} 💎\n"
             f"🏦 Банк: {format_number(new_bank)} 💎",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("💰 К экономике", callback_data="owner_economy")]
-            ])
-        )
+            InlineKeyboardMarkup([[InlineKeyboardButton("💰 К экономике", callback_data="owner_economy")]]))
         logger.info(f"EMIT: {amount} to {target_id} by {user.id}")
         return True
 
@@ -661,192 +616,25 @@ async def handle_owner_text_input(
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
-            return True
-
-        if target_id == admin_id:
-            await message.reply_text("⛔ Нельзя добавить владельца в блэклист.")
-            return True
-
-        ensure_owner_columns(db)
-
-        target = db.get_user(target_id)
-        if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
-            return True
-
-        db.cursor.execute('UPDATE users SET is_blacklisted = 1 WHERE user_id = ?', (target_id,))
-        db.conn.commit()
-
-        name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
-            f"🚫 @{name} (<code>{target_id}</code>) добавлен в блэклист.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
-            ])
-        )
-        logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
-        return True
-
-    # ── Убрать из блэклиста ──
-    if awaiting == 'bl_remove':
-        context.user_data.pop('owner_awaiting', None)
-        try:
-            target_id = int(text)
-        except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
-            return True
-
-        ensure_owner_columns(db)
-
-        target = db.get_user(target_id)
-        if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
-            return True
-
-        db.cursor.execute('UPDATE users SET is_blacklisted = 0 WHERE user_id = ?', (target_id,))
-        db.conn.commit()
-
-        name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
-            f"✅ @{name} (<code>{target_id}</code>) убран из блэклиста.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
-            ])
-        )
-        logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
-        return True
-
-    # ── Мут по ID из ЛС ──
-    if awaiting.startswith('mute_'):
-        context.user_data.pop('owner_awaiting', None)
-        duration_key = awaiting.replace('mute_', '')
-
-        if duration_key not in MUTE_DURATIONS:
-            await message.reply_text("❌ Неизвестная длительность.")
-            return True
-
-        try:
-            target_id = int(text)
-        except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
-            return True
-
-        seconds, human = MUTE_DURATIONS[duration_key]
-        until_ts = int(time.time()) + seconds
-
-        if not target_chat_id:
-            await message.reply_text("❌ Не удалось определить чат.")
-            return True
-
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=target_chat_id,
-                user_id=target_id,
-                permissions=ChatPermissions(
-                    can_send_messages=False,
-                    can_send_audios=False,
-                    can_send_documents=False,
-                    can_send_photos=False,
-                    can_send_videos=False,
-                    can_send_video_notes=False,
-                    can_send_voice_notes=False,
-                    can_send_polls=False,
-                    can_send_other_messages=False,
-                    can_add_web_page_previews=False,
-                ),
-                until_date=until_ts,
-            )
-
-            target = db.get_user(target_id)
-            name = (target['username'] or target['first_name'] or target_id) if target else target_id
-
-            await message.reply_text(
-                f"🔇 <code>{name}</code> замучен на <b>{human}</b>",
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
-                ])
-            )
-            logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
-        except Exception as e:
-            logger.error(f"Owner mute error: {e}")
-            await message.reply_text(f"❌ Не удалось замутить: {e}")
-        return True
-
-    # ── Размут по ID из ЛС ──
-    if awaiting == 'unmute':
-        context.user_data.pop('owner_awaiting', None)
-        try:
-            target_id = int(text)
-        except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
-            return True
-
-        if not target_chat_id:
-            await message.reply_text("❌ Не удалось определить чат.")
-            return True
-
-        try:
-            await context.bot.restrict_chat_member(
-                chat_id=target_chat_id,
-                user_id=target_id,
-                permissions=ChatPermissions(
-                    can_send_messages=True,
-                    can_send_audios=True,
-                    can_send_documents=True,
-                    can_send_photos=True,
-                    can_send_videos=True,
-                    can_send_video_notes=True,
-                    can_send_voice_notes=True,
-                    can_send_polls=True,
-                    can_send_other_messages=True,
-                    can_add_web_page_previews=True,
-                ),
-            )
-
-            target = db.get_user(target_id)
-            name = (target['username'] or target['first_name'] or target_id) if target else target_id
-
-            await message.reply_text(
-                f"🔊 <code>{name}</code> размучен",
-                parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]
-                ])
-            )
-            logger.info(f"OWNER UNMUTE: {target_id} by {user.id}")
-        except Exception as e:
-            logger.error(f"Owner unmute error: {e}")
-            await message.reply_text(f"❌ Не удалось размутить: {e}")
-        return True
-
-    # ── Добавить в блэклист ──
-    if awaiting == 'bl_add':
-        context.user_data.pop('owner_awaiting', None)
-        try:
-            target_id = int(text)
-        except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_bl_add")]]))
             return True
         if target_id == admin_id:
-            await message.reply_text("⛔ Нельзя добавить владельца в блэклист.")
+            await reply("⛔ Нельзя добавить владельца в блэклист.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         ensure_owner_columns(db)
         target = db.get_user(target_id)
         if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            await reply(f"❌ Пользователь <code>{target_id}</code> не найден.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         db.cursor.execute('UPDATE users SET is_blacklisted = 1 WHERE user_id = ?', (target_id,))
         db.conn.commit()
         name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
+        await reply(
             f"🚫 @{name} (<code>{target_id}</code>) добавлен в блэклист.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]])
-        )
+            InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
         logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
         try:
             from handlers.journal_handlers import log_blacklist
@@ -861,21 +649,21 @@ async def handle_owner_text_input(
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔄 Повторить", callback_data="owner_bl_remove")]]))
             return True
         ensure_owner_columns(db)
         target = db.get_user(target_id)
         if not target:
-            await message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден.", parse_mode='HTML')
+            await reply(f"❌ Пользователь <code>{target_id}</code> не найден.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         db.cursor.execute('UPDATE users SET is_blacklisted = 0 WHERE user_id = ?', (target_id,))
         db.conn.commit()
         name = target['username'] or target['first_name'] or target_id
-        await message.reply_text(
+        await reply(
             f"✅ @{name} (<code>{target_id}</code>) убран из блэклиста.",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]])
-        )
+            InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
         logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
         try:
             from handlers.journal_handlers import log_blacklist
@@ -889,17 +677,20 @@ async def handle_owner_text_input(
         context.user_data.pop('owner_awaiting', None)
         duration_key = awaiting.replace('mute_', '')
         if duration_key not in MUTE_DURATIONS:
-            await message.reply_text("❌ Неизвестная длительность.")
+            await reply("❌ Неизвестная длительность.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         seconds, human = MUTE_DURATIONS[duration_key]
         until_ts = int(time.time()) + seconds
         if not target_chat_id:
-            await message.reply_text("❌ Не удалось определить чат.")
+            await reply("❌ Не удалось определить чат.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         try:
             await context.bot.restrict_chat_member(
@@ -914,13 +705,14 @@ async def handle_owner_text_input(
             )
             target = db.get_user(target_id)
             name = (target['username'] or target['first_name'] or target_id) if target else target_id
-            await message.reply_text(
-                f"🔇 <code>{name}</code> замучен на <b>{human}</b>", parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]])
-            )
-            logger.info(f"OWNER MUTE: {target_id} for {human} by {user.id}")
+            await reply(
+                f"🔇 <code>{name}</code> замучен на <b>{human}</b>",
+                InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
+            logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
         except Exception as e:
-            await message.reply_text(f"❌ Не удалось замутить: {e}")
+            logger.error(f"Owner mute error: {e}")
+            await reply(f"❌ Не удалось замутить: {e}",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
         return True
 
     # ── Размут по ID из ЛС ──
@@ -929,10 +721,12 @@ async def handle_owner_text_input(
         try:
             target_id = int(text)
         except (ValueError, TypeError):
-            await message.reply_text("❌ Введите числовой user_id.")
+            await reply("❌ Введите числовой user_id.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         if not target_chat_id:
-            await message.reply_text("❌ Не удалось определить чат.")
+            await reply("❌ Не удалось определить чат.",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
             return True
         try:
             await context.bot.restrict_chat_member(
@@ -946,13 +740,14 @@ async def handle_owner_text_input(
             )
             target = db.get_user(target_id)
             name = (target['username'] or target['first_name'] or target_id) if target else target_id
-            await message.reply_text(
-                f"🔊 <code>{name}</code> размучен", parse_mode='HTML',
-                reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]])
-            )
+            await reply(
+                f"🔊 <code>{name}</code> размучен",
+                InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER UNMUTE: {target_id} by {user.id}")
         except Exception as e:
-            await message.reply_text(f"❌ Не удалось размутить: {e}")
+            logger.error(f"Owner unmute error: {e}")
+            await reply(f"❌ Не удалось размутить: {e}",
+                        InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
         return True
 
     # Неизвестный awaiting — сбрасываем

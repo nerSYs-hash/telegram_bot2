@@ -71,17 +71,10 @@ async def show_top_rich(message, context, db):
 
 
 # ══════════════════════════════════════════════════════════════════
-# ФОРМУЛА ИНДЕКСА АКТИВНОСТИ (АктП):
-#
-# АктП = (0.03×ОКСП/100 + 0.03×СДСП/100 + 0.04×КСП + 0.07×КОРП +
-#         0.07×КПРП + 0.15×КОПЮП + 0.16×КОПЯП + 0.15×КУПП +
-#         0.05×МедиаП + 0.10×ПИВДВП) / (Участники − Боты − 1)
-#
-# ОКСП и СДСП нормализуются /100 (символы → масштаб единиц)
-# Знаменатель: участники − боты − 1 (сам пользователь)
+# ФОРМУЛА ИНДЕКСА АКТИВНОСТИ — ЕДИНАЯ (из exchange_rate.py)
 # ══════════════════════════════════════════════════════════════════
 
-CHARS_NORMALIZER = 100
+from utils.exchange_rate import ACTIVITY_INDEX_SQL, CHARS_NORM
 
 
 async def show_top_activists(message, context, db):
@@ -93,51 +86,22 @@ async def show_top_activists(message, context, db):
     try:
         today = get_today_date_msk()
 
-        # ── Знаменатель: участники − боты − 1 (сам пользователь) ──
-        bot_count = int(os.getenv('BOT_COUNT', 1))
-
-        try:
-            member_count = await context.bot.get_chat_member_count(message.chat.id)
-            divisor = max(member_count - bot_count - 1, 1)
-        except Exception as e:
-            logging.warning(f"Could not get member count from API: {e}")
-            db.cursor.execute('''
-                SELECT COUNT(DISTINCT user_id) as cnt
-                FROM user_stats
-                WHERE date = ? AND total_messages > 0
-            ''', (today,))
-            active = db.cursor.fetchone()['cnt']
-            divisor = max(active - bot_count - 1, 1)
-            member_count = active
-
-        # ── Числитель: формула АктП (символы нормализованы /100) ──
-        db.cursor.execute('''
+        # ── Единая формула АктП из exchange_rate.py (без деления на участников) ──
+        db.cursor.execute(f'''
             SELECT 
                 u.username, 
                 u.first_name,
-                (
-                    0.03 * (us.total_chars * 1.0 / ?) +
-                    0.03 * (CASE WHEN us.total_messages > 0 
-                                 THEN (us.total_chars * 1.0 / us.total_messages) / ?
-                                 ELSE 0 END) +
-                    0.04 * us.total_messages +
-                    0.07 * us.reactions_given +
-                    0.07 * us.reactions_received +
-                    0.15 * us.replies_received +
-                    0.16 * us.replies_sent +
-                    0.15 * us.mentions_received +
-                    0.05 * us.media_sent +
-                    0.10 * us.other_threads_posts
-                ) / ? as activity_index
+                ({ACTIVITY_INDEX_SQL}) as activity_index
             FROM user_stats us
             JOIN users u ON us.user_id = u.user_id
             WHERE us.date = ?
               AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
-              AND (us.total_messages > 0 OR us.reactions_given > 0
-                   OR us.reactions_received > 0 OR us.replies_sent > 0)
+            GROUP BY us.user_id
+            HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0
+                   OR SUM(us.reactions_received) > 0 OR SUM(us.replies_sent) > 0
             ORDER BY activity_index DESC
             LIMIT 5
-        ''', (CHARS_NORMALIZER, CHARS_NORMALIZER, divisor, today))
+        ''', (today,))
 
         top_users = db.cursor.fetchall()
 
