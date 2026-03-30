@@ -131,8 +131,8 @@ def mini_app_bootstrap(
             {
                 'id': 'economy',
                 'title': 'Экономика',
-                'description': 'После bootstrap добавим баланс, перевод и историю операций поверх общей авторизации.',
-                'state': 'next',
+                'description': 'Баланс, история операций и статистика приходов/расходов.',
+                'state': 'ready',
             },
         ],
     }
@@ -298,3 +298,81 @@ def mini_app_bbs_delete(user_id: int) -> dict[str, Any]:
         connection.close()
 
     return {'ok': True}
+
+
+@app.get('/api/mini-app/economy/{user_id}')
+def mini_app_economy(
+    user_id: int,
+    limit: int = Query(default=30, ge=1, le=100),
+) -> dict[str, Any]:
+    if not DB_PATH.exists():
+        return {'ok': False, 'error': 'database not found'}
+
+    connection = sqlite3.connect(DB_PATH)
+    connection.row_factory = sqlite3.Row
+    try:
+        user_row = connection.execute(
+            'SELECT balance, frozen_balance FROM users WHERE user_id = ?',
+            (user_id,),
+        ).fetchone()
+
+        if user_row is None:
+            return {'ok': False, 'error': 'user not found'}
+
+        uid_str = str(user_id)
+        txn_rows = connection.execute(
+            '''
+            SELECT id, from_user_id, to_user_id, amount,
+                   transaction_type, description, timestamp
+            FROM transactions
+            WHERE from_user_id = ?1 OR CAST(from_user_id AS TEXT) = ?2
+               OR to_user_id   = ?1 OR CAST(to_user_id   AS TEXT) = ?2
+            ORDER BY id DESC
+            LIMIT ?3
+            ''',
+            (user_id, uid_str, limit),
+        ).fetchall()
+
+        stats_row = connection.execute(
+            '''
+            SELECT
+                COALESCE(SUM(CASE
+                    WHEN to_user_id = ?1 OR CAST(to_user_id AS TEXT) = ?2
+                    THEN amount ELSE 0 END), 0) AS total_received,
+                COALESCE(SUM(CASE
+                    WHEN from_user_id = ?1 OR CAST(from_user_id AS TEXT) = ?2
+                    THEN amount ELSE 0 END), 0) AS total_sent
+            FROM transactions
+            ''',
+            (user_id, uid_str),
+        ).fetchone()
+    finally:
+        connection.close()
+
+    txns = []
+    for row in txn_rows:
+        to_val = row['to_user_id']
+        is_incoming = (to_val == user_id or str(to_val) == uid_str)
+        txns.append({
+            'id': row['id'],
+            'direction': 'in' if is_incoming else 'out',
+            'amount': round(float(row['amount'] or 0), 2),
+            'type': row['transaction_type'],
+            'description': row['description'],
+            'fromUserId': row['from_user_id'],
+            'toUserId': row['to_user_id'],
+            'timestamp': row['timestamp'],
+        })
+
+    return {
+        'ok': True,
+        'economy': {
+            'balance': int(user_row['balance'] or 0),
+            'frozenBalance': int(user_row['frozen_balance'] or 0),
+            'totalReceived': round(float(stats_row['total_received'] or 0), 2),
+            'totalSent': round(float(stats_row['total_sent'] or 0), 2),
+            'transactions': txns,
+        },
+    }
+
+

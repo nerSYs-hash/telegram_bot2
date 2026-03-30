@@ -4,6 +4,7 @@ import {API_BASE} from './api';
 import HomePage from './HomePage';
 import ProfilePage from './ProfilePage';
 import BbsPage from './BbsPage';
+import EconomyPage from './EconomyPage';
 
 declare global {
   interface Window {
@@ -21,7 +22,7 @@ declare global {
   }
 }
 
-type Page = 'home' | 'profile' | 'bbs';
+type Page = 'home' | 'profile' | 'bbs' | 'economy';
 
 function resolveUserId(): number | undefined {
   const q = new URLSearchParams(window.location.search).get('tgUserId');
@@ -62,6 +63,9 @@ export default function App() {
   if (page === 'bbs' && data?.user?.userId != null) {
     return <BbsPage userId={data.user.userId} onBack={() => setPage('home')} />;
   }
+  if (page === 'economy' && data?.user?.userId != null) {
+    return <EconomyPage userId={data.user.userId} onBack={() => setPage('home')} />;
+  }
   return (
     <HomePage
       loading={loading}
@@ -69,6 +73,7 @@ export default function App() {
       data={data}
       onGoProfile={() => setPage('profile')}
       onGoBbs={() => setPage('bbs')}
+      onGoEconomy={() => setPage('economy')}
     />
   );
 }

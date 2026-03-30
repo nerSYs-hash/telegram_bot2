@@ -121,3 +121,53 @@ export type BbsActionResponse = {
   ok: boolean;
   error?: string;
 };
+
+export type Transaction = {
+  id: number;
+  direction: 'in' | 'out';
+  amount: number;
+  type: string;
+  description: string | null;
+  fromUserId: number | string | null;
+  toUserId: number | string | null;
+  timestamp: string | null;
+};
+
+export type EconomyData = {
+  balance: number;
+  frozenBalance: number;
+  totalReceived: number;
+  totalSent: number;
+  transactions: Transaction[];
+};
+
+export type EconomyResponse = {
+  ok: boolean;
+  economy?: EconomyData;
+  error?: string;
+};
+
+export type Transaction = {
+  id: number;
+  direction: 'in' | 'out';
+  amount: number;
+  type: string;
+  description: string | null;
+  fromUserId: number | string | null;
+  toUserId: number | string | null;
+  timestamp: string | null;
+};
+
+export type EconomyData = {
+  balance: number;
+  frozenBalance: number;
+  totalReceived: number;
+  totalSent: number;
+  transactions: Transaction[];
+};
+
+export type EconomyResponse = {
+  ok: boolean;
+  economy?: EconomyData;
+  error?: string;
+};

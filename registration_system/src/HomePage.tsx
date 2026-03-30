@@ -6,6 +6,7 @@ type Props = {
   data: BootstrapResponse | null;
   onGoProfile: () => void;
   onGoBbs: () => void;
+  onGoEconomy: () => void;
 };
 
 function fmt(v: number) {
@@ -18,13 +19,14 @@ const SECTION_ICONS: Record<string, string> = {
   economy: '💎',
 };
 
-export default function HomePage({loading, error, data, onGoProfile, onGoBbs}: Props) {
+export default function HomePage({loading, error, data, onGoProfile, onGoBbs, onGoEconomy}: Props) {
   const platform = window.Telegram?.WebApp?.platform ?? 'browser';
   const version = window.Telegram?.WebApp?.version ?? 'dev';
 
   function handleSectionClick(id: string) {
     if (id === 'profile') onGoProfile();
     else if (id === 'bbs') onGoBbs();
+    else if (id === 'economy') onGoEconomy();
   }
 
   return (
