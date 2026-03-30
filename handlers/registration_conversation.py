@@ -1,3 +1,4 @@
+import html
 import logging
 import pytz
 from datetime import datetime, date
@@ -215,6 +216,8 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             data['reg_age'] = user['q_age']
         if user.get('q_city') and 'reg_city' not in data:
             data['reg_city'] = user['q_city']
+        if user.get('q_therapy') and 'reg_therapy' not in data:
+            data['reg_therapy'] = user['q_therapy']
 
         next_q = questions.get(state, "А. Как тебя зовут?")
         keyboard = None
@@ -288,8 +291,9 @@ async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    await update_user(user_id, questionnaire_state="AGE")
-    context.user_data['reg_name'] = update.message.text
+    name = update.message.text
+    context.user_data['reg_name'] = name
+    await update_user(user_id, questionnaire_state="AGE", q_name=name)
 
     msg_id = context.user_data.get('reg_msg_id')
     if msg_id:
@@ -312,6 +316,7 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     age = int(age_text)
     await _delete_user_msg(update.message)
     context.user_data['reg_age'] = age
+    await update_user(user_id, q_age=age)
 
     if age < 18:
         await update_user(user_id, questionnaire_state="BIRTH_DATE")
@@ -372,8 +377,9 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    await update_user(user_id, questionnaire_state="THERAPY")
-    context.user_data['reg_city'] = update.message.text
+    city = update.message.text
+    context.user_data['reg_city'] = city
+    await update_user(user_id, questionnaire_state="THERAPY", q_city=city)
 
     msg_id = context.user_data.get('reg_msg_id')
     if msg_id:
@@ -386,8 +392,9 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    await update_user(user_id, questionnaire_state="REF_CODE")
-    context.user_data['reg_therapy'] = update.message.text
+    therapy = update.message.text
+    context.user_data['reg_therapy'] = therapy
+    await update_user(user_id, questionnaire_state="REF_CODE", q_therapy=therapy)
 
     keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_ref")]])
     msg_id = context.user_data.get('reg_msg_id')
@@ -472,11 +479,11 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     admin_text = (
         f"📢 <b>НОВАЯ ЗАЯВКА #{app_id}</b>"
         f"{block_d}\n"
-        f"👤 Имя: {data['reg_name']} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
+        f"👤 Имя: {html.escape(str(data['reg_name']))} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
         f"🎂 Возраст: {data['reg_age']}\n"
-        f"🏙 Город: {data['reg_city']}\n"
-        f"💊 Терапия: {data['reg_therapy']}\n"
-        f"🤝 Реферал: {ref_code or 'Нет'}\n"
+        f"🏙 Город: {html.escape(str(data['reg_city']))}\n"
+        f"💊 Терапия: {html.escape(str(data['reg_therapy']))}\n"
+        f"🤝 Реферал: {html.escape(str(ref_code)) if ref_code else 'Нет'}\n"
         f"🆔 Никнейм: {username_str}\n\n"
         f"📅 <b>Блок Е:</b>\n"
         f"Дата заявки: {now_msk}"
