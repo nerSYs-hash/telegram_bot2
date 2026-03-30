@@ -125,7 +125,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка фактического членства в чате (is_member)
     is_member = False
     try:
-        from telegram import ChatMemberStatus
+        from telegram.constants import ChatMemberStatus
         from config import CHAT_ID
         if CHAT_ID and CHAT_ID != 0:
             member = await context.bot.get_chat_member(CHAT_ID, user_id)

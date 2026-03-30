@@ -574,7 +574,7 @@ class MessageHandler:
         # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец ═══
         if user.id != self.main_admin_id:
             try:
-                from telegram import ChatMemberStatus
+                from telegram.constants import ChatMemberStatus
                 member = await context.bot.get_chat_member(self.target_chat_id, user.id)
                 # Разрешаем стандартные статусы + RESTRICTED (если пользователь все еще в чате)
                 is_member = member.status in (
