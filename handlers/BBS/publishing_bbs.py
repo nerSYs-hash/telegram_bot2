@@ -124,8 +124,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
 
     # Сохранить в БД
     now_iso = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
-    try:
-        db.cursor.execute('''
+    save_sql = '''
             INSERT INTO bbs_profiles
                 (user_id, username, photos, name, age, params, roles, city, goals, about,
                  message_ids, thread_id, published_at, edited_fields, created_at, updated_at)
@@ -137,7 +136,8 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 message_ids=excluded.message_ids, thread_id=excluded.thread_id,
                 published_at=excluded.published_at, edited=0, edited_fields='{}',
                 reaction_count=0, updated_at=excluded.updated_at
-        ''', (
+        '''
+    save_args = (
             user.id, user.username,
             json.dumps(photos),
             data['name'], data['age'],
@@ -149,10 +149,31 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
             json.dumps(sent_message_ids),
             bbs_thread_id,
             now_iso, now_iso, now_iso,
-        ))
+    )
+
+    try:
+        db.cursor.execute(save_sql, save_args)
         db.conn.commit()
     except Exception as e:
-        logging.error(f"BBS: Error saving profile to DB: {e}")
+        logging.error(f"BBS: Error saving profile to DB (first try): {e}")
+        try:
+            from handlers.BBS.database_bbs import init_bbs_tables
+            init_bbs_tables(db)
+            db.cursor.execute(save_sql, save_args)
+            db.conn.commit()
+            logging.info("BBS: Profile saved after schema migration retry")
+        except Exception as e2:
+            logging.error(f"BBS: Error saving profile to DB (retry): {e2}")
+            err_keyboard = InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔙 В меню", callback_data="menu_bbs")]
+            ])
+            await safe_answer(
+                query,
+                "❌ Анкета не сохранена в БД из-за ошибки структуры данных. Попробуйте ещё раз.",
+                err_keyboard,
+            )
+            clear_bbs(context)
+            return
 
     clear_bbs(context)
 

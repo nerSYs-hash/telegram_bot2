@@ -52,13 +52,38 @@ def init_bbs_tables(db):
         db.cursor.executescript(BBS_TABLES_SQL)
         db.conn.commit()
 
-        # Миграция: добавить edited_fields если колонки нет
-        try:
-            db.cursor.execute("SELECT edited_fields FROM bbs_profiles LIMIT 1")
-        except Exception:
-            db.cursor.execute("ALTER TABLE bbs_profiles ADD COLUMN edited_fields TEXT NOT NULL DEFAULT '[]'")
+        # Миграции: добавляем отсутствующие колонки в старых БД.
+        db.cursor.execute("PRAGMA table_info(bbs_profiles)")
+        existing_columns = {row['name'] for row in db.cursor.fetchall()}
+
+        required_columns = {
+            'username': "TEXT",
+            'photos': "TEXT NOT NULL DEFAULT '[]'",
+            'params': "TEXT DEFAULT NULL",
+            'roles': "TEXT NOT NULL DEFAULT '[]'",
+            'city': "TEXT NOT NULL DEFAULT '[]'",
+            'goals': "TEXT NOT NULL DEFAULT '[]'",
+            'about': "TEXT DEFAULT NULL",
+            'message_ids': "TEXT DEFAULT NULL",
+            'thread_id': "INTEGER DEFAULT NULL",
+            'published_at': "TEXT DEFAULT NULL",
+            'edited': "INTEGER NOT NULL DEFAULT 0",
+            'edited_fields': "TEXT NOT NULL DEFAULT '[]'",
+            'reaction_count': "INTEGER NOT NULL DEFAULT 0",
+            'bonus_paid_at': "TEXT DEFAULT NULL",
+            'created_at': "TEXT NOT NULL DEFAULT (datetime('now'))",
+            'updated_at': "TEXT NOT NULL DEFAULT (datetime('now'))",
+        }
+
+        migrated = False
+        for col, col_def in required_columns.items():
+            if col not in existing_columns:
+                db.cursor.execute(f"ALTER TABLE bbs_profiles ADD COLUMN {col} {col_def}")
+                migrated = True
+                logging.info(f"BBS: Migrated — added column bbs_profiles.{col}")
+
+        if migrated:
             db.conn.commit()
-            logging.info("BBS: Migrated — added edited_fields column")
 
         logging.info("✅ BBS tables initialized")
     except Exception as e:
