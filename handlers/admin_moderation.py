@@ -206,6 +206,22 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
     # Получаем данные заявки и пользователя
     app_data = await get_application(app_id)
     reg_data = await get_user(target_user_id)
+    if not reg_data:
+        # Пользователь не найден в БД — создаём запись и подтягиваем из Telegram
+        from database.db_friend import create_user
+        try:
+            chat_member = await context.bot.get_chat_member(target_user_id, target_user_id)
+            tg_user = chat_member.user
+        except Exception:
+            tg_user = None
+        
+        if tg_user:
+            await create_user(target_user_id, tg_user.username or '', tg_user.first_name or '', tg_user.last_name or '')
+            reg_data = await get_user(target_user_id)
+        
+        if not reg_data:
+            reg_data = {}
+            logger.warning(f"⚠️ Пользователь {target_user_id} не найден в БД регистрации")
     applied_at = _fmt_date(app_data.get('created_at')) if app_data else "—"
 
     if action == "app":
@@ -220,9 +236,9 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         if main_db:
             main_db.add_user(
                 target_user_id,
-                username=reg_data.get('username'),
-                first_name=reg_data.get('first_name'),
-                last_name=reg_data.get('last_name'),
+                username=reg_data.get('username', ''),
+                first_name=reg_data.get('first_name', ''),
+                last_name=reg_data.get('last_name', ''),
             )
             if referrer_id:
                 try:
@@ -395,8 +411,11 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Не смог написать юзеру {target_user_id}: {e}")
 
-    # 3.4.2 Обновляем сообщение в чате администраторов
-    await update.message.reply_text(
+    # 3.4.2 Карточка отказа в тред заявок
+    await context.bot.send_message(
+        chat_id=ADMIN_CHAT_ID,
+        message_thread_id=APPLICATIONS_THREAD_ID,
+        text=
         f"❌ <b>#Отказ — Заявка #{app_id}</b>\n\n"
         f"👤 {html.escape(reg_data.get('q_name') or '—')} | "
         f"<code>{target_user_id}</code>\n"
@@ -414,7 +433,7 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 3.4.3 УДАЛЯЕМ старую карточку заявки из треда заявок
     from config import ADMIN_CHAT_ID
-    app_msg_id = app_data.get('message_id') if app_id else None
+    app_msg_id = app_data.get('message_id') if app_data else None
     if not app_msg_id:
         # Пытаемся взять из текущей сессии если не сохранили в БД
         app_msg_id = context.user_data.get('current_app_msg_id')

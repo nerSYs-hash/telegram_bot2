@@ -52,7 +52,7 @@ class CommandHandler:
             # Проверяем фактическое нахождение в чате
             is_member = False
             try:
-                from telegram import ChatMemberStatus
+                from telegram.constants import ChatMemberStatus
                 if self.target_chat_id and self.target_chat_id != 0:
                     member = await context.bot.get_chat_member(self.target_chat_id, user_id)
                     is_member = member.status in (

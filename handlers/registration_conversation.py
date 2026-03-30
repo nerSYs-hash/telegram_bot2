@@ -125,7 +125,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Проверка фактического членства в чате (is_member)
     is_member = False
     try:
-        from telegram import ChatMemberStatus
+        from telegram.constants import ChatMemberStatus
         from config import CHAT_ID
         if CHAT_ID and CHAT_ID != 0:
             member = await context.bot.get_chat_member(CHAT_ID, user_id)
@@ -178,9 +178,14 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         main_db = context.bot_data.get('db')
 
         if main_db:
-            from handlers.commands.system_commands import menu_command
-            from config import OWNER_ID
-            await menu_command(update, context, main_db, OWNER_ID)
+            # Важно: сообщение /register могло быть удалено выше, поэтому не используем reply_text.
+            # Явно отправляем новое сообщение и восстанавливаем постоянную нижнюю клавиатуру.
+            from handlers.commands.system_commands import get_main_reply_keyboard
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="✅ Ты уже участник чата! Нижнее меню восстановлено.",
+                reply_markup=get_main_reply_keyboard(main_db, user_id, OWNER_ID)
+            )
         else:
             logger.error("main_db is None in start_reg — bot_data['db'] not set!")
             await context.bot.send_message(
@@ -231,7 +236,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
         context.user_data['reg_msg_id'] = sent.message_id
-        state_map = {"AGE": AGE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
+        state_map = {"AGE": AGE, "BIRTH_DATE": BIRTH_DATE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
         return state_map.get(state, NAME)
 
     if not user:
