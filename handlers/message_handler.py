@@ -481,7 +481,7 @@ class MessageHandler:
         # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ (fix V1.8.1c) ===
         if message.text:
             from handlers.triggers_handlers import process_triggers
-            if await process_triggers(message, context, self.db):
+            if await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id):
                 return
 
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
