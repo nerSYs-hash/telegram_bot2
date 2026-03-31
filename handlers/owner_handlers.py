@@ -16,6 +16,7 @@
 
 import os
 import time
+import asyncio
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import ContextTypes
@@ -125,6 +126,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("📊 Опросы при выходе", callback_data="owner_survey_results")],
         [InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("🆘 Восстановление веток", callback_data="owner_recovery_menu")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")],
     ]
@@ -1063,3 +1065,192 @@ async def send_database_backup(query, user, db, admin_id: int, context) -> None:
     except Exception as e:
         logger.error(f"Backup error: {e}")
         await query.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+#  🆘 ВОССТАНОВЛЕНИЕ ВЕТОК
+# ═══════════════════════════════════════════════════════════════
+
+# Константы форума
+_RECOVERY_CHAT_ID = -1003153855971
+_BBS_THREAD_ID = 8
+_NEWS_THREAD_ID = 26
+
+
+async def show_recovery_menu(query, db, admin_id: int) -> None:
+    """Главное меню восстановления веток."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    text = (
+        "🆘 <b>ВОССТАНОВЛЕНИЕ ВЕТОК</b>\n\n"
+        "Выберите ветку для восстановления из базы данных:"
+    )
+    keyboard = [
+        [InlineKeyboardButton("♻️ Восстановить BBS", callback_data="owner_restore_bbs")],
+        [InlineKeyboardButton("📰 Восстановить НьюзON", callback_data="owner_restore_news")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def restore_bbs_confirm(query, db, admin_id: int) -> None:
+    """Запрос подтверждения восстановления BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    try:
+        db.cursor.execute(
+            "SELECT COUNT(*) as cnt FROM bbs_profiles WHERE published_at IS NOT NULL"
+        )
+        row = db.cursor.fetchone()
+        count = row['cnt'] if row else 0
+    except Exception:
+        count = "?"
+
+    text = (
+        f"♻️ <b>Восстановление BBS</b>\n\n"
+        f"Будет перепубликовано анкет: <b>{count}</b>\n"
+        f"Ветка: <b>thread_id {_BBS_THREAD_ID}</b>\n\n"
+        f"⚠️ Старые message_ids будут перезаписаны в БД.\n"
+        f"Продолжить?"
+    )
+    keyboard = [
+        [InlineKeyboardButton("✅ Да, восстановить", callback_data="owner_restore_bbs_confirm")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="owner_recovery_menu")],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def restore_bbs_execute(query, context, db, admin_id: int) -> None:
+    """Выполняет восстановление всех анкет BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    from handlers.BBS.publishing_bbs import republish_profile
+
+    await query.edit_message_text("⏳ Начинаю восстановление анкет...", parse_mode='HTML')
+
+    try:
+        db.cursor.execute(
+            "SELECT user_id FROM bbs_profiles WHERE published_at IS NOT NULL"
+        )
+        rows = db.cursor.fetchall()
+    except Exception as e:
+        logger.error(f"restore_bbs_execute DB error: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка при чтении БД: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    success, errors = 0, 0
+    for row in rows:
+        try:
+            await republish_profile(
+                context.bot, db, row['user_id'],
+                _RECOVERY_CHAT_ID, _BBS_THREAD_ID,
+            )
+            success += 1
+        except Exception as e:
+            logger.error(f"restore_bbs: failed user_id={row['user_id']}: {e}")
+            errors += 1
+        await asyncio.sleep(2)
+
+    keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+    await query.edit_message_text(
+        f"✅ <b>Восстановление BBS завершено!</b>\n\n"
+        f"Успешно: <b>{success}</b>\n"
+        f"Ошибок: <b>{errors}</b>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def restore_news_confirm(query, db, admin_id: int) -> None:
+    """Запрос подтверждения восстановления НьюзON."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    try:
+        db.cursor.execute(
+            "SELECT COUNT(*) as cnt FROM scheduled_posts WHERE status = 'published'"
+        )
+        row = db.cursor.fetchone()
+        count = row['cnt'] if row else 0
+    except Exception:
+        count = "?"
+
+    text = (
+        f"📰 <b>Восстановление НьюзON</b>\n\n"
+        f"Будет перепубликовано постов: <b>{count}</b>\n"
+        f"Ветка: <b>thread_id {_NEWS_THREAD_ID}</b>\n\n"
+        f"⚠️ Посты публикуются в хронологическом порядке.\n"
+        f"Продолжить?"
+    )
+    keyboard = [
+        [InlineKeyboardButton("✅ Да, восстановить", callback_data="owner_restore_news_confirm")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="owner_recovery_menu")],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def restore_news_execute(query, context, db, admin_id: int) -> None:
+    """Выполняет восстановление всех постов НьюзON."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    from handlers.messages.admin_logic import publish_press_release_to_target
+
+    await query.edit_message_text("⏳ Начинаю восстановление новостей...", parse_mode='HTML')
+
+    try:
+        db.cursor.execute(
+            "SELECT text, photo_file_id FROM scheduled_posts "
+            "WHERE status = 'published' ORDER BY publish_at ASC"
+        )
+        rows = db.cursor.fetchall()
+    except Exception as e:
+        logger.error(f"restore_news_execute DB error: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка при чтении БД: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    success, errors = 0, 0
+    for row in rows:
+        try:
+            result = await publish_press_release_to_target(
+                context.bot,
+                row['text'],
+                row['photo_file_id'],
+                _RECOVERY_CHAT_ID,
+                _NEWS_THREAD_ID,
+            )
+            if result:
+                success += 1
+            else:
+                errors += 1
+        except Exception as e:
+            logger.error(f"restore_news: failed post: {e}")
+            errors += 1
+        await asyncio.sleep(2)
+
+    keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+    await query.edit_message_text(
+        f"✅ <b>Восстановление НьюзON завершено!</b>\n\n"
+        f"Успешно: <b>{success}</b>\n"
+        f"Ошибок: <b>{errors}</b>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )

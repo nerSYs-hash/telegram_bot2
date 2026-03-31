@@ -12,6 +12,8 @@ from handlers.owner_handlers import (
     show_system_menu, toggle_maintenance,
     send_database_backup,
     show_statistics_not_in_chat,
+    show_recovery_menu, restore_bbs_confirm, restore_bbs_execute,
+    restore_news_confirm, restore_news_execute,
 )
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
@@ -100,6 +102,18 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         class _FakeUpdate:
             callback_query = query
         await panel_callback(_FakeUpdate(), context)
+
+    # ── Восстановление веток ──
+    elif data == "owner_recovery_menu":
+        await show_recovery_menu(query, db, admin_id)
+    elif data == "owner_restore_bbs":
+        await restore_bbs_confirm(query, db, admin_id)
+    elif data == "owner_restore_bbs_confirm":
+        await restore_bbs_execute(query, context, db, admin_id)
+    elif data == "owner_restore_news":
+        await restore_news_confirm(query, db, admin_id)
+    elif data == "owner_restore_news_confirm":
+        await restore_news_execute(query, context, db, admin_id)
 
     # ── Журнал ──
     elif data == "owner_journal":

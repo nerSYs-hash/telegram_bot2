@@ -181,6 +181,22 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     except Exception as e:
         logging.error(f"BBS cleanup error: {e}")
 
+    # ═══ Запуск exit-опроса при любом выходе пользователя ═══
+    try:
+        from handlers.exit_survey_handlers import handle_exit_reason
+        # Имитация нажатия первой кнопки (Q1) — можно доработать под свою функцию старта
+        class DummyQuery:
+            def __init__(self, user_id):
+                self.data = f"exit_boring_{user_id}"
+            async def answer(self, *a, **kw):
+                pass
+            async def edit_message_text(self, *a, **kw):
+                pass
+        dummy_query = DummyQuery(user_id)
+        await handle_exit_reason(dummy_query, f"exit_boring_{user_id}", context, db, admin_id)
+    except Exception as e:
+        logging.error(f"Exit survey trigger error: {e}")
+
     # ═══ EXIT SURVEY: отправляем опрос ═══
     try:
         user_link = f"@{username}" if username else (user_data['first_name'] or 'Друг')
