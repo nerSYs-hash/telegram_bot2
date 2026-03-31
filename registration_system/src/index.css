@@ -1,3 +1,19 @@
+@layer utilities {
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(24px) scale(0.98); }
+    to { opacity: 1; transform: none; }
+  }
+  @keyframes fadeOut {
+    from { opacity: 1; transform: none; }
+    to { opacity: 0; transform: translateY(-24px) scale(0.98); }
+  }
+  .animate-fadeIn {
+    animation: fadeIn 0.22s cubic-bezier(.4,0,.2,1);
+  }
+  .animate-fadeOut {
+    animation: fadeOut 0.22s cubic-bezier(.4,0,.2,1);
+  }
+}
 @import "tailwindcss";
 
 :root {
@@ -16,8 +32,14 @@ body {
   background: #090d14;
 }
 
+
 #root {
   min-height: 100vh;
+}
+
+/* Отступ для нижнего меню, чтобы контент не перекрывался */
+.pb-20 {
+  padding-bottom: 5rem;
 }
 
 * {
