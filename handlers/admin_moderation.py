@@ -206,6 +206,8 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
     # Получаем данные заявки и пользователя
     app_data = await get_application(app_id)
     reg_data = await get_user(target_user_id)
+    if not reg_data:
+        reg_data = {}
     applied_at = _fmt_date(app_data.get('created_at')) if app_data else "—"
 
     if action == "app":
@@ -220,9 +222,9 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         if main_db:
             main_db.add_user(
                 target_user_id,
-                username=reg_data.get('username'),
-                first_name=reg_data.get('first_name'),
-                last_name=reg_data.get('last_name'),
+                username=reg_data.get('username', ''),
+                first_name=reg_data.get('first_name', ''),
+                last_name=reg_data.get('last_name', ''),
             )
             if referrer_id:
                 try:
