@@ -12,6 +12,7 @@ from decimal import Decimal
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, get_today_date_msk, get_moscow_time
+from utils.exchange_rate import CHARS_NORM
 
 # ══════════════════════════════════════════════════════════════════
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
@@ -121,7 +122,7 @@ async def show_top_rich(message, context, db):
         logging.error(f"Error showing top rich: {e}")
 
 
-CHARS_NORMALIZER = 100
+
 
 async def show_top_activists(message, context, db):
     try:

@@ -127,21 +127,21 @@ async function fetchBootstrap(): Promise<BootstrapResponse> {
     }
   }
 
-  return (
-    <div className="relative min-h-screen pb-20 bg-[#090d14]">
-      <div className="relative">
-        {/* Старый контент (уходит) */}
-        {animating && (
-          <div className="absolute inset-0 z-10 animate-fadeOut pointer-events-none">
-            {getContent(prevPage)}
+  export default function App() {
+    // ...existing code (все хуки и функции выше)
+    return (
+      <div className="relative min-h-screen pb-20 bg-[#090d14]">
+        <div className="relative">
+          {animating && (
+            <div className="absolute inset-0 z-10 animate-fadeOut pointer-events-none">
+              {getContent(prevPage)}
+            </div>
+          )}
+          <div className={animating ? 'animate-fadeIn' : ''}>
+            {getContent(page)}
           </div>
-        )}
-        {/* Новый контент (появляется) */}
-        <div className={animating ? 'animate-fadeIn' : ''}>
-          {getContent(page)}
         </div>
+        <BottomNavBar page={page} setPage={handleSetPage} />
       </div>
-      <BottomNavBar page={page} setPage={handleSetPage} />
-    </div>
-  );
-}
+    );
+  }
