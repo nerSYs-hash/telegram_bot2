@@ -503,7 +503,8 @@ class TelegramBot:
         self.application.add_handler(
             MessageHandler(
                 filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | 
-                filters.AUDIO | filters.ANIMATION | filters.Document.ALL,
+                filters.AUDIO | filters.ANIMATION | filters.Document.ALL |
+                filters.VIDEO_NOTE | filters.Sticker.ALL,
                 self.message_handler.handle_message
             )
         )

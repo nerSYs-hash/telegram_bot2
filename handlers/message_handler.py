@@ -73,7 +73,7 @@ class MessageHandler:
         
         # Check if cache is still valid
         now = datetime.now()
-        if self.last_admin_check and (now - self.last_admin_check).seconds < self.admin_cache_duration:
+        if self.last_admin_check and (now - self.last_admin_check).total_seconds() < self.admin_cache_duration:
             return self.chat_admins_cache
         
         try:
@@ -478,6 +478,12 @@ class MessageHandler:
             elif any(kw in clean_text for kw in ['богач', 'активист']):
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
+        # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ (fix V1.8.1c) ===
+        if message.text:
+            from handlers.triggers_handlers import process_triggers
+            if await process_triggers(message, context, self.db):
+                return
+
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
@@ -632,6 +638,12 @@ class MessageHandler:
             handled = await handle_owner_text_input(
                 update, context, self.db, self.main_admin_id, self.target_chat_id
             )
+            if handled:
+                return
+
+            # fix(V1.8.1c): FSM триггеров — ранее не подключён, текст проваливался
+            from handlers.triggers_handlers import handle_trigger_text_input
+            handled = await handle_trigger_text_input(update, context, self.db)
             if handled:
                 return
 
