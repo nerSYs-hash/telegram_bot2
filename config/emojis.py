@@ -143,7 +143,7 @@ ICON_LOCKED = "🔒"
 ICON_UNLOCKED = "🔓"
 ICON_LINK = "🔗"
 ICON_BACK_ARROW = "🔙"
-ICON_FIRE = "🔥"
+ICON_FIRE = '<tg-emoji emoji-id="5368324170671202286">🔥</tg-emoji>'
 ICON_WRENCH = "🔧"
 ICON_CRYSTAL_BALL = "🔮"
 ICON_RED_CIRCLE = '<tg-emoji emoji-id="5411225014148014586">🔴</tg-emoji>'

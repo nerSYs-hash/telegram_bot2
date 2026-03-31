@@ -116,6 +116,7 @@ async def show_top_activists(message, context, db):
         response += f"({get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n"
 
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+        from config.emojis import ICON_FIRE
         max_score = float(top_users[0]['activity_index']) if top_users else 1
 
         for idx, user in enumerate(top_users):
@@ -124,12 +125,13 @@ async def show_top_activists(message, context, db):
             pct = round(score / max_score * 100) if max_score > 0 else 0
             filled = round(pct / 10)
             bar = '▰' * filled + '░' * (10 - filled)
-            fire = '🔥' if idx == 0 else ''
+            fire = ICON_FIRE if idx == 0 else ''
             response += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
 
         await context.bot.send_message(
             chat_id=message.chat.id,
-            text=response
+            text=response,
+            parse_mode='HTML'
         )
 
     except Exception as e:
