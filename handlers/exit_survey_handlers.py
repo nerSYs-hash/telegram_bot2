@@ -533,18 +533,17 @@ async def handle_exit_final(query, data: str, context, db) -> None:
             row = db.cursor.fetchone()
             if row:
                 # Формируем текст отчета
-                report = f"📋 <b>Опрос при выходе</b>\n"
-                report += f"Пользователь: <code>{user_id}</code>\n"
-                if 'reason_category' in row and row['reason_category']:
-                    report += f"Причина: {row['reason_category']}\n"
-                if 'reason_text' in row and row['reason_text']:
-                    report += f"Детали: {row['reason_text']}\n"
-                if 'improvement' in row and row['improvement']:
-                    report += f"Что улучшить: {row['improvement']}\n"
-                if 'q3_event' in row and row['q3_event']:
-                    report += f"Событие: {row['q3_event']}\n"
-                if 'q4_expectations' in row and row['q4_expectations']:
-                    report += f"Ожидания: {row['q4_expectations']}\n"
+                def val(field):
+                    return row[field] if field in row and row[field] else '—'
+                report = (
+                    f"📋 <b>Опрос при выходе</b>\n"
+                    f"Пользователь: <code>{user_id}</code>\n"
+                    f"\n<b>1. Причина ухода:</b> {val('reason_category')}"
+                    f"\n<b>1b. Детали/уточнения:</b> {val('reason_text')}"
+                    f"\n<b>2. Что можно улучшить:</b> {val('improvement')}"
+                    f"\n<b>3. Конкретное событие:</b> {val('q3_event')}"
+                    f"\n<b>4. Ожидания при вступлении:</b> {val('q4_expectations')}"
+                )
                 # Отправляем OWNER_ID и ADMIN_CHAT_ID
                 for admin_chat in {OWNER_ID, ADMIN_CHAT_ID}:
                     try:
