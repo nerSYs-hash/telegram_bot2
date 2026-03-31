@@ -207,7 +207,21 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
     app_data = await get_application(app_id)
     reg_data = await get_user(target_user_id)
     if not reg_data:
-        reg_data = {}
+        # Пользователь не найден в БД — создаём запись и подтягиваем из Telegram
+        from database.db_friend import create_user
+        try:
+            chat_member = await context.bot.get_chat_member(target_user_id, target_user_id)
+            tg_user = chat_member.user
+        except Exception:
+            tg_user = None
+        
+        if tg_user:
+            await create_user(target_user_id, tg_user.username or '', tg_user.first_name or '', tg_user.last_name or '')
+            reg_data = await get_user(target_user_id)
+        
+        if not reg_data:
+            reg_data = {}
+            logger.warning(f"⚠️ Пользователь {target_user_id} не найден в БД регистрации")
     applied_at = _fmt_date(app_data.get('created_at')) if app_data else "—"
 
     if action == "app":
@@ -242,8 +256,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_message(
                 chat_id=target_user_id,
-                text="🎉 Поздравляем! Твоя заявка одобрена.",
-                message_effect_id="5046509860389126442"
+                text="🎉 Поздравляем! Твоя заявка одобрена."
             )
         except Exception as e:
             logger.error(f"Не смог написать юзеру {target_user_id}: {e}")
