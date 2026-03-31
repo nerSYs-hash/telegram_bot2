@@ -163,10 +163,10 @@ async def _generate_invite_link(context, user_id: int) -> str | None:
     if not chat_id:
         return None
     try:
-        # Используем creates_join_request=True для безопасности (только по одобрению)
+        # Для возврата по кнопке — обычная ссылка (без заявки)
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=int(chat_id),
-            creates_join_request=True,
+            creates_join_request=False,  # мгновенный возврат
             name=f"return_{user_id}"[:32],
         )
         return link_obj.invite_link
