@@ -94,7 +94,7 @@ async def _send_invite_link(bot, user_id: int, user_name: str):
         link_obj = await bot.create_chat_invite_link(
             chat_id=CHAT_ID,
             name=f"Approve: {user_name}"[:32],
-            creates_join_request=True
+            member_limit=1
         )
         invite_link = link_obj.invite_link
     except Exception as e:
@@ -205,6 +205,12 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
 
     # Получаем данные заявки и пользователя
     app_data = await get_application(app_id)
+
+    # Защита от двойного нажатия — если заявка уже обработана
+    if app_data and app_data.get('status') in ('approved', 'rejected', 'deleted'):
+        await query.answer("⚠️ Эта заявка уже обработана.", show_alert=True)
+        return
+
     reg_data = await get_user(target_user_id)
     if not reg_data:
         # Пользователь не найден в БД — создаём запись и подтягиваем из Telegram
@@ -359,6 +365,35 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             parse_mode="HTML",
             reply_markup=kb
         )
+
+    elif action == "del":
+        # Удаляем заявку — статус DELETED, не возвращается в очередь, пользователь НЕ уведомлён
+        from database.db_friend import delete_application
+        await delete_application(app_id, query.from_user.id)
+        context.user_data.pop('current_app_id', None)
+
+        admin_name = f"@{query.from_user.username}" if query.from_user.username else str(query.from_user.id)
+
+        # Удаляем карточку из треда заявок
+        app_msg_id = app_data.get('message_id') if app_data else None
+        if app_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
+            except Exception as e:
+                logger.warning(f"Не удалось удалить сообщение заявки {app_msg_id}: {e}")
+
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")]
+        ])
+        await query.edit_message_text(
+            f"🗑 <b>Заявка #{app_id} — УДАЛЕНА</b>\n\n"
+            f"👤 <code>{target_user_id}</code> #user{target_user_id}\n"
+            f"👨‍💼 Удалил: {admin_name}\n\n"
+            f"<i>Пользователь не уведомлён.</i>",
+            parse_mode="HTML",
+            reply_markup=kb
+        )
+        logger.info(f"Application #{app_id} deleted by {query.from_user.id}")
         
 async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текста с причиной отказа от администратора"""
@@ -431,8 +466,8 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
         parse_mode="HTML"
     )
 
+
     # 3.4.3 УДАЛЯЕМ старую карточку заявки из треда заявок
-    from config import ADMIN_CHAT_ID
     app_msg_id = app_data.get('message_id') if app_data else None
     if not app_msg_id:
         # Пытаемся взять из текущей сессии если не сохранили в БД
@@ -649,7 +684,10 @@ async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYP
             InlineKeyboardButton("❌ Отклонить", callback_data=f"adm_rej_{target_user_id}_{app_id}"),
             InlineKeyboardButton("⏳ Отложить", callback_data=f"adm_skip_{target_user_id}_{app_id}"),
         ],
-        [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}")],
+        [
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"adm_del_{target_user_id}_{app_id}"),
+            InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}"),
+        ],
         [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
     ])
 
@@ -762,7 +800,10 @@ async def _show_app_card(query, context, app, reg_data):
             InlineKeyboardButton("❌ Отклонить", callback_data=f"adm_rej_{user_id}_{app_id}"),
             InlineKeyboardButton("⏳ Отложить", callback_data=f"adm_skip_{user_id}_{app_id}"),
         ],
-        [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={user_id}")],
+        [
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"adm_del_{user_id}_{app_id}"),
+            InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
+        ],
         [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")],
     ])
 
