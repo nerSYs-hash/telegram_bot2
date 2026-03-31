@@ -509,6 +509,47 @@ async def handle_exit_final(query, data: str, context, db) -> None:
     await query.answer()
     await _show_thanks(query.message, user_id, db, context)
 
+    # --- Отправка отчета админу и владельцу ---
+    try:
+        from config import OWNER_ID, ADMIN_CHAT_ID
+        # Получаем все ответы пользователя
+        interview_id = context.user_data.get('exit_interview_id')
+        if not interview_id:
+            # Пытаемся найти последний по user_id
+            db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+            row = db.cursor.fetchone()
+            if row:
+                interview_id = row['id']
+        if interview_id:
+            db.cursor.execute('SELECT * FROM exit_interviews WHERE id = ?', (interview_id,))
+            row = db.cursor.fetchone()
+            if row:
+                # Формируем текст отчета
+                report = f"📋 <b>Опрос при выходе</b>\n"
+                report += f"Пользователь: <code>{user_id}</code>\n"
+                if row.get('reason_category'):
+                    report += f"Причина: {row['reason_category']}\n"
+                if row.get('reason_text'):
+                    report += f"Детали: {row['reason_text']}\n"
+                if row.get('improvement'):
+                    report += f"Что улучшить: {row['improvement']}\n"
+                if row.get('q3_event'):
+                    report += f"Событие: {row['q3_event']}\n"
+                if row.get('q4_expectations'):
+                    report += f"Ожидания: {row['q4_expectations']}\n"
+                # Отправляем OWNER_ID и ADMIN_CHAT_ID
+                for admin_chat in {OWNER_ID, ADMIN_CHAT_ID}:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin_chat,
+                            text=report,
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Не удалось отправить отчет админу {admin_chat}: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке exit-отчета админу/владельцу: {e}")
+
 
 async def _make_q5_kb(user_id: int, context) -> InlineKeyboardMarkup:
     """Клавиатура Q5: кнопка возврата + завершить."""
