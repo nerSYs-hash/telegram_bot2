@@ -280,10 +280,7 @@ def export_stats_to_excel(stats_data, filename):
             ws.row_dimensions[row].height = 35
             row += 1
 
-            _member_count = stats_data.get('member_count', 10)
-            _bot_count    = stats_data.get('bot_count', 1)
-            _divisor      = max(_member_count - _bot_count - 1, 1)
-            _CHARS_NORM   = Decimal('100')
+
 
             for idx, (user, data) in enumerate(stats_data['detailed_stats'].items()):
                 _msgs  = int(to_decimal(data.get('messages', 0)))
@@ -314,17 +311,17 @@ def export_stats_to_excel(stats_data, filename):
                     act = _n(data['activity_index'], 3)
                 else:
                     act = float(round_decimal((
-                        Decimal('0.03') * (Decimal(_chars) / _CHARS_NORM) +
-                        Decimal('0.03') * (to_decimal(_avg_len) / _CHARS_NORM) +
-                        Decimal('0.04') * Decimal(_msgs) +
-                        Decimal('0.07') * to_decimal(data.get('reactions', 0)) +
-                        Decimal('0.07') * to_decimal(data.get('reactions_received', 0)) +
-                        Decimal('0.15') * to_decimal(data.get('replies_received', 0)) +
-                        Decimal('0.16') * to_decimal(data.get('replies', 0)) +
+                        Decimal('0.05') * (Decimal(_chars) / Decimal('100')) +
+                        Decimal('0.05') * (to_decimal(_avg_len) / Decimal('100')) +
+                        Decimal('0.05') * Decimal(_msgs) +
+                        Decimal('0.08') * to_decimal(data.get('reactions', 0)) +
+                        Decimal('0.10') * to_decimal(data.get('reactions_received', 0)) +
+                        Decimal('0.18') * to_decimal(data.get('replies_received', 0)) +
+                        Decimal('0.15') * to_decimal(data.get('replies', 0)) +
                         Decimal('0.15') * to_decimal(data.get('mentions_received', 0)) +
-                        Decimal('0.05') * to_decimal(data.get('media', 0)) +
-                        Decimal('0.10') * to_decimal(data.get('other_threads_posts', 0))
-                    ) / Decimal(_divisor), 3))
+                        Decimal('0.07') * to_decimal(data.get('media', 0)) +
+                        Decimal('0.12') * to_decimal(data.get('other_threads_posts', 0))
+                    ), 3))
 
                 ws[f'P{row}'] = act                                          # float ← было строка
                 ws[f'P{row}'].number_format = _FMT_FLOAT3
@@ -814,20 +811,19 @@ def export_users_stats_to_excel(users_data, filename, period_name, member_count=
         total_msgs  = int(to_decimal(user.get('total_messages', 0)))
         total_chars = int(to_decimal(user.get('total_chars', 0)))
         avg_len = to_decimal(total_chars) / to_decimal(total_msgs) if total_msgs > 0 else Decimal('0')
-        divisor = max(member_count - bot_count - 1, 1)
 
         score = (
-            Decimal('0.03') * (to_decimal(total_chars) / CHARS_NORM) +
-            Decimal('0.03') * (avg_len / CHARS_NORM) +
-            Decimal('0.04') * to_decimal(total_msgs) +
-            Decimal('0.07') * to_decimal(user.get('reactions_given', 0)) +
-            Decimal('0.07') * to_decimal(user.get('reactions_received', 0)) +
-            Decimal('0.15') * to_decimal(user.get('replies_received', 0)) +
-            Decimal('0.16') * to_decimal(user.get('replies_sent', 0)) +
+            Decimal('0.05') * (to_decimal(total_chars) / CHARS_NORM) +
+            Decimal('0.05') * (avg_len / CHARS_NORM) +
+            Decimal('0.05') * to_decimal(total_msgs) +
+            Decimal('0.08') * to_decimal(user.get('reactions_given', 0)) +
+            Decimal('0.10') * to_decimal(user.get('reactions_received', 0)) +
+            Decimal('0.18') * to_decimal(user.get('replies_received', 0)) +
+            Decimal('0.15') * to_decimal(user.get('replies_sent', 0)) +
             Decimal('0.15') * to_decimal(user.get('mentions_received', 0)) +
-            Decimal('0.05') * to_decimal(user.get('media_sent', 0)) +
-            Decimal('0.10') * to_decimal(user.get('other_threads_posts', 0))
-        ) / Decimal(divisor)
+            Decimal('0.07') * to_decimal(user.get('media_sent', 0)) +
+            Decimal('0.12') * to_decimal(user.get('other_threads_posts', 0))
+        )
         return float(round_decimal(score, 2))
 
     def _online_time(last_active_str, total_messages: int) -> str:

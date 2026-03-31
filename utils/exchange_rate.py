@@ -304,9 +304,6 @@ def calculate_top5_snapshot(db, today, total_members):
     Returns:
         list of dict: [{'user_id': int, 'username': str, 'activity_index': float, 'rank': int}, ...]
     """
-    bot_count = int(os.getenv('BOT_COUNT', 1))
-    divisor = max(total_members - bot_count - 1, 1)
-
     date_30 = (today - timedelta(days=30)).strftime('%Y-%m-%d')
 
     db.cursor.execute(f'''
@@ -314,7 +311,7 @@ def calculate_top5_snapshot(db, today, total_members):
             u.user_id,
             u.username,
             u.first_name,
-            ({ACTIVITY_INDEX_SQL}) / ? as activity_index
+            ({ACTIVITY_INDEX_SQL}) as activity_index
         FROM user_stats us
         JOIN users u ON us.user_id = u.user_id
         WHERE us.date >= ? AND u.is_admin = 0 AND u.is_owner = 0
@@ -323,7 +320,7 @@ def calculate_top5_snapshot(db, today, total_members):
                OR SUM(us.reactions_received) > 0 OR SUM(us.replies_sent) > 0
         ORDER BY activity_index DESC
         LIMIT 5
-    ''', (divisor, date_30))
+    ''', (date_30,))
 
     rows = db.cursor.fetchall()
     result = []

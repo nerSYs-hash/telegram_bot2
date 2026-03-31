@@ -121,41 +121,20 @@ async def show_top_rich(message, context, db):
         logging.error(f"Error showing top rich: {e}")
 
 
-CHARS_NORM = 100
-
 async def show_top_activists(message, context, db):
     try:
         today = get_today_date_msk()
         admin_ids = await _get_admin_ids(context, message.chat.id)
-        bot_count = int(os.getenv('BOT_COUNT', 1))
         
         from datetime import timedelta
+        from utils.exchange_rate import ACTIVITY_INDEX_SQL
         now = get_moscow_time()
         date_30 = (now - timedelta(days=30)).strftime('%Y-%m-%d')
 
-        try:
-            member_count = await context.bot.get_chat_member_count(message.chat.id)
-            divisor = max(member_count - bot_count - 1, 1)
-        except Exception:
-            db.cursor.execute('SELECT COUNT(DISTINCT user_id) as cnt FROM user_stats WHERE date = ? AND total_messages > 0', (today,))
-            active = db.cursor.fetchone()['cnt']
-            divisor = max(active - bot_count - 1, 1)
-
-        db.cursor.execute('''
+        db.cursor.execute(f'''
             SELECT
                 u.user_id, u.username, u.first_name,
-                (
-                    0.05 * (SUM(us.total_chars) * 1.0 / ?) +
-                    0.05 * (CASE WHEN SUM(us.total_messages) > 0 THEN (SUM(us.total_chars) * 1.0 / SUM(us.total_messages)) / ? ELSE 0 END) +
-                    0.05 * SUM(us.total_words) +
-                    0.08 * SUM(us.reactions_given) +
-                    0.10 * SUM(us.reactions_received) +
-                    0.18 * SUM(us.replies_received) +
-                    0.15 * SUM(us.replies_sent) +
-                    0.15 * SUM(us.mentions_received) +
-                    0.07 * SUM(us.media_sent) +
-                    0.12 * SUM(us.other_threads_posts)
-                ) / ? as activity_index
+                ({ACTIVITY_INDEX_SQL}) as activity_index
             FROM user_stats us
             JOIN users u ON us.user_id = u.user_id
             WHERE us.date >= ?
@@ -164,7 +143,7 @@ async def show_top_activists(message, context, db):
             HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0 OR SUM(us.replies_sent) > 0
             ORDER BY activity_index DESC
             LIMIT 20
-        ''', (float(CHARS_NORM), float(CHARS_NORM), float(divisor), date_30))
+        ''', (date_30,))
         
         all_users = db.cursor.fetchall()
         top_users = await _filter_active_users(context, message.chat.id, all_users, admin_ids, db, limit=5)
