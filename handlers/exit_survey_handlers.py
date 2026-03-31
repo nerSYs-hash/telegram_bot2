@@ -527,15 +527,15 @@ async def handle_exit_final(query, data: str, context, db) -> None:
                 # Формируем текст отчета
                 report = f"📋 <b>Опрос при выходе</b>\n"
                 report += f"Пользователь: <code>{user_id}</code>\n"
-                if row.get('reason_category'):
+                if 'reason_category' in row and row['reason_category']:
                     report += f"Причина: {row['reason_category']}\n"
-                if row.get('reason_text'):
+                if 'reason_text' in row and row['reason_text']:
                     report += f"Детали: {row['reason_text']}\n"
-                if row.get('improvement'):
+                if 'improvement' in row and row['improvement']:
                     report += f"Что улучшить: {row['improvement']}\n"
-                if row.get('q3_event'):
+                if 'q3_event' in row and row['q3_event']:
                     report += f"Событие: {row['q3_event']}\n"
-                if row.get('q4_expectations'):
+                if 'q4_expectations' in row and row['q4_expectations']:
                     report += f"Ожидания: {row['q4_expectations']}\n"
                 # Отправляем OWNER_ID и ADMIN_CHAT_ID
                 for admin_chat in {OWNER_ID, ADMIN_CHAT_ID}:
