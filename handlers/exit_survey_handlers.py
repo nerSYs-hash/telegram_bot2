@@ -153,8 +153,9 @@ def _make_love_place_kb(user_id: int) -> InlineKeyboardMarkup:
 
 
 async def _generate_invite_link(context, user_id: int) -> str | None:
-    """Генерирует защищённую ссылку возврата (по заявке) из сохранённого chat_id."""
+    """Генерирует ссылку для возврата/входа: если заявка одобрена — мгновенный вход, иначе join request."""
     from config import CHAT_ID
+    import database.db_friend as db_friend
     chat_id = CHAT_ID
     if not chat_id:
         chat_id = context.user_data.get('exit_survey_chat_id')
@@ -163,10 +164,17 @@ async def _generate_invite_link(context, user_id: int) -> str | None:
     if not chat_id:
         return None
     try:
-        # Для возврата по кнопке — обычная ссылка (без заявки)
+        # Проверяем статус заявки пользователя
+        approved = False
+        try:
+            app = await db_friend.get_user_pending_application(user_id)
+            if app and app.get('status') == 'approved':
+                approved = True
+        except Exception as e:
+            logger.error(f"_generate_invite_link: ошибка проверки статуса заявки: {e}")
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=int(chat_id),
-            creates_join_request=False,  # мгновенный возврат
+            creates_join_request=not approved,  # если одобрено — мгновенный вход
             name=f"return_{user_id}"[:32],
         )
         return link_obj.invite_link
