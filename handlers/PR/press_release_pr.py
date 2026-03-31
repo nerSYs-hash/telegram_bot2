@@ -293,6 +293,19 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
 
         context.user_data.pop('pr_data', None)
 
+        # Сохраняем в архив БД со статусом published
+        try:
+            from utils.helpers import get_moscow_time
+            now_str = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
+            db.cursor.execute('''
+                INSERT INTO scheduled_posts
+                    (author_id, text, photo_file_id, target_chat_id, thread_id, publish_at, status, published_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'published', ?)
+            ''', (user.id, text, photo_file_id, target_chat_id, thread_id, now_str, now_str))
+            db.conn.commit()
+        except Exception as _e:
+            logger.warning(f"PR archive save failed: {_e}")
+
         await query.edit_message_text(
             "✅ Пресс-релиз опубликован!",
             reply_markup=InlineKeyboardMarkup([[
@@ -730,7 +743,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         else:
             await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
 
-        db.delete_scheduled_post(post_id)
+        db.mark_scheduled_post_published(post_id)
         await query.answer("✅ Пресс-релиз успешно опубликован!", show_alert=True)
         await show_scheduled_posts(query, user, context, db, admin_id, target_chat_id)
 
