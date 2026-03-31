@@ -236,7 +236,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             reply_markup=keyboard
         )
         context.user_data['reg_msg_id'] = sent.message_id
-        state_map = {"AGE": AGE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
+        state_map = {"AGE": AGE, "BIRTH_DATE": BIRTH_DATE, "CITY": CITY, "THERAPY": THERAPY, "REF_CODE": REF_CODE}
         return state_map.get(state, NAME)
 
     if not user:

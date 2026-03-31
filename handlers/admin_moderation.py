@@ -395,8 +395,11 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Не смог написать юзеру {target_user_id}: {e}")
 
-    # 3.4.2 Обновляем сообщение в чате администраторов
-    await update.message.reply_text(
+    # 3.4.2 Карточка отказа в тред заявок
+    await context.bot.send_message(
+        chat_id=ADMIN_CHAT_ID,
+        message_thread_id=APPLICATIONS_THREAD_ID,
+        text=
         f"❌ <b>#Отказ — Заявка #{app_id}</b>\n\n"
         f"👤 {html.escape(reg_data.get('q_name') or '—')} | "
         f"<code>{target_user_id}</code>\n"
@@ -414,7 +417,7 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
 
     # 3.4.3 УДАЛЯЕМ старую карточку заявки из треда заявок
     from config import ADMIN_CHAT_ID
-    app_msg_id = app_data.get('message_id') if app_id else None
+    app_msg_id = app_data.get('message_id') if app_data else None
     if not app_msg_id:
         # Пытаемся взять из текущей сессии если не сохранили в БД
         app_msg_id = context.user_data.get('current_app_msg_id')

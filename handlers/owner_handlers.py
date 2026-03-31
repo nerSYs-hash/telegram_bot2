@@ -254,10 +254,9 @@ async def wipe_execute(query, db, admin_id: int) -> None:
 
     try:
         db.cursor.execute('UPDATE users SET balance = 0, frozen_balance = 0')
+        affected = db.cursor.rowcount
         db.cursor.execute("UPDATE settings SET value = '10000000' WHERE key = 'bank_balance'")
         db.conn.commit()
-
-        affected = db.cursor.rowcount
         logger.warning(f"GLOBAL WIPE by {query.from_user.id}: {affected} users zeroed")
 
         text = (
