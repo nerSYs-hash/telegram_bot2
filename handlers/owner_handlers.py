@@ -228,8 +228,8 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
         users_total = 0
         frozen_total = 0
 
-    # Общая масса = банк + на руках + заморожено
-    total_supply = bank + users_total + frozen_total
+    # Общая масса = банк + на руках (замороженные уже в банке)
+    total_supply = bank + users_total
     # Дефицит/профицит
     target = 10_000_000
     delta = total_supply - target
@@ -249,9 +249,9 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
     text = (
         f"💰 <b>ЭКОНОМИКА</b>\n"
         f"🕐 <i>{time_str} МСК</i>\n\n"
-        f"🏦 Центробанк: <b>{format_number(bank)}</b> 💎 ({bank_pct:.1f}%)\n"
+        f"🏦 Центробанк: <b>{format_number(bank)}</b> 💎 ({bank_pct:.1f}%)"
+        f"{f' (вкл. 🧊 {format_number(frozen_total)})' if frozen_total > 0 else ''}\n"
         f"👥 На руках: <b>{format_number(users_total)}</b> 💎\n"
-        f"🧊 Заморожено: <b>{format_number(frozen_total)}</b> 💎\n"
         f"━━━━━━━━━━━━━━━━━\n"
         f"📊 Всего: <b>{format_number(total_supply)}</b> / {format_number(target)} 💎\n"
         f"{status_line}"
