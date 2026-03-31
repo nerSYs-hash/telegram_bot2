@@ -273,23 +273,52 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
             )
             sent_ids.append(msg.message_id)
         elif len(photos) > 1:
-            media = [
-                InputMediaPhoto(media=photos[0], caption=profile_text, parse_mode='HTML')
-            ]
-            media +=[InputMediaPhoto(media=fid) for fid in photos[1:]]
-            messages = await bot.send_media_group(
-                chat_id=target_chat_id,
-                message_thread_id=bbs_thread_id,
-                media=media,
-            )
-            sent_ids =[m.message_id for m in messages]
-            btn_msg = await bot.send_message(
-                chat_id=target_chat_id,
-                message_thread_id=bbs_thread_id,
-                text="ㅤ",
-                reply_markup=write_button(user_id, bot.username),
-            )
-            sent_ids.append(btn_msg.message_id)
+            # Фильтруем битые file_id (пустые строки, None)
+            valid_photos = [p for p in photos if p]
+            if not valid_photos:
+                # Все фото битые — fallback на текст с кнопкой
+                msg = await bot.send_message(
+                    chat_id=target_chat_id,
+                    message_thread_id=bbs_thread_id,
+                    text=profile_text,
+                    parse_mode='HTML',
+                    reply_markup=write_button(user_id, bot.username),
+                )
+                sent_ids.append(msg.message_id)
+            elif len(valid_photos) == 1:
+                # Осталось 1 фото — отправляем как одиночное с кнопкой
+                msg = await bot.send_photo(
+                    chat_id=target_chat_id,
+                    message_thread_id=bbs_thread_id,
+                    photo=valid_photos[0],
+                    caption=profile_text,
+                    parse_mode='HTML',
+                    reply_markup=write_button(user_id, bot.username),
+                )
+                sent_ids.append(msg.message_id)
+            else:
+                media = [
+                    InputMediaPhoto(media=valid_photos[0], caption=profile_text, parse_mode='HTML')
+                ]
+                media += [InputMediaPhoto(media=fid) for fid in valid_photos[1:]]
+                messages = await bot.send_media_group(
+                    chat_id=target_chat_id,
+                    message_thread_id=bbs_thread_id,
+                    media=media,
+                )
+                sent_ids = [m.message_id for m in messages]
+                # Кнопка — отдельным сообщением, отказ не должен ронять всю анкету
+                try:
+                    btn_msg = await bot.send_message(
+                        chat_id=target_chat_id,
+                        message_thread_id=bbs_thread_id,
+                        text=" 👆<b>Понравился ?</b>",
+                        parse_mode='HTML',
+                        reply_markup=write_button(user_id, bot.username),
+                    )
+                    sent_ids.append(btn_msg.message_id)
+                except Exception as btn_err:
+                    logging.warning(f"BBS: Button send failed for {user_id}: {btn_err}")
         else:
             # Fallback на случай отсутствия фото (если БД повредилась)
             msg = await bot.send_message(
