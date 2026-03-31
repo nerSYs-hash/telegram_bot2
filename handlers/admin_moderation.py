@@ -240,7 +240,8 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         try:
             await context.bot.send_message(
                 chat_id=target_user_id,
-                text="🎉 Поздравляем! Твоя заявка одобрена."
+                text="🎉 Поздравляем! Твоя заявка одобрена.",
+                message_effect_id="5046509860389126442"
             )
         except Exception as e:
             logger.error(f"Не смог написать юзеру {target_user_id}: {e}")

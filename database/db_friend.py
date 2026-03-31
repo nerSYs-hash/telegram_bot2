@@ -191,6 +191,7 @@ async def init_db():
                 status TEXT DEFAULT 'new',
                 admin_id INTEGER,
                 rejection_reason TEXT,
+                message_id INTEGER,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 locked_until TIMESTAMP,
@@ -205,6 +206,7 @@ async def init_db():
         try:
             await db.execute("ALTER TABLE applications ADD COLUMN message_id INTEGER")
             await db.commit()
+            logger.info("✅ Миграция: добавлена колонка message_id в applications")
         except Exception:
             pass  # колонка уже есть
 
