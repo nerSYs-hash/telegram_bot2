@@ -695,6 +695,18 @@ async def set_application_skipped(app_id: int):
         )
         await db.commit()
 
+async def delete_application(app_id: int, admin_id: int):
+    """Удаление заявки администратором — статус DELETED, не возвращается в очередь"""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            """UPDATE applications
+               SET status = ?, admin_id = ?, locked_by = NULL, locked_until = NULL, updated_at = ?
+               WHERE id = ?""",
+            (ApplicationStatus.DELETED, admin_id, datetime.now().isoformat(), app_id)
+        )
+        await db.commit()
+
+
 async def approve_application(app_id: int, admin_id: int):
     """Одобрение заявки"""
     async with db_pool.get_connection() as db:

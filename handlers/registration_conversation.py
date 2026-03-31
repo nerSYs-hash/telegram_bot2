@@ -158,7 +158,32 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 logger.warning(f"start_reg: main DB fallback failed for {user_id}: {e}")
 
-    # Если пользователь уже одобрен или находится в чате — ��еренаправляем в меню
+    # Проверка блокировки по возрасту (< 18)
+    if user and user.get('status') == 'blocked':
+        blocked_until = user.get('blocked_until')
+        if blocked_until:
+            try:
+                unlock_date = datetime.strptime(blocked_until, "%d.%m.%Y").date()
+                if date.today() < unlock_date:
+                    days_left = (unlock_date - date.today()).days
+                    await context.bot.send_message(
+                        chat_id=user_id,
+                        text=(
+                            f"⛔️ <b>Доступ в чат разрешён только с 18 лет.</b>\n\n"
+                            f"🔓 Доступ будет открыт: {blocked_until}\n"
+                            f"⏳ Осталось дней: {days_left}\n\n"
+                            f"Мы уведомим тебя, когда это произойдет."
+                        ),
+                        parse_mode="HTML"
+                    )
+                    return ConversationHandler.END
+                else:
+                    # Дата разблокировки прошла — сбрасываем статус
+                    await update_user(user_id, status='not_in_chat', blocked_until=None)
+            except ValueError:
+                pass
+
+    # Если пользователь уже одобрен или находится в чате — перенаправляем в меню
     if is_member or (user and user.get('status') in ('approved', 'in_chat', 'registered')):
         if is_member and user and user.get('status') not in ('approved', 'in_chat', 'registered'):
             try:
@@ -296,7 +321,13 @@ async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    name = update.message.text
+    name = update.message.text.strip()
+    if len(name) < 2:
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data, "А. Как тебя зовут?\n\n❌ Имя должно быть не менее 2 символов."))
+        return NAME
     context.user_data['reg_name'] = name
     await update_user(user_id, questionnaire_state="AGE", q_name=name)
 
@@ -320,6 +351,14 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     age = int(age_text)
     await _delete_user_msg(update.message)
+
+    if age < 1 or age > 120:
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data, "Б. Сколько тебе полных лет?\n\n❌ Укажи корректный возраст (от 1 до 120)."))
+        return AGE
+
     context.user_data['reg_age'] = age
     await update_user(user_id, q_age=age)
 
@@ -350,6 +389,15 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     try:
         birth_date = datetime.strptime(date_text, "%d.%m.%Y").date()
         today = date.today()
+
+        if birth_date > today:
+            if msg_id:
+                await _edit_form(context, user_id, msg_id,
+                    _build_form(context.user_data,
+                        "Е. Укажи точную дату рождения в формате ДД.ММ.ГГГГ\n\n"
+                        "❌ Дата не может быть в будущем!"))
+            return BIRTH_DATE
+
         real_age = today.year - birth_date.year - ((today.month, today.day) < (birth_date.month, birth_date.day))
 
         if real_age < 18:
@@ -382,7 +430,13 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    city = update.message.text
+    city = update.message.text.strip()
+    if len(city) < 2:
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data, "В. В каком городе ты проживаешь?\n\n❌ Название города — минимум 2 символа."))
+        return CITY
     context.user_data['reg_city'] = city
     await update_user(user_id, questionnaire_state="THERAPY", q_city=city)
 
@@ -397,7 +451,14 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     await _delete_user_msg(update.message)
-    therapy = update.message.text
+    therapy = update.message.text.strip()
+    if len(therapy) < 2:
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(context, user_id, msg_id,
+                _build_form(context.user_data,
+                    "Г. Какую терапию ты принимаешь?\n\n❌ Укажи терапию — минимум 2 символа."))
+        return THERAPY
     context.user_data['reg_therapy'] = therapy
     await update_user(user_id, questionnaire_state="REF_CODE", q_therapy=therapy)
 
