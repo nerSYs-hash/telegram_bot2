@@ -173,14 +173,20 @@ async def show_top_activists(message, context, db):
             await context.bot.send_message(chat_id=message.chat.id, text="Сегодня ещё никто не проявлял активность.")
             return
 
-        response = "⚡ ТОП-5 АКТИВИСТОВ СЕГОДНЯ\n\n"
+        response = "🏆 ТОП-5 АКТИВИСТОВ СЕГОДНЯ\n\n"
+        from config.emojis import ICON_FIRE
         emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+        max_score = float(top_users[0]['activity_index']) if top_users else 1
         for idx, user in enumerate(top_users):
             username = user['username'] or user['first_name'] or 'Unknown'
-            score = round(user['activity_index'], 2)
-            response += f"{emojis[idx]} @{username} — {score} 🏅\n"
+            score = float(user['activity_index'])
+            pct = round(score / max_score * 100) if max_score > 0 else 0
+            filled = round(pct / 10)
+            bar = '▰' * filled + '░' * (10 - filled)
+            fire = ICON_FIRE if idx == 0 else ''
+            response += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
 
-        await context.bot.send_message(chat_id=message.chat.id, text=response)
+        await context.bot.send_message(chat_id=message.chat.id, text=response, parse_mode='HTML')
     except Exception as e:
         logging.error(f"Error showing top activists: {e}")
 

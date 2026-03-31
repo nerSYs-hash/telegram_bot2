@@ -124,7 +124,6 @@ async def show_top5_activists(query, user, db, context=None):
 
     message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
     if top_users:
-        from config.emojis import ICON_FIRE
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         max_score = float(top_users[0]['activity_index']) if top_users else 1
         for idx, u_data in enumerate(top_users):
@@ -133,7 +132,7 @@ async def show_top5_activists(query, user, db, context=None):
             pct = round(score / max_score * 100) if max_score > 0 else 0
             filled = round(pct / 10)
             bar = '▰' * filled + '░' * (10 - filled)
-            fire = ICON_FIRE if idx == 0 else ''
+            fire = '🔥' if idx == 0 else ''
             message += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
     else:
         message += "За последние 30 дней нет данных об активности."
