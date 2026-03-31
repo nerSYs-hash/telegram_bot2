@@ -153,8 +153,9 @@ def _make_love_place_kb(user_id: int) -> InlineKeyboardMarkup:
 
 
 async def _generate_invite_link(context, user_id: int) -> str | None:
-    """Генерирует защищённую ссылку возврата (по заявке) из сохранённого chat_id."""
+    """Генерирует ссылку для возврата/входа: если заявка одобрена — мгновенный вход, иначе join request."""
     from config import CHAT_ID
+    import database.db_friend as db_friend
     chat_id = CHAT_ID
     if not chat_id:
         chat_id = context.user_data.get('exit_survey_chat_id')
@@ -163,10 +164,29 @@ async def _generate_invite_link(context, user_id: int) -> str | None:
     if not chat_id:
         return None
     try:
-        # Используем creates_join_request=True для безопасности (только по одобрению)
+        # Проверяем статус заявки пользователя
+        approved = False
+        try:
+            app = await db_friend.get_user_pending_application(user_id)
+            if app and app.get('status') == 'approved':
+                approved = True
+        except Exception as e:
+            logger.error(f"_generate_invite_link: ошибка проверки статуса заявки: {e}")
+
+        # Проверяем статус пользователя в чате через Telegram API
+        can_instant_join = False
+        try:
+            member = await context.bot.get_chat_member(int(chat_id), user_id)
+            if member.status not in ('left', 'kicked'):
+                can_instant_join = True
+        except Exception as e:
+            logger.warning(f"_generate_invite_link: get_chat_member error: {e}")
+
+        # Логика: если заявка одобрена и статус не left/kicked — мгновенная ссылка
+        instant = approved and can_instant_join
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=int(chat_id),
-            creates_join_request=True,
+            creates_join_request=not instant,  # мгновенный вход только если всё ок
             name=f"return_{user_id}"[:32],
         )
         return link_obj.invite_link
@@ -508,6 +528,46 @@ async def handle_exit_final(query, data: str, context, db) -> None:
 
     await query.answer()
     await _show_thanks(query.message, user_id, db, context)
+
+    # --- Отправка отчета админу и владельцу ---
+    try:
+        from config import OWNER_ID, ADMIN_CHAT_ID
+        # Получаем все ответы пользователя
+        interview_id = context.user_data.get('exit_interview_id')
+        if not interview_id:
+            # Пытаемся найти последний по user_id
+            db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+            row = db.cursor.fetchone()
+            if row:
+                interview_id = row['id']
+        if interview_id:
+            db.cursor.execute('SELECT * FROM exit_interviews WHERE id = ?', (interview_id,))
+            row = db.cursor.fetchone()
+            if row:
+                # Формируем текст отчета
+                def val(field):
+                    return row[field] if field in row and row[field] else '—'
+                report = (
+                    f"📋 <b>Опрос при выходе</b>\n"
+                    f"Пользователь: <code>{user_id}</code>\n"
+                    f"\n<b>1. Причина ухода:</b> {val('reason_category')}"
+                    f"\n<b>1b. Детали/уточнения:</b> {val('reason_text')}"
+                    f"\n<b>2. Что можно улучшить:</b> {val('improvement')}"
+                    f"\n<b>3. Конкретное событие:</b> {val('q3_event')}"
+                    f"\n<b>4. Ожидания при вступлении:</b> {val('q4_expectations')}"
+                )
+                # Отправляем OWNER_ID и ADMIN_CHAT_ID
+                for admin_chat in {OWNER_ID, ADMIN_CHAT_ID}:
+                    try:
+                        await context.bot.send_message(
+                            chat_id=admin_chat,
+                            text=report,
+                            parse_mode='HTML'
+                        )
+                    except Exception as e:
+                        logger.error(f"Не удалось отправить отчет админу {admin_chat}: {e}")
+    except Exception as e:
+        logger.error(f"Ошибка при отправке exit-отчета админу/владельцу: {e}")
 
 
 async def _make_q5_kb(user_id: int, context) -> InlineKeyboardMarkup:
