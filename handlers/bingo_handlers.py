@@ -705,7 +705,7 @@ class BingoHandler:
                             reply_markup=self._card_kb(gid, c))
                 except Exception as e:
                     if 'not modified' not in str(e).lower():
-                        logger.debug(f"Update card DM {uid}: {e}")
+                        logger.warning(f"Update card DM {uid}: {e}")
 
     # ══════════════════════════════════════════
     #  СООБЩЕНИЕ В ЧАТЕ

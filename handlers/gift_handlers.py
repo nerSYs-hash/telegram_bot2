@@ -116,7 +116,7 @@ class GiftHandler:
             
             if gift['status'] == 'completed' and gift['winner_id']:
                 winner = self.db.get_user(gift['winner_id'])
-                w_name = winner['username'] or winner['first_name'] if winner else "Unknown"
+                w_name = (winner['username'] or winner['first_name'] or str(gift['winner_id'])) if winner else str(gift['winner_id'])
                 message += f"\n🏆 Победитель: @{w_name}\n"
                 message += f"📅 Вручен: {gift['awarded_at']}\n"
             elif gift['status'] == 'active':
@@ -757,7 +757,7 @@ class GiftHandler:
         if not gift or gift['status'] != 'active':
             if gift and gift['status'] == 'completed' and gift['winner_id']:
                 winner = self.db.get_user(gift['winner_id'])
-                w_name = winner['username'] or winner['first_name'] if winner else "Unknown"
+                w_name = (winner['username'] or winner['first_name'] or str(gift['winner_id'])) if winner else str(gift['winner_id'])
                 message += f"🏆 В этом месяце победил: @{w_name}\n"
                 message += f"💎 Приз: {format_number(gift['prize_amount'])} Пульсов\n\n"
                 
