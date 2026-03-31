@@ -429,18 +429,25 @@ async def handle_exit_improvement(query, data: str, context, db) -> None:
         await query.answer("❌ Ошибка.", show_alert=True)
         return
 
-    if imp_key != 'skip':
-        interview_id = context.user_data.get('exit_interview_id')
-        if interview_id:
-            imp_text = IMPROVEMENT_MAP.get(imp_key, imp_key)
-            try:
-                db.cursor.execute(
-                    'UPDATE exit_interviews SET improvement = ? WHERE id = ?',
-                    (imp_text, interview_id)
-                )
-                db.conn.commit()
-            except Exception as e:
-                logger.error(f"handle_exit_improvement save error: {e}")
+    # Всегда ищем актуальный interview_id
+    interview_id = context.user_data.get('exit_interview_id')
+    if not interview_id:
+        db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+        row = db.cursor.fetchone()
+        if row:
+            interview_id = row['id']
+            context.user_data['exit_interview_id'] = interview_id
+
+    imp_text = IMPROVEMENT_MAP.get(imp_key, imp_key) if imp_key != 'skip' else 'Пропущено'
+    if interview_id:
+        try:
+            db.cursor.execute(
+                'UPDATE exit_interviews SET improvement = ? WHERE id = ?',
+                (imp_text, interview_id)
+            )
+            db.conn.commit()
+        except Exception as e:
+            logger.error(f"handle_exit_improvement save error: {e}")
 
     await query.answer()
     await query.edit_message_text(
@@ -460,18 +467,25 @@ async def handle_exit_event(query, data: str, context, db) -> None:
         await query.answer("❌ Ошибка.", show_alert=True)
         return
 
-    if ev_key != 'skip':
-        interview_id = context.user_data.get('exit_interview_id')
-        if interview_id:
-            ev_text = EVENT_MAP.get(ev_key, ev_key)
-            try:
-                db.cursor.execute(
-                    'UPDATE exit_interviews SET q3_event = ? WHERE id = ?',
-                    (ev_text, interview_id)
-                )
-                db.conn.commit()
-            except Exception as e:
-                logger.error(f"handle_exit_event save error: {e}")
+    # Всегда ищем актуальный interview_id
+    interview_id = context.user_data.get('exit_interview_id')
+    if not interview_id:
+        db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+        row = db.cursor.fetchone()
+        if row:
+            interview_id = row['id']
+            context.user_data['exit_interview_id'] = interview_id
+
+    ev_text = EVENT_MAP.get(ev_key, ev_key) if ev_key != 'skip' else 'Пропущено'
+    if interview_id:
+        try:
+            db.cursor.execute(
+                'UPDATE exit_interviews SET q3_event = ? WHERE id = ?',
+                (ev_text, interview_id)
+            )
+            db.conn.commit()
+        except Exception as e:
+            logger.error(f"handle_exit_event save error: {e}")
 
     # → Q4: текстовый ввод ожиданий
     context.user_data['exit_survey_awaiting'] = 'q4_expectations'
@@ -499,6 +513,26 @@ async def handle_exitq4_skip(query, data: str, context, db) -> None:
     except (ValueError, IndexError):
         await query.answer("❌ Ошибка.", show_alert=True)
         return
+
+    # Всегда ищем актуальный interview_id
+    interview_id = context.user_data.get('exit_interview_id')
+    if not interview_id:
+        db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+        row = db.cursor.fetchone()
+        if row:
+            interview_id = row['id']
+            context.user_data['exit_interview_id'] = interview_id
+
+    # Явно пишем "Пропущено" в q4_expectations
+    if interview_id:
+        try:
+            db.cursor.execute(
+                'UPDATE exit_interviews SET q4_expectations = ? WHERE id = ?',
+                ('Пропущено', interview_id)
+            )
+            db.conn.commit()
+        except Exception as e:
+            logger.error(f"handle_exitq4_skip save error: {e}")
 
     context.user_data.pop('exit_survey_awaiting', None)
     await query.answer()
@@ -546,7 +580,11 @@ async def handle_exit_final(query, data: str, context, db) -> None:
             if row:
                 # Формируем текст отчета
                 def val(field):
-                    return row[field] if field in row and row[field] else '—'
+                    try:
+                        v = row[field]
+                        return v if v else '—'
+                    except (IndexError, KeyError):
+                        return '—'
                 report = (
                     f"📋 <b>Опрос при выходе</b>\n"
                     f"Пользователь: <code>{user_id}</code>\n"
@@ -643,7 +681,15 @@ async def handle_exit_survey_text(update, context, db) -> bool:
     if not user_id:
         return False
 
+
+    # Всегда ищем актуальный interview_id
     interview_id = context.user_data.get('exit_interview_id')
+    if not interview_id:
+        db.cursor.execute('SELECT id FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1', (user_id,))
+        row = db.cursor.fetchone()
+        if row:
+            interview_id = row['id']
+            context.user_data['exit_interview_id'] = interview_id
 
     # ── Q1 текстовые ответы ──────────────────────────────────────
     if awaiting in ('expectations', 'threat_details', 'info_request', 'dislike_details', 'other_details'):
@@ -656,13 +702,14 @@ async def handle_exit_survey_text(update, context, db) -> bool:
                     'UPDATE exit_interviews SET reason_text = ? WHERE id = ?',
                     (text, interview_id)
                 )
+                db.conn.commit()
             else:
                 db.cursor.execute(
                     'INSERT INTO exit_interviews (user_id, reason_category, reason_text) VALUES (?, ?, ?)',
                     (user_id, reason_text, text)
                 )
                 context.user_data['exit_interview_id'] = db.cursor.lastrowid
-            db.conn.commit()
+                db.conn.commit()
         except Exception as e:
             logger.error(f"handle_exit_survey_text Q1 save error: {e}")
 
