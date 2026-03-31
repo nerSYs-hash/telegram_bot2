@@ -122,13 +122,18 @@ async def show_top5_activists(query, user, db, context=None):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
 
-    message = "⚡ ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
+    message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+        max_score = float(top_users[0]['activity_index']) if top_users else 1
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
-            score = float(round_decimal(_d(u_data['activity_index']), 2))
-            message += f"{emojis[idx]} @{username} — {score}\n"
+            score = float(u_data['activity_index'])
+            pct = round(score / max_score * 100) if max_score > 0 else 0
+            filled = round(pct / 10)
+            bar = '▰' * filled + '░' * (10 - filled)
+            fire = '🔥' if idx == 0 else ''
+            message += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
     else:
         message += "За последние 30 дней нет данных об активности."
 
