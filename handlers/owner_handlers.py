@@ -1315,7 +1315,7 @@ async def compensate_bbs_start(query, context, db, admin_id: int) -> None:
 
     try:
         db.cursor.execute(
-            "SELECT user_id, username, first_name FROM bbs_profiles WHERE published_at IS NOT NULL"
+            "SELECT user_id, username, name FROM bbs_profiles WHERE published_at IS NOT NULL"
         )
         rows = db.cursor.fetchall()
     except Exception as e:
@@ -1331,7 +1331,7 @@ async def compensate_bbs_start(query, context, db, admin_id: int) -> None:
         )
         return
 
-    affected = [{'user_id': r['user_id'], 'username': r['username'], 'first_name': r['first_name']} for r in rows]
+    affected = [{'user_id': r['user_id'], 'username': r['username'], 'name': r['name']} for r in rows]
     context.user_data['compensate_affected'] = affected
     context.user_data['owner_awaiting'] = 'compensate_bbs_amount'
 
