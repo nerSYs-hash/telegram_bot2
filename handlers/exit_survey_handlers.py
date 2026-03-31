@@ -172,9 +172,21 @@ async def _generate_invite_link(context, user_id: int) -> str | None:
                 approved = True
         except Exception as e:
             logger.error(f"_generate_invite_link: ошибка проверки статуса заявки: {e}")
+
+        # Проверяем статус пользователя в чате через Telegram API
+        can_instant_join = False
+        try:
+            member = await context.bot.get_chat_member(int(chat_id), user_id)
+            if member.status not in ('left', 'kicked'):
+                can_instant_join = True
+        except Exception as e:
+            logger.warning(f"_generate_invite_link: get_chat_member error: {e}")
+
+        # Логика: если заявка одобрена и статус не left/kicked — мгновенная ссылка
+        instant = approved and can_instant_join
         link_obj = await context.bot.create_chat_invite_link(
             chat_id=int(chat_id),
-            creates_join_request=not approved,  # если одобрено — мгновенный вход
+            creates_join_request=not instant,  # мгновенный вход только если всё ок
             name=f"return_{user_id}"[:32],
         )
         return link_obj.invite_link
