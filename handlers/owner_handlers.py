@@ -957,6 +957,52 @@ async def handle_owner_text_input(
             await message.reply_text(f"❌ Не удалось размутить: {e}")
         return True
 
+    # ── Компенсация BBS: ввод суммы ──
+    if awaiting == 'compensate_bbs_amount':
+        context.user_data.pop('owner_awaiting', None)
+        try:
+            amount = round(float(text.replace(',', '.')), 2)
+        except (ValueError, TypeError):
+            await message.reply_text("❌ Введите число. Пример: <code>500</code>", parse_mode='HTML')
+            context.user_data['owner_awaiting'] = 'compensate_bbs_amount'
+            return True
+
+        if amount <= 0:
+            await message.reply_text("❌ Сумма должна быть больше 0.")
+            context.user_data['owner_awaiting'] = 'compensate_bbs_amount'
+            return True
+
+        affected = context.user_data.get('compensate_affected', [])
+        total_cost = amount * len(affected)
+        bank = db.get_bank_balance()
+
+        if bank < total_cost:
+            await message.reply_text(
+                f"❌ <b>Недостаточно средств в Банке!</b>\n\n"
+                f"🏦 В банке: {format_number(bank)} 💎\n"
+                f"💸 Нужно: {format_number(total_cost)} 💎\n\n"
+                f"Введите сумму поменьше или нажмите Отмена.",
+                parse_mode='HTML',
+            )
+            context.user_data['owner_awaiting'] = 'compensate_bbs_amount'
+            return True
+
+        context.user_data['compensate_amount'] = amount
+
+        await message.reply_text(
+            f"⚖️ <b>СМЕТА КОМПЕНСАЦИИ</b>\n\n"
+            f"👥 Пострадавших: <b>{len(affected)}</b>\n"
+            f"💎 Выплата каждому: <b>{format_number(amount)} 💎</b>\n"
+            f"🏦 Итого из Банка: <b>{format_number(total_cost)} 💎</b>\n\n"
+            f"Запустить рассылку извинений?",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Подтвердить рассылку", callback_data="confirm_compensate_bbs")],
+                [InlineKeyboardButton("❌ Отмена", callback_data="owner_recovery_menu")],
+            ]),
+        )
+        return True
+
     # Неизвестный awaiting — сбрасываем
     context.user_data.pop('owner_awaiting', None)
     return False
@@ -1090,6 +1136,7 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton("♻️ Восстановить BBS", callback_data="owner_restore_bbs")],
         [InlineKeyboardButton("📰 Восстановить НьюзON", callback_data="owner_restore_news")],
+        [InlineKeyboardButton("🎁 Компенсация BBS", callback_data="owner_compensate_bbs")],
         [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
@@ -1251,6 +1298,107 @@ async def restore_news_execute(query, context, db, admin_id: int) -> None:
         f"✅ <b>Восстановление НьюзON завершено!</b>\n\n"
         f"Успешно: <b>{success}</b>\n"
         f"Ошибок: <b>{errors}</b>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+#  🎁 КОМПЕНСАЦИЯ BBS
+# ═══════════════════════════════════════════════════════════════
+
+async def compensate_bbs_start(query, context, db, admin_id: int) -> None:
+    """ШАГ 1: получает список пострадавших и просит ввести сумму."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    try:
+        db.cursor.execute(
+            "SELECT user_id, username, first_name FROM bbs_profiles WHERE published_at IS NOT NULL"
+        )
+        rows = db.cursor.fetchall()
+    except Exception as e:
+        logger.error(f"compensate_bbs_start DB error: {e}")
+        rows = []
+
+    if not rows:
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            "📭 Нет пользователей с анкетами BBS.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    affected = [{'user_id': r['user_id'], 'username': r['username'], 'first_name': r['first_name']} for r in rows]
+    context.user_data['compensate_affected'] = affected
+    context.user_data['owner_awaiting'] = 'compensate_bbs_amount'
+
+    text = (
+        f"🎁 <b>КОМПЕНСАЦИЯ BBS</b>\n\n"
+        f"Найдено <b>{len(affected)}</b> пострадавших пользователей с анкетами.\n\n"
+        f"Введите сумму Пульсов для компенсации <b>КАЖДОМУ</b> (число):"
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="owner_recovery_menu")]]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def compensate_bbs_confirm(query, context, db, admin_id: int) -> None:
+    """ШАГ 3: подтверждение — запускает рассылку."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    affected = context.user_data.get('compensate_affected', [])
+    amount = context.user_data.get('compensate_amount', 0)
+
+    if not affected or not amount:
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            "❌ Данные компенсации потеряны. Начните заново.",
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    await query.edit_message_text("⏳ Начинаю рассылку извинений и начисление Пульсов...", parse_mode='HTML')
+
+    success, errors = 0, 0
+    for u in affected:
+        uid = u['user_id']
+        try:
+            db.update_user_balance(uid, amount, 'add')
+            db.update_bank_balance(amount, 'subtract')
+            db.add_transaction(None, uid, amount, 'compensation_reward', 'Компенсация за сбой в BBS')
+
+            await context.bot.send_message(
+                chat_id=uid,
+                text=(
+                    "⚠️ <b>СИСТЕМНАЯ АНОМАЛИЯ УСТРАНЕНА</b>\n\n"
+                    "Недавно в ветке знакомств (BBS) произошёл сбой. "
+                    "Не переживайте, ваша анкета в безопасности и уже восстановлена!\n\n"
+                    f"В качестве извинений Администрация начислила вам "
+                    f"<b>+{format_number(amount)} 💎 Пульсов</b>.\n\n"
+                    "Спасибо, что вы с нами! ❤️"
+                ),
+                parse_mode='HTML',
+            )
+            success += 1
+        except Exception as e:
+            logger.error(f"compensate_bbs user {uid}: {e}")
+            errors += 1
+        await asyncio.sleep(0.5)
+
+    # Очистка
+    context.user_data.pop('compensate_affected', None)
+    context.user_data.pop('compensate_amount', None)
+
+    keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+    await query.edit_message_text(
+        f"✅ <b>Компенсация выплачена!</b>\n\n"
+        f"Получатели: <b>{success}</b>\n"
+        f"Не удалось отправить: <b>{errors}</b>\n"
+        f"Списано из банка: <b>{format_number(amount * success)} 💎</b>",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )

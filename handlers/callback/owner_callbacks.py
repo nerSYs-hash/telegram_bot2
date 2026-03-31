@@ -14,6 +14,7 @@ from handlers.owner_handlers import (
     show_statistics_not_in_chat,
     show_recovery_menu, restore_bbs_confirm, restore_bbs_execute,
     restore_news_confirm, restore_news_execute,
+    compensate_bbs_start, compensate_bbs_confirm,
 )
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
@@ -114,6 +115,10 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await restore_news_confirm(query, db, admin_id)
     elif data == "owner_restore_news_confirm":
         await restore_news_execute(query, context, db, admin_id)
+    elif data == "owner_compensate_bbs":
+        await compensate_bbs_start(query, context, db, admin_id)
+    elif data == "confirm_compensate_bbs":
+        await compensate_bbs_confirm(query, context, db, admin_id)
 
     # ── Журнал ──
     elif data == "owner_journal":
