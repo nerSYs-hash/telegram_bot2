@@ -416,7 +416,17 @@ class Database:
                 PRIMARY KEY (user_id, sprint_name, window_key)
             )
         ''')
-        
+
+        # Defibrillator buff columns in users table
+        for col, col_def in [
+            ('mining_buff_multiplier', 'REAL DEFAULT 1.0'),
+            ('mining_buff_expires_at', 'TIMESTAMP'),
+        ]:
+            try:
+                self.cursor.execute(f'ALTER TABLE users ADD COLUMN {col} {col_def}')
+            except Exception:
+                pass  # column already exists
+
         self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS monthly_gifts (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,

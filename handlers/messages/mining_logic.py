@@ -19,6 +19,7 @@ mining_logic.py — Ядро экономики «Конструктор цен�
 from __future__ import annotations
 
 import logging
+import random
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 
@@ -31,6 +32,12 @@ logger = logging.getLogger(__name__)
 
 GLOBAL_BASE_RATE: float = 0.002
 """Единая базовая ставка экономики. Все коэффициенты умножаются на неё."""
+
+# ── Дефибриллятор (Разрушитель тишины) ──────────────────────────────────
+DEFIBRILLATOR_BUFF_MULTIPLIER: float = 3.0
+DEFIBRILLATOR_BUFF_DURATION_MIN: int = 10
+DEFIBRILLATOR_SILENCE_MIN: int = 5
+DEFIBRILLATOR_SILENCE_MAX: int = 15
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -752,6 +759,107 @@ def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, 
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  ДЕФИБРИЛЛЯТОР — «Разрушитель тишины»
+# ══════════════════════════════════════════════════════════════════════════════
+
+def _check_and_grant_defibrillator(db, user_id: int, chat_id: int, now: datetime) -> bool:
+    """
+    Если во всём чате была тишина >= random(5..15) минут,
+    первый написавший получает бафф x3 на 10 минут.
+    Анти-абуз: 1 раз в 24 часа на юзера.
+    """
+    try:
+        # 1. КД — получал ли бафф за последние 24ч
+        db.cursor.execute('''
+            SELECT 1 FROM combo_claims
+            WHERE user_id = ? AND combo_name = 'defibrillator'
+              AND claimed_at >= datetime('now', '+3 hours', '-24 hours')
+        ''', (user_id,))
+        if db.cursor.fetchone():
+            return False
+
+        # 2. Время предыдущего сообщения во ВСЁМ чате (любая ветка)
+        db.cursor.execute('''
+            SELECT timestamp FROM messages
+            WHERE chat_id = ?
+            ORDER BY id DESC LIMIT 1 OFFSET 1
+        ''', (chat_id,))
+        row = db.cursor.fetchone()
+        if not row or not row['timestamp']:
+            return False
+
+        # 3. Считаем тишину в минутах (timestamp хранится в UTC → +3 = MSK)
+        try:
+            prev_time = datetime.strptime(row['timestamp'][:19], '%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            return False
+
+        prev_time_msk = prev_time + timedelta(hours=3)
+        now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+        delta_minutes = (now_naive - prev_time_msk).total_seconds() / 60
+
+        if delta_minutes < DEFIBRILLATOR_SILENCE_MIN:
+            return False
+
+        # 4. Рандомный порог (анти-абуз)
+        target_minutes = random.randint(DEFIBRILLATOR_SILENCE_MIN, DEFIBRILLATOR_SILENCE_MAX)
+        if delta_minutes < target_minutes:
+            return False
+
+        # 5. Активируем бафф
+        expires_at = now_naive + timedelta(minutes=DEFIBRILLATOR_BUFF_DURATION_MIN)
+        expires_str = expires_at.strftime('%Y-%m-%d %H:%M:%S')
+
+        db.cursor.execute('''
+            UPDATE users SET mining_buff_multiplier = ?, mining_buff_expires_at = ?
+            WHERE user_id = ?
+        ''', (DEFIBRILLATOR_BUFF_MULTIPLIER, expires_str, user_id))
+
+        now_str = now_naive.strftime('%Y-%m-%d %H:%M:%S')
+        db.cursor.execute('''
+            INSERT OR REPLACE INTO combo_claims (user_id, combo_name, reward, claimed_at)
+            VALUES (?, 'defibrillator', 0, ?)
+        ''', (user_id, now_str))
+
+        db.conn.commit()
+
+        logger.info(
+            f"⚡ ДЕФИБРИЛЛЯТОР | user={user_id} | "
+            f"тишина={delta_minutes:.1f}мин >= {target_minutes}мин | "
+            f"бафф x{DEFIBRILLATOR_BUFF_MULTIPLIER} на {DEFIBRILLATOR_BUFF_DURATION_MIN}мин"
+        )
+        return True
+
+    except Exception as e:
+        logger.debug(f"Defibrillator check: {e}")
+        return False
+
+
+def _get_user_buff(db, user_id: int, now: datetime) -> float:
+    """Возвращает активный множитель баффа (1.0 = нет баффа)."""
+    try:
+        db.cursor.execute('''
+            SELECT mining_buff_multiplier, mining_buff_expires_at
+            FROM users WHERE user_id = ?
+        ''', (user_id,))
+        row = db.cursor.fetchone()
+        if not row or not row['mining_buff_expires_at']:
+            return 1.0
+
+        try:
+            expires = datetime.strptime(row['mining_buff_expires_at'][:19], '%Y-%m-%d %H:%M:%S')
+        except (ValueError, TypeError):
+            return 1.0
+
+        now_naive = now.replace(tzinfo=None) if now.tzinfo else now
+        if expires > now_naive:
+            return row['mining_buff_multiplier'] or 1.0
+        return 1.0
+    except Exception:
+        return 1.0
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  ГЛАВНАЯ ФУНКЦИЯ
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -764,7 +872,7 @@ def process_mining_reward(
     db,
     message,
     thread_id: Optional[int],
-) -> float:
+) -> tuple[float, dict | None]:
     """
     Полный цикл начисления награды за одно сообщение.
 
@@ -773,19 +881,19 @@ def process_mining_reward(
     3. Проверяет мгновенные комбо         (Блок 2)
     4. Проверяет спринты                  (Блок 3)
     5. Считает штрафы                     (Блок 4)
-    6. total = (Σ коэффициентов) × GLOBAL_BASE_RATE
+    6. total = (Σ коэффициентов) × GLOBAL_BASE_RATE × buff
     7. Списывает из банка, начисляет юзеру, пишет транзакцию
 
-    Возвращает начисленную награду (0.0 если не начислена).
+    Возвращает (начисленная_награда, notification_dict | None).
     """
 
     if is_excluded:
         logger.info(f"ℹ️ SKIP user {user_id} ({exclusion_reason})")
-        return 0.0
+        return 0.0, None
 
     if not user_data:
         logger.warning(f"⚠️ No user_data for {user_id}")
-        return 0.0
+        return 0.0, None
 
     try:
         # ══════════════════════════════════════════════════════════════════
@@ -830,6 +938,11 @@ def process_mining_reward(
 
         from utils.helpers import get_moscow_time
         now = get_moscow_time()
+
+        # ══════════════════════════════════════════════════════════════════
+        #  ДЕФИБРИЛЛЯТОР — «Разрушитель тишины»
+        # ══════════════════════════════════════════════════════════════════
+        defibrillator_activated = _check_and_grant_defibrillator(db, user_id, chat_id, now)
 
         # claimed_combos = {combo_name: claimed_at_datetime} — на КД
         claimed_combos = _get_claimed_combos(db, user_id, now)
@@ -935,16 +1048,40 @@ def process_mining_reward(
         sprint_rw = round(sprint_coeff * GLOBAL_BASE_RATE, 4) if new_sprints else 0.0
         penalty_rw = round(abs(penalty_coeff) * GLOBAL_BASE_RATE, 4) if penalties else 0.0
 
-        # Итого к начислению (база + комбо + спринт - штраф)
-        total_reward = round(max(base_rw + combo_rw + sprint_rw - penalty_rw, 0.0), 4)
+        # ══════════════════════════════════════════════════════════════════
+        #  ПРИМЕНЕНИЕ БАФФА (Дефибриллятор и др.)
+        # ══════════════════════════════════════════════════════════════════
+        buff_multiplier = _get_user_buff(db, user_id, now)
+        income = base_rw + combo_rw + sprint_rw
+        if buff_multiplier > 1.0:
+            total_reward = round(max(income * buff_multiplier - penalty_rw, 0.0), 4)
+            logger.info(f"⚡ Активен БАФФ x{buff_multiplier}! Итого: {total_reward} 💎")
+        else:
+            total_reward = round(max(income - penalty_rw, 0.0), 4)
+
+        # ══════════════════════════════════════════════════════════════════
+        #  УВЕДОМЛЕНИЕ О ДЕФИБРИЛЛЯТОРЕ
+        # ══════════════════════════════════════════════════════════════════
+        notification = None
+        if defibrillator_activated:
+            notification = {
+                'type': 'defibrillator',
+                'user_id': user_id,
+                'text': (
+                    "⚡️ <b>СЕКРЕТ РАСКРЫТ: «Дефибриллятор»!</b>\n\n"
+                    "Чат спал, но вы прервали тишину! "
+                    "Ваша кирка заряжена: <b>весь ваш майнинг увеличен "
+                    "на 200% (х3) на следующие 10 минут!</b>"
+                ),
+            }
 
         if total_reward <= 0:
-            return 0.0
+            return 0.0, notification
 
         bank_balance = db.get_bank_balance()
         if bank_balance < total_reward:
             logger.warning(f"⚠️ Bank: {bank_balance} < {total_reward}")
-            return 0.0
+            return 0.0, notification
 
         db.update_user_balance(user_id, total_reward, 'add')
         db.update_bank_balance(total_reward, 'subtract')
@@ -1023,10 +1160,10 @@ def process_mining_reward(
             f"✅ НАЧИСЛЕНО | user={user_id} | "
             f"{' | '.join(parts)} | ИТОГО: {total_reward} 💎"
         )
-        return total_reward
+        return total_reward, notification
 
     except Exception as e:
         logger.error(f"❌ process_mining_reward error user={user_id}: {e}")
         import traceback
         logger.error(traceback.format_exc())
-        return 0.0
+        return 0.0, None

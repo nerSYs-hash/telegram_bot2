@@ -324,7 +324,7 @@ class MessageHandler:
         self.db.conn.commit()
         
         # === НАЧИСЛЕНИЕ НАГРАД ===
-        process_mining_reward(
+        _reward, _notification = process_mining_reward(
             user_id=user.id,
             today=today,
             user_data=user_data,
@@ -334,6 +334,17 @@ class MessageHandler:
             message=message,          # Передаем само сообщение
             thread_id=thread_id       # Передаем ID ветки
         )
+
+        # Уведомление о секретных механиках (Дефибриллятор и пр.)
+        if _notification:
+            try:
+                await context.bot.send_message(
+                    chat_id=_notification['user_id'],
+                    text=_notification['text'],
+                    parse_mode='HTML',
+                )
+            except Exception:
+                pass
         
         # === ДАЛЕЕ КОД ВЫПОЛНЯЕТСЯ ДЛЯ ВСЕХ (включая админов и владельца) ===
 
