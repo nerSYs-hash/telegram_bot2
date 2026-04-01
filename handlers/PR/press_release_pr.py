@@ -46,10 +46,11 @@ def _resolve_thread_name(db, target_chat_id, thread_id):
     for t in topics:
         if t['thread_id'] == thread_id:
             name = (t['thread_name'] if t['thread_name'] else '')
+            normalized = name.strip()
             is_generic = (
-                not name or
-                name.startswith('Ветка #') or
-                name == f'Ветка #{thread_id}'
+                not normalized or
+                normalized == f'Ветка #{thread_id}' or
+                normalized == f'Ветка {thread_id}'
             )
             if not is_generic:
                 return f"🧵 {name}"

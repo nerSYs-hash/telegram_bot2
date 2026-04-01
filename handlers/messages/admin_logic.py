@@ -127,12 +127,13 @@ async def build_topic_keyboard(context, db, target_chat_id):
         name = topic['thread_name'] or ''
         tid = topic['thread_id']
 
-        # Check if it's a real name (not generic "Ветка #xxx")
+        # Generic only when empty or exactly default auto-name for this ID.
+        # Do not hide real names that happen to start with "Ветка".
+        normalized = name.strip()
         is_generic = (
-            name.startswith('Ветка #') or
-            name.startswith('Ветка ') or
-            name == f'Ветка #{tid}' or
-            not name
+            not normalized or
+            normalized == f'Ветка #{tid}' or
+            normalized == f'Ветка {tid}'
         )
 
         if is_generic:
