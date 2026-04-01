@@ -719,10 +719,16 @@ async def _show_topics_select(src, ctx, db, page=0):
     kb = []
     for t in page_topics:
         tid = t['thread_id']
-        name = t['thread_name'] or f"Ветка #{tid}"
-        if t['is_main_thread']:
+        raw_name = t['thread_name'] or ''
+        if tid is None:
+            # Главный чат (thread_id IS NULL)
             name = "💬 Главный чат"
-            tid = None  # main thread
+        elif raw_name and not raw_name.startswith('Ветка #') and not raw_name.startswith('Ветка '):
+            # Реальное название ветки из БД
+            name = f"📂 {raw_name}"
+        else:
+            # Ветка без красивого имени — показываем ID
+            name = f"📂 Ветка #{tid}"
         mark = " ✅" if tid in selected_ids else ""
         # callback_data: thread_id или 0 для главного чата
         cb_id = tid if tid is not None else 0

@@ -679,6 +679,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
             'viral_post':   {'label': '📢 Вирусный пост',   'desc': '> 2 лайков'},
             'hit_post':     {'label': '💥 Хит-пост',        'desc': '4+ лайка'},
             'legend_post':  {'label': '👑 Легенда',          'desc': '6+ лайков'},
+            # Секретные механики
+            'defibrillator': {'label': '⚡️ Дефибриллятор', 'desc': 'Первое сообщение после тишины 5–15 мин (бафф x3)'},
             # Спринты
             'chat_core':    {'label': '💬 Основа чата',      'desc': '10 сообщений за 24ч'},
             'emotional':    {'label': '😍 Эмоциональный',    'desc': '10 эмодзи за 24ч'},
