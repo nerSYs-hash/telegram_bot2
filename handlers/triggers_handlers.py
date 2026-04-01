@@ -186,6 +186,8 @@ def _nav_buttons(step: str, show_skip: bool = False) -> list:
     idx = CREATION_STEPS.index(step) if step in CREATION_STEPS else -1
     if idx > 0:
         row.append(IKB("◀ Назад", callback_data="trigger_back"))
+    elif idx == 0:
+        row.append(IKB("◀ Назад в меню", callback_data="trigger_back_to_menu"))
     row.append(IKB("❌ Сброс", callback_data="trigger_reset"))
     if show_skip:
         row.append(IKB("⏩ Пропустить", callback_data="trigger_skip"))
@@ -1150,16 +1152,31 @@ async def process_triggers(
                 act_cfg = cfgs.get(act, {})
 
                 if act == 'msg_chat':
-                    reply_text = act_cfg.get('text', f"⚡ Триггер: {trigger['name']}")
-                    bot_msg = await message.reply_text(reply_text, parse_mode='HTML')
-                    await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
+                    reply_text = (act_cfg.get('text') or trigger['name']).strip()
+                    bot_msg = await _send_action_message(
+                        bot=context.bot,
+                        chat_id=message.chat.id,
+                        thread_id=getattr(message, 'message_thread_id', None),
+                        text=reply_text,
+                        act_cfg=act_cfg,
+                        parse_mode='HTML',
+                    )
+                    if bot_msg:
+                        await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
 
                 elif act == 'msg_dm':
-                    dm_text = act_cfg.get('text', f"⚡ {trigger['name']}")
+                    dm_text = (act_cfg.get('text') or trigger['name']).strip()
                     uid = _resolve_target(user, target_type, tdata)
                     if uid:
                         try:
-                            await context.bot.send_message(uid, dm_text, parse_mode='HTML')
+                            await _send_action_message(
+                                bot=context.bot,
+                                chat_id=uid,
+                                thread_id=None,
+                                text=dm_text,
+                                act_cfg=act_cfg,
+                                parse_mode='HTML',
+                            )
                         except Exception as e:
                             logger.warning(f"DM failed: {e}")
 
@@ -1196,6 +1213,9 @@ async def process_triggers(
                             logger.error(f"Mute failed: {e}")
 
                 elif act == 'warn':
+                    uid = _resolve_target(user, target_type, tdata)
+                    if not uid:
+                        continue
                     wp = tdata.get('warn_period')
                     count = _get_violations_in_period(db, user.id, trigger['id'], wp)
                     bot_msg = await message.reply_text(
@@ -1205,18 +1225,16 @@ async def process_triggers(
                     # Эскалация
                     for threshold, mute_sec in WARN_ESCALATION:
                         if count == threshold:
-                            uid = _resolve_target(user, target_type, tdata)
-                            if uid:
-                                try:
-                                    await context.bot.restrict_chat_member(
-                                        chat_id=target_chat_id, user_id=uid,
-                                        permissions=ChatPermissions(can_send_messages=False),
-                                        until_date=int(time.time()) + mute_sec)
-                                    await message.reply_text(
-                                        f"🔇 {_user_link(user)} — мут {_format_duration(mute_sec)} "
-                                        f"({count} предупр.)", parse_mode='HTML')
-                                except Exception as e:
-                                    logger.error(f"Warn mute failed: {e}")
+                            try:
+                                await context.bot.restrict_chat_member(
+                                    chat_id=target_chat_id, user_id=uid,
+                                    permissions=ChatPermissions(can_send_messages=False),
+                                    until_date=int(time.time()) + mute_sec)
+                                await message.reply_text(
+                                    f"🔇 {_user_link(user)} — мут {_format_duration(mute_sec)} "
+                                    f"({count} предупр.)", parse_mode='HTML')
+                            except Exception as e:
+                                logger.error(f"Warn mute failed: {e}")
                             break
 
                 elif act == 'emoji':
@@ -1242,6 +1260,61 @@ def _resolve_target(user, target_type: str, tdata: dict) -> Optional[int]:
         except (ValueError, TypeError): pass
     if target_type == 'nobody': return None
     return user.id  # fallback
+
+
+async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text: str,
+                               act_cfg: dict, parse_mode: str = 'HTML'):
+    """Отправка сообщения действия с опциональным медиа (для чат/ЛС)."""
+    media_id = act_cfg.get('media_id')
+    media_type = act_cfg.get('media_type')
+    media_pos = act_cfg.get('media_pos', 'above')
+    text = (text or '').strip()
+
+    if not media_id or not media_type:
+        if not text:
+            return None
+        kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+        if thread_id is not None:
+            kwargs['message_thread_id'] = thread_id
+        return await bot.send_message(**kwargs)
+
+    sent_media = None
+    sent_text = None
+
+    if media_pos == 'above':
+        sent_media = await _send_action_media(bot, chat_id, thread_id, media_id, media_type)
+        if text:
+            kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+            if thread_id is not None:
+                kwargs['message_thread_id'] = thread_id
+            sent_text = await bot.send_message(**kwargs)
+    else:
+        if text:
+            kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+            if thread_id is not None:
+                kwargs['message_thread_id'] = thread_id
+            sent_text = await bot.send_message(**kwargs)
+        sent_media = await _send_action_media(bot, chat_id, thread_id, media_id, media_type)
+
+    return sent_text or sent_media
+
+
+async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
+                             media_id: str, media_type: str):
+    """Отправка одного медиа-сообщения в чат/ветку или ЛС."""
+    kwargs = {'chat_id': chat_id}
+    if thread_id is not None:
+        kwargs['message_thread_id'] = thread_id
+
+    if media_type == 'photo':
+        return await bot.send_photo(photo=media_id, **kwargs)
+    if media_type == 'video':
+        return await bot.send_video(video=media_id, **kwargs)
+    if media_type == 'animation':
+        return await bot.send_animation(animation=media_id, **kwargs)
+
+    logger.warning(f"Unsupported media_type in trigger action: {media_type}")
+    return None
 
 
 async def _handle_bot_msg_deletion(context, db, trigger, bot_msg):
@@ -1600,6 +1673,10 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
                     await prev_fn(query, ctx)
         else:
             await _step_name(query, ctx, db)
+
+    elif d == "trigger_back_to_menu":
+        _clear_fsm(ctx)
+        await show_triggers_menu(query, db, admin_id)
 
     elif d == "trigger_reset":
         _clear_fsm(ctx)
