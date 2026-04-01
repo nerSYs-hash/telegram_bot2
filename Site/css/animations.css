@@ -95,9 +95,9 @@
 
 /* Pages transition smoothly */
 .page {
-  animation-duration: 0.25s;
+  animation-duration: var(--dur-250);
   animation-fill-mode: both;
-  animation-timing-function: cubic-bezier(0.25, 0.1, 0.25, 1);
+  animation-timing-function: var(--easing-standard);
 }
 .page.active {
   animation-name: slideInLeft;
@@ -105,10 +105,10 @@
 
 /* Chat items have subtle hover */
 .chat-item {
-  transition: background 0.12s ease, transform 0.1s ease;
+  transition: background-color var(--dur-150) var(--easing-standard), transform var(--dur-100) var(--easing-standard);
 }
 .chat-item:active {
-  transform: scale(0.98);
+  transform: scale(calc(1 - (0.02 * var(--motion-level))));
 }
 
 /* Buttons press effect */
@@ -116,59 +116,71 @@
 .btn-outline:active,
 .auth-submit:active,
 .fab:active {
-  transform: scale(0.95);
-  transition: transform 0.1s;
+  transform: scale(calc(1 - (0.05 * var(--motion-level))));
+  transition: transform var(--dur-100) var(--easing-standard);
 }
 
 /* Badge animation on update */
 .badge {
-  animation: badgePop 0.3s ease;
+  animation: badgePop var(--dur-300) var(--easing-standard);
 }
 
 /* Smooth transitions on theme change */
 .sidebar, .chat-view, .chat-header, .input-area, .slide-menu, .msg-bubble {
-  transition: background-color 0.3s ease, border-color 0.3s ease, color 0.2s ease;
+  transition: background-color var(--dur-300) var(--easing-standard), border-color var(--dur-300) var(--easing-standard), color var(--dur-200) var(--easing-standard);
 }
 
 /* Message bubbles */
 .msg-row {
-  animation: msgIn 0.2s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  animation: msgIn var(--dur-200) var(--easing-standard) both;
 }
 
 /* Context menu / reaction picker */
 .context-menu, .reaction-picker, .admin-actions-dropdown {
-  animation: fadeScale 0.15s cubic-bezier(0.25, 0.1, 0.25, 1) both;
+  animation: fadeScale var(--dur-150) var(--easing-standard) both;
 }
 
 /* Modal backdrop */
 .modal.active {
-  animation: fadeUp 0.2s ease both;
+  animation: fadeUp var(--dur-200) var(--easing-standard) both;
 }
 
 /* Topic cards hover */
 .topic-card {
-  transition: background 0.15s, border-color 0.15s, transform 0.15s;
+  transition: background-color var(--dur-150) var(--easing-standard), border-color var(--dur-150) var(--easing-standard), transform var(--dur-150) var(--easing-standard);
 }
 .topic-card:active {
-  transform: scale(0.98);
+  transform: scale(calc(1 - (0.02 * var(--motion-level))));
 }
 
 /* Slide menu */
 .slide-menu {
-  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform var(--dur-300) var(--easing-standard);
 }
 
 /* Admin panel */
 .admin-panel-overlay {
-  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform var(--dur-300) var(--easing-standard);
 }
 
 /* Info panel */
 .info-panel-overlay {
-  transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: transform var(--dur-300) var(--easing-standard);
 }
 
 /* Scroll to bottom button */
 .scroll-to-bottom {
-  transition: opacity 0.2s, transform 0.2s cubic-bezier(0.25, 0.1, 0.25, 1);
+  transition: opacity var(--dur-200) var(--easing-standard), transform var(--dur-200) var(--easing-standard);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-level: 0;
+    --dur-100: 0.01ms;
+    --dur-150: 0.01ms;
+    --dur-200: 0.01ms;
+    --dur-250: 0.01ms;
+    --dur-300: 0.01ms;
+    --dur-400: 0.01ms;
+  }
 }

@@ -11,6 +11,16 @@
   --font-size-xs: 11px;
   --font-size-date: 13px;
 
+  /* Telegram-like spacing scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-7: 28px;
+  --space-8: 32px;
+
   --radius-bubble-lg: 16px;
   --radius-bubble-sm: 6px;
   --radius-sm: 6px;
@@ -25,12 +35,12 @@
   --dialog-h-forum: 80px;
   --topic-h: 54px;
   --dialog-photo: 54px;
-  --dialog-padding: 8px 10px;
+  --dialog-padding: var(--space-2) 10px;
   --dialog-name-left: 72px;
   --dialog-text-left: 72px;
   --msg-max-w: 430px;
-  --msg-padding: 8px 11px;
-  --msg-margin-left: 16px;
+  --msg-padding: var(--space-2) 11px;
+  --msg-margin-left: var(--space-4);
   --msg-photo: 33px;
   --msg-min-w: 160px;
   --online-size: 14px;
@@ -39,9 +49,28 @@
   --unread-font: 12px;
   --unread-pad: 6px;
 
-  --transition-fast: 0.15s ease;
-  --transition: 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  --transition-slow: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  --control-h: 46px;
+  --input-h: 54px;
+  --sidebar-header-pad-x: 8px;
+  --chat-header-pad-x: 10px;
+  --messages-pad-x: 14px;
+  --messages-pad-y: 8px;
+  --focus-ring: 0 0 0 3px var(--input-focus);
+
+  /* Telegram-like motion */
+  --easing-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --dur-100: 0.1s;
+  --dur-150: 0.15s;
+  --dur-200: 0.2s;
+  --dur-250: 0.25s;
+  --dur-300: 0.3s;
+  --dur-400: 0.4s;
+  --dur-500: 0.5s;
+  --motion-level: 1;
+
+  --transition-fast: var(--dur-150) var(--easing-standard);
+  --transition: var(--dur-250) var(--easing-standard);
+  --transition-slow: var(--dur-300) var(--easing-standard);
 
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bottom: env(safe-area-inset-bottom, 0px);
