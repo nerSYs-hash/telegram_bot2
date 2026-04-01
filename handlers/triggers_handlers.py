@@ -803,13 +803,13 @@ async def _configure_action(src, ctx, action: str):
     if action == 'msg_chat':
         cur_text = cfg.get('text', '<i>не задан</i>')
         has_media = '✅' if cfg.get('media_id') else '❌'
-        pos = 'Над' if cfg.get('media_pos', 'above') == 'above' else 'Под'
-        text = f"💬 <b>Сообщение в чат</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n📐 Медиа: {pos} сообщением"
+        pos = '🖼 Медиа + текст (одно сообщение)' if cfg.get('media_pos', 'above') == 'above' else '📝 Текст, затем 🖼 медиа'
+        text = f"💬 <b>Сообщение в чат</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n📐 Режим: {pos}"
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_chat_media")],
-            [IKB("⬆ Над", callback_data="trigger_acfg_media_above"),
-             IKB("⬇ Под", callback_data="trigger_acfg_media_below")],
+            [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
+            [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
@@ -1278,39 +1278,62 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             kwargs['message_thread_id'] = thread_id
         return await bot.send_message(**kwargs)
 
-    sent_media = None
-    sent_text = None
-
     if media_pos == 'above':
-        sent_media = await _send_action_media(bot, chat_id, thread_id, media_id, media_type)
-        if text:
-            kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
-            if thread_id is not None:
-                kwargs['message_thread_id'] = thread_id
-            sent_text = await bot.send_message(**kwargs)
-    else:
-        if text:
-            kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
-            if thread_id is not None:
-                kwargs['message_thread_id'] = thread_id
-            sent_text = await bot.send_message(**kwargs)
-        sent_media = await _send_action_media(bot, chat_id, thread_id, media_id, media_type)
+        return await _send_action_media(
+            bot=bot,
+            chat_id=chat_id,
+            thread_id=thread_id,
+            media_id=media_id,
+            media_type=media_type,
+            caption=text or None,
+            parse_mode=parse_mode,
+        )
+
+    sent_text = None
+    if text:
+        kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+        if thread_id is not None:
+            kwargs['message_thread_id'] = thread_id
+        sent_text = await bot.send_message(**kwargs)
+
+    sent_media = await _send_action_media(
+        bot=bot,
+        chat_id=chat_id,
+        thread_id=thread_id,
+        media_id=media_id,
+        media_type=media_type,
+        reply_to_message_id=sent_text.message_id if sent_text else None,
+    )
 
     return sent_text or sent_media
 
 
 async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
-                             media_id: str, media_type: str):
+                             media_id: str, media_type: str,
+                             caption: Optional[str] = None,
+                             parse_mode: str = 'HTML',
+                             reply_to_message_id: Optional[int] = None):
     """Отправка одного медиа-сообщения в чат/ветку или ЛС."""
     kwargs = {'chat_id': chat_id}
     if thread_id is not None:
         kwargs['message_thread_id'] = thread_id
+    if reply_to_message_id is not None:
+        kwargs['reply_to_message_id'] = reply_to_message_id
 
     if media_type == 'photo':
+        if caption:
+            kwargs['caption'] = caption
+            kwargs['parse_mode'] = parse_mode
         return await bot.send_photo(photo=media_id, **kwargs)
     if media_type == 'video':
+        if caption:
+            kwargs['caption'] = caption
+            kwargs['parse_mode'] = parse_mode
         return await bot.send_video(video=media_id, **kwargs)
     if media_type == 'animation':
+        if caption:
+            kwargs['caption'] = caption
+            kwargs['parse_mode'] = parse_mode
         return await bot.send_animation(animation=media_id, **kwargs)
 
     logger.warning(f"Unsupported media_type in trigger action: {media_type}")
@@ -1601,11 +1624,11 @@ async def handle_trigger_media_input(update: Update, context, db) -> bool:
 
     # Позиция медиа (7.4.1.3)
     kb = [
-        [IKB("⬆ Над сообщением", callback_data="trigger_acfg_media_above"),
-         IKB("⬇ Под сообщением", callback_data="trigger_acfg_media_below")],
+        [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
+        [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
         [IKB("◀ К действиям", callback_data="trigger_set_actions")],
     ]
-    await _send_step(message, context, "📐 <b>Расположение медиа:</b>", kb, message.chat.id)
+    await _send_step(message, context, "📐 <b>Выберите формат отправки:</b>", kb, message.chat.id)
     return True
 
 
