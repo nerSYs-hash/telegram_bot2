@@ -4,17 +4,19 @@
 
 /* ===== ICON BUTTON ===== */
 .icon-btn {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 18px;
+  font-size: 17px;
+  line-height: 1;
   color: var(--text-2);
   transition: background-color var(--transition-fast), color var(--transition-fast), transform var(--dur-100) var(--easing-standard);
   flex-shrink: 0;
 }
+.icon-btn i { pointer-events: none; }
 .icon-btn:hover { background: var(--bg-hover); color: var(--text-0); }
 .icon-btn:active { background: var(--bg-active); transform: scale(calc(1 - (0.05 * var(--motion-level)))); }
 .icon-btn:focus-visible { box-shadow: var(--focus-ring); }
@@ -54,8 +56,8 @@
 
 /* ===== SEND BUTTON ===== */
 .send-btn {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 50%;
   background: var(--accent);
   color: #fff;

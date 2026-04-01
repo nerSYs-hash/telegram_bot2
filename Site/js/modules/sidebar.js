@@ -149,7 +149,15 @@ const Sidebar = {
     if (willOpen) {
       const infoPanel = document.getElementById('infoPanelOverlay');
       if (infoPanel) infoPanel.classList.remove('active');
-      if (typeof Chat !== 'undefined') Chat._infoPanelOpen = false;
+      if (typeof Chat !== 'undefined') {
+        Chat._infoPanelOpen = false;
+        Chat._searchOpen = false;
+        Chat._emojiOpen = false;
+        const chatSearchPanel = document.getElementById('chatSearchPanel');
+        if (chatSearchPanel) chatSearchPanel.style.display = 'none';
+        const emojiPicker = document.getElementById('emojiPicker');
+        if (emojiPicker) emojiPicker.style.display = 'none';
+      }
     }
 
     slideMenu.classList.toggle('active');

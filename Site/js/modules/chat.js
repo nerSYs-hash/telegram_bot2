@@ -648,8 +648,17 @@ const Chat = {
   // SEARCH IN CHAT
   // ══════════════════════════════════════════
   toggleChatSearch() {
+    if (!State.currentChatId) return;
     this._searchOpen = !this._searchOpen;
     const panel = document.getElementById('chatSearchPanel');
+    if (this._searchOpen) {
+      this._emojiOpen = false;
+      const picker = document.getElementById('emojiPicker');
+      if (picker) picker.style.display = 'none';
+      this._infoPanelOpen = false;
+      const infoPanel = document.getElementById('infoPanelOverlay');
+      if (infoPanel) infoPanel.classList.remove('active');
+    }
     panel.style.display = this._searchOpen ? 'flex' : 'none';
     if (this._searchOpen) document.getElementById('chatSearchInput').focus();
     else this._renderMessages();
@@ -669,8 +678,17 @@ const Chat = {
   // EMOJI PICKER
   // ══════════════════════════════════════════
   toggleEmoji() {
+    if (!State.currentChatId) return;
     this._emojiOpen = !this._emojiOpen;
     const picker = document.getElementById('emojiPicker');
+    if (this._emojiOpen) {
+      this._searchOpen = false;
+      const searchPanel = document.getElementById('chatSearchPanel');
+      if (searchPanel) searchPanel.style.display = 'none';
+      this._infoPanelOpen = false;
+      const infoPanel = document.getElementById('infoPanelOverlay');
+      if (infoPanel) infoPanel.classList.remove('active');
+    }
     picker.style.display = this._emojiOpen ? 'flex' : 'none';
   },
 
@@ -734,6 +752,15 @@ const Chat = {
       slideMenu.classList.remove('active');
       menuOverlay?.classList.remove('active');
       document.body.style.overflow = '';
+    }
+
+    if (!this._infoPanelOpen) {
+      this._searchOpen = false;
+      this._emojiOpen = false;
+      const searchPanel = document.getElementById('chatSearchPanel');
+      if (searchPanel) searchPanel.style.display = 'none';
+      const picker = document.getElementById('emojiPicker');
+      if (picker) picker.style.display = 'none';
     }
 
     this._infoPanelOpen = !this._infoPanelOpen;
