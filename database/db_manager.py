@@ -157,7 +157,7 @@ class Database:
                 other_threads_posts INTEGER DEFAULT 0,
                 warnings INTEGER DEFAULT 0,
                 activity_score REAL DEFAULT 0,
-                pulses_mined INTEGER DEFAULT 0,
+                pulses_mined REAL DEFAULT 0.0,
                 FOREIGN KEY (user_id) REFERENCES users(user_id),
                 UNIQUE(user_id, date)
             )
@@ -179,7 +179,7 @@ class Database:
                 other_threads_posts INTEGER DEFAULT 0,
                 total_warnings INTEGER DEFAULT 0,
                 active_users INTEGER DEFAULT 0,
-                total_pulses_mined INTEGER DEFAULT 0,
+                total_pulses_mined REAL DEFAULT 0.0,
                 avg_message_length REAL DEFAULT 0
             )
         ''')

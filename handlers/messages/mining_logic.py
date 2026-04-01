@@ -89,6 +89,8 @@ THREAD_IDS: dict[str, int] = {
     'https://t.me/c/3890785443/3202':    6,
 }
 
+SPECIAL_THREAD_IDS: set[int] = set(THREAD_IDS.values())
+
 SPRINTS_CONFIG: dict[str, dict] = {
 
     # ── 24 ч ─────────────────────────────────────────────────────────────
@@ -444,7 +446,7 @@ def _detect_copypaste(db, user_id: int, chat_id: int, text: str) -> bool:
             SELECT COUNT(*) AS cnt FROM messages
             WHERE user_id = ? AND chat_id = ?
               AND message_text = ?
-              AND created_at >= datetime('now', '-1 hour')
+              AND timestamp >= datetime('now', '+3 hours', '-1 hour')
         ''', (user_id, chat_id, text[:500]))
         row = db.cursor.fetchone()
         return (row['cnt'] or 0) >= 2 if row else False
@@ -678,7 +680,7 @@ def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, 
                 WHERE user_id = ? AND chat_id = (
                     SELECT chat_id FROM messages WHERE user_id = ? ORDER BY rowid DESC LIMIT 1
                 )
-                AND created_at >= datetime('now', ?)
+                AND timestamp >= datetime('now', '+3 hours', ?)
             ''', (user_id, user_id, interval))
             row = db.cursor.fetchone()
             media_metrics[label] = {
@@ -698,27 +700,45 @@ def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, 
         # Для 1ч social-метрики берём из messages count (приблизительно)
         db.cursor.execute('''
             SELECT COUNT(*) AS cnt FROM messages
-            WHERE user_id = ? AND created_at >= datetime('now', '-1 hour')
+            WHERE user_id = ? AND timestamp >= datetime('now', '+3 hours', '-1 hour')
         ''', (user_id,))
         r1 = db.cursor.fetchone()
         m1h['messages'] = r1['cnt'] if r1 else 0
-        # replies/reactions за 1ч — пока берём суточные (верхняя оценка)
-        m1h['replies_sent']       = base_24h['replies_sent']
+
+        # replies/reactions за 1ч — считаем из messages по message_type
+        db.cursor.execute('''
+            SELECT
+                COALESCE(SUM(CASE WHEN message_type = 'reply' THEN 1 ELSE 0 END), 0) AS replies_sent,
+                COALESCE(SUM(CASE WHEN message_type = 'reaction_given' THEN 1 ELSE 0 END), 0) AS reactions_given
+            FROM messages
+            WHERE user_id = ? AND timestamp >= datetime('now', '+3 hours', '-1 hour')
+        ''', (user_id,))
+        r1s = db.cursor.fetchone()
+        m1h['replies_sent']       = r1s['replies_sent'] if r1s else 0
+        m1h['reactions_given']    = r1s['reactions_given'] if r1s else 0
+        # replies_received и reactions_received — нет данных в messages, берём суточные (верхняя оценка)
         m1h['replies_received']   = base_24h['replies_received']
-        m1h['reactions_given']    = base_24h['reactions_given']
         m1h['reactions_received'] = base_24h['reactions_received']
 
         # 12ч: аналогично
         m12h = {**media_metrics['12h']}
         db.cursor.execute('''
             SELECT COUNT(*) AS cnt FROM messages
-            WHERE user_id = ? AND created_at >= datetime('now', '-12 hours')
+            WHERE user_id = ? AND timestamp >= datetime('now', '+3 hours', '-12 hours')
         ''', (user_id,))
         r12 = db.cursor.fetchone()
         m12h['messages'] = r12['cnt'] if r12 else 0
-        m12h['replies_sent']       = base_24h['replies_sent']
+        db.cursor.execute('''
+            SELECT
+                COALESCE(SUM(CASE WHEN message_type = 'reply' THEN 1 ELSE 0 END), 0) AS replies_sent,
+                COALESCE(SUM(CASE WHEN message_type = 'reaction_given' THEN 1 ELSE 0 END), 0) AS reactions_given
+            FROM messages
+            WHERE user_id = ? AND timestamp >= datetime('now', '+3 hours', '-12 hours')
+        ''', (user_id,))
+        r12s = db.cursor.fetchone()
+        m12h['replies_sent']       = r12s['replies_sent'] if r12s else 0
+        m12h['reactions_given']    = r12s['reactions_given'] if r12s else 0
         m12h['replies_received']   = base_24h['replies_received']
-        m12h['reactions_given']    = base_24h['reactions_given']
         m12h['reactions_received'] = base_24h['reactions_received']
 
         # 24ч: user_stats + media из messages
@@ -774,6 +794,7 @@ def process_mining_reward(
 
         text       = message.text or message.caption or ''
         has_photo  = bool(message.photo)
+        photo_count = len(message.photo) // 4 if message.photo else 0  # PTB даёт 4 размера на фото
         has_video  = bool(message.video)
         is_vnote   = bool(message.video_note)
         has_voice  = bool(message.voice)
@@ -795,10 +816,12 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
 
         base_coeff, base_triggered = calculate_base_coefficients(
-            text=text, has_photo=has_photo, has_video=has_video,
+            text=text, has_photo=has_photo, photo_count=photo_count,
+            has_video=has_video,
             is_video_note=is_vnote, has_voice=has_voice,
             has_audio=has_audio, has_gif=has_gif,
             is_reply=is_reply, thread_id=thread_id,
+            special_thread_ids=SPECIAL_THREAD_IDS,
         )
 
         # ══════════════════════════════════════════════════════════════════

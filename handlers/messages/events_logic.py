@@ -20,9 +20,14 @@ from datetime import datetime, timedelta
 
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
-from utils.helpers import format_number, get_today_date_msk
+from utils.helpers import format_number, get_today_date_msk, get_moscow_time
 from handlers.bbs_handlers import handle_bbs_reaction, on_member_left_cleanup
 from handlers.journal_handlers import log_join, log_leave
+from handlers.messages.mining_logic import (
+    calculate_social_combos, calculate_reaction_given_reward,
+    calculate_reaction_received_reward, _get_claimed_combos,
+    _save_combo_claims, GLOBAL_BASE_RATE,
+)
 
 
 async def handle_member_left(update, context, db, admin_id, target_chat_id):
@@ -535,3 +540,63 @@ async def handle_reaction(update, context, db, target_chat_id):
         db.conn.commit()
     except Exception as e:
         logging.error(f"Error updating chat_stats reactions: {e}")
+
+    # ═══ НАЧИСЛЕНИЕ НАГРАД ЗА РЕАКЦИИ ═══
+    if net_change <= 0:
+        return
+
+    try:
+        # Микро-награда тому, кто поставил реакцию
+        rg_reward = calculate_reaction_given_reward()
+        if rg_reward > 0:
+            bank_balance = db.get_bank_balance()
+            if bank_balance >= rg_reward:
+                db.update_user_balance(user.id, rg_reward, 'add')
+                db.update_bank_balance(rg_reward, 'subtract')
+                db.add_transaction(None, user.id, rg_reward, 'reaction_given_reward', 'Реакция')
+
+        # Микро-награда автору поста
+        if result:
+            message_author_id = result['user_id']
+            if message_author_id != user.id:
+                rr_reward = calculate_reaction_received_reward()
+                if rr_reward > 0:
+                    bank_balance = db.get_bank_balance()
+                    if bank_balance >= rr_reward:
+                        db.update_user_balance(message_author_id, rr_reward, 'add')
+                        db.update_bank_balance(rr_reward, 'subtract')
+                        db.add_transaction(None, message_author_id, rr_reward, 'reaction_received_reward', 'Получена реакция')
+
+                # Проверка social combos для автора поста
+                now = get_moscow_time()
+                claimed_combos = _get_claimed_combos(db, message_author_id, now)
+
+                # Считаем текущие реакции и ответы на этот пост
+                db.cursor.execute('''
+                    SELECT
+                        COALESCE(reactions_received, 0) AS rr,
+                        COALESCE(replies_received, 0) AS rep
+                    FROM user_stats
+                    WHERE user_id = ? AND date = ?
+                ''', (message_author_id, today))
+                stats_row = db.cursor.fetchone()
+                total_reactions = stats_row['rr'] if stats_row else 0
+                total_replies = stats_row['rep'] if stats_row else 0
+
+                combo_reward, new_combos = calculate_social_combos(
+                    reply_count=total_replies,
+                    reaction_count=total_reactions,
+                    completed_today=list(claimed_combos.keys()),
+                )
+
+                if combo_reward > 0 and new_combos:
+                    bank_balance = db.get_bank_balance()
+                    if bank_balance >= combo_reward:
+                        db.update_user_balance(message_author_id, combo_reward, 'add')
+                        db.update_bank_balance(combo_reward, 'subtract')
+                        db.add_transaction(None, message_author_id, combo_reward, 'combo_reward', 'Тайное Комбо (соц.)')
+                        _save_combo_claims(db, message_author_id, new_combos, combo_reward, now)
+                        logging.info(f"🏆 SOCIAL COMBO for {message_author_id}: {new_combos} = {combo_reward}")
+
+    except Exception as e:
+        logging.error(f"Error in reaction rewards: {e}")
