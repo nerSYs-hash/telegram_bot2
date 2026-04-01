@@ -88,6 +88,11 @@ def register_topic(db, chat_id, thread_id, thread_name=None):
                 WHERE chat_id = ? AND thread_id IS ?
             ''', (name_to_insert, chat_id, thread_id))
     else:
+        # Удаляем возможные дубли с тем же thread_id (актуально для NULL, т.к. UNIQUE не защищает)
+        db.cursor.execute(
+            'DELETE FROM topics WHERE chat_id = ? AND thread_id IS ?',
+            (chat_id, thread_id)
+        )
         db.cursor.execute('''
             INSERT INTO topics (chat_id, thread_id, thread_name, is_main_thread,
                                 last_message_at, total_messages)
@@ -124,11 +129,19 @@ def purge_unnamed_topics(db, chat_id):
 
 
 def get_all_topics(db, chat_id):
-    """Get all topics/threads for a chat"""
+    """Get all unique topics/threads for a chat, deduplicated by thread_id."""
     db.cursor.execute('''
-        SELECT * FROM topics 
+        SELECT
+            chat_id,
+            thread_id,
+            MAX(thread_name)      AS thread_name,
+            MAX(is_main_thread)   AS is_main_thread,
+            MAX(last_message_at)  AS last_message_at,
+            SUM(total_messages)   AS total_messages
+        FROM topics
         WHERE chat_id = ?
-        ORDER BY is_main_thread DESC, total_messages DESC
+        GROUP BY COALESCE(CAST(thread_id AS TEXT), '__main__')
+        ORDER BY MAX(is_main_thread) DESC, SUM(total_messages) DESC
     ''', (chat_id,))
     return db.cursor.fetchall()
 

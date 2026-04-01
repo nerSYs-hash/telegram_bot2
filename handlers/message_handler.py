@@ -525,6 +525,12 @@ class MessageHandler:
             elif any(kw in clean_text for kw in ['богач', 'активист']):
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
+        # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ ===
+        if message.text:
+            from handlers.triggers_handlers import process_triggers
+            if await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id):
+                return
+
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
@@ -704,6 +710,18 @@ class MessageHandler:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
+
+        # ═══ TRIGGER FSM v2 (создание/редактирование триггера) ═══
+        if context.user_data.get('trigger_state') or context.user_data.get('owner_awaiting', '').startswith('trigger_'):
+            from handlers.triggers_handlers import handle_trigger_text_input, handle_trigger_media_input
+            if message.text:
+                handled = await handle_trigger_text_input(update, context, self.db)
+                if handled:
+                    return
+            elif message.photo or message.video or message.animation:
+                handled = await handle_trigger_media_input(update, context, self.db)
+                if handled:
+                    return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         if message.text and context.user_data.get('owner_awaiting'):
