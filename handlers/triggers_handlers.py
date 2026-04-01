@@ -65,6 +65,7 @@ TARGETS = {
 ACTIONS_AVAILABLE = {
     'msg_chat':  '💬 Сообщение в чат',
     'msg_dm':    '✉️ Сообщение в ЛС',
+    'rotation':  '🔁 Ротация',
     'pin':       '📌 Закрепление сообщения',
     'delete':    '🗑 Удалить сообщение',
     'warn':      '⚠️ Предупреждение',
@@ -119,6 +120,8 @@ class TS:
     ACT_CHAT_MEDIA     = 'tg_act_chat_media'
     ACT_DM_TEXT        = 'tg_act_dm_text'
     ACT_DM_MEDIA       = 'tg_act_dm_media'
+    ACT_ROT_TEXT       = 'tg_act_rot_text'
+    ACT_ROT_MEDIA      = 'tg_act_rot_media'
     ACT_EMOJI          = 'tg_act_emoji'
     ACT_WARN_PERIOD    = 'tg_act_warn_period'
     ACT_DELAYED_TIME   = 'tg_act_delayed_time'
@@ -159,6 +162,7 @@ def _clear_fsm(ctx):
     ctx.user_data.pop('trigger_edit_id', None)
     ctx.user_data.pop('owner_awaiting', None)
     ctx.user_data.pop('trigger_configuring_action', None)
+    ctx.user_data.pop('trigger_rotation_slot', None)
 
 def _default_data() -> dict:
     return {
@@ -783,11 +787,62 @@ async def _show_actions_menu(src, ctx):
     for key, label in ACTIONS_AVAILABLE.items():
         mark = " ✅" if key in selected else ""
         row = [IKB(f"{label}{mark}", callback_data=f"trigger_act_{key}")]
-        if key in selected and key in ('msg_chat', 'msg_dm', 'mute', 'warn', 'emoji', 'delete', 'pin'):
+        if key in selected and key in ('msg_chat', 'msg_dm', 'rotation', 'mute', 'warn', 'emoji', 'delete', 'pin'):
             row.append(IKB("⚙", callback_data=f"trigger_acfg_{key}"))
         kb.append(row)
     kb.append([IKB("✅ Готово", callback_data="trigger_actdone")])
     kb.append([IKB("◀ Назад к меню", callback_data="trigger_menu")])
+    await _send_step(src, ctx, text, kb)
+
+
+def _get_rotation_items(data: dict) -> list:
+    cfgs = data.get('action_configs', {})
+    rot = cfgs.get('rotation', {})
+    items = rot.get('items', []) if isinstance(rot, dict) else []
+    if not isinstance(items, list):
+        items = []
+    return items[:5]
+
+
+def _set_rotation_items(data: dict, items: list):
+    cfgs = data.get('action_configs', {})
+    rot = cfgs.get('rotation', {}) if isinstance(cfgs.get('rotation', {}), dict) else {}
+    rot['items'] = items[:5]
+    if not isinstance(rot.get('next_idx', 0), int):
+        rot['next_idx'] = 0
+    cfgs['rotation'] = rot
+    data['action_configs'] = cfgs
+
+
+def _ensure_rotation_slot(data: dict, slot: int) -> dict:
+    items = _get_rotation_items(data)
+    while len(items) < slot:
+        items.append({})
+    _set_rotation_items(data, items)
+    return items[slot - 1]
+
+
+async def _show_rotation_slot_menu(src, ctx, slot: int):
+    data = _get_data(ctx)
+    items = _get_rotation_items(data)
+    cfg = items[slot - 1] if len(items) >= slot else {}
+    txt = (cfg.get('text') or '<i>не задан</i>')[:150]
+    has_media = '✅' if cfg.get('media_id') else '❌'
+    mode = '🖼+📝 Одним сообщением' if cfg.get('media_pos', 'above') == 'above' else '📝 Потом 🖼 отдельным'
+    text = (
+        f"🔁 <b>Ротация — слот {slot}/5</b>\n\n"
+        f"📝 Текст: {txt}\n"
+        f"🖼 Медиа: {has_media}\n"
+        f"📐 Режим: {mode}"
+    )
+    kb = [
+        [IKB("📝 Задать текст", callback_data=f"trigger_acfg_rot_text_{slot}")],
+        [IKB("🖼 Прикрепить медиа", callback_data=f"trigger_acfg_rot_media_{slot}")],
+        [IKB("🖼+📝 Одним сообщением", callback_data=f"trigger_acfg_rot_above_{slot}")],
+        [IKB("📝 Потом 🖼 отдельным", callback_data=f"trigger_acfg_rot_below_{slot}")],
+        [IKB("🗑 Очистить слот", callback_data=f"trigger_acfg_rot_clear_{slot}")],
+        [IKB("◀ К ротации", callback_data="trigger_acfg_rotation")],
+    ]
     await _send_step(src, ctx, text, kb)
 
 
@@ -822,6 +877,23 @@ async def _configure_action(src, ctx, action: str):
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_dm_media")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
+
+    elif action == 'rotation':
+        items = _get_rotation_items(data)
+        ready = sum(1 for i in items if i.get('text') or i.get('media_id'))
+        idx = cfg.get('next_idx', 0) if isinstance(cfg, dict) else 0
+        text = (
+            "🔁 <b>Ротация сообщений</b>\n\n"
+            f"Слотов заполнено: <b>{ready}/5</b>\n"
+            f"Следующий слот: <b>{(idx % max(1, len(items))) + 1 if items else 1}</b>\n\n"
+            "<i>Настройте до 5 слотов (текст и/или медиа).</i>"
+        )
+        kb = []
+        for n in range(1, 6):
+            slot_cfg = items[n - 1] if len(items) >= n else {}
+            mark = "✅" if slot_cfg.get('text') or slot_cfg.get('media_id') else "▫"
+            kb.append([IKB(f"{mark} Слот {n}", callback_data=f"trigger_acfg_rot_slot_{n}")])
+        kb.append([IKB("◀ К действиям", callback_data="trigger_set_actions")])
 
     elif action == 'pin':
         notify = cfg.get('notify', False)
@@ -1180,6 +1252,41 @@ async def process_triggers(
                         except Exception as e:
                             logger.warning(f"DM failed: {e}")
 
+                elif act == 'rotation':
+                    rot_cfg = cfgs.get('rotation', {}) if isinstance(cfgs.get('rotation', {}), dict) else {}
+                    items = rot_cfg.get('items', []) if isinstance(rot_cfg.get('items', []), list) else []
+                    items = [i for i in items[:5] if isinstance(i, dict) and (i.get('text') or i.get('media_id'))]
+                    if not items:
+                        continue
+
+                    next_idx = rot_cfg.get('next_idx', 0)
+                    if not isinstance(next_idx, int):
+                        next_idx = 0
+                    idx = next_idx % len(items)
+                    item_cfg = items[idx]
+
+                    bot_msg = await _send_action_message(
+                        bot=context.bot,
+                        chat_id=message.chat.id,
+                        thread_id=getattr(message, 'message_thread_id', None),
+                        text=(item_cfg.get('text') or '').strip(),
+                        act_cfg=item_cfg,
+                        parse_mode='HTML',
+                    )
+                    if bot_msg:
+                        await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
+
+                    rot_cfg['next_idx'] = (idx + 1) % len(items)
+                    cfgs['rotation'] = rot_cfg
+                    try:
+                        db.cursor.execute(
+                            "UPDATE triggers SET action_configs=? WHERE id=?",
+                            (json.dumps(cfgs), trigger['id'])
+                        )
+                        db.conn.commit()
+                    except Exception as e:
+                        logger.warning(f"Rotation next_idx save failed: {e}")
+
                 elif act == 'pin':
                     try:
                         await message.pin(disable_notification=not act_cfg.get('notify', False))
@@ -1499,6 +1606,34 @@ async def handle_trigger_text_input(update: Update, context, db) -> bool:
         ], chat_id)
         return True
 
+    # ── Текст в слот ротации ──
+    if state == TS.ACT_ROT_TEXT:
+        slot = context.user_data.get('trigger_rotation_slot', 1)
+        try:
+            slot = int(slot)
+        except (TypeError, ValueError):
+            slot = 1
+        slot = max(1, min(5, slot))
+
+        _ensure_rotation_slot(data, slot)
+        items = _get_rotation_items(data)
+        items[slot - 1]['text'] = text
+        _set_rotation_items(data, items)
+        _set_data(context, data)
+        _set_state(context, TS.ACT_ROT_MEDIA)
+
+        await _send_step(
+            message,
+            context,
+            f"🖼 <b>Слот {slot}: медиа</b>\n\nОтправьте фото/видео/gif или «Пропустить».",
+            [
+                [IKB("⏩ Пропустить", callback_data=f"trigger_acfg_rot_media_skip_{slot}")],
+                [IKB("◀ К слоту", callback_data=f"trigger_acfg_rot_slot_{slot}")],
+            ],
+            chat_id,
+        )
+        return True
+
     # ── Эмодзи (7.4.7) ──
     if state in (TS.ACT_EMOJI, TS.EDIT_ACT_EMOJI):
         if text:
@@ -1589,7 +1724,7 @@ async def handle_trigger_text_input(update: Update, context, db) -> bool:
 async def handle_trigger_media_input(update: Update, context, db) -> bool:
     """Обработка медиа (фото/видео/gif) для триггеров."""
     state = _get_state(context)
-    if state not in (TS.ACT_CHAT_MEDIA, TS.ACT_DM_MEDIA):
+    if state not in (TS.ACT_CHAT_MEDIA, TS.ACT_DM_MEDIA, TS.ACT_ROT_MEDIA):
         return False
 
     message = update.effective_message
@@ -1608,27 +1743,51 @@ async def handle_trigger_media_input(update: Update, context, db) -> bool:
 
     data = _get_data(context)
     cfgs = data.get('action_configs', {})
-    key = 'msg_chat' if state == TS.ACT_CHAT_MEDIA else 'msg_dm'
-    cfg = cfgs.get(key, {})
-    cfg['media_id'] = file_id
-    cfg['media_type'] = media_type
-    cfgs[key] = cfg
-    data['action_configs'] = cfgs
-    _set_data(context, data)
-    _set_state(context, None)
+    if state in (TS.ACT_CHAT_MEDIA, TS.ACT_DM_MEDIA):
+        key = 'msg_chat' if state == TS.ACT_CHAT_MEDIA else 'msg_dm'
+        cfg = cfgs.get(key, {})
+        cfg['media_id'] = file_id
+        cfg['media_type'] = media_type
+        cfgs[key] = cfg
+        data['action_configs'] = cfgs
+        _set_data(context, data)
+        _set_state(context, None)
+    else:
+        slot = context.user_data.get('trigger_rotation_slot', 1)
+        try:
+            slot = int(slot)
+        except (TypeError, ValueError):
+            slot = 1
+        slot = max(1, min(5, slot))
+        _ensure_rotation_slot(data, slot)
+        items = _get_rotation_items(data)
+        items[slot - 1]['media_id'] = file_id
+        items[slot - 1]['media_type'] = media_type
+        _set_rotation_items(data, items)
+        _set_data(context, data)
+        _set_state(context, None)
 
     try:
         await message.delete()
     except Exception:
         pass
 
-    # Позиция медиа (7.4.1.3)
-    kb = [
-        [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
-        [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
-        [IKB("◀ К действиям", callback_data="trigger_set_actions")],
-    ]
-    await _send_step(message, context, "📐 <b>Выберите формат отправки:</b>", kb, message.chat.id)
+    # Позиция медиа
+    if state == TS.ACT_ROT_MEDIA:
+        slot = context.user_data.get('trigger_rotation_slot', 1)
+        kb = [
+            [IKB("🖼+📝 Одним сообщением", callback_data=f"trigger_acfg_rot_above_{slot}")],
+            [IKB("📝 Потом 🖼 отдельным", callback_data=f"trigger_acfg_rot_below_{slot}")],
+            [IKB("◀ К слоту", callback_data=f"trigger_acfg_rot_slot_{slot}")],
+        ]
+        await _send_step(message, context, f"📐 <b>Слот {slot}: выберите формат отправки</b>", kb, message.chat.id)
+    else:
+        kb = [
+            [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
+            [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
+            [IKB("◀ К действиям", callback_data="trigger_set_actions")],
+        ]
+        await _send_step(message, context, "📐 <b>Выберите формат отправки:</b>", kb, message.chat.id)
     return True
 
 
@@ -1879,7 +2038,101 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
     elif d.startswith("trigger_acfg_"):
         sub = d[len("trigger_acfg_"):]
 
-        if sub == "chat_text":
+        if sub == "rotation":
+            await _configure_action(query, ctx, 'rotation')
+
+        elif sub.startswith("rot_slot_"):
+            try:
+                slot = int(sub[len("rot_slot_"):])
+            except ValueError:
+                slot = 1
+            slot = max(1, min(5, slot))
+            ctx.user_data['trigger_rotation_slot'] = slot
+            await _show_rotation_slot_menu(query, ctx, slot)
+
+        elif sub.startswith("rot_text_"):
+            try:
+                slot = int(sub[len("rot_text_"):])
+            except ValueError:
+                slot = 1
+            slot = max(1, min(5, slot))
+            ctx.user_data['trigger_rotation_slot'] = slot
+            _set_state(ctx, TS.ACT_ROT_TEXT)
+            await _send_step(
+                query,
+                ctx,
+                f"📝 <b>Слот {slot}: введите текст</b>",
+                [[IKB("◀ К слоту", callback_data=f"trigger_acfg_rot_slot_{slot}")]],
+            )
+
+        elif sub.startswith("rot_media_"):
+            if sub.startswith("rot_media_skip_"):
+                try:
+                    slot = int(sub[len("rot_media_skip_"):])
+                except ValueError:
+                    slot = 1
+                slot = max(1, min(5, slot))
+                _set_state(ctx, None)
+                await _show_rotation_slot_menu(query, ctx, slot)
+            else:
+                try:
+                    slot = int(sub[len("rot_media_"):])
+                except ValueError:
+                    slot = 1
+                slot = max(1, min(5, slot))
+                ctx.user_data['trigger_rotation_slot'] = slot
+                _set_state(ctx, TS.ACT_ROT_MEDIA)
+                await _send_step(
+                    query,
+                    ctx,
+                    f"🖼 <b>Слот {slot}: отправьте медиа</b>",
+                    [
+                        [IKB("⏩ Пропустить", callback_data=f"trigger_acfg_rot_media_skip_{slot}")],
+                        [IKB("◀ К слоту", callback_data=f"trigger_acfg_rot_slot_{slot}")],
+                    ],
+                )
+
+        elif sub.startswith("rot_clear_"):
+            try:
+                slot = int(sub[len("rot_clear_"):])
+            except ValueError:
+                slot = 1
+            slot = max(1, min(5, slot))
+            items = _get_rotation_items(draft)
+            while len(items) < slot:
+                items.append({})
+            items[slot - 1] = {}
+            _set_rotation_items(draft, items)
+            _set_data(ctx, draft)
+            await _show_rotation_slot_menu(query, ctx, slot)
+
+        elif sub.startswith("rot_above_"):
+            try:
+                slot = int(sub[len("rot_above_"):])
+            except ValueError:
+                slot = 1
+            slot = max(1, min(5, slot))
+            _ensure_rotation_slot(draft, slot)
+            items = _get_rotation_items(draft)
+            items[slot - 1]['media_pos'] = 'above'
+            _set_rotation_items(draft, items)
+            _set_data(ctx, draft)
+            await _show_rotation_slot_menu(query, ctx, slot)
+
+        elif sub.startswith("rot_below_"):
+            try:
+                slot = int(sub[len("rot_below_"):])
+            except ValueError:
+                slot = 1
+            slot = max(1, min(5, slot))
+            _ensure_rotation_slot(draft, slot)
+            items = _get_rotation_items(draft)
+            items[slot - 1]['media_pos'] = 'below'
+            _set_rotation_items(draft, items)
+            _set_data(ctx, draft)
+            await _show_rotation_slot_menu(query, ctx, slot)
+
+        elif sub == "chat_text":
             _set_state(ctx, TS.ACT_CHAT_TEXT)
             await _send_step(query, ctx, "💬 <b>Введите текст сообщения в чат:</b>",
                              [[IKB("◀ К действиям", callback_data="trigger_set_actions")]])
