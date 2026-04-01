@@ -633,17 +633,18 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
 
+        # ═══ TRIGGER FSM (создание триггера — name, keywords, action_value) ═══
+        if message.text and context.user_data.get('owner_awaiting', '').startswith('trigger_'):
+            from handlers.triggers_handlers import handle_trigger_text_input
+            handled = await handle_trigger_text_input(update, context, self.db)
+            if handled:
+                return
+
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         if message.text and context.user_data.get('owner_awaiting'):
             handled = await handle_owner_text_input(
                 update, context, self.db, self.main_admin_id, self.target_chat_id
             )
-            if handled:
-                return
-
-            # fix(V1.8.1c): FSM триггеров — ранее не подключён, текст проваливался
-            from handlers.triggers_handlers import handle_trigger_text_input
-            handled = await handle_trigger_text_input(update, context, self.db)
             if handled:
                 return
 
