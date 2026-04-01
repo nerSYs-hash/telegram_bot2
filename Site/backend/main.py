@@ -204,10 +204,10 @@ class AuthData(BaseModel):
     id: int
     first_name: str = ''
     last_name: str = ''
-    username: str = None
-    photo_url: str = None
-    auth_date: int = None
-    hash: str = None
+    username: Optional[str] = None
+    photo_url: Optional[str] = None
+    auth_date: Optional[int] = None
+    hash: Optional[str] = None
 
 class CreateChatData(BaseModel):
     owner_id: int

@@ -260,3 +260,250 @@
 }
 .empty-state i { font-size: 72px; opacity: 0.12; }
 .empty-state span { font-size: 16px; opacity: 0.5; }
+
+/* ══════════════════════════════════════════════════
+   GLASSMORPHISM — Жидкое стекло (из tweb-master)
+   ══════════════════════════════════════════════════ */
+
+/* === Glass card — базовый элемент === */
+.glass {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* === Floating glass panel (меню, тултипы) === */
+.glass-panel {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-menu);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--glass-shadow);
+}
+
+/* === Tooltip — из _tooltip.scss tweb === */
+.tooltip {
+  position: fixed;
+  padding: 8px 12px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-0);
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-tooltip);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  pointer-events: none;
+  z-index: 999;
+  max-width: 220px;
+  transition: opacity var(--transition-standard-in);
+}
+
+/* === Icon button с frosted ripple (из tweb _button.scss) === */
+.icon-btn {
+  position: relative;
+  overflow: hidden;
+  border-radius: 50% !important;
+  transition:
+    color var(--transition-standard-in),
+    opacity var(--transition-standard-in),
+    background var(--transition-standard-in);
+}
+.icon-btn::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--transition-standard-in);
+}
+.icon-btn:hover::before { opacity: var(--hover-alpha); }
+
+/* === Liquid buttons and cards === */
+.btn-primary,
+.send-btn,
+.fab {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid color-mix(in oklab, var(--accent) 70%, #ffffff 30%);
+}
+
+.btn-primary::before,
+.send-btn::before,
+.fab::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--liquid-sheen);
+}
+
+.card,
+.context-menu,
+.glass-panel,
+.tooltip {
+  box-shadow: var(--glass-shadow), var(--liquid-inner-shadow);
+}
+
+/* === Primary button — ripple + glow === */
+.btn-primary {
+  position: relative;
+  overflow: hidden;
+  transition:
+    background var(--transition-standard-in),
+    transform var(--transition-standard-in),
+    box-shadow var(--transition-standard-in);
+}
+.btn-primary:hover {
+  box-shadow: 0 4px 16px rgba(106,178,242,0.25);
+}
+.btn-primary:active {
+  transform: scale(0.96);
+  transition-duration: .08s;
+}
+
+/* === Glass modal backdrop === */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  -webkit-backdrop-filter: blur(6px) brightness(0.6) saturate(0.8);
+  backdrop-filter: blur(6px) brightness(0.6) saturate(0.8);
+  background: rgba(0,0,0,0.35);
+  z-index: 300;
+  transition: opacity var(--transition-standard-in);
+}
+
+/* === Glass modal content === */
+.modal-content {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-popup);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+  border-radius: var(--radius-lg);
+}
+
+/* === Frosted sidebar header при скролле === */
+.sidebar-header {
+  transition:
+    background var(--transition-standard-in),
+    border-color var(--transition-standard-in),
+    backdrop-filter var(--transition-standard-in);
+}
+.sidebar-header.scrolled {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* === Chat header frosted === */
+.chat-header {
+  transition:
+    background var(--transition-standard-in),
+    border-color var(--transition-standard-in);
+}
+.chat-header.scrolled {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* === Glass FAB === */
+.fab {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  box-shadow: 0 4px 24px rgba(0,0,0,0.25), 0 0 0 1px var(--glass-border);
+  transition:
+    transform var(--transition-standard-in),
+    box-shadow var(--transition-standard-in);
+}
+.fab:hover {
+  transform: scale(1.08);
+  box-shadow: 0 8px 32px rgba(0,0,0,0.35), 0 0 0 1px var(--glass-border);
+}
+
+/* === Frosted slide-menu === */
+.slide-menu {
+  -webkit-backdrop-filter: var(--glass-blur-lg);
+  backdrop-filter: var(--glass-blur-lg);
+  background: var(--glass-bg-menu);
+  border-right: 1px solid var(--glass-border);
+}
+
+/* === Glass context menu (усиленный) === */
+.context-menu {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-menu);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+/* === Ripple element (JS-generated) === */
+.rp-overflow { overflow: hidden !important; }
+.rp {
+  position: relative;
+  overflow: hidden;
+  cursor: pointer;
+}
+.rp::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: currentColor;
+  opacity: 0;
+  transition: opacity var(--transition-standard-in);
+  border-radius: inherit;
+}
+.rp:hover::after { opacity: var(--hover-alpha); }
+.rp:active::after { opacity: calc(var(--hover-alpha) * 2); transition-duration: .05s; }
+
+/* === Skeleton loading === */
+.skeleton-line {
+  border-radius: 4px;
+  height: 14px;
+  background: linear-gradient(
+    90deg,
+    var(--bg-2) 25%,
+    var(--bg-3) 50%,
+    var(--bg-2) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* === Chat hero glass orbs === */
+.glass-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(60px) saturate(2);
+  pointer-events: none;
+  opacity: 0.18;
+  animation: orbFloat 12s ease-in-out infinite;
+}
+.glass-orb-1 {
+  width: 300px; height: 300px;
+  background: var(--accent);
+  top: -80px; right: -40px;
+  animation-delay: 0s;
+}
+.glass-orb-2 {
+  width: 200px; height: 200px;
+  background: var(--gradient-accent);
+  bottom: 60px; left: -60px;
+  animation-delay: -4s;
+}
+.glass-orb-3 {
+  width: 150px; height: 150px;
+  background: var(--success);
+  top: 50%; left: 50%;
+  animation-delay: -8s;
+  opacity: 0.1;
+}

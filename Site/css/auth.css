@@ -32,4 +32,51 @@
 #tgWidgetContainer { min-height:48px; }
 #tgWidgetContainer iframe { border-radius:12px !important; }
 
+.auth-notice {
+  margin: 0 0 16px;
+  padding: 12px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--input-border);
+  background: var(--surface);
+  color: var(--text-1);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.auth-notice strong {
+  color: var(--accent);
+  font-weight: 700;
+}
+
 @media (max-width: 768px) { .auth-card { margin:16px; padding:32px 24px; } }
+
+/* ===== Liquid glass pass ===== */
+.auth-card {
+  overflow: hidden;
+  box-shadow: var(--glass-shadow), var(--liquid-inner-shadow);
+}
+
+.auth-card::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--liquid-sheen);
+}
+
+.auth-submit {
+  background: linear-gradient(135deg, var(--accent), color-mix(in oklab, var(--accent) 74%, #ffffff 26%));
+  border: 1px solid color-mix(in oklab, var(--accent) 70%, #ffffff 30%);
+  box-shadow: 0 10px 24px rgba(41, 132, 214, 0.25);
+}
+
+.auth-submit:hover {
+  box-shadow: 0 14px 28px rgba(41, 132, 214, 0.32);
+}
+
+.auth-notice {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg-popup);
+  border-color: var(--glass-border);
+}

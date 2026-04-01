@@ -222,3 +222,70 @@
   --peer-avatar-blue-top: #72D5FD; --peer-avatar-blue-bottom: #2A9EF1;
   --peer-avatar-pink-top: #E0A2F3; --peer-avatar-pink-bottom: #D669ED;
 }
+
+/* ═══ Glassmorphism Tokens (from tweb-master) ═══ */
+:root {
+  /* blur levels — точно как в Telegram Web */
+  --glass-blur-sm:   blur(10px) brightness(0.85);
+  --glass-blur:      blur(25px);
+  --glass-blur-lg:   blur(40px) saturate(1.8);
+  --glass-blur-hero: blur(60px) saturate(2);
+
+  /* menu backdrop — var(--menu-backdrop-filter) из tweb */
+  --menu-backdrop: blur(25px);
+
+  /* transition timing — точно из tweb variables.scss */
+  --transition-standard-in:  .2s cubic-bezier(.4, 0, .2, 1);
+  --transition-standard-out: .15s cubic-bezier(.4, 0, 1, 1);
+  --transition-decelerate:   .35s cubic-bezier(0, 0, .2, 1);
+  --transition-accelerate:   .25s cubic-bezier(.4, 0, 1, 1);
+
+  /* ripple */
+  --hover-alpha: .08;
+  --ripple-duration: .6s;
+
+  /* layout — из tweb variables.scss */
+  --chat-input-size:   3.375rem;
+  --chat-padding:      .8125rem;
+  --btn-send-margin:   .5rem;
+  --bubble-overflow:   1.5rem;
+
+  /* disabled */
+  --disabled-opacity: .5;
+
+  /* animation level (0=off, 1=reduced, 2=full) */
+  --animation-level: 2;
+}
+
+/* ═══ Dark theme glass ═══ */
+[data-theme="dark"] {
+  --glass-bg:         rgba(17, 27, 39, 0.75);
+  --glass-bg-menu:    rgba(23, 33, 43, 0.92);
+  --glass-bg-popup:   rgba(14, 22, 33, 0.88);
+  --glass-bg-tooltip: rgba(28, 39, 51, 0.95);
+  --glass-border:      rgba(255,255,255,0.07);
+  --glass-shadow:      0 8px 32px rgba(0,0,0,0.45);
+}
+
+/* ═══ Light theme glass ═══ */
+[data-theme="light"] {
+  --glass-bg:         rgba(255, 255, 255, 0.72);
+  --glass-bg-menu:    rgba(255, 255, 255, 0.95);
+  --glass-bg-popup:   rgba(244, 244, 245, 0.92);
+  --glass-bg-tooltip: rgba(255, 255, 255, 0.98);
+  --glass-border:      rgba(0,0,0,0.07);
+  --glass-shadow:      0 8px 32px rgba(0,0,0,0.12);
+}
+
+/* ═══ Liquid glass accents ═══ */
+:root {
+  --liquid-sheen: linear-gradient(135deg, rgba(255,255,255,0.24), rgba(255,255,255,0.03) 45%, rgba(255,255,255,0));
+  --liquid-edge: rgba(255,255,255,0.18);
+  --liquid-inner-shadow: inset 0 1px 0 rgba(255,255,255,0.18), inset 0 -1px 0 rgba(0,0,0,0.08);
+}
+
+[data-theme="dark"] {
+  --liquid-sheen: linear-gradient(135deg, rgba(132, 198, 255, 0.24), rgba(132, 198, 255, 0.06) 45%, rgba(132, 198, 255, 0));
+  --liquid-edge: rgba(132, 198, 255, 0.2);
+  --liquid-inner-shadow: inset 0 1px 0 rgba(255,255,255,0.12), inset 0 -1px 0 rgba(0,0,0,0.18);
+}

@@ -347,6 +347,35 @@
   margin-top: 1px;
 }
 
+/* ===== Liquid glass pass ===== */
+.msg-bubble {
+  border: 1px solid var(--glass-border);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  box-shadow: var(--liquid-inner-shadow);
+  overflow: hidden;
+}
+
+.msg-bubble::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--liquid-sheen);
+  opacity: 0.35;
+}
+
+.pinned-bar,
+.chat-search-panel,
+.reaction-picker,
+.scroll-to-bottom {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg-menu);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
 /* ===== MEDIA IN MESSAGES ===== */
 .msg-media {
   margin-bottom: 2px;

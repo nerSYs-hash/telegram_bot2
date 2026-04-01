@@ -239,3 +239,39 @@
 @media (min-width: 1400px) {
   .messages-container { max-width: 900px; margin: 0 auto; }
 }
+
+/* ===== Liquid glass pass ===== */
+.chat-view::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background:
+    radial-gradient(60% 40% at 20% 10%, rgba(106,178,242,0.09), transparent 70%),
+    radial-gradient(45% 35% at 85% 85%, rgba(166,149,231,0.08), transparent 70%);
+}
+
+.sidebar,
+.chat-header,
+.input-area,
+.slide-menu,
+.reply-preview {
+  position: relative;
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg-menu);
+  box-shadow: var(--liquid-inner-shadow);
+}
+
+.sidebar::before,
+.chat-header::before,
+.input-area::before,
+.slide-menu::before,
+.reply-preview::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: var(--liquid-sheen);
+}

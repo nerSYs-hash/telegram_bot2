@@ -3,9 +3,29 @@
    Handles communication with Python (FastAPI) backend
    =================================================== */
 
+function resolveApiBaseUrl() {
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+  const localHosts = new Set(['localhost', '127.0.0.1']);
+  const prodHosts = new Set(['puls-chat.ru', 'www.puls-chat.ru']);
+
+  // Локальный предпросмотр: фронт на 8080, API на 8000.
+  if (localHosts.has(host)) {
+    return 'http://127.0.0.1:8000';
+  }
+
+  // Предпросмотр по IP/кастомному хосту: ожидаем API на том же хосте, порт 8000.
+  if (!prodHosts.has(host)) {
+    return `${protocol}//${host}:8000`;
+  }
+
+  // Прод через nginx/proxy: API доступен на том же origin.
+  return '';
+}
+
 const API = {
-  // Указываем адрес твоего FastAPI сервера
-  baseUrl: '', 
+  // Базовый URL API выбирается автоматически по окружению.
+  baseUrl: resolveApiBaseUrl(),
   token: null,
 
   /**

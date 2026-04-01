@@ -110,12 +110,46 @@ const Auth = {
   },
 };
 
-// Показать fallback если виджет не загрузился за 5 секунд
-setTimeout(() => {
-  const widget = document.querySelector('#tgWidgetContainer iframe');
-  if (!widget) {
-    const fb = document.getElementById('tgFallback');
-    if (fb) fb.style.display = 'block';
-    console.warn('⚠️ Telegram widget не загрузился — показан fallback');
+function showAuthFallback(message) {
+  const widgetWrap = document.getElementById('tgWidgetContainer');
+  const fb = document.getElementById('tgFallback');
+  const note = document.getElementById('tgDomainNotice');
+
+  if (widgetWrap) widgetWrap.style.display = 'none';
+  if (fb) fb.style.display = 'block';
+  if (note) {
+    note.style.display = 'block';
+    note.innerHTML = message;
   }
-}, 5000);
+}
+
+function initTelegramAuthWidget() {
+  const host = window.location.hostname;
+  const protocol = window.location.protocol;
+  const allowedHosts = new Set(['puls-chat.ru', 'www.puls-chat.ru']);
+  const isProdDomain = allowedHosts.has(host);
+
+  if (protocol !== 'https:' || !isProdDomain) {
+    showAuthFallback(
+      '<strong>Режим предпросмотра:</strong> Telegram-виджет отключен для локального запуска/IP. Используйте вход по Telegram ID ниже.'
+    );
+    return;
+  }
+
+  // Показать fallback, если виджет не загрузился за 5 секунд
+  setTimeout(() => {
+    const widget = document.querySelector('#tgWidgetContainer iframe');
+    if (!widget) {
+      showAuthFallback(
+        '<strong>Виджет недоступен:</strong> Telegram Login не загрузился. Проверьте домен в BotFather (/setdomain) и попробуйте снова.'
+      );
+      console.warn('⚠️ Telegram widget не загрузился — показан fallback');
+    }
+  }, 5000);
+}
+
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initTelegramAuthWidget);
+} else {
+  initTelegramAuthWidget();
+}

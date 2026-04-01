@@ -158,6 +158,143 @@
   transition: transform var(--dur-300) var(--easing-standard);
 }
 
+/* ══════════════════════════════════
+   Telegram Web — keyframes из tweb-master
+   ══════════════════════════════════ */
+
+/* Выбор пузыря — из _chatBubble.scss */
+@keyframes bubbleSelected {
+  0%  { opacity: 0; }
+  25% { opacity: 1; }
+  to  { opacity: 0; }
+}
+
+/* Ripple из tweb */
+@keyframes rippleTG {
+  0%   { transform: scale(0); opacity: var(--hover-alpha); }
+  100% { transform: scale(4); opacity: 0; }
+}
+
+/* Preloader blur-in — из _preloader.scss */
+@keyframes preloaderIn {
+  from { opacity: 0; backdrop-filter: blur(0px) brightness(1.0); }
+  to   { opacity: 1; backdrop-filter: blur(10px) brightness(0.8); }
+}
+
+/* Popup/modal — деcелерация как в TG */
+@keyframes popupIn {
+  from { opacity: 0; transform: scale(0.94) translateY(8px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes popupOut {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.94) translateY(8px); }
+}
+
+/* Contextual menu — из btn-menu в tweb */
+@keyframes menuIn {
+  from { opacity: 0; transform: scale(0.88) translateY(-4px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Avatar sticky bounce */
+@keyframes avatarBounce {
+  0%   { transform: translateY(0); }
+  30%  { transform: translateY(-3px); }
+  100% { transform: translateY(0); }
+}
+
+/* Typing indicator dots (точно как в TG) */
+@keyframes typingDot {
+  0%, 60%, 100% { transform: translateY(0); opacity: .6; }
+  30%           { transform: translateY(-5px); opacity: 1; }
+}
+
+/* Glass shimmer (для skeleton-загрузки) */
+@keyframes shimmer {
+  0%   { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* ══════════════════════════════════
+   Apply — glass + точные transition
+   ══════════════════════════════════ */
+
+/* Glassmorphism popup */
+.modal-content,
+.context-menu,
+.reaction-picker,
+.admin-actions-dropdown,
+.tooltip {
+  -webkit-backdrop-filter: var(--glass-blur);
+  backdrop-filter: var(--glass-blur);
+  background: var(--glass-bg-menu);
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow);
+}
+
+.modal.active .modal-content {
+  animation: popupIn var(--transition-decelerate) both;
+}
+
+/* Context menu */
+.context-menu,
+.admin-actions-dropdown {
+  animation: menuIn var(--transition-standard-in) both;
+}
+
+/* Header glass при скролле */
+.sidebar-header.scrolled,
+.chat-header.scrolled {
+  -webkit-backdrop-filter: var(--glass-blur-sm);
+  backdrop-filter: var(--glass-blur-sm);
+  background: var(--glass-bg);
+  border-bottom: 1px solid var(--glass-border);
+}
+
+/* Menu overlay frosted glass */
+.menu-overlay {
+  -webkit-backdrop-filter: blur(6px) brightness(0.6) saturate(0.8);
+  backdrop-filter: blur(6px) brightness(0.6) saturate(0.8);
+}
+
+/* Ripple элемент */
+.ripple-el {
+  position: absolute;
+  border-radius: 50%;
+  background: currentColor;
+  opacity: var(--hover-alpha);
+  pointer-events: none;
+  animation: rippleTG var(--ripple-duration) linear forwards;
+}
+
+/* Typing dots */
+.typing-dot {
+  animation: typingDot 1.2s ease-in-out infinite;
+}
+.typing-dot:nth-child(2) { animation-delay: 0.2s; }
+.typing-dot:nth-child(3) { animation-delay: 0.4s; }
+
+/* Skeleton shimmer */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--bg-2) 0%,
+    var(--bg-3) 50%,
+    var(--bg-2) 100%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.4s ease-in-out infinite;
+}
+
+/* Reduced motion */
+@media (prefers-reduced-motion: reduce) {
+  *, ::before, ::after {
+    animation-duration: .01ms !important;
+    transition-duration: .01ms !important;
+  }
+}
+
 /* Admin panel */
 .admin-panel-overlay {
   transition: transform var(--dur-300) var(--easing-standard);
