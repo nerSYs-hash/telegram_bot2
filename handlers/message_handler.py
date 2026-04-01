@@ -633,12 +633,17 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
 
-        # ═══ TRIGGER FSM (создание триггера — name, keywords, action_value) ═══
-        if message.text and context.user_data.get('owner_awaiting', '').startswith('trigger_'):
-            from handlers.triggers_handlers import handle_trigger_text_input
-            handled = await handle_trigger_text_input(update, context, self.db)
-            if handled:
-                return
+        # ═══ TRIGGER FSM v2 (создание/редактирование триггера) ═══
+        if context.user_data.get('trigger_state') or context.user_data.get('owner_awaiting', '').startswith('trigger_'):
+            from handlers.triggers_handlers import handle_trigger_text_input, handle_trigger_media_input
+            if message.text:
+                handled = await handle_trigger_text_input(update, context, self.db)
+                if handled:
+                    return
+            elif message.photo or message.video or message.animation:
+                handled = await handle_trigger_media_input(update, context, self.db)
+                if handled:
+                    return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         if message.text and context.user_data.get('owner_awaiting'):
