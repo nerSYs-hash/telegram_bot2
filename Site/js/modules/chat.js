@@ -719,6 +719,23 @@ const Chat = {
   // INFO PANEL
   // ══════════════════════════════════════════
   toggleInfoPanel() {
+    // Do not open the info panel in the empty state when no chat is selected.
+    if (!State.currentChatId || !this.chatMeta) {
+      this._infoPanelOpen = false;
+      const ip = document.getElementById('infoPanelOverlay');
+      if (ip) ip.classList.remove('active');
+      return;
+    }
+
+    // Keep side overlays mutually exclusive to preserve layout proportions.
+    const slideMenu = document.getElementById('slideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+    if (slideMenu?.classList.contains('active')) {
+      slideMenu.classList.remove('active');
+      menuOverlay?.classList.remove('active');
+      document.body.style.overflow = '';
+    }
+
     this._infoPanelOpen = !this._infoPanelOpen;
     document.getElementById('infoPanelOverlay').classList.toggle('active', this._infoPanelOpen);
     if (this._infoPanelOpen) this._renderInfoPanel();

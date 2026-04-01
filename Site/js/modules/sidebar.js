@@ -141,11 +141,22 @@ const Sidebar = {
   },
 
   toggleMenu() {
-    document.getElementById('slideMenu').classList.toggle('active');
-    document.getElementById('menuOverlay').classList.toggle('active');
+    const slideMenu = document.getElementById('slideMenu');
+    const menuOverlay = document.getElementById('menuOverlay');
+    const willOpen = !slideMenu.classList.contains('active');
+
+    // Keep side overlays mutually exclusive to avoid squeezing the center area.
+    if (willOpen) {
+      const infoPanel = document.getElementById('infoPanelOverlay');
+      if (infoPanel) infoPanel.classList.remove('active');
+      if (typeof Chat !== 'undefined') Chat._infoPanelOpen = false;
+    }
+
+    slideMenu.classList.toggle('active');
+    menuOverlay.classList.toggle('active');
     // Prevent body scroll when menu is open
     document.body.style.overflow =
-      document.getElementById('slideMenu').classList.contains('active') ? 'hidden' : '';
+      slideMenu.classList.contains('active') ? 'hidden' : '';
   },
 
   openCreateModal() {
