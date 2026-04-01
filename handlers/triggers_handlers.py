@@ -674,9 +674,10 @@ async def _show_where_menu(src, ctx, db=None):
     await _send_step(src, ctx, text, kb)
 
 
-async def _show_topics_select(src, ctx, db):
-    """Показать список веток чата для множественного выбора."""
+async def _show_topics_select(src, ctx, db, page=0):
+    """Показать список веток чата для множественного выбора (с пагинацией)."""
     from config import CHAT_ID
+    TOPICS_PER_PAGE = 15
     data = _get_data(ctx)
 
     # Текущий выбор
@@ -699,13 +700,24 @@ async def _show_topics_select(src, ctx, db):
         await _send_step(src, ctx, text, kb)
         return
 
+    total = len(topics)
+    total_pages = (total + TOPICS_PER_PAGE - 1) // TOPICS_PER_PAGE
+    page = max(0, min(page, total_pages - 1))
+
+    start = page * TOPICS_PER_PAGE
+    end = min(start + TOPICS_PER_PAGE, total)
+    page_topics = topics[start:end]
+
+    sel_count = len(selected_ids)
+    page_info = f" (стр. {page + 1}/{total_pages})" if total_pages > 1 else ""
+    sel_info = f"\nВыбрано: {sel_count}" if sel_count else ""
     text = (
-        "📂 <b>Выбор веток</b>\n\n"
-        "<i>Нажмите на ветку чтобы вкл/выкл.\n"
-        "Затем «✅ Готово».</i>"
+        f"📂 <b>Выбор веток</b>{page_info}\n\n"
+        f"<i>Нажмите на ветку чтобы вкл/выкл.\n"
+        f"Затем «✅ Готово».</i>{sel_info}"
     )
     kb = []
-    for t in topics:
+    for t in page_topics:
         tid = t['thread_id']
         name = t['thread_name'] or f"Ветка #{tid}"
         if t['is_main_thread']:
@@ -714,7 +726,21 @@ async def _show_topics_select(src, ctx, db):
         mark = " ✅" if tid in selected_ids else ""
         # callback_data: thread_id или 0 для главного чата
         cb_id = tid if tid is not None else 0
-        kb.append([IKB(f"{name}{mark}", callback_data=f"trigger_wt_{cb_id}")])
+        # Обрезаем длинные названия
+        display = name[:30] + "…" if len(name) > 30 else name
+        kb.append([IKB(f"{display}{mark}", callback_data=f"trigger_wt_{cb_id}")])
+
+    # Навигация по страницам
+    if total_pages > 1:
+        nav = []
+        if page > 0:
+            nav.append(IKB("◀ Пред.", callback_data=f"trigger_wtp_{page - 1}"))
+        if page < total_pages - 1:
+            nav.append(IKB("След. ▶", callback_data=f"trigger_wtp_{page + 1}"))
+        kb.append(nav)
+
+    # Сохраняем текущую страницу для восстановления после toggle
+    ctx.user_data['trigger_topics_page'] = page
 
     kb.append([IKB("✅ Готово", callback_data="trigger_wt_done")])
     kb.append([IKB("◀ Назад", callback_data="trigger_set_where")])
@@ -1642,7 +1668,12 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             await _show_settings_menu(query, ctx)
 
     elif d == "trigger_where_topics":
-        await _show_topics_select(query, ctx, db)
+        await _show_topics_select(query, ctx, db, page=0)
+
+    elif d.startswith("trigger_wtp_"):
+        # Пагинация веток
+        pg = int(d[len("trigger_wtp_"):])
+        await _show_topics_select(query, ctx, db, page=pg)
 
     elif d.startswith("trigger_wt_"):
         # Toggle ветки в выборе
@@ -1668,7 +1699,8 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
 
         draft['where_fires'] = json.dumps(selected) if selected else 'all'
         _set_data(ctx, draft)
-        await _show_topics_select(query, ctx, db)
+        pg = ctx.user_data.get('trigger_topics_page', 0)
+        await _show_topics_select(query, ctx, db, page=pg)
 
     elif d == "trigger_wt_done":
         cur = draft.get('where_fires', 'all')
