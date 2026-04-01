@@ -1210,6 +1210,8 @@ async def process_triggers(
         actions = tdata.get('actions', [])
         cfgs = tdata.get('action_configs', {})
         target_type = tdata.get('target', 'nobody')
+        has_rotation = 'rotation' in actions
+        sent_public_bot_message = False
 
         # Журнал
         try:
@@ -1223,6 +1225,11 @@ async def process_triggers(
             try:
                 act_cfg = cfgs.get(act, {})
 
+                # Если включена ротация, обычное сообщение в чат пропускаем,
+                # чтобы не получать дубли при одном срабатывании.
+                if has_rotation and act == 'msg_chat':
+                    continue
+
                 if act == 'msg_chat':
                     reply_text = (act_cfg.get('text') or trigger['name']).strip()
                     bot_msg = await _send_action_message(
@@ -1234,6 +1241,7 @@ async def process_triggers(
                         parse_mode='HTML',
                     )
                     if bot_msg:
+                        sent_public_bot_message = True
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
 
                 elif act == 'msg_dm':
@@ -1274,6 +1282,7 @@ async def process_triggers(
                         parse_mode='HTML',
                     )
                     if bot_msg:
+                        sent_public_bot_message = True
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
 
                     rot_cfg['next_idx'] = (idx + 1) % len(items)
@@ -1325,10 +1334,13 @@ async def process_triggers(
                         continue
                     wp = tdata.get('warn_period')
                     count = _get_violations_in_period(db, user.id, trigger['id'], wp)
-                    bot_msg = await message.reply_text(
-                        f"⚠️ {_user_link(user)}, предупреждение ({count})!",
-                        parse_mode='HTML')
-                    await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
+                    # При включенной ротации не дублируем чат дополнительными сообщениями warn.
+                    if not has_rotation:
+                        bot_msg = await message.reply_text(
+                            f"⚠️ {_user_link(user)}, предупреждение ({count})!",
+                            parse_mode='HTML')
+                        sent_public_bot_message = True
+                        await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
                     # Эскалация
                     for threshold, mute_sec in WARN_ESCALATION:
                         if count == threshold:
@@ -1337,9 +1349,11 @@ async def process_triggers(
                                     chat_id=target_chat_id, user_id=uid,
                                     permissions=ChatPermissions(can_send_messages=False),
                                     until_date=int(time.time()) + mute_sec)
-                                await message.reply_text(
-                                    f"🔇 {_user_link(user)} — мут {_format_duration(mute_sec)} "
-                                    f"({count} предупр.)", parse_mode='HTML')
+                                if not has_rotation:
+                                    await message.reply_text(
+                                        f"🔇 {_user_link(user)} — мут {_format_duration(mute_sec)} "
+                                        f"({count} предупр.)", parse_mode='HTML')
+                                    sent_public_bot_message = True
                             except Exception as e:
                                 logger.error(f"Warn mute failed: {e}")
                             break
@@ -2023,6 +2037,13 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
                 draft.get('action_configs', {}).pop(key, None)
             else:
                 acts.append(key)
+                # Взаимоисключающие действия: обычное сообщение и ротация.
+                if key == 'rotation' and 'msg_chat' in acts:
+                    acts.remove('msg_chat')
+                    draft.get('action_configs', {}).pop('msg_chat', None)
+                elif key == 'msg_chat' and 'rotation' in acts:
+                    acts.remove('rotation')
+                    draft.get('action_configs', {}).pop('rotation', None)
             draft['actions'] = acts
             _set_data(ctx, draft)
         await _show_actions_menu(query, ctx)
