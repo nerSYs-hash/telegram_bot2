@@ -1681,29 +1681,9 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         pg = int(d[len("trigger_wtp_"):])
         await _show_topics_select(query, ctx, db, page=pg)
 
-    elif d == "trigger_wt_done":
-        cur = draft.get('where_fires', 'all')
-        # Если пустой список — ставим 'all'
-        if cur != 'all':
-            try:
-                selected = json.loads(cur) if isinstance(cur, str) else cur
-                if not selected:
-                    draft['where_fires'] = 'all'
-                    _set_data(ctx, draft)
-            except (json.JSONDecodeError, TypeError):
-                pass
-        edit_id = ctx.user_data.get('trigger_edit_id')
-        if edit_id:
-            await _show_edit_menu(query, ctx, db, edit_id)
-        else:
-            await _show_settings_menu(query, ctx)
-
     elif d.startswith("trigger_wt_"):
         # Toggle ветки в выборе
         raw = d[len("trigger_wt_"):]
-        if not raw.lstrip('-').isdigit():
-            await query.answer("⚠️ Некорректный ID ветки")
-            return
         tid = int(raw)
         if tid == 0:
             tid = None  # главный чат
@@ -1727,6 +1707,23 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         _set_data(ctx, draft)
         pg = ctx.user_data.get('trigger_topics_page', 0)
         await _show_topics_select(query, ctx, db, page=pg)
+
+    elif d == "trigger_wt_done":
+        cur = draft.get('where_fires', 'all')
+        # Если пустой список — ставим 'all'
+        if cur != 'all':
+            try:
+                selected = json.loads(cur) if isinstance(cur, str) else cur
+                if not selected:
+                    draft['where_fires'] = 'all'
+                    _set_data(ctx, draft)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        edit_id = ctx.user_data.get('trigger_edit_id')
+        if edit_id:
+            await _show_edit_menu(query, ctx, db, edit_id)
+        else:
+            await _show_settings_menu(query, ctx)
 
     # ═══ ИНИЦИАТОР (7.3.3) ═══
     elif d.startswith("trigger_init_"):
