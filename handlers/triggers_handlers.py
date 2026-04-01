@@ -662,7 +662,7 @@ async def _show_condition_menu(src, ctx):
     kb.append([IKB("◀ Назад к меню", callback_data="trigger_menu")])
     await _send_step(src, ctx, text, kb)
 
-async def _show_where_menu(src, ctx):
+async def _show_where_menu(src, ctx, db=None):
     data = _get_data(ctx)
     cur = data.get('where_fires', 'all')
     text = "📍 <b>Где срабатывает триггер:</b>\n\n<i>По умолчанию — во всём чате</i>"
@@ -671,6 +671,53 @@ async def _show_where_menu(src, ctx):
         [IKB(f"📂 Выбор веток{' ✅' if cur != 'all' else ''}", callback_data="trigger_where_topics")],
         [IKB("◀ Назад к меню", callback_data="trigger_menu")],
     ]
+    await _send_step(src, ctx, text, kb)
+
+
+async def _show_topics_select(src, ctx, db):
+    """Показать список веток чата для множественного выбора."""
+    from config import CHAT_ID
+    data = _get_data(ctx)
+
+    # Текущий выбор
+    cur = data.get('where_fires', 'all')
+    selected_ids = []
+    if cur != 'all':
+        try:
+            selected_ids = json.loads(cur) if isinstance(cur, str) else cur
+            if not isinstance(selected_ids, list):
+                selected_ids = []
+        except (json.JSONDecodeError, TypeError):
+            selected_ids = []
+
+    # Получаем ветки из БД
+    topics = db.get_all_topics(CHAT_ID) if CHAT_ID else []
+
+    if not topics:
+        text = "📂 <b>Выбор веток</b>\n\n<i>Ветки не найдены. Бот запоминает ветки автоматически при получении сообщений.</i>"
+        kb = [[IKB("◀ Назад", callback_data="trigger_set_where")]]
+        await _send_step(src, ctx, text, kb)
+        return
+
+    text = (
+        "📂 <b>Выбор веток</b>\n\n"
+        "<i>Нажмите на ветку чтобы вкл/выкл.\n"
+        "Затем «✅ Готово».</i>"
+    )
+    kb = []
+    for t in topics:
+        tid = t['thread_id']
+        name = t['thread_name'] or f"Ветка #{tid}"
+        if t['is_main_thread']:
+            name = "💬 Главный чат"
+            tid = None  # main thread
+        mark = " ✅" if tid in selected_ids else ""
+        # callback_data: thread_id или 0 для главного чата
+        cb_id = tid if tid is not None else 0
+        kb.append([IKB(f"{name}{mark}", callback_data=f"trigger_wt_{cb_id}")])
+
+    kb.append([IKB("✅ Готово", callback_data="trigger_wt_done")])
+    kb.append([IKB("◀ Назад", callback_data="trigger_set_where")])
     await _send_step(src, ctx, text, kb)
 
 async def _show_initiator_menu(src, ctx):
@@ -1562,7 +1609,7 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
     elif d == "trigger_set_cond":
         await _show_condition_menu(query, ctx)
     elif d == "trigger_set_where":
-        await _show_where_menu(query, ctx)
+        await _show_where_menu(query, ctx, db)
     elif d == "trigger_set_init":
         await _show_initiator_menu(query, ctx)
     elif d == "trigger_set_target":
@@ -1595,7 +1642,50 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             await _show_settings_menu(query, ctx)
 
     elif d == "trigger_where_topics":
-        await query.answer("📂 Выбор веток — в следующем обновлении", show_alert=True)
+        await _show_topics_select(query, ctx, db)
+
+    elif d.startswith("trigger_wt_"):
+        # Toggle ветки в выборе
+        raw = d[len("trigger_wt_"):]
+        tid = int(raw)
+        if tid == 0:
+            tid = None  # главный чат
+
+        cur = draft.get('where_fires', 'all')
+        selected = []
+        if cur != 'all':
+            try:
+                selected = json.loads(cur) if isinstance(cur, str) else cur
+                if not isinstance(selected, list):
+                    selected = []
+            except (json.JSONDecodeError, TypeError):
+                selected = []
+
+        if tid in selected:
+            selected.remove(tid)
+        else:
+            selected.append(tid)
+
+        draft['where_fires'] = json.dumps(selected) if selected else 'all'
+        _set_data(ctx, draft)
+        await _show_topics_select(query, ctx, db)
+
+    elif d == "trigger_wt_done":
+        cur = draft.get('where_fires', 'all')
+        # Если пустой список — ставим 'all'
+        if cur != 'all':
+            try:
+                selected = json.loads(cur) if isinstance(cur, str) else cur
+                if not selected:
+                    draft['where_fires'] = 'all'
+                    _set_data(ctx, draft)
+            except (json.JSONDecodeError, TypeError):
+                pass
+        edit_id = ctx.user_data.get('trigger_edit_id')
+        if edit_id:
+            await _show_edit_menu(query, ctx, db, edit_id)
+        else:
+            await _show_settings_menu(query, ctx)
 
     # ═══ ИНИЦИАТОР (7.3.3) ═══
     elif d.startswith("trigger_init_"):
