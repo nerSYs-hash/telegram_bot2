@@ -442,10 +442,10 @@ class MessageHandler:
             
             # ── ЕДИНСТВЕННОЕ УСЛОВИЕ: ровно 1 слово и точное совпадение ──
             if len(words) == 1:
-                if clean_text == 'богач':
+                if clean_text in ('богач', 'богачи'):
                     trigger_type = 'rich'
                     triggered = True
-                elif clean_text == 'активист':
+                elif clean_text in ('активист', 'активисты'):
                     trigger_type = 'activist'
                     triggered = True
                 elif clean_text == 'курс':
@@ -475,7 +475,7 @@ class MessageHandler:
                 return
             
             # Логирование проигнорированных фраз для отладки
-            elif any(kw in clean_text for kw in ['богач', 'активист']):
+            elif any(kw in clean_text for kw in ['богач', 'богачи', 'активист', 'активисты']):
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
         # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ (fix V1.8.1c) ===
