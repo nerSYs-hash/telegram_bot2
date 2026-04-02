@@ -370,6 +370,7 @@ def _actions_to_legacy(actions: list) -> str:
     return 'delete'
 
 def _save_trigger(db, data: dict, created_by: int) -> int:
+    data = _normalize_rotation_action(dict(data))
     ensure_trigger_tables(db)
     db.cursor.execute('''
         INSERT INTO triggers
@@ -398,6 +399,7 @@ def _save_trigger(db, data: dict, created_by: int) -> int:
     return db.cursor.lastrowid
 
 def _update_trigger(db, trigger_id: int, data: dict):
+    data = _normalize_rotation_action(dict(data))
     db.cursor.execute('''
         UPDATE triggers SET
             name=?, keywords=?, condition=?, probability=?,
@@ -430,7 +432,7 @@ def _trigger_to_data(t) -> dict:
         try: return json.loads(val)
         except (json.JSONDecodeError, TypeError): return default
 
-    return {
+    data = {
         'name': t['name'],
         'keywords': t['keywords'],
         'probability': t['probability'] or 100,
@@ -447,6 +449,7 @@ def _trigger_to_data(t) -> dict:
         'delayed_enabled': bool(_json(t['delayed_configs'], {})),
         'delayed_configs': _json(t['delayed_configs'], {}),
     }
+    return _normalize_rotation_action(data)
 
 def _increment_violation(db, user_id: int, trigger_id: int) -> int:
     db.cursor.execute(
@@ -632,7 +635,8 @@ async def _show_settings_menu(src, ctx):
     init = INITIATORS.get(data.get('initiator', 'all'), '?')
     tgt = TARGETS.get(data.get('target', 'nobody'), '?')
     acts = data.get('actions', [])
-    acts_str = ', '.join(ACTIONS_AVAILABLE.get(a, a) for a in acts) if acts else '<i>не выбрано</i>'
+    visible_acts = _visible_actions(acts)
+    acts_str = ', '.join(ACTIONS_AVAILABLE.get(a, a) for a in visible_acts) if visible_acts else '<i>не выбрано</i>'
 
     text = (
         f"⚡ <b>Настройки «{data.get('name', '?')}»</b>\n\n"
@@ -648,7 +652,7 @@ async def _show_settings_menu(src, ctx):
         [IKB(f"📍 Где: {where}", callback_data="trigger_set_where")],
         [IKB(f"👤 Инициатор", callback_data="trigger_set_init")],
         [IKB(f"🎯 Цель", callback_data="trigger_set_target")],
-        [IKB(f"⚡ Действия ({len(acts)})", callback_data="trigger_set_actions")],
+        [IKB(f"⚡ Действия ({len(visible_acts)})", callback_data="trigger_set_actions")],
         [IKB("💾 Завершить", callback_data="trigger_finish")],
         [IKB("❌ Сброс", callback_data="trigger_reset")],
     ]
@@ -785,9 +789,11 @@ async def _show_actions_menu(src, ctx):
     )
     kb = []
     for key, label in ACTIONS_AVAILABLE.items():
+        if key == 'rotation':
+            continue
         mark = " ✅" if key in selected else ""
         row = [IKB(f"{label}{mark}", callback_data=f"trigger_act_{key}")]
-        if key in selected and key in ('msg_chat', 'msg_dm', 'rotation', 'mute', 'warn', 'emoji', 'delete', 'pin'):
+        if key in selected and key in ('msg_chat', 'msg_dm', 'mute', 'warn', 'emoji', 'delete', 'pin'):
             row.append(IKB("⚙", callback_data=f"trigger_acfg_{key}"))
         kb.append(row)
     kb.append([IKB("✅ Готово", callback_data="trigger_actdone")])
@@ -820,6 +826,72 @@ def _ensure_rotation_slot(data: dict, slot: int) -> dict:
         items.append({})
     _set_rotation_items(data, items)
     return items[slot - 1]
+
+
+def _visible_actions(actions: list) -> list:
+    """Действия для UI без скрытой служебной ротации."""
+    return [action for action in actions if action != 'rotation']
+
+
+def _rotation_items_for_trigger(tdata: dict) -> list:
+    cfgs = tdata.get('action_configs', {}) if isinstance(tdata, dict) else {}
+    rot = cfgs.get('rotation', {}) if isinstance(cfgs.get('rotation', {}), dict) else {}
+    items = rot.get('items', []) if isinstance(rot, dict) else []
+    if not isinstance(items, list):
+        return []
+    return [item for item in items[:5] if isinstance(item, dict) and (item.get('text') or item.get('media_id'))]
+
+
+def _normalize_rotation_action(data: dict) -> dict:
+    """Ротация живет внутри msg_chat, а не отдельным действием."""
+    actions = list(data.get('actions', []))
+    rotation_items = _get_rotation_items(data)
+    has_rotation = any(item.get('text') or item.get('media_id') for item in rotation_items)
+
+    if 'rotation' in actions:
+        actions = [action for action in actions if action != 'rotation']
+
+    if has_rotation and 'msg_chat' not in actions:
+        actions.append('msg_chat')
+
+    data['actions'] = actions
+    return data
+
+
+async def _execute_rotation_action(context, db, trigger, cfgs, message):
+    rot_cfg = cfgs.get('rotation', {}) if isinstance(cfgs.get('rotation', {}), dict) else {}
+    items = rot_cfg.get('items', []) if isinstance(rot_cfg.get('items', []), list) else []
+    items = [i for i in items[:5] if isinstance(i, dict) and (i.get('text') or i.get('media_id'))]
+    if not items:
+        return None
+
+    next_idx = rot_cfg.get('next_idx', 0)
+    if not isinstance(next_idx, int):
+        next_idx = 0
+    idx = next_idx % len(items)
+    item_cfg = items[idx]
+
+    bot_msg = await _send_action_message(
+        bot=context.bot,
+        chat_id=message.chat.id,
+        thread_id=getattr(message, 'message_thread_id', None),
+        text=(item_cfg.get('text') or '').strip(),
+        act_cfg=item_cfg,
+        parse_mode='HTML',
+    )
+
+    rot_cfg['next_idx'] = (idx + 1) % len(items)
+    cfgs['rotation'] = rot_cfg
+    try:
+        db.cursor.execute(
+            "UPDATE triggers SET action_configs=? WHERE id=?",
+            (json.dumps(cfgs), trigger['id'])
+        )
+        db.conn.commit()
+    except Exception as e:
+        logger.warning(f"Rotation next_idx save failed: {e}")
+
+    return bot_msg
 
 
 async def _show_rotation_slot_menu(src, ctx, slot: int):
@@ -859,12 +931,16 @@ async def _configure_action(src, ctx, action: str):
         cur_text = cfg.get('text', '<i>не задан</i>')
         has_media = '✅' if cfg.get('media_id') else '❌'
         pos = '🖼 Медиа + текст (одно сообщение)' if cfg.get('media_pos', 'above') == 'above' else '📝 Текст, затем 🖼 медиа'
-        text = f"💬 <b>Сообщение в чат</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n📐 Режим: {pos}"
+        rot_items = _get_rotation_items(data)
+        rot_ready = sum(1 for item in rot_items if item.get('text') or item.get('media_id'))
+        rot_status = f"🔁 Ротация: {'✅' if rot_ready else '❌'} ({rot_ready}/5)"
+        text = f"💬 <b>Сообщение в чат</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n📐 Режим: {pos}\n{rot_status}"
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_chat_media")],
             [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
             [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
+            [IKB(f"🔁 Ротация ({rot_ready}/5)", callback_data="trigger_acfg_rotation")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
@@ -893,7 +969,7 @@ async def _configure_action(src, ctx, action: str):
             slot_cfg = items[n - 1] if len(items) >= n else {}
             mark = "✅" if slot_cfg.get('text') or slot_cfg.get('media_id') else "▫"
             kb.append([IKB(f"{mark} Слот {n}", callback_data=f"trigger_acfg_rot_slot_{n}")])
-        kb.append([IKB("◀ К действиям", callback_data="trigger_set_actions")])
+        kb.append([IKB("◀ К сообщению в чат", callback_data="trigger_acfg_msg_chat")])
 
     elif action == 'pin':
         notify = cfg.get('notify', False)
@@ -951,7 +1027,8 @@ async def _configure_action(src, ctx, action: str):
 # ═══════════════════════════════════════════════════════════════
 
 async def _finish_and_save(src, ctx, db):
-    data = _get_data(ctx)
+    data = _normalize_rotation_action(_get_data(ctx))
+    _set_data(ctx, data)
     edit_id = ctx.user_data.get('trigger_edit_id')
 
     if not data.get('name'):
@@ -1033,7 +1110,8 @@ async def _show_trigger_detail(src, db, trigger_id: int):
     tgt = TARGETS.get(data['target'], data['target'])
     where = 'Во всём чате' if data['where_fires'] == 'all' else 'Выбранные ветки'
     acts = data.get('actions', [])
-    acts_str = ', '.join(ACTIONS_AVAILABLE.get(a, a) for a in acts) if acts else '—'
+    visible_acts = _visible_actions(acts)
+    acts_str = ', '.join(ACTIONS_AVAILABLE.get(a, a) for a in visible_acts) if visible_acts else '—'
     bot_del = BOT_DEL_OPTIONS.get(data.get('bot_msg_delete', 'no'), 'Нет')
     if data.get('bot_msg_delete') == 'period' and data.get('bot_msg_delete_after'):
         bot_del += f" ({_format_duration(data['bot_msg_delete_after'])})"
@@ -1210,7 +1288,7 @@ async def process_triggers(
         actions = tdata.get('actions', [])
         cfgs = tdata.get('action_configs', {})
         target_type = tdata.get('target', 'nobody')
-        has_rotation = 'rotation' in actions
+        has_rotation = bool(_rotation_items_for_trigger(tdata))
         sent_public_bot_message = False
 
         # Журнал
@@ -1225,21 +1303,19 @@ async def process_triggers(
             try:
                 act_cfg = cfgs.get(act, {})
 
-                # Если включена ротация, обычное сообщение в чат пропускаем,
-                # чтобы не получать дубли при одном срабатывании.
-                if has_rotation and act == 'msg_chat':
-                    continue
-
                 if act == 'msg_chat':
-                    reply_text = (act_cfg.get('text') or trigger['name']).strip()
-                    bot_msg = await _send_action_message(
-                        bot=context.bot,
-                        chat_id=message.chat.id,
-                        thread_id=getattr(message, 'message_thread_id', None),
-                        text=reply_text,
-                        act_cfg=act_cfg,
-                        parse_mode='HTML',
-                    )
+                    if has_rotation:
+                        bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
+                    else:
+                        reply_text = (act_cfg.get('text') or trigger['name']).strip()
+                        bot_msg = await _send_action_message(
+                            bot=context.bot,
+                            chat_id=message.chat.id,
+                            thread_id=getattr(message, 'message_thread_id', None),
+                            text=reply_text,
+                            act_cfg=act_cfg,
+                            parse_mode='HTML',
+                        )
                     if bot_msg:
                         sent_public_bot_message = True
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
@@ -1259,42 +1335,6 @@ async def process_triggers(
                             )
                         except Exception as e:
                             logger.warning(f"DM failed: {e}")
-
-                elif act == 'rotation':
-                    rot_cfg = cfgs.get('rotation', {}) if isinstance(cfgs.get('rotation', {}), dict) else {}
-                    items = rot_cfg.get('items', []) if isinstance(rot_cfg.get('items', []), list) else []
-                    items = [i for i in items[:5] if isinstance(i, dict) and (i.get('text') or i.get('media_id'))]
-                    if not items:
-                        continue
-
-                    next_idx = rot_cfg.get('next_idx', 0)
-                    if not isinstance(next_idx, int):
-                        next_idx = 0
-                    idx = next_idx % len(items)
-                    item_cfg = items[idx]
-
-                    bot_msg = await _send_action_message(
-                        bot=context.bot,
-                        chat_id=message.chat.id,
-                        thread_id=getattr(message, 'message_thread_id', None),
-                        text=(item_cfg.get('text') or '').strip(),
-                        act_cfg=item_cfg,
-                        parse_mode='HTML',
-                    )
-                    if bot_msg:
-                        sent_public_bot_message = True
-                        await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
-
-                    rot_cfg['next_idx'] = (idx + 1) % len(items)
-                    cfgs['rotation'] = rot_cfg
-                    try:
-                        db.cursor.execute(
-                            "UPDATE triggers SET action_configs=? WHERE id=?",
-                            (json.dumps(cfgs), trigger['id'])
-                        )
-                        db.conn.commit()
-                    except Exception as e:
-                        logger.warning(f"Rotation next_idx save failed: {e}")
 
                 elif act == 'pin':
                     try:
@@ -2032,18 +2072,18 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         key = d.replace("trigger_act_", "")
         if key in ACTIONS_AVAILABLE:
             acts = draft.get('actions', [])
+            if key == 'rotation':
+                if 'msg_chat' not in acts:
+                    acts.append('msg_chat')
+                draft['actions'] = acts
+                _set_data(ctx, draft)
+                await _configure_action(query, ctx, 'msg_chat')
+                return
             if key in acts:
                 acts.remove(key)
                 draft.get('action_configs', {}).pop(key, None)
             else:
                 acts.append(key)
-                # Взаимоисключающие действия: обычное сообщение и ротация.
-                if key == 'rotation' and 'msg_chat' in acts:
-                    acts.remove('msg_chat')
-                    draft.get('action_configs', {}).pop('msg_chat', None)
-                elif key == 'msg_chat' and 'rotation' in acts:
-                    acts.remove('rotation')
-                    draft.get('action_configs', {}).pop('rotation', None)
             draft['actions'] = acts
             _set_data(ctx, draft)
         await _show_actions_menu(query, ctx)
@@ -2059,7 +2099,15 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
     elif d.startswith("trigger_acfg_"):
         sub = d[len("trigger_acfg_"):]
 
-        if sub == "rotation":
+        if sub == "msg_chat":
+            await _configure_action(query, ctx, 'msg_chat')
+
+        elif sub == "rotation":
+            acts = draft.get('actions', [])
+            if 'msg_chat' not in acts:
+                acts.append('msg_chat')
+                draft['actions'] = acts
+                _set_data(ctx, draft)
             await _configure_action(query, ctx, 'rotation')
 
         elif sub.startswith("rot_slot_"):
