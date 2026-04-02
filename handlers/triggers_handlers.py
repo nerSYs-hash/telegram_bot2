@@ -1064,7 +1064,7 @@ async def _finish_and_save(src, ctx, db):
 #  СПИСОК ТРИГГЕРОВ (7.6)
 # ═══════════════════════════════════════════════════════════════
 
-async def show_trigger_list(query, db, admin_id: int) -> None:
+async def show_trigger_list(query, db, admin_id: int, ctx=None) -> None:
     ensure_trigger_tables(db)
     triggers = _get_all_triggers(db)
 
@@ -1077,16 +1077,22 @@ async def show_trigger_list(query, db, admin_id: int) -> None:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=IKM(kb))
         return
 
-    text = "⚡ <b>СПИСОК ТРИГГЕРОВ</b>\n\n"
+    text = (
+        "⚡ <b>СПИСОК ТРИГГЕРОВ</b>\n"
+        "<i>Здесь можно редактировать, включать/выключать и удалять — просто нажмите на триггер.</i>\n\n"
+    )
+    expanded_id = ctx.user_data.get('trigger_list_expanded_id') if ctx else None
     kb = []
     for t in triggers:
         status = "✅" if t['is_enabled'] else "❌"
-        kb.append([
-            IKB(t['name'], callback_data=f"trigger_view_{t['id']}"),
-            IKB("✏️", callback_data=f"trigger_edit_{t['id']}"),
-            IKB(status, callback_data=f"trigger_toggle_{t['id']}"),
-            IKB("🚫", callback_data=f"trigger_del_{t['id']}"),
-        ])
+        tid = t['id']
+        kb.append([IKB(t['name'], callback_data=f"trigger_expand_{tid}")])
+        if expanded_id == tid:
+            kb.append([
+                IKB("✏️", callback_data=f"trigger_edit_{tid}"),
+                IKB(status, callback_data=f"trigger_toggle_{tid}"),
+                IKB("🚫", callback_data=f"trigger_del_{tid}"),
+            ])
     kb.append([IKB("🔔 Создать", callback_data="trigger_create")])
     kb.append([IKB("🔙 Назад", callback_data="owner_triggers")])
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=IKM(kb))
@@ -1262,7 +1268,15 @@ async def process_triggers(
                 continue
 
         # Вероятность
-        prob = tdata.get('probability', 100) or 100
+        raw_prob = tdata.get('probability', 100)
+        if raw_prob is None:
+            prob = 100
+        else:
+            try:
+                prob = int(raw_prob)
+            except (TypeError, ValueError):
+                prob = 100
+        prob = max(0, min(100, prob))
         if prob < 100 and random.randint(1, 100) > prob:
             continue
 
@@ -1873,7 +1887,14 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
 
     elif d == "trigger_list":
         _clear_fsm(ctx)
-        await show_trigger_list(query, db, admin_id)
+        ctx.user_data.pop('trigger_list_expanded_id', None)
+        await show_trigger_list(query, db, admin_id, ctx)
+
+    elif d.startswith("trigger_expand_"):
+        tid = int(d[len("trigger_expand_"):])
+        cur = ctx.user_data.get('trigger_list_expanded_id')
+        ctx.user_data['trigger_list_expanded_id'] = None if cur == tid else tid
+        await show_trigger_list(query, db, admin_id, ctx)
 
     elif d == "trigger_menu":
         edit_id = ctx.user_data.get('trigger_edit_id')
@@ -2312,14 +2333,16 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         tid = int(d[len("trigger_toggle_"):])
         new = _toggle_trigger(db, tid)
         await query.answer(f"Триггер {'✅ вкл' if new else '❌ выкл'}", show_alert=True)
-        await show_trigger_list(query, db, admin_id)
+        await show_trigger_list(query, db, admin_id, ctx)
 
     # ═══ УДАЛЕНИЕ ═══
     elif d.startswith("trigger_delyes_"):
         tid = int(d[len("trigger_delyes_"):])
         _delete_trigger(db, tid)
+        if ctx.user_data.get('trigger_list_expanded_id') == tid:
+            ctx.user_data.pop('trigger_list_expanded_id', None)
         await query.answer("✅ Удалён.", show_alert=True)
-        await show_trigger_list(query, db, admin_id)
+        await show_trigger_list(query, db, admin_id, ctx)
 
     elif d.startswith("trigger_del_"):
         tid = int(d[len("trigger_del_"):])
