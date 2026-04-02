@@ -152,16 +152,10 @@ class CallbackHandler:
                 return
             # Проверка: пользователь состоит в чате?
             if user.id != self.main_admin_id:
-                try:
-                    from telegram.constants import ChatMemberStatus
-                    member = await context.bot.get_chat_member(self.target_chat_id, user.id)
-                    in_chat = member.status in (
-                        ChatMemberStatus.MEMBER,
-                        ChatMemberStatus.ADMINISTRATOR,
-                        ChatMemberStatus.OWNER,
-                    )
-                except Exception:
-                    in_chat = False
+                from utils.membership import verify_chat_membership
+                in_chat = await verify_chat_membership(
+                    context.bot, self.target_chat_id, user.id, db=self.db
+                )
                 if not in_chat:
                     await query.answer("⏳ Доступ к BBS открывается после вступления в чат.", show_alert=True)
                     return

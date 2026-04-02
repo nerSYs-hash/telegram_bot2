@@ -579,17 +579,10 @@ class MessageHandler:
 
         # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец ═══
         if user.id != self.main_admin_id:
-            try:
-                from telegram.constants import ChatMemberStatus
-                member = await context.bot.get_chat_member(self.target_chat_id, user.id)
-                # Разрешаем стандартные статусы + RESTRICTED (если пользователь все еще в чате)
-                is_member = member.status in (
-                    ChatMemberStatus.MEMBER,
-                    ChatMemberStatus.ADMINISTRATOR,
-                    ChatMemberStatus.OWNER,
-                ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
-            except Exception:
-                is_member = False
+            from utils.membership import verify_chat_membership
+            is_member = await verify_chat_membership(
+                context.bot, self.target_chat_id, user.id, db=self.db
+            )
 
             if not is_member:
                 # ── Exit survey: разрешаем текстовые ответы ──────
@@ -598,7 +591,10 @@ class MessageHandler:
                     if await handle_exit_survey_text(update, context, self.db):
                         return
                 if message.text and not message.text.strip().startswith(('/start', '/register')):
-                    await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
+                    try:
+                        await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
+                    except Exception:
+                        pass  # Forbidden — бот заблокирован пользователем
                 return
 
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══
