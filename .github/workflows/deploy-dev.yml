@@ -1,0 +1,31 @@
+name: Deploy DEV to Server
+
+on:
+  push:
+    branches: [dev]
+
+jobs:
+  deploy-dev:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy DEV via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SERVER_HOST }}
+          username: ${{ secrets.SERVER_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            # Первый раз — клонируем, потом просто pull
+            if [ ! -d /root/dev ]; then
+              git clone -b dev https://github.com/nerSYs-hash/telegram_bot2.git /root/dev
+            fi
+            cd /root/dev
+            git fetch origin dev
+            git reset --hard origin/dev
+            # Используем собственный venv dev-бота
+            source /root/dev/venv/bin/activate
+            pip install -r requirements.txt -q 2>/dev/null || true
+            # Перезапускаем dev-бота
+            systemctl restart devbot
+            echo "DEV deploy done! Dir: /root/dev"

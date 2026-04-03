@@ -43,14 +43,18 @@ from handlers.horoscope_handler import (
     show_horoscope_menu, publish_horoscope_today, preview_horoscope,
     diagnose_emoji,
 )
-from handlers.bbs_handlers import handle_bbs_callback
+from handlers.BBS.callback_bbs import handle_bbs_callback
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import (
     show_triggers_menu, handle_trigger_callback,
 )
 from handlers.exit_survey_handlers import (
     handle_exit_reason, handle_exit_skip_reason,
-    handle_exit_improvement, handle_exit_return,
+    handle_exit_love_place,
+    handle_exit_improvement,
+    handle_exit_event,
+    handle_exitq4_skip,
+    handle_exit_final,
     show_survey_results, ensure_survey_columns,
 )
 from handlers.journal_handlers import (
@@ -59,7 +63,6 @@ from handlers.journal_handlers import (
     ensure_journal_tables,
 )
 from handlers.owner_handlers import (
-    show_owner_dashboard,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_system_menu, toggle_maintenance,
     ensure_owner_columns,
@@ -147,12 +150,36 @@ class CallbackHandler:
                     ])
                 )
                 return
+            # Проверка: пользователь состоит в чате?
+            if user.id != self.main_admin_id:
+                from utils.membership import verify_chat_membership
+                in_chat = await verify_chat_membership(
+                    context.bot, self.target_chat_id, user.id, db=self.db
+                )
+                if not in_chat:
+                    await query.answer("⏳ Доступ к BBS открывается после вступления в чат.", show_alert=True)
+                    return
+
             handled = await handle_bbs_callback(
                 query, context, self.db, self.target_chat_id, self.bbs_thread_id
             )
             if handled:
                 return
         
+        # Перезапуск регистрации (если заявка потерялась)
+        if data in ("restart_registration", "reapply"):
+            from database.db_friend import update_user, cancel_user_applications
+            from handlers.registration_conversation import start_reg
+            await cancel_user_applications(user.id)
+            await update_user(user.id, status='new', questionnaire_state=None)
+            await query.answer()
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
+            await start_reg(update, context)
+            return
+
         # Back to main menu
         if data == "back_to_menu":
             await self.show_main_menu(query, user)
@@ -268,10 +295,16 @@ class CallbackHandler:
             await handle_exit_skip_reason(query, data, context, self.db)
         elif data.startswith("exit_"):
             await handle_exit_reason(query, data, context, self.db, self.main_admin_id)
+        elif data.startswith("exitlove_"):
+            await handle_exit_love_place(query, data, context, self.db)
         elif data.startswith("exitimp_"):
             await handle_exit_improvement(query, data, context, self.db)
-        elif data.startswith("exitret_"):
-            await handle_exit_return(query, data, context, self.db)
+        elif data.startswith("exitev_"):
+            await handle_exit_event(query, data, context, self.db)
+        elif data.startswith("exitq4_skip_"):
+            await handle_exitq4_skip(query, data, context, self.db)
+        elif data.startswith("exitfinal_"):
+            await handle_exit_final(query, data, context, self.db)
         elif data == "owner_survey_results":
             await show_survey_results(query, self.db, self.main_admin_id)
         
@@ -445,9 +478,13 @@ class CallbackHandler:
         elif data.startswith("detail_export_"):
             await self.export_user_detalization(query, data, user, context)
         
-        # ═══ OWNER DASHBOARD CALLBACKS ═══
-        elif data == "owner_dashboard":
-            await show_owner_dashboard(query, context, self.db, self.main_admin_id)
+        # ═══ OWNER / ADMIN PANEL CALLBACKS ═══
+        elif data in ("owner_dashboard", "panel_main"):
+            from handlers.admin_moderation import send_admin_panel
+            await send_admin_panel(context.bot, query.message.chat.id, is_owner=True)
+        elif data == "new_app":
+            from handlers.admin_moderation import new_application_callback
+            await new_application_callback(update, context)
         elif data == "owner_economy":
             await show_economy_menu(query, self.db, self.main_admin_id)
         elif data == "owner_emit":
@@ -547,7 +584,6 @@ class CallbackHandler:
 
         # ── Владелец ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🎛 Пульт Владельца", callback_data="owner_dashboard")])
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
@@ -1102,7 +1138,7 @@ class CallbackHandler:
         # Ссылка на анкету из БД
         post_link_text = ""
         try:
-            from handlers.BBS.database_bbs import get_profile
+            from handlers.BBS.database_bbs import get_other_post, get_profile
             import json
             profile = get_profile(self.db, reported_user_id)
             if profile:
@@ -1114,6 +1150,17 @@ class CallbackHandler:
                     first_msg_id = msg_ids[0]
                     post_link = f"https://t.me/c/{chat_id_short}/{first_msg_id}"
                     post_link_text = f"\n🔗 <a href='{post_link}'>Перейти к анкете</a>"
+            else:
+                other_post = get_other_post(self.db, reported_user_id)
+                if other_post:
+                    msg_ids = other_post.get('message_ids', '[]')
+                    if isinstance(msg_ids, str):
+                        msg_ids = json.loads(msg_ids)
+                    if msg_ids:
+                        chat_id_short = str(self.target_chat_id).replace('-100', '')
+                        first_msg_id = msg_ids[0]
+                        post_link = f"https://t.me/c/{chat_id_short}/{first_msg_id}"
+                        post_link_text = f"\n🔗 <a href='{post_link}'>Перейти к объявлению</a>"
         except Exception:
             pass
 

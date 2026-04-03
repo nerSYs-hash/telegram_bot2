@@ -121,13 +121,14 @@ def calculate_message_delta(char_count, word_count, is_reply, is_media, has_ment
     """
     delta = (
         (char_count / CHARS_NORM)       * WEIGHTS['total_chars'] +
-        (char_count / CHARS_NORM)       * WEIGHTS['avg_message_length'] +  # приближение
         word_count                      * WEIGHTS['total_words'] +
         (1 if is_reply else 0)          * WEIGHTS['replies_sent'] +
         (1 if is_media else 0)          * WEIGHTS['media_sent'] +
         (1 if has_mention else 0)       * WEIGHTS['mentions_received'] +
         (1 if is_other_thread else 0)   * WEIGHTS['other_threads_posts']
     )
+    # avg_message_length не добавляем как дельту — она пересчитывается
+    # при full_recalculate из соотношения total_chars / total_messages
     return delta
 
 
@@ -188,7 +189,7 @@ class RateCache:
         for i in range(30):
             date = today - timedelta(days=i)
             stats = _get_chat_stats_for_date(db, date)
-            if stats and stats['total_messages'] > 0:
+            if stats and (stats['total_messages'] > 0 or stats['reactions_given'] > 0):
                 ai = calculate_index(stats)
                 total_ai += ai
                 total_active += stats['active_users']
@@ -199,7 +200,7 @@ class RateCache:
         self.total_members = max(1, total_members)
         self.avg_active = (total_active / days_count) if days_count > 0 else 0
 
-        # Знаменатель
+        # Знаменатель: меньше неактивных → выше курс
         denom = self.total_members - self.avg_active
         if denom <= 0:
             denom = max(1.0, self.total_members * 0.1)
@@ -228,15 +229,18 @@ class RateCache:
         """
         Применить дельту от одного действия.
         Мгновенно обновляет курс в памяти.
+        Дельта добавляется только к «сегодняшнему» AI.
         """
         if self.is_manual or not self._initialized:
             return
 
+        # Дельта влияет на 1 день из N дней с данными
+        days = max(1, self.days_with_data)
         self.ai_30d += delta
 
         # Пересчитываем курс с масштабом и потолком
-        if self.days_with_data > 0 and self.denominator > 0:
-            avg_ai = self.ai_30d / self.days_with_data
+        if days > 0 and self.denominator > 0:
+            avg_ai = self.ai_30d / days
             raw_rate = avg_ai / self.denominator
             self.current_rate = round(min(raw_rate / RATE_SCALE, MAX_RATE), 6)
 
@@ -384,10 +388,11 @@ def _get_chat_stats_for_date(db, date):
             JOIN users u ON us.user_id = u.user_id
             WHERE us.date = ?
               AND u.is_admin = 0 AND u.is_owner = 0
-              AND us.total_messages > 0
+              AND (us.total_messages > 0 OR us.reactions_given > 0
+                   OR us.reactions_received > 0 OR us.media_sent > 0)
         ''', (str(date),))
         row = db.cursor.fetchone()
-        if not row or row['total_messages'] == 0:
+        if not row or (row['total_messages'] == 0 and row['reactions_given'] == 0):
             return None
         return dict(row)
     except Exception as e:
@@ -398,13 +403,19 @@ def _get_chat_stats_for_date(db, date):
 def format_rate_message(rate_data, user_balance=None):
     """Форматирует сообщение о курсе."""
     rate = rate_data['rate']
+    ai_avg = rate_data.get('ai_30d', 0)
+    days = rate_data.get('days_with_data', 0)
+    avg_active = rate_data.get('avg_active', 0)
+    members = rate_data.get('total_members', 0)
 
-    msg = "💱 КУРС ПУЛЬСА\n\n"
-    msg += f"📊 1 💎 Пульс = {rate:.6f} ₽\n\n"
-    
+    msg = "💱 <b>КУРС ПУЛЬСА</b>\n\n"
+    msg += f"📊 1 💎 = <b>{rate:.6f}</b> ₽\n"
+    msg += f"\n📈 Сред. AI (30д): <b>{ai_avg:.2f}</b>\n"
+    msg += f"📅 Дней с данными: <b>{days}</b>/30\n"
+    msg += f"👥 Активных (сред.): <b>{avg_active:.0f}</b> / {members}\n"
 
     if rate >= MAX_RATE:
-        msg += f"   ⚠️ Скоро обновится: {MAX_RATE} ₽\n"
+        msg += f"\n⚠️ Достигнут потолок: {MAX_RATE} ₽\n"
 
     if user_balance is not None and rate > 0:
         rub_value = user_balance * rate

@@ -95,6 +95,48 @@ def _build_edit_menu_keyboard(edited: list) -> list:
     return rows
 
 
+def _build_edit_params_keyboard(params: dict) -> list:
+    keyboard =[]
+    for key, label in PARAM_OPTIONS.items():
+        val = params.get(key)
+        check = f" ✅ {val}" if val else ""
+        keyboard.append([InlineKeyboardButton(f"{label}{check}", callback_data=f"bbs_eparam_{key}")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_eparam_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_role_keyboard(selected: list) -> list:
+    keyboard =[]
+    for role in ROLE_OPTIONS:
+        check = "✅ " if role in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{role}", callback_data=f"bbs_erole_{role}")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_city_keyboard(selected: list) -> list:
+    presets =[('Санкт-Петербург', '#Спб'), ('Москва', '#Мск')]
+    keyboard =[]
+    for label, tag in presets:
+        check = "✅ " if tag in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{label}", callback_data=f"bbs_ecity_{tag}")])
+    keyboard.append([InlineKeyboardButton("🏙 Другой город", callback_data="bbs_ecity_custom")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_ecity_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
+def _build_edit_goal_keyboard(selected: list) -> list:
+    keyboard =[]
+    for goal in GOAL_OPTIONS:
+        check = "✅ " if goal in selected else ""
+        keyboard.append([InlineKeyboardButton(f"{check}{goal}", callback_data=f"bbs_egoal_{goal}")])
+    keyboard.append([InlineKeyboardButton("✅ Сохранить", callback_data="bbs_egoal_done")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")])
+    return keyboard
+
+
 async def apply_edit_and_republish(
     src, context, db,
     target_chat_id, bbs_thread_id,

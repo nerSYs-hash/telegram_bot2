@@ -14,10 +14,14 @@ class UserStatus:
 
 class ApplicationStatus:
     """Статусы заявок"""
-    NEW = "new"
-    IN_WORK = "in_work"
-    APPROVED = "approved"
-    REJECTED = "rejected"
+    NEW = "new"           # Новая, ожидает рассмотрения
+    PENDING = "pending"   # Отправлена, ждёт рассмотрения (синоним NEW для users.status)
+    IN_WORK = "in_work"   # Заблокирована админом (в работе)
+    SKIPPED = "skipped"   # Отложена админом, вернётся в очередь
+    APPROVED = "approved" # Одобрена
+    REJECTED = "rejected" # Отклонена
+    CANCELLED = "cancelled"  # Отменена (при перезапуске регистрации)
+    DELETED = "deleted"      # Удалена администратором
 
 
 class UserRole:

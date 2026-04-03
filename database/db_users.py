@@ -33,7 +33,8 @@ def add_user(db, user_id, username=None, first_name=None, last_name=None,
 def get_user(db, user_id):
     """Get user by ID"""
     db.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
-    return db.cursor.fetchone()
+    row = db.cursor.fetchone()
+    return dict(row) if row else None
 
 
 def get_user_by_username(db, username):

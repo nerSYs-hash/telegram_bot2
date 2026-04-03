@@ -4,7 +4,6 @@
 
 import logging
 from handlers.owner_handlers import (
-    show_owner_dashboard,
     show_staff_menu, staff_add_start, staff_remove_start,
     show_economy_menu, emit_start, wipe_confirm_step1, wipe_execute,
     show_moderation_menu, bl_add_start, bl_remove_start,
@@ -16,6 +15,7 @@ from handlers.owner_handlers import (
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
 )
+from handlers.admin_moderation import send_admin_panel
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
 from handlers.journal_handlers import (
@@ -42,7 +42,7 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Дашборд ──
     if data in ("owner_dashboard", "panel_main"):
-        await show_owner_dashboard(query, context, db, admin_id)
+        await send_admin_panel(query.message._bot, query.message.chat.id, is_owner=True)
     elif data == "owner_backup":
         await send_database_backup(query, user, db, admin_id, context)
 
@@ -96,6 +96,15 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     # ── Статистика "Не в чате" ──
     elif data == "owner_stats_not_in_chat":
         await show_statistics_not_in_chat(query, admin_id)
+
+    # ── Восстановление веток ──
+    elif data == "owner_recovery":
+        await show_recovery_menu(query, db, admin_id)
+    elif data == "owner_recovery_other_confirm":
+        await recovery_other_confirm(query, db, admin_id)
+    elif data == "owner_recovery_other_execute":
+        bbs_thread_id = handler.bbs_thread_id
+        await recovery_other_execute(query, db, admin_id, context, target_chat_id, bbs_thread_id)
 
     # ── Старая panel_* система (маршрутизация через panel_callback) ──
     elif data.startswith("panel_"):

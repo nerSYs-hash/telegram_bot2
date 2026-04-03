@@ -481,8 +481,8 @@ class Database:
 
         self.conn.commit()
 
-        # Initialize BBS tables
-        from handlers.bbs_handlers import init_bbs_tables
+        # Initialize BBS tables (dating + other posts)
+        from handlers.BBS.database_bbs import init_bbs_tables
         init_bbs_tables(self)
 
         # Run migrations

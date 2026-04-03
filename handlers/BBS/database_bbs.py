@@ -40,9 +40,28 @@ CREATE TABLE IF NOT EXISTS bbs_reactions (
     FOREIGN KEY (profile_id) REFERENCES bbs_profiles(id) ON DELETE CASCADE
 );
 
+CREATE TABLE IF NOT EXISTS bbs_other_posts (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id           INTEGER NOT NULL UNIQUE,
+    username          TEXT,
+    category          TEXT    NOT NULL,
+    city              TEXT    NOT NULL,
+    author_name       TEXT    NOT NULL,
+    title             TEXT    NOT NULL,
+    description       TEXT    NOT NULL,
+    price             TEXT    NOT NULL,
+    photos            TEXT    NOT NULL DEFAULT '[]',
+    message_ids       TEXT    NOT NULL DEFAULT '[]',
+    thread_id         INTEGER DEFAULT NULL,
+    published_at      TEXT    DEFAULT NULL,
+    created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE INDEX IF NOT EXISTS idx_bbs_profiles_user    ON bbs_profiles(user_id);
 CREATE INDEX IF NOT EXISTS idx_bbs_reactions_profile ON bbs_reactions(profile_id);
 CREATE INDEX IF NOT EXISTS idx_bbs_reactions_msg     ON bbs_reactions(message_id);
+CREATE INDEX IF NOT EXISTS idx_bbs_other_posts_user  ON bbs_other_posts(user_id);
+CREATE INDEX IF NOT EXISTS idx_bbs_other_posts_category ON bbs_other_posts(category);
 """
 
 
@@ -98,4 +117,15 @@ def get_profile(db, user_id) -> dict | None:
         return dict(row) if row else None
     except Exception as e:
         logging.error(f"BBS: Error getting profile for {user_id}: {e}")
+        return None
+
+
+def get_other_post(db, user_id) -> dict | None:
+    """Получить объявление раздела "Другое" из БД."""
+    try:
+        db.cursor.execute('SELECT * FROM bbs_other_posts WHERE user_id = ?', (user_id,))
+        row = db.cursor.fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        logging.error(f"BBS Other: Error getting post for {user_id}: {e}")
         return None

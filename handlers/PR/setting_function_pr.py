@@ -67,6 +67,7 @@ async def show_features_management(query, user, db, admin_id):
         ('🎁 Подарок Месяца', 'monthly_gift'),
         ('🔮 Гороскоп', 'horoscope'),
         ('❣️ Pulse BBS', 'bbs'),
+        ('📦 BBS: Другое', 'bbs_other'),
         ('✏️ Ред. анкет BBS', 'bbs_edit'),
     ]
 

@@ -26,16 +26,17 @@ async def _send_long_text(bot, chat_id, text, parse_mode='HTML', thread_id=None)
     base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode}
     if thread_id:
         base_kw['message_thread_id'] = thread_id
+    # Разбиваем по \n чтобы не резать посреди строки
     while text:
         if len(text) <= MSG_LIMIT:
             await bot.send_message(**base_kw, text=text)
             break
+        # Ищем последний перенос строки в пределах лимита
         cut = text.rfind('\n', 0, MSG_LIMIT)
         if cut == -1:
             cut = MSG_LIMIT
         await bot.send_message(**base_kw, text=text[:cut])
         text = text[cut:].lstrip('\n')
-
 
 def _resolve_thread_name(db, target_chat_id, thread_id):
     """Получить человекочитаемое имя ветки из БД по thread_id."""
@@ -46,11 +47,10 @@ def _resolve_thread_name(db, target_chat_id, thread_id):
     for t in topics:
         if t['thread_id'] == thread_id:
             name = (t['thread_name'] if t['thread_name'] else '')
-            normalized = name.strip()
             is_generic = (
-                not normalized or
-                normalized == f'Ветка #{thread_id}' or
-                normalized == f'Ветка {thread_id}'
+                not name or
+                name.startswith('Ветка #') or
+                name == f'Ветка #{thread_id}'
             )
             if not is_generic:
                 return f"🧵 {name}"
@@ -251,8 +251,6 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
         f"<i>© Сообщество Pulse</i>"
     )
 
-    CAPTION_LIMIT = 1024
-
     try:
         kwargs = {
             'chat_id': target_chat_id,
@@ -271,7 +269,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if len(press_release) > CAPTION_LIMIT:
+            if len(press_release) > 1024:
                 # Caption > 1024: медиа без подписи + текст отдельно
                 if is_video:
                     kwargs['video'] = raw_file_id
@@ -293,19 +291,6 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             await _send_long_text(context.bot, target_chat_id, press_release, thread_id=thread_id)
 
         context.user_data.pop('pr_data', None)
-
-        # Сохраняем в архив БД со статусом published
-        try:
-            from utils.helpers import get_moscow_time
-            now_str = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
-            db.cursor.execute('''
-                INSERT INTO scheduled_posts
-                    (author_id, text, photo_file_id, target_chat_id, thread_id, publish_at, status, published_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'published', ?)
-            ''', (user.id, text, photo_file_id, target_chat_id, thread_id, now_str, now_str))
-            db.conn.commit()
-        except Exception as _e:
-            logger.warning(f"PR archive save failed: {_e}")
 
         await query.edit_message_text(
             "✅ Пресс-релиз опубликован!",
@@ -703,8 +688,6 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         f"<i>© Сообщество Pulse</i>"
     )
 
-    CAPTION_LIMIT = 1024
-
     try:
         kwargs = {
             'chat_id': chat_id_for_topic,
@@ -723,8 +706,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
             elif str(photo_file_id).startswith('photo:'):
                 raw_file_id = photo_file_id.split(':', 1)[1]
 
-            if len(press_release) > CAPTION_LIMIT:
-                # Caption > 1024: медиа без подписи + текст отдельно
+            if len(press_release) > 1024:
                 if is_video:
                     kwargs['video'] = raw_file_id
                     await context.bot.send_video(**kwargs)
@@ -744,7 +726,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         else:
             await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
 
-        db.mark_scheduled_post_published(post_id)
+        db.delete_scheduled_post(post_id)
         await query.answer("✅ Пресс-релиз успешно опубликован!", show_alert=True)
         await show_scheduled_posts(query, user, context, db, admin_id, target_chat_id)
 

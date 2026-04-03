@@ -6,8 +6,8 @@ from telegram.ext import ContextTypes
 from handlers.commands.economy_commands import (
     safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
 )
-
-from database.db_friend import get_user # Импорт из файла друга
+from utils.ai_core import ask_ai
+from database.db_friend import get_user, get_user_pending_application
 #from handlers.profile_handlers import show_profile
 from handlers.commands.donation_commands import donate_command as _donate_command
 from handlers.commands.exchange_commands import course_command as _course_command
@@ -70,9 +70,46 @@ class CommandHandler:
                     "Привет! Ты еще не зарегистрирован. Напиши /register"
                 )
                 return
-            if user.get('status') != 'approved':
-                await update.message.reply_text("⏳ Твоя анкета еще на проверке у администраторов. Пожалуйста, подожди!")
-            return
+            # Проверяем фактическое нахождение в чате (железобетонная проверка)
+            from utils.membership import verify_chat_membership
+            is_member = await verify_chat_membership(
+                context.bot, self.target_chat_id, user_id, db=self.db
+            )
+
+            if is_member:
+                # Закрываем старые анкеты — статус уже синхронизирован в verify_chat_membership
+                try:
+                    from database.db_friend import close_user_applications
+                    await close_user_applications(user_id)
+                except Exception as e:
+                    logger.error(f"Failed to close apps for {user_id}: {e}")
+                pass  # продолжаем обычный /start
+            else:
+                # Пользователь НЕ в чате. Разбираем ситуацию:
+                user_status = user.get('status', '')
+
+                if user_status in ('left', 'approved', 'in_chat', 'registered'):
+                    # Был одобрен ранее, но сейчас не в чате — предлагаем вернуться
+                    await update.message.reply_text(
+                        "👋 Ты сейчас не состоишь в чате.\n\n"
+                        "Чтобы пользоваться ботом, нужно вступить обратно в чат."
+                    )
+                else:
+                    # Проверяем есть ли активная заявка
+                    pending_app = await get_user_pending_application(user_id)
+                    if pending_app:
+                        await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
+                    else:
+                        # Заявка потерялась — предлагаем пройти заново
+                        kb = InlineKeyboardMarkup([[
+                            InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
+                        ]])
+                        await update.message.reply_text(
+                            "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
+                            "Нажми кнопку ниже, чтобы пройти анкету заново:",
+                            reply_markup=kb
+                        )
+                return
         
         # --- ИНТЕГРАЦИЯ МОЕЙ РЕФЕРАЛКИ ---
         if context.args:
