@@ -43,7 +43,7 @@ from handlers.horoscope_handler import (
     show_horoscope_menu, publish_horoscope_today, preview_horoscope,
     diagnose_emoji,
 )
-from handlers.bbs_handlers import handle_bbs_callback
+from handlers.BBS.callback_bbs import handle_bbs_callback
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import (
     show_triggers_menu, handle_trigger_callback,
@@ -1138,7 +1138,7 @@ class CallbackHandler:
         # Ссылка на анкету из БД
         post_link_text = ""
         try:
-            from handlers.BBS.database_bbs import get_profile
+            from handlers.BBS.database_bbs import get_other_post, get_profile
             import json
             profile = get_profile(self.db, reported_user_id)
             if profile:
@@ -1150,6 +1150,17 @@ class CallbackHandler:
                     first_msg_id = msg_ids[0]
                     post_link = f"https://t.me/c/{chat_id_short}/{first_msg_id}"
                     post_link_text = f"\n🔗 <a href='{post_link}'>Перейти к анкете</a>"
+            else:
+                other_post = get_other_post(self.db, reported_user_id)
+                if other_post:
+                    msg_ids = other_post.get('message_ids', '[]')
+                    if isinstance(msg_ids, str):
+                        msg_ids = json.loads(msg_ids)
+                    if msg_ids:
+                        chat_id_short = str(self.target_chat_id).replace('-100', '')
+                        first_msg_id = msg_ids[0]
+                        post_link = f"https://t.me/c/{chat_id_short}/{first_msg_id}"
+                        post_link_text = f"\n🔗 <a href='{post_link}'>Перейти к объявлению</a>"
         except Exception:
             pass
 

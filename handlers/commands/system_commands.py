@@ -72,7 +72,7 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, 
 
         # ── Deep link: BBS ──
         if arg == 'bbs':
-            from handlers.bbs_handlers import show_bbs_menu
+            from handlers.BBS.navigation_bbs import show_bbs_menu
             db.add_user(user.id, user.username, user.first_name, user.last_name)
             if not db.is_feature_enabled('bbs'):
                 await update.message.reply_text("📋 Pulse BBS временно отключена.")
@@ -455,10 +455,11 @@ FAQ_FEATURES = {
         'name': 'Pulse BBS',
         'text': (
             "❣️ <b>Pulse BBS</b>\n\n"
-            "Доска знакомств сообщества!\n\n"
+            "Внутренняя доска знакомств и объявлений сообщества!\n\n"
             "• 📝 Создай анкету с фото и описанием\n"
             "• 👀 Просматривай анкеты других участников\n"
             "• ❤️ Ставь реакции — взаимный лайк = мэтч!\n"
+            "• 📦 Раздел <b>«Другое»</b> — аренда, услуги, барахолка и объявления о помощи\n"
             "• 🏆 Бонус популярности за реакции на анкету\n\n"
             "📍 Доступ: кнопка <b>«Pulse BBS»</b> в меню"
         ),

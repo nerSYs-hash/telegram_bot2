@@ -24,7 +24,7 @@ from handlers.messages.admin_logic import (
 )
 from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
-from handlers.bbs_handlers import process_bbs_input
+from handlers.BBS.fsm_input_bbs import process_bbs_input
 from handlers.owner_handlers import handle_owner_text_input
 
 
@@ -772,6 +772,10 @@ class MessageHandler:
             context.user_data.pop('bbs_edit_photos', None)
             context.user_data.pop('bbs_edit_cities', None)
             context.user_data.pop('bbs_edit_goals', None)
+            context.user_data.pop('other_state', None)
+            context.user_data.pop('other_data', None)
+            context.user_data.pop('other_bot_msg_id', None)
+            context.user_data.pop('other_preview_message_ids', None)
             # Owner panel cleanup
             context.user_data.pop('owner_awaiting', None)
             await message.reply_text("❌ Действие отменено.")

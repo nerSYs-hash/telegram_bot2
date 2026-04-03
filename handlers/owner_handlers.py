@@ -136,6 +136,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("📊 Опросы при выходе", callback_data="owner_survey_results")],
+        [InlineKeyboardButton("🆘 Восстановление", callback_data="owner_recovery")],
         [InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")],
@@ -900,3 +901,56 @@ async def send_database_backup(query, user, db, admin_id: int, context) -> None:
     except Exception as e:
         logger.error(f"Backup error: {e}")
         await query.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+
+async def show_recovery_menu(query, db, admin_id: int) -> None:
+    """Меню восстановления веток BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    try:
+        db.cursor.execute('SELECT COUNT(*) FROM bbs_other_posts')
+        other_count = db.cursor.fetchone()[0]
+    except Exception:
+        other_count = 0
+    text = (
+        '🆘 <b>Восстановление веток</b>\n\n'
+        f'📦 Объявлений «Другое» в БД: <b>{other_count}</b>\n\n'
+        'Перепубликация удалит старые message_ids и отправит все объявления заново в ветку BBS.'
+    )
+    keyboard = [
+        [InlineKeyboardButton(f'📦 Восстановить «Другое» ({other_count} шт.)', callback_data='owner_recovery_other_confirm')],
+        [InlineKeyboardButton('🔙 Назад', callback_data='panel_main')],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def recovery_other_confirm(query, db, admin_id: int) -> None:
+    """Запрос подтверждения перед восстановлением «Другое»."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    await query.edit_message_text(
+        '⚠️ <b>Подтверждение</b>\n\nЗапустить перепубликацию всех объявлений раздела «Другое»?\n\n'
+        '<i>Операция может занять несколько минут из-за ограничений Telegram.</i>',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton('✅ Запустить', callback_data='owner_recovery_other_execute')],
+            [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
+        ])
+    )
+
+
+async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int) -> None:
+    """Запускает перепубликацию всех объявлений «Другое»."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    await query.edit_message_text('⏳ Восстановление запущено...', parse_mode='HTML')
+    from handlers.BBS.fsm_other import restore_all_other_posts
+    ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
+    await query.edit_message_text(
+        f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+    )
