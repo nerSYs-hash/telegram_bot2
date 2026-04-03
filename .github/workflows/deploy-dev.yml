@@ -17,7 +17,7 @@ jobs:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           script: |
             # Первый раз — клонируем, потом просто pull
-            if [ ! -d /root/PulsBotDev ]; then
+            if [ ! -d /root/dev ]; then
               git clone -b dev https://github.com/nerSYs-hash/telegram_bot2.git /root/dev
             fi
             cd /root/dev
@@ -26,4 +26,6 @@ jobs:
             # Используем venv основного бота (тот же Python, те же пакеты)
             source /root/PulsBot/economybot/venv/bin/activate
             pip install -r requirements.txt -q 2>/dev/null || true
+            # Перезапускаем dev-бота
+            systemctl restart devbot
             echo "DEV deploy done! Dir: /root/dev"
