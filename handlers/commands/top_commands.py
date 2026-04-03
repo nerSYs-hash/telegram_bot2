@@ -47,8 +47,7 @@ async def show_top_rich(message, context, db):
             )
             return
 
-        response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n"
-        response += f"({get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n"
+        response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
 
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
 
@@ -168,8 +167,7 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
 
     top_users = db.cursor.fetchall()
 
-    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n"
-    message += f"(по добытым пульсам: {get_moscow_time().strftime('%d.%m.%Y')})\n\n"
+    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n\n"
 
     if top_users and any(user['pulses_today'] > 0 for user in top_users):
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
@@ -204,8 +202,7 @@ async def top5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
             await update.message.reply_text("Нет данных для топ-5")
             return
 
-        message = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n"
-        message += f"(период: {get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n"
+        message = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
         message += "    Всего добыто\n"
 
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']

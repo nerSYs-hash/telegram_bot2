@@ -78,7 +78,7 @@ async def show_top(query, db, target_chat_id, context=None):
     ''', (today,))
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
-    message = f"🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n({get_moscow_time().strftime('%d.%m.%Y')})\n\n"
+    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n\n"
     if top_users and any(_d(u['pulses_today']) > 0 for u in top_users):
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, user in enumerate(top_users):
@@ -100,26 +100,19 @@ async def show_top5_activists(query, user, db, context=None):
     # Берём кешированные % из БД (обновляются каждый час)
     top_users = db.get_top5_percent()
 
-    message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n"
-    message += "📊 Доля в активности за последние 4 часа\n\n"
+    message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
 
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
             pct = float(u_data['percent'])
-            filled = round(pct / 10)
-            filled = min(filled, 10)
+            filled = min(round(pct / 10), 10)
             bar = '▰' * filled + '░' * (10 - filled)
             fire = '🔥' if idx == 0 else ''
             message += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
-
-        # Показываем окно
-        ws = top_users[0]['window_start']
-        we = top_users[0]['window_end']
-        message += f"\n🕐 Окно: {ws} — {we} МСК"
     else:
-        message += "Пока нет данных об активности за последние 4 часа."
+        message += "Пока нет данных об активности."
 
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]]))
 
@@ -145,7 +138,7 @@ async def show_top5_rich(query, user, db, context=None):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
 
-    message = f"💰 ТОП-5 БОГАЧЕЙ ЧАТА\n({get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n"
+    message = "💰 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, u_data in enumerate(top_users):

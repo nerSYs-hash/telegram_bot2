@@ -127,11 +127,10 @@ async def show_top_activists(message, context, db):
         top_users = db.get_top5_percent()
 
         if not top_users:
-            await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности за последние 4 часа.")
+            await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности.")
             return
 
-        response = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n"
-        response += "📊 Доля в активности за последние 4 часа\n\n"
+        response = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
         from config.emojis import ICON_FIRE
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, user in enumerate(top_users):
@@ -141,10 +140,6 @@ async def show_top_activists(message, context, db):
             bar = '▰' * filled + '░' * (10 - filled)
             fire = ICON_FIRE if idx == 0 else ''
             response += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
-
-        ws = top_users[0]['window_start']
-        we = top_users[0]['window_end']
-        response += f"\n🕐 Окно: {ws} — {we} МСК"
 
         await context.bot.send_message(chat_id=message.chat.id, text=response)
     except Exception as e:
@@ -175,8 +170,7 @@ async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, update.message.chat.id, all_users, admin_ids, db, limit=5)
 
-    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n"
-    message += f"(по добытым пульсам: {get_moscow_time().strftime('%d.%m.%Y')})\n\n"
+    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n\n"
 
     if top_users and any(user['pulses_today'] > 0 for user in top_users):
         emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
@@ -206,8 +200,7 @@ async def top5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
             await update.message.reply_text("Нет данных для топ-5")
             return
 
-        message = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n"
-        message += f"(период: {get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n    Всего добыто\n"
+        message = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
         emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
 
         for idx, user in enumerate(top_users):

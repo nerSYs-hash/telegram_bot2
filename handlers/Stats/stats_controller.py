@@ -1105,7 +1105,7 @@ async def show_top(query, db, target_chat_id, context=None):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
 
-    message = f"🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n({get_moscow_time().strftime('%d.%m.%Y')})\n\n"
+    message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n\n"
 
     if top_users and any(_d(u['pulses_today']) > 0 for u in top_users):
         emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
@@ -1203,7 +1203,7 @@ async def show_top5_rich(query, user, db, context=None):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
 
-    message = f"💰 ТОП-5 БОГАЧЕЙ ЧАТА\n({get_moscow_time().strftime('%d.%m.%Y %H:%M')} МСК)\n\n"
+    message = "💰 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, u_data in enumerate(top_users):
