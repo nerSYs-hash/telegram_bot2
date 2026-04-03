@@ -1242,7 +1242,10 @@ async def compensate_bbs_confirm(query, context, db, admin_id: int) -> None:
         f"Списано из банка: <b>{format_number(amount * success)} 💎</b>",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
+    )
 
+
+async def recovery_other_confirm(query, db, admin_id: int) -> None:
     """Запрос подтверждения перед восстановлением «Другое»."""
     if not _is_owner(db, query.from_user.id, admin_id):
         await query.answer("⛔", show_alert=True)
