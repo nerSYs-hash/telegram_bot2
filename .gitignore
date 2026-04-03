@@ -15,3 +15,5 @@ env/
 # Логи и временные файлы
 logs/
 *.log
+
+telegram_bot2/
