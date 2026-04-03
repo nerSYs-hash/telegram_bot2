@@ -719,6 +719,12 @@ class MessageHandler:
                 if handled:
                     return
 
+        # ═══ ЖУРНАЛ: подключение канала (обрабатывается в admin_logic) ═══
+        if context.user_data.get('owner_awaiting') == 'journal_connect':
+            from handlers.journal_handlers import handle_journal_text_input
+            if await handle_journal_text_input(update, context, self.db):
+                return
+
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         if message.text and context.user_data.get('owner_awaiting'):
             handled = await handle_owner_text_input(

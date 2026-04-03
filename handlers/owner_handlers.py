@@ -788,6 +788,10 @@ async def handle_owner_text_input(
                         InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
         return True
 
+    # journal_connect обрабатывается в admin_logic — не сбрасываем
+    if awaiting == 'journal_connect':
+        return False
+
     # Неизвестный awaiting — сбрасываем
     context.user_data.pop('owner_awaiting', None)
     return False
