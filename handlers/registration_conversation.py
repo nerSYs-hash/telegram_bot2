@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 
 WELCOME, RULES, NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(8)
 
+# Тексты кнопок reply-клавиатуры, которые не должны приниматься как ответы анкеты
+_REPLY_KEYBOARD_TEXTS = {
+    "👤 Профиль", "💰 Баланс", "📊 Курс",
+    "👑 Панель Владельца", "📋 Новые заявки", "❓ FAQ",
+    "📋 Меню", "🏆 ТОП-5", "🎯 Активности",
+    "🏦 Центробанк", "❣️ Pulse BBS",
+}
+
+
+def _is_button_text(text: str) -> bool:
+    """Проверяет, является ли текст нажатием reply-кнопки."""
+    return text.strip() in _REPLY_KEYBOARD_TEXTS
+
 
 def _build_form(data: dict, next_question: str, keyboard=None) -> str:
     """Строит текст анкеты с заполненными полями и следующим вопросом."""
@@ -282,6 +295,9 @@ async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return NAME
     await _delete_user_msg(update.message)
     name = update.message.text.strip()
     if len(name) < 2:
@@ -302,6 +318,10 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     age_text = update.message.text
+
+    if _is_button_text(age_text):
+        await _delete_user_msg(update.message)
+        return AGE
 
     if not age_text.isdigit():
         await _delete_user_msg(update.message)
@@ -345,6 +365,9 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     date_text = update.message.text.strip()
     user_id = update.effective_user.id
+    if _is_button_text(date_text):
+        await _delete_user_msg(update.message)
+        return BIRTH_DATE
     await _delete_user_msg(update.message)
     msg_id = context.user_data.get('reg_msg_id')
 
@@ -391,6 +414,9 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return CITY
     await _delete_user_msg(update.message)
     city = update.message.text.strip()
     if len(city) < 2:
@@ -412,6 +438,9 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return THERAPY
     await _delete_user_msg(update.message)
     therapy = update.message.text.strip()
     if len(therapy) < 2:
@@ -436,6 +465,9 @@ async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return REF_CODE
     await _delete_user_msg(update.message)
     return await finish_registration(update, context, update.message.text)
 

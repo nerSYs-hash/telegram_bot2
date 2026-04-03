@@ -41,6 +41,26 @@ class CommandHandler:
             # Сразу переходим к твоему обычному коду старта (лотереи и т.д.)
             pass 
         else:
+            # Проверяем чёрный список ДО всех остальных проверок
+            from database.db_friend import is_blacklisted, get_blacklist_reason
+            from config import OWNER_ID
+            if await is_blacklisted(user_id):
+                reason = await get_blacklist_reason(user_id)
+                try:
+                    owner_chat = await context.bot.get_chat(OWNER_ID)
+                    owner_name = owner_chat.full_name or str(OWNER_ID)
+                except Exception:
+                    owner_name = str(OWNER_ID)
+                await update.message.reply_text(
+                    f"⛔ {update.effective_user.first_name}, ты заблокирован(а) "
+                    f"по решению администрации чата Pulse 4ever.\n\n"
+                    f"📝 Причина: {reason}\n\n"
+                    f"Если считаешь, что это ошибка — свяжись с администратором: "
+                    f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>',
+                    parse_mode="HTML"
+                )
+                return
+
             # 2. Если это обычный юзер, проверяем регистрацию в базе друга
             user = await get_user(user_id)
 

@@ -259,6 +259,18 @@ async def wipe_execute(query, db, admin_id: int) -> None:
         db.conn.commit()
         logger.warning(f"GLOBAL WIPE by {query.from_user.id}: {affected} users zeroed")
 
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_admin_action
+            bot = query._bot if hasattr(query, '_bot') else None
+            if bot:
+                await log_admin_action(
+                    bot, db, query.from_user.id,
+                    f"💀 Глобальный вайп балансов: обнулено {affected} пользователей"
+                )
+        except Exception as e:
+            logger.error(f"Journal log_admin_action (wipe) error: {e}")
+
         text = (
             f"💀 <b>ВАЙП ВЫПОЛНЕН</b>\n\n"
             f"Обнулено пользователей: <b>{affected}</b>\n"
@@ -607,6 +619,17 @@ async def handle_owner_text_input(
             f"🏦 Банк: {format_number(new_bank)} 💎",
             InlineKeyboardMarkup([[InlineKeyboardButton("💰 К экономике", callback_data="owner_economy")]]))
         logger.info(f"EMIT: {amount} to {target_id} by {user.id}")
+
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_admin_action
+            await log_admin_action(
+                context.bot, db, user.id,
+                f"💸 Эмиссия: {format_number(amount)} 💎 → @{name} (<code>{target_id}</code>)"
+            )
+        except Exception as e:
+            logger.error(f"Journal log_admin_action (emit) error: {e}")
+
         return True
 
     # ── Добавить в блэклист ──
@@ -708,6 +731,14 @@ async def handle_owner_text_input(
                 f"🔇 <code>{name}</code> замучен на <b>{human}</b>",
                 InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
+
+            # Журнал
+            try:
+                from handlers.journal_handlers import log_mute
+                await log_mute(context.bot, db, target_id, user.id, human)
+            except Exception as je:
+                logger.error(f"Journal log_mute error: {je}")
+
         except Exception as e:
             logger.error(f"Owner mute error: {e}")
             await reply(f"❌ Не удалось замутить: {e}",
@@ -743,6 +774,14 @@ async def handle_owner_text_input(
                 f"🔊 <code>{name}</code> размучен",
                 InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER UNMUTE: {target_id} by {user.id}")
+
+            # Журнал
+            try:
+                from handlers.journal_handlers import log_unmute
+                await log_unmute(context.bot, db, target_id, user.id)
+            except Exception as je:
+                logger.error(f"Journal log_unmute error: {je}")
+
         except Exception as e:
             logger.error(f"Owner unmute error: {e}")
             await reply(f"❌ Не удалось размутить: {e}",
