@@ -69,6 +69,7 @@ async def show_features_management(query, user, db, admin_id):
         ('❣️ Pulse BBS', 'bbs'),
         ('📦 BBS: Другое', 'bbs_other'),
         ('✏️ Ред. анкет BBS', 'bbs_edit'),
+        ('📝 Регистрация новых участников', 'registration'),
     ]
 
     message = "🔧 УПРАВЛЕНИЕ ФУНКЦИЯМИ\n\n"

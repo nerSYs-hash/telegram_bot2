@@ -117,6 +117,20 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.message:
         await _delete_user_msg(update.message)
 
+    # Проверка: регистрация включена?
+    main_db = context.bot_data.get('db')
+    if main_db and not main_db.is_feature_enabled('registration'):
+        await context.bot.send_message(
+            chat_id=user_id,
+            text=(
+                "🚫 <b>Регистрация временно закрыта.</b>\n\n"
+                "Набор новых участников приостановлен администрацией чата.\n"
+                "Следи за обновлениями!"
+            ),
+            parse_mode="HTML"
+        )
+        return ConversationHandler.END
+
     # Проверка чёрного списка
     if await is_blacklisted(user_id):
         reason = await get_blacklist_reason(user_id)
