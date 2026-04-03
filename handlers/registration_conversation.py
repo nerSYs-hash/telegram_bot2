@@ -12,6 +12,19 @@ logger = logging.getLogger(__name__)
 
 NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(6)
 
+# Тексты кнопок reply-клавиатуры, которые не должны приниматься как ответы анкеты
+_REPLY_KEYBOARD_TEXTS = {
+    "👤 Профиль", "💰 Баланс", "📊 Курс",
+    "👑 Панель Владельца", "📋 Новые заявки", "❓ FAQ",
+    "📋 Меню", "🏆 ТОП-5", "🎯 Активности",
+    "🏦 Центробанк", "❣️ Pulse BBS",
+}
+
+
+def _is_button_text(text: str) -> bool:
+    """Проверяет, является ли текст нажатием reply-кнопки."""
+    return text.strip() in _REPLY_KEYBOARD_TEXTS
+
 
 # ══════════════════════════════════════════════════════
 #  Система одного окна
@@ -148,6 +161,12 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return NAME
     context.user_data['reg_name'] = update.message.text
     await update_user(user_id, questionnaire_state="AGE")
     text = _build_form(context, "Б. Сколько тебе полных лет?")
@@ -158,6 +177,13 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     age_text = update.message.text
+
+    if _is_button_text(age_text):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return AGE
 
     if not age_text.isdigit():
         text = _build_form(context, "Б. Сколько тебе полных лет?", "⚠️ Введи возраст числом.")
@@ -186,6 +212,13 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     date_text = update.message.text.strip()
     user_id   = update.effective_user.id
+
+    if _is_button_text(date_text):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return BIRTH_DATE
 
     try:
         birth_date = datetime.strptime(date_text, "%d.%m.%Y").date()
@@ -224,6 +257,12 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return CITY
     context.user_data['reg_city'] = update.message.text
     await update_user(user_id, questionnaire_state="THERAPY")
     text = _build_form(context, "Г. Какую терапию ты принимаешь?",
@@ -234,6 +273,12 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return THERAPY
     context.user_data['reg_therapy'] = update.message.text
     await update_user(user_id, questionnaire_state="REF_CODE")
 
@@ -249,6 +294,12 @@ async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ref_code = update.message.text
+    if _is_button_text(ref_code):
+        try:
+            await update.message.delete()
+        except Exception:
+            pass
+        return REF_CODE
     try:
         await update.message.delete()
     except Exception:

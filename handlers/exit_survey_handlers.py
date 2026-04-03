@@ -227,14 +227,14 @@ async def handle_exit_return(query, data: str, context, db) -> None:
             logger.error(f"Exit survey return save error: {e}")
 
     # → Финал
-    await _show_survey_thanks(query, user_id, db)
+    await _show_survey_thanks(query, user_id, db, context)
 
 
 # ═══════════════════════════════════════════════════════════════
 #  ФИНАЛ: СПАСИБО
 # ═══════════════════════════════════════════════════════════════
 
-async def _show_survey_thanks(query, user_id: int, db) -> None:
+async def _show_survey_thanks(query, user_id: int, db, context=None) -> None:
     user_data = db.get_user(user_id)
     frozen = 0
     if user_data:
@@ -256,6 +256,21 @@ async def _show_survey_thanks(query, user_id: int, db) -> None:
     )
 
     await query.edit_message_text(text, parse_mode='HTML')
+
+    # Журнал: логируем завершение exit-опроса
+    try:
+        from handlers.journal_handlers import log_exit_survey
+        db.cursor.execute(
+            'SELECT reason_category FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+            (user_id,)
+        )
+        row = db.cursor.fetchone()
+        reason = row['reason_category'] if row else 'Не указана'
+        bot = context.bot if context else (query._bot if hasattr(query, '_bot') else None)
+        if bot:
+            await log_exit_survey(bot, db, user_id, reason)
+    except Exception as e:
+        logger.error(f"Journal log_exit_survey error: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════
