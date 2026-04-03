@@ -264,6 +264,77 @@ class CommandHandler:
             logger.error(f"remove_from_top error: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
+    async def unfreeze_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Разморозить пульсы пользователя по @username или user_id. Доступно @Nersys и владельцу."""
+        try:
+            caller = update.effective_user
+            caller_username = (caller.username or '').lower()
+            is_allowed = (caller.id == self.main_admin_id or caller_username == 'nersys')
+            if not is_allowed:
+                await update.message.reply_text("❌ Нет доступа.")
+                return
+
+            if not context.args:
+                await update.message.reply_text("Использование: /unfreeze @username или /unfreeze 123456789")
+                return
+
+            target = context.args[0].lstrip('@')
+            target_user = None
+            try:
+                target_id = int(target)
+                target_user = self.db.get_user(target_id)
+            except ValueError:
+                self.db.cursor.execute('SELECT * FROM users WHERE username = ?', (target,))
+                row = self.db.cursor.fetchone()
+                if row:
+                    target_user = row
+
+            if not target_user:
+                await update.message.reply_text(f"❌ Пользователь «{target}» не найден в базе.")
+                return
+
+            uid = target_user['user_id']
+            uname = target_user['username'] or target_user['first_name'] or str(uid)
+
+            try:
+                frozen_balance = float(target_user['frozen_balance'] or 0)
+            except (KeyError, IndexError):
+                frozen_balance = 0
+
+            if frozen_balance <= 0:
+                await update.message.reply_text(f"ℹ️ У @{uname} нет замороженных пульсов.")
+                return
+
+            from utils.helpers import format_number
+
+            bank_balance = self.db.get_bank_balance()
+            restore_amount = frozen_balance
+            if bank_balance < frozen_balance:
+                restore_amount = bank_balance
+
+            self.db.update_bank_balance(restore_amount, 'subtract')
+            self.db.update_user_balance(uid, restore_amount, 'add')
+            self.db.add_transaction(
+                None, uid, restore_amount, 'unfreeze_manual',
+                f'Ручная разморозка администратором {caller.id}'
+            )
+            self.db.cursor.execute(
+                'UPDATE users SET is_left = 0, frozen_balance = 0, freeze_until = NULL WHERE user_id = ?',
+                (uid,)
+            )
+            self.db.conn.commit()
+
+            result = (
+                f"✅ @{uname} разморожен!\n"
+                f"💰 {format_number(restore_amount)} 💎 возвращено на баланс\n"
+                f"🏦 Банк: {format_number(self.db.get_bank_balance())} 💎"
+            )
+            await update.message.reply_text(result)
+
+        except Exception as e:
+            logger.error(f"unfreeze error: {e}", exc_info=True)
+            await update.message.reply_text(f"❌ Ошибка: {e}")
+
     async def _show_lottery_deeplink(self, update: Update, context: ContextTypes.DEFAULT_TYPE, lottery_id: int):
         """Показать виджет покупки лотереи при переходе по deep link."""
         user = update.effective_user
