@@ -23,8 +23,8 @@ jobs:
             cd /root/dev
             git fetch origin dev
             git reset --hard origin/dev
-            # Используем venv основного бота (тот же Python, те же пакеты)
-            source /root/PulsBot/economybot/venv/bin/activate
+            # Используем собственный venv dev-бота
+            source /root/dev/venv/bin/activate
             pip install -r requirements.txt -q 2>/dev/null || true
             # Перезапускаем dev-бота
             systemctl restart devbot
