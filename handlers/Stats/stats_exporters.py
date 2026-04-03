@@ -378,22 +378,43 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
         )
         g['🛡️ ИТОГОВЫЙ ИНДЕКС ЗДОРОВЬЯ ЧАТА'] = f"{float(round_decimal(health_idx, 3)):.3f}"
 
-        # 5. ТОП 10
-        db.cursor.execute('''
+        # 5. ТОП 10 АКТИВИСТОВ (по индексу активности)
+        from utils.exchange_rate import ACTIVITY_INDEX_SQL
+        db.cursor.execute(f'''
             SELECT u.username, u.first_name,
-                   COALESCE(SUM(us.total_messages), 0) as msgs,
-                   COALESCE(SUM(us.pulses_mined), 0)   as earned
+                   ({ACTIVITY_INDEX_SQL}) as activity_index,
+                   COALESCE(SUM(us.pulses_mined), 0) as earned
             FROM users u
             LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
             WHERE (u.is_admin=0 AND u.is_owner=0)
-            GROUP BY u.user_id HAVING msgs > 0 ORDER BY msgs DESC LIMIT 10
+            GROUP BY u.user_id
+            HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0
+                   OR SUM(us.reactions_received) > 0 OR SUM(us.replies_sent) > 0
+            ORDER BY activity_index DESC LIMIT 10
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
         for i, r_msg in enumerate(db.cursor.fetchall()):
             stats_data['top_messages'].append({
-                'Место': i + 1,
-                'Пользователь': f"@{r_msg['username'] or r_msg['first_name']}",
-                'Сообщений': int(_d(r_msg['msgs'])),
-                '💎 Добыто': format_number(r_msg['earned']),
+                'rank': i + 1,
+                'username': f"@{r_msg['username'] or r_msg['first_name']}",
+                'activity_score': float(_d(r_msg['activity_index'])),
+                'earned_raw': float(_d(r_msg['earned'])),
+            })
+
+        # 5b. ТОП 10 ПО ЗАРАБОТКУ
+        db.cursor.execute('''
+            SELECT u.username, u.first_name,
+                   COALESCE(SUM(us.pulses_mined), 0) as earned
+            FROM users u
+            LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
+            WHERE (u.is_admin=0 AND u.is_owner=0)
+            GROUP BY u.user_id HAVING earned > 0
+            ORDER BY earned DESC LIMIT 10
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+        for i, r_earn in enumerate(db.cursor.fetchall()):
+            stats_data['top_earners'].append({
+                'rank': i + 1,
+                'username': f"@{r_earn['username'] or r_earn['first_name']}",
+                'earned': float(_d(r_earn['earned'])),
             })
 
         # 6. ДЕТАЛИЗАЦИЯ с персональным индексом активности
