@@ -261,7 +261,15 @@ class MessageHandler:
         }
         
         self.db.update_user_activity(user.id, today, **stats_update)
-   
+
+        # ═══ ПОЧАСОВАЯ СТАТИСТИКА (для % активности) ═══
+        try:
+            from utils.helpers import get_moscow_time
+            now_msk = get_moscow_time()
+            self.db.update_user_activity_hourly(user.id, today, now_msk.hour, **stats_update)
+        except Exception as e:
+            logging.debug(f"Hourly stats error: {e}")
+
          # ═══ МГНОВЕННОЕ ОБНОВЛЕНИЕ КУРСА (дельта) ═══
         try:
             from utils.exchange_rate import rate_cache, calculate_message_delta
@@ -284,6 +292,12 @@ class MessageHandler:
             # Не обновляем если ответили самому себе (уже проверено выше)
             if replied_to_user_id != user.id:
                 self.db.update_user_activity(replied_to_user_id, today, replies_received=1)
+                try:
+                    from utils.helpers import get_moscow_time
+                    now_msk = get_moscow_time()
+                    self.db.update_user_activity_hourly(replied_to_user_id, today, now_msk.hour, replies_received=1)
+                except Exception:
+                    pass
                 logging.info(f"📬 User {replied_to_user_id} received reply from {user.id}")
                 # Дельта для replies_received
                 try:

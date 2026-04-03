@@ -53,6 +53,53 @@ def create_exchange_tables(db):
         ON top_activists_history (user_id, date)
     ''')
 
+    # ═══ Почасовая статистика для % активности (4ч окно) ═══
+    db.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS user_stats_hourly (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            date DATE NOT NULL,
+            hour INTEGER NOT NULL,
+            total_chars INTEGER DEFAULT 0,
+            total_messages INTEGER DEFAULT 0,
+            total_words INTEGER DEFAULT 0,
+            reactions_given INTEGER DEFAULT 0,
+            reactions_received INTEGER DEFAULT 0,
+            replies_received INTEGER DEFAULT 0,
+            replies_sent INTEGER DEFAULT 0,
+            mentions_received INTEGER DEFAULT 0,
+            media_sent INTEGER DEFAULT 0,
+            other_threads_posts INTEGER DEFAULT 0,
+            FOREIGN KEY (user_id) REFERENCES users(user_id),
+            UNIQUE(user_id, date, hour)
+        )
+    ''')
+
+    db.cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_stats_hourly_date_hour
+        ON user_stats_hourly (date, hour)
+    ''')
+
+    # ═══ Кеш ТОП-5 % активности (обновляется каждый час) ═══
+    db.cursor.execute('''
+        CREATE TABLE IF NOT EXISTS top_activists_percent (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL,
+            percent REAL DEFAULT 0,
+            activity_index REAL DEFAULT 0,
+            rank INTEGER NOT NULL,
+            window_start TEXT NOT NULL,
+            window_end TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (user_id) REFERENCES users(user_id)
+        )
+    ''')
+
+    db.cursor.execute('''
+        CREATE INDEX IF NOT EXISTS idx_top_percent_updated
+        ON top_activists_percent (updated_at)
+    ''')
+
     db.conn.commit()
 
 
@@ -257,3 +304,95 @@ def get_all_top_appearances(db, days=30):
         })
 
     return result
+
+
+# ═══════════════════════════════════════════════════
+# HOURLY STATS (для % активности за 4ч окно)
+# ═══════════════════════════════════════════════════
+
+def update_user_activity_hourly(db, user_id, date, hour, **kwargs):
+    """Обновить почасовую статистику пользователя (аналог update_user_activity)."""
+    db.cursor.execute('''
+        SELECT id FROM user_stats_hourly WHERE user_id = ? AND date = ? AND hour = ?
+    ''', (user_id, date, hour))
+
+    existing = db.cursor.fetchone()
+
+    if existing:
+        fields = []
+        values = []
+        for key, value in kwargs.items():
+            if value is not None and key in (
+                'total_chars', 'total_messages', 'total_words',
+                'reactions_given', 'reactions_received',
+                'replies_received', 'replies_sent',
+                'mentions_received', 'media_sent', 'other_threads_posts'
+            ):
+                fields.append(f"{key} = {key} + ?")
+                values.append(value)
+
+        if fields:
+            query = f"UPDATE user_stats_hourly SET {', '.join(fields)} WHERE user_id = ? AND date = ? AND hour = ?"
+            values.extend([user_id, date, hour])
+            db.cursor.execute(query, values)
+    else:
+        cols = {'user_id': user_id, 'date': date, 'hour': hour}
+        for key, value in kwargs.items():
+            if value is not None and key in (
+                'total_chars', 'total_messages', 'total_words',
+                'reactions_given', 'reactions_received',
+                'replies_received', 'replies_sent',
+                'mentions_received', 'media_sent', 'other_threads_posts'
+            ):
+                cols[key] = value
+
+        fields = list(cols.keys())
+        placeholders = ['?'] * len(fields)
+        values = list(cols.values())
+        query = f"INSERT INTO user_stats_hourly ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
+        db.cursor.execute(query, values)
+
+    db.conn.commit()
+
+
+def save_top5_percent(db, entries, window_start, window_end):
+    """
+    Сохранить кеш ТОП-5 % активности.
+    entries: list of dict {'user_id', 'percent', 'activity_index', 'rank'}
+    """
+    try:
+        db.cursor.execute('DELETE FROM top_activists_percent')
+        for e in entries:
+            db.cursor.execute('''
+                INSERT INTO top_activists_percent
+                    (user_id, percent, activity_index, rank, window_start, window_end)
+                VALUES (?, ?, ?, ?, ?, ?)
+            ''', (e['user_id'], e['percent'], e['activity_index'], e['rank'],
+                  window_start, window_end))
+        db.conn.commit()
+    except Exception as e:
+        logger.error(f"Error saving top5 percent: {e}")
+
+
+def get_top5_percent(db):
+    """Получить кешированный ТОП-5 % активности."""
+    db.cursor.execute('''
+        SELECT tap.*, u.username, u.first_name
+        FROM top_activists_percent tap
+        JOIN users u ON tap.user_id = u.user_id
+        ORDER BY tap.rank ASC
+        LIMIT 5
+    ''')
+    return db.cursor.fetchall()
+
+
+def cleanup_old_hourly_stats(db, days_to_keep=2):
+    """Удалить hourly-данные старше N дней (экономия места)."""
+    try:
+        db.cursor.execute('''
+            DELETE FROM user_stats_hourly
+            WHERE date < date('now', ?)
+        ''', (f'-{days_to_keep} days',))
+        db.conn.commit()
+    except Exception as e:
+        logger.error(f"Error cleaning hourly stats: {e}")

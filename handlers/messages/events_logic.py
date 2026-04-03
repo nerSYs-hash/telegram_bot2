@@ -546,6 +546,12 @@ async def handle_reaction(update, context, db, target_chat_id):
     
     if net_change != 0:
         db.update_user_activity(user.id, today, reactions_given=abs(net_change))
+        try:
+            from utils.helpers import get_moscow_time
+            now_msk = get_moscow_time()
+            db.update_user_activity_hourly(user.id, today, now_msk.hour, reactions_given=abs(net_change))
+        except Exception:
+            pass
     
     try:
         message_id = reaction_update.message_id
@@ -562,6 +568,12 @@ async def handle_reaction(update, context, db, target_chat_id):
             message_author_id = result['user_id']
             if message_author_id != user.id:
                 db.update_user_activity(message_author_id, today, reactions_received=abs(net_change))
+                try:
+                    from utils.helpers import get_moscow_time
+                    now_msk = get_moscow_time()
+                    db.update_user_activity_hourly(message_author_id, today, now_msk.hour, reactions_received=abs(net_change))
+                except Exception:
+                    pass
                 logging.info(f"👍 User {message_author_id} received {abs(net_change)} reactions from {user.id}")
         else:
             logging.warning(f"⚠️ Could not find message author for reaction")

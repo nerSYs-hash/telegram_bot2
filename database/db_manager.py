@@ -50,6 +50,10 @@ from database.db_exchange import (
     get_previous_top_snapshot as _get_previous_top_snapshot,
     get_user_top_appearances as _get_user_top_appearances,
     get_all_top_appearances as _get_all_top_appearances,
+    update_user_activity_hourly as _update_user_activity_hourly,
+    save_top5_percent as _save_top5_percent,
+    get_top5_percent as _get_top5_percent,
+    cleanup_old_hourly_stats as _cleanup_old_hourly_stats,
 )
 from database.db_referrals import (
     create_referral_link as _create_referral_link,
@@ -606,6 +610,19 @@ class Database:
 
     def get_all_top_appearances(self, days=30):
         return _get_all_top_appearances(self, days)
+
+    # ── Hourly Stats & % Activity ──
+    def update_user_activity_hourly(self, user_id, date, hour, **kwargs):
+        _update_user_activity_hourly(self, user_id, date, hour, **kwargs)
+
+    def save_top5_percent(self, entries, window_start, window_end):
+        _save_top5_percent(self, entries, window_start, window_end)
+
+    def get_top5_percent(self):
+        return _get_top5_percent(self)
+
+    def cleanup_old_hourly_stats(self, days_to_keep=2):
+        _cleanup_old_hourly_stats(self, days_to_keep)
 
     # ── Referrals ──
     def create_referral_link(self, user_id):

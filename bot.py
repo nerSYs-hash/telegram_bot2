@@ -25,7 +25,7 @@ from handlers.message_handler import MessageHandler as BotMessageHandler
 from handlers.callback import CallbackHandler
 from handlers.commands.exchange_commands import recalc_rate_command
 from utils.helpers import get_moscow_time, format_number
-from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update
+from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update, scheduled_top5_percent_update
 
 # Абсолютный путь к папке скрипта — не зависит от рабочей директории
 _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -437,6 +437,14 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in TOP-5 update: {e}")
 
+    async def update_top5_percent(self):
+        """Scheduled: обновление % активности ТОП-5 (каждый час)"""
+        try:
+            entries = scheduled_top5_percent_update(self.db)
+            logger.info(f"📊 TOP-5%% percent: {len(entries)} users cached")
+        except Exception as e:
+            logger.error(f"Error in TOP-5 percent update: {e}")
+
     async def error_handler(self, update, context):
         """Handle errors"""
         try:
@@ -673,7 +681,15 @@ class TelegramBot:
             minute=0,
             id='top5_evening'
         )
-        
+
+        # ═══ ТОП-5 % активности: каждый час ═══
+        self.scheduler.add_job(
+            self.update_top5_percent,
+            'interval',
+            hours=1,
+            id='top5_percent_hourly'
+        )
+
         # ═══ Проверка неактивных пользователей (раз в 24 часа) ═══
         self.scheduler.add_job(
             self.check_inactive_users_job,

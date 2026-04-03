@@ -97,45 +97,29 @@ async def show_top5_menu(query, user):
     await query.edit_message_text("🏆 ТОП-5\nВыберите категорию:", reply_markup=InlineKeyboardMarkup(keyboard))
 
 async def show_top5_activists(query, user, db, context=None):
-    from utils.exchange_rate import ACTIVITY_INDEX_SQL
-    now = get_moscow_time()
-    date_30 = (now - timedelta(days=30)).strftime('%Y-%m-%d')
-    target_chat_id = int(os.getenv('TARGET_CHAT_ID'))
+    # Берём кешированные % из БД (обновляются каждый час)
+    top_users = db.get_top5_percent()
 
-    admin_ids = set()
-    if context:
-        try:
-            admins_list = await context.bot.get_chat_administrators(target_chat_id)
-            admin_ids = {a.user.id for a in admins_list}
-        except Exception:
-            pass
+    message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n"
+    message += "📊 Доля в активности за последние 4 часа\n\n"
 
-    db.cursor.execute(f'''
-        SELECT u.user_id, u.username, u.first_name,
-            ({ACTIVITY_INDEX_SQL}) as activity_index
-        FROM user_stats us JOIN users u ON us.user_id = u.user_id
-        WHERE us.date >= ? AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
-        GROUP BY us.user_id HAVING SUM(us.total_messages)>0 OR SUM(us.reactions_given)>0 OR SUM(us.reactions_received)>0 OR SUM(us.replies_sent)>0
-        ORDER BY activity_index DESC LIMIT 20
-    ''', (date_30,))
-
-    all_users = db.cursor.fetchall()
-    top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
-
-    message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
-        max_score = float(top_users[0]['activity_index']) if top_users else 1
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
-            score = float(u_data['activity_index'])
-            pct = round(score / max_score * 100) if max_score > 0 else 0
+            pct = float(u_data['percent'])
             filled = round(pct / 10)
+            filled = min(filled, 10)
             bar = '▰' * filled + '░' * (10 - filled)
             fire = '🔥' if idx == 0 else ''
-            message += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
+            message += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
+
+        # Показываем окно
+        ws = top_users[0]['window_start']
+        we = top_users[0]['window_end']
+        message += f"\n🕐 Окно: {ws} — {we} МСК"
     else:
-        message += "За последние 30 дней нет данных об активности."
+        message += "Пока нет данных об активности за последние 4 часа."
 
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]]))
 

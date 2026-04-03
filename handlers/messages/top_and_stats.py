@@ -123,49 +123,30 @@ async def show_top_rich(message, context, db):
 
 async def show_top_activists(message, context, db):
     try:
-        today = get_today_date_msk()
-        admin_ids = await _get_admin_ids(context, message.chat.id)
-        
-        from datetime import timedelta
-        from utils.exchange_rate import ACTIVITY_INDEX_SQL
-        now = get_moscow_time()
-        date_30 = (now - timedelta(days=30)).strftime('%Y-%m-%d')
-
-        db.cursor.execute(f'''
-            SELECT
-                u.user_id, u.username, u.first_name,
-                ({ACTIVITY_INDEX_SQL}) as activity_index
-            FROM user_stats us
-            JOIN users u ON us.user_id = u.user_id
-            WHERE us.date >= ?
-              AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
-            GROUP BY us.user_id 
-            HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0 OR SUM(us.replies_sent) > 0
-            ORDER BY activity_index DESC
-            LIMIT 20
-        ''', (date_30,))
-        
-        all_users = db.cursor.fetchall()
-        top_users = await _filter_active_users(context, message.chat.id, all_users, admin_ids, db, limit=5)
+        # Берём кешированные % из БД (обновляются каждый час)
+        top_users = db.get_top5_percent()
 
         if not top_users:
-            await context.bot.send_message(chat_id=message.chat.id, text="Сегодня ещё никто не проявлял активность.")
+            await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности за последние 4 часа.")
             return
 
-        response = "🏆 ТОП-5 АКТИВИСТОВ СЕГОДНЯ\n\n"
+        response = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n"
+        response += "📊 Доля в активности за последние 4 часа\n\n"
         from config.emojis import ICON_FIRE
-        emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
-        max_score = float(top_users[0]['activity_index']) if top_users else 1
+        emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, user in enumerate(top_users):
             username = user['username'] or user['first_name'] or 'Unknown'
-            score = float(user['activity_index'])
-            pct = round(score / max_score * 100) if max_score > 0 else 0
-            filled = round(pct / 10)
+            pct = float(user['percent'])
+            filled = min(round(pct / 10), 10)
             bar = '▰' * filled + '░' * (10 - filled)
             fire = ICON_FIRE if idx == 0 else ''
-            response += f"{emojis[idx]} @{username} {bar} {pct}%{fire}\n"
+            response += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
 
-        await context.bot.send_message(chat_id=message.chat.id, text=response, parse_mode='HTML')
+        ws = top_users[0]['window_start']
+        we = top_users[0]['window_end']
+        response += f"\n🕐 Окно: {ws} — {we} МСК"
+
+        await context.bot.send_message(chat_id=message.chat.id, text=response)
     except Exception as e:
         logging.error(f"Error showing top activists: {e}")
 

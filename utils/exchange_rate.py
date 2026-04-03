@@ -297,6 +297,112 @@ def scheduled_rate_update(db, total_members, today):
 
 
 # ═══════════════════════════════════════════════════
+# ТОП-5 АКТИВИСТОВ — % ЗА 4-ЧАСОВОЕ ОКНО
+# ═══════════════════════════════════════════════════
+
+# SQL-формула для hourly-таблицы (аналогична ACTIVITY_INDEX_SQL, но по ush)
+SQL_WEIGHTS_HOURLY = {
+    'total_chars':          f'0.05 * (SUM(ush.total_chars) * 1.0 / {CHARS_NORM})',
+    'avg_message_length':   f'0.05 * (CASE WHEN SUM(ush.total_messages) > 0 '
+                            f'THEN (SUM(ush.total_chars) * 1.0 / SUM(ush.total_messages)) / {CHARS_NORM} '
+                            f'ELSE 0 END)',
+    'total_words':          '0.05 * SUM(ush.total_words)',
+    'reactions_given':      '0.08 * SUM(ush.reactions_given)',
+    'reactions_received':   '0.10 * SUM(ush.reactions_received)',
+    'replies_received':     '0.18 * SUM(ush.replies_received)',
+    'replies_sent':         '0.15 * SUM(ush.replies_sent)',
+    'mentions_received':    '0.15 * SUM(ush.mentions_received)',
+    'media_sent':           '0.07 * SUM(ush.media_sent)',
+    'other_threads_posts':  '0.12 * SUM(ush.other_threads_posts)',
+}
+ACTIVITY_INDEX_HOURLY_SQL = ' + '.join(SQL_WEIGHTS_HOURLY.values())
+
+
+def calculate_top5_percent(db):
+    """
+    Рассчитать ТОП-5 % активности за скользящее 4-часовое окно.
+    Каждый пользователь = его AI / сумма AI всех × 100%.
+
+    Returns:
+        list of dict: [{'user_id', 'username', 'percent', 'activity_index', 'rank'}, ...]
+        + window_start, window_end (строки)
+    """
+    from utils.helpers import get_moscow_time
+    now = get_moscow_time()
+
+    # Определяем окно: последние 4 часа
+    window_end = now
+    window_start = now - timedelta(hours=4)
+
+    # Строим условие WHERE для часов
+    # Окно может пересекать границу дней (напр. 22:00 - 02:00)
+    date_end = window_end.strftime('%Y-%m-%d')
+    date_start = window_start.strftime('%Y-%m-%d')
+
+    if date_start == date_end:
+        # Простой случай — один день
+        where = "ush.date = ? AND ush.hour >= ? AND ush.hour <= ?"
+        params = [date_start, window_start.hour, window_end.hour]
+    else:
+        # Пересечение дней
+        where = ("(ush.date = ? AND ush.hour >= ?) OR "
+                 "(ush.date = ? AND ush.hour <= ?)")
+        params = [date_start, window_start.hour, date_end, window_end.hour]
+
+    # Считаем AI для каждого юзера за окно
+    query = f'''
+        SELECT
+            u.user_id, u.username, u.first_name,
+            ({ACTIVITY_INDEX_HOURLY_SQL}) as activity_index
+        FROM user_stats_hourly ush
+        JOIN users u ON ush.user_id = u.user_id
+        WHERE ({where}) AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
+        GROUP BY ush.user_id
+        HAVING SUM(ush.total_messages) > 0 OR SUM(ush.reactions_given) > 0
+               OR SUM(ush.reactions_received) > 0 OR SUM(ush.replies_sent) > 0
+        ORDER BY activity_index DESC
+    '''
+    db.cursor.execute(query, params)
+    rows = db.cursor.fetchall()
+
+    # Общая сумма AI всех
+    total_ai = sum(float(r['activity_index']) for r in rows) if rows else 0
+
+    result = []
+    for rank, row in enumerate(rows[:5], 1):
+        ai = float(row['activity_index'])
+        pct = (ai / total_ai * 100) if total_ai > 0 else 0
+        result.append({
+            'user_id': row['user_id'],
+            'username': row['username'] or row['first_name'] or f"ID:{row['user_id']}",
+            'activity_index': round(ai, 3),
+            'percent': round(pct, 1),
+            'rank': rank,
+        })
+
+    ws = window_start.strftime('%Y-%m-%d %H:%M')
+    we = window_end.strftime('%Y-%m-%d %H:%M')
+    return result, ws, we
+
+
+def scheduled_top5_percent_update(db):
+    """
+    Вызывается каждый час из bot.py.
+    Считает % активности за 4ч окно и кеширует в БД.
+    """
+    try:
+        entries, ws, we = calculate_top5_percent(db)
+        db.save_top5_percent(entries, ws, we)
+        # Чистим старые hourly-данные (оставляем 2 дня)
+        db.cleanup_old_hourly_stats(days_to_keep=2)
+        logger.info(f"📊 TOP-5%% updated: {len(entries)} users | window {ws} → {we}")
+        return entries
+    except Exception as e:
+        logger.error(f"Error in top5 percent update: {e}")
+        return []
+
+
+# ═══════════════════════════════════════════════════
 # ТОП-5 АКТИВИСТОВ — СНАПШОТ (2 раза в день)
 # ═══════════════════════════════════════════════════
 
