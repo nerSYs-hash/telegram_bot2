@@ -1403,25 +1403,13 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     stats_message = f"{type_names.get(stats_type, '📊 СТАТИСТИКА ЧАТА')}\n{period_name}\n\n"
 
     
-    # ── 1. Сообщений (Железобетонно из chat_stats) ──
+    # ── 1. Сообщений (из chat_stats, фоллбэк на user_stats) ──
     db.cursor.execute('''
-        SELECT COALESCE(SUM(total_messages), 0) as count 
-        FROM chat_stats 
+        SELECT COALESCE(SUM(total_messages), 0) as count
+        FROM chat_stats
         WHERE date >= ? AND date <= ?
     ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
     total_messages = int(db.cursor.fetchone()['count'])
-    
-    stats_message += f"💬 Всего сообщений: {total_messages}\n"
-
-    # ── 2. Активных пользователей (Железобетонно из user_stats) ──
-    db.cursor.execute('''
-        SELECT COUNT(DISTINCT user_id) as count 
-        FROM user_stats 
-        WHERE date >= ? AND date <= ? AND total_messages > 0
-    ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
-    active_users = int(db.cursor.fetchone()['count'])
-
-    stats_message += f"👥 Активных пользователей: {active_users}\n"
 
     if total_messages == 0:
         if period == 'day':
