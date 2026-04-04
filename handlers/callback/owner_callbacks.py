@@ -15,6 +15,18 @@ from handlers.owner_handlers import (
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
 )
+from handlers.shipper_handlers import (
+    show_shipper_menu,
+    toggle_shipper_enabled,
+    start_shipper_timing_input,
+    start_shipper_add_phrase,
+    show_shipper_target_menu,
+    set_shipper_target_mode,
+    select_shipper_category,
+    show_shipper_phrases,
+    delete_shipper_phrase,
+    run_shipper_now,
+)
 from handlers.admin_moderation import send_admin_panel
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
@@ -63,6 +75,36 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await wipe_confirm_step1(query, db, admin_id)
     elif data == "owner_wipe_confirm":
         await wipe_execute(query, db, admin_id)
+
+    # ── Шиппер ──
+    elif data == "owner_shipper_menu":
+        await show_shipper_menu(query, context, db, target_chat_id)
+    elif data == "owner_shipper_toggle":
+        await toggle_shipper_enabled(query, context, db, target_chat_id)
+    elif data == "owner_shipper_timing":
+        await start_shipper_timing_input(query, context, db)
+    elif data == "owner_shipper_target_menu":
+        await show_shipper_target_menu(query, db)
+    elif data.startswith("owner_shipper_target_"):
+        await set_shipper_target_mode(query, data, context, db, target_chat_id)
+    elif data == "owner_shipper_add_phrase":
+        await start_shipper_add_phrase(query, context, db)
+    elif data.startswith("owner_shipper_cat_"):
+        await select_shipper_category(query, data, context, db)
+    elif data.startswith("owner_shipper_list_"):
+        try:
+            page = int(data.replace("owner_shipper_list_", ""))
+        except Exception:
+            page = 1
+        await show_shipper_phrases(query, db, page=page)
+    elif data.startswith("owner_shipper_listcat_"):
+        await show_shipper_phrases(query, db, page=1)
+    elif data.startswith("owner_shipper_phrase_delete_"):
+        await delete_shipper_phrase(query, data, db)
+    elif data == "owner_shipper_run_now":
+        await run_shipper_now(query, context, db, target_chat_id)
+    elif data == "owner_shipper_noop":
+        await query.answer()
 
     # ── Модерация ──
     elif data == "owner_moderation":

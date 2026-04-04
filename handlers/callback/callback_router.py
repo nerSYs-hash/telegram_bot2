@@ -322,6 +322,19 @@ class CallbackHandler:
         ''', date_params)
         expenses = self.db.cursor.fetchone()
 
+        # Скрытое комбо "Мэтч дня" (активации резонанса)
+        if period_key == "yesterday":
+            resonance_date_condition = "AND DATE(activated_at) = ?"
+        else:
+            resonance_date_condition = "AND DATE(activated_at) >= ?"
+        self.db.cursor.execute(f'''
+            SELECT COUNT(*) AS cnt
+            FROM shipper_resonance_stats
+            WHERE user_id = ? {resonance_date_condition}
+        ''', date_params)
+        resonance_row = self.db.cursor.fetchone()
+        resonance_count = int(resonance_row['cnt']) if resonance_row and resonance_row['cnt'] is not None else 0
+
         # Детализация по дням
         daily_breakdown = ""
         if period_key not in ("today", "yesterday"):
@@ -367,6 +380,8 @@ class CallbackHandler:
             message += f"   🏦 От Центробанка: +{format_number(income['admin_give'])} 💎\n"
         if income['donates_in'] > 0:
             message += f"   🎁 Донаты: +{format_number(income['donates_in'])} 💎\n"
+        if resonance_count > 0:
+            message += f"   💘 Мэтч дня (x2): {resonance_count} сраб.\n"
         if income['total_in'] == 0:
             message += "   — нет начислений\n"
         message += f"   ▸ Итого: +{format_number(income['total_in'])} 💎 ({income['tx_count']} опер.)\n\n"

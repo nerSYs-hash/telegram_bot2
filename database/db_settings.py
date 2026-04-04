@@ -26,7 +26,11 @@ def initialize_settings(db, initial_bank_balance=10000000, initial_difficulty_k=
         ('difficulty_k', str(initial_difficulty_k)),
         ('reactor_balance', '0'),
         ('reactor_goal', '10000'),
-        ('reactor_level', '0')
+        ('reactor_level', '0'),
+        ('shipper_enabled', '0'),
+        ('shipper_min_hours', '2'),
+        ('shipper_max_hours', '5'),
+        ('shipper_target_mode', 'active_48'),
     ]
 
     for key, value in settings:

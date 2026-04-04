@@ -133,6 +133,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
         [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
+        [InlineKeyboardButton("💘 Рулетка пар (Шиппер)", callback_data="owner_shipper_menu")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
@@ -515,6 +516,17 @@ async def handle_owner_text_input(
         return False
 
     text = message.text.strip() if message.text else ''
+
+    if awaiting.startswith('shipper_'):
+        try:
+            from handlers.shipper_handlers import handle_shipper_text_input
+            handled_shipper = await handle_shipper_text_input(
+                update, context, db, admin_id, target_chat_id
+            )
+            if handled_shipper:
+                return True
+        except Exception as e:
+            logger.error(f"shipper FSM delegate error: {e}")
 
     # Хелпер: удаляем входящее сообщение и редактируем панель
     panel_msg_id = context.user_data.get('owner_panel_msg_id')
