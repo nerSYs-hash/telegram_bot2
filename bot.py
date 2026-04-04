@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
+BOT_VERSION = "1.9.1"
+
 import os
 import sys
 import logging
@@ -171,7 +173,35 @@ class TelegramBot:
         
         # Initialize rate cache
         await self.init_rate_cache()
-    
+
+        # ══ Уведомление о версии при старте ══
+        await self._notify_version(bot)
+
+    async def _notify_version(self, bot):
+        """Отправить уведомление о версии Владельцу и замам."""
+        try:
+            from database.db_friend import get_all_deputies
+            now = get_moscow_time().strftime('%d.%m.%Y %H:%M')
+            text = (
+                f"🤖 Бот обновлён и запущен\n\n"
+                f"📌 Версия: <b>{BOT_VERSION}</b>\n"
+                f"🕐 {now} МСК"
+            )
+            # Владелец
+            try:
+                await bot.send_message(self.main_admin_id, text, parse_mode='HTML')
+            except Exception as e:
+                logger.warning(f"Не удалось уведомить владельца: {e}")
+            # Замы
+            deputies = await get_all_deputies()
+            for dep in deputies:
+                try:
+                    await bot.send_message(dep['tg_id'], text, parse_mode='HTML')
+                except Exception as e:
+                    logger.warning(f"Не удалось уведомить зама {dep['tg_id']}: {e}")
+        except Exception as e:
+            logger.error(f"_notify_version error: {e}")
+
     async def daily_statistics(self):
         """Send daily statistics at 19:05 MSK"""
         try:

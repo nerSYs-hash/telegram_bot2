@@ -854,6 +854,18 @@ async def get_all_admins() -> List[dict]:
     logger.info(f"Total recipients for notifications: {len(admins)}")
     return admins
 
+
+async def get_all_deputies() -> list:
+    """Получить всех замов владельца"""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT * FROM users WHERE role = ?",
+            (UserRole.DEPUTY,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return rows_to_dict_list(rows)
+
+
 # ==================== BLACKLIST OPERATIONS ====================
 
 async def is_blacklisted(tg_id: int) -> bool:
