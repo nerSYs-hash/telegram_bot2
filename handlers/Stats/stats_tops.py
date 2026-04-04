@@ -104,17 +104,18 @@ async def show_top5_activists(query, user, db, context=None):
 
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+        from config.emojis import ICON_TOP_ACT
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
             pct = float(u_data['percent'])
             filled = min(round(pct / 10), 10)
             bar = '▰' * filled + '░' * (10 - filled)
-            fire = '🔥' if idx == 0 else ''
+            fire = ICON_TOP_ACT if idx == 0 else ''
             message += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
     else:
         message += "Пока нет данных об активности."
 
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]]))
+    await query.edit_message_text(message, parse_mode='HTML', reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]]))
 
 async def show_top5_rich(query, user, db, context=None):
     today = get_today_date_msk()

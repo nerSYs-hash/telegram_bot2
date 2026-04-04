@@ -159,6 +159,12 @@ class MessageHandler:
                     from handlers.admin_moderation import handle_reject_reason
                     await handle_reject_reason(update, context)
                     return
+                # FSM: ввод для панели (Админы, ЧС, Зам)
+                if message.text and context.user_data.get('panel_awaiting'):
+                    from handlers.admin_moderation import handle_panel_input
+                    handled = await handle_panel_input(update, context)
+                    if handled:
+                        return
                 # Обработка ReplyKeyboard кнопок в админском чате
                 if message.text and message.text.strip() in REPLY_BUTTONS:
                     btn = message.text.strip()
@@ -174,8 +180,9 @@ class MessageHandler:
                         await handle_owner_panel_button(update, context, btn)
                         return
                     elif btn == REPLY_BTN_OWNER_PANEL:
-                        from handlers.admin_moderation import send_admin_panel
-                        await send_admin_panel(context.bot, message.chat.id, is_owner=(user.id == self.main_admin_id))
+                        from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
+                        is_owner = await _is_owner_or_deputy(user.id)
+                        await send_admin_panel(context.bot, message.chat.id, is_owner=is_owner)
                         return
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
@@ -476,8 +483,8 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
+                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
                 return
             elif btn == REPLY_BTN_NEW_APPS:
                 from handlers.admin_moderation import handle_new_apps_text
@@ -713,8 +720,8 @@ class MessageHandler:
                 await _show_faq_menu(message)
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
-                from handlers.admin_moderation import send_admin_panel
-                await send_admin_panel(context.bot, message.chat.id, is_owner=True)
+                from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
+                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
                 return
             elif btn == REPLY_BTN_NEW_APPS:
                 from handlers.admin_moderation import handle_new_apps_text
@@ -748,6 +755,13 @@ class MessageHandler:
         if context.user_data.get('owner_awaiting') == 'journal_connect':
             from handlers.journal_handlers import handle_journal_text_input
             if await handle_journal_text_input(update, context, self.db):
+                return
+
+        # ═══ PANEL FSM (Админы, ЧС, Проверка ника, Зам) ═══
+        if message.text and context.user_data.get('panel_awaiting'):
+            from handlers.admin_moderation import handle_panel_input
+            handled = await handle_panel_input(update, context)
+            if handled:
                 return
 
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══

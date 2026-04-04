@@ -554,10 +554,9 @@ async def send_applications_button(bot):
 
 async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAULT_TYPE, btn_text: str):
     """Обработчик текстовых кнопок панели владельца в треде заявок"""
-    from config import OWNER_ID
     user_id = update.effective_user.id
 
-    if user_id != OWNER_ID:
+    if not await _is_owner_or_deputy(user_id):
         return
 
     # Удаляем сообщение с текстом кнопки
@@ -833,6 +832,15 @@ async def _show_app_card(query, context, app, reg_data):
             )
 
 
+async def _is_owner_or_deputy(user_id: int) -> bool:
+    """Проверка: владелец или зам владельца."""
+    from config import OWNER_ID
+    if user_id == OWNER_ID:
+        return True
+    from database.db_friend import is_deputy
+    return await is_deputy(user_id)
+
+
 async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик кнопок панели владельца: Админы, ЧС, Проверка ника"""
     from database.db_friend import (
@@ -846,8 +854,8 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     user_id = query.from_user.id
 
-    # Только владелец
-    if user_id != OWNER_ID:
+    # Только владелец или зам
+    if not await _is_owner_or_deputy(user_id):
         await query.answer("⛔ Только для владельца.", show_alert=True)
         return
 
@@ -864,14 +872,35 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ─── АДМИНЫ (4.2.1) ───
     elif data == "panel_admins":
+        from database.db_friend import get_all_deputies
         admins = await get_all_admins()
-        lines = [f"• <code>{a['tg_id']}</code>" for a in admins] if admins else ["— пусто —"]
-        text = "👥 <b>Администраторы</b>\n\n" + "\n".join(lines)
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("➕ Добавить", callback_data="panel_admin_add"),
-             InlineKeyboardButton("➖ Удалить", callback_data="panel_admin_remove")],
-            *back_btn
-        ])
+        deputies = await get_all_deputies()
+        deputy_ids = {d['tg_id'] for d in deputies}
+
+        lines = []
+        for a in admins:
+            name = a.get('username') or a.get('first_name') or str(a['tg_id'])
+            if a['tg_id'] == OWNER_ID:
+                role = "👑 Владелец"
+            elif a['tg_id'] in deputy_ids:
+                role = "🥈 Зам"
+            else:
+                role = "⭐ Админ"
+            lines.append(f"  {role} — @{name} (<code>{a['tg_id']}</code>)")
+        admin_block = "\n".join(lines) if lines else "— пусто —"
+        text = f"👥 <b>Персонал</b>\n\n{admin_block}"
+        buttons = [
+            [InlineKeyboardButton("➕ Добавить админа", callback_data="panel_admin_add"),
+             InlineKeyboardButton("➖ Удалить админа", callback_data="panel_admin_remove")],
+        ]
+        # Кнопки зама — только для главного владельца
+        if user_id == OWNER_ID:
+            buttons.append(
+                [InlineKeyboardButton("👑 Назначить зама", callback_data="panel_deputy_add"),
+                 InlineKeyboardButton("👑 Снять зама", callback_data="panel_deputy_remove")]
+            )
+        buttons.extend(back_btn)
+        kb = InlineKeyboardMarkup(buttons)
         await query.edit_message_text(text, reply_markup=kb, parse_mode="HTML")
 
     elif data == "panel_admin_add":
@@ -885,6 +914,39 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data['panel_awaiting'] = 'admin_remove'
         await query.edit_message_text(
             "➖ <b>Удалить администратора</b>\n\nОтправьте <b>Telegram ID</b> пользователя:",
+            reply_markup=InlineKeyboardMarkup(back_btn), parse_mode="HTML"
+        )
+
+    # ─── ЗАМ ВЛАДЕЛЬЦА (только главный владелец) ───
+    elif data == "panel_deputy_add":
+        if user_id != OWNER_ID:
+            await query.answer("⛔ Только владелец может назначать замов.", show_alert=True)
+            return
+        context.user_data['panel_awaiting'] = 'deputy_add'
+        await query.edit_message_text(
+            "👑 <b>Назначить Зама Владельца</b>\n\n"
+            "Зам получает полный доступ к Панели Владельца.\n\n"
+            "Отправьте <b>Telegram ID</b> участника:",
+            reply_markup=InlineKeyboardMarkup(back_btn), parse_mode="HTML"
+        )
+
+    elif data == "panel_deputy_remove":
+        if user_id != OWNER_ID:
+            await query.answer("⛔ Только владелец может снимать замов.", show_alert=True)
+            return
+        from database.db_friend import get_all_deputies
+        deputies = await get_all_deputies()
+        if deputies:
+            dep_lines = [f"  🥈 @{d.get('username') or d.get('first_name') or d['tg_id']} (<code>{d['tg_id']}</code>)"
+                         for d in deputies]
+            dep_block = "\n".join(dep_lines)
+        else:
+            dep_block = "  — замов нет —"
+        context.user_data['panel_awaiting'] = 'deputy_remove'
+        await query.edit_message_text(
+            f"👑 <b>Снять Зама Владельца</b>\n\n"
+            f"<b>Текущие замы:</b>\n{dep_block}\n\n"
+            f"Отправьте <b>Telegram ID</b> зама для снятия:",
             reply_markup=InlineKeyboardMarkup(back_btn), parse_mode="HTML"
         )
 
@@ -939,7 +1001,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not awaiting:
         return False  # не наш ввод
 
-    if update.effective_user.id != OWNER_ID:
+    if not await _is_owner_or_deputy(update.effective_user.id):
         return False
 
     text = update.message.text.strip()
@@ -972,6 +1034,70 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await remove_admin(target_id)
         await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из администраторов.",
                                         parse_mode="HTML")
+
+    # ─── НАЗНАЧИТЬ ЗАМА ───
+    elif awaiting == 'deputy_add':
+        from database.db_friend import add_deputy, is_deputy
+        try:
+            target_id = int(text)
+        except ValueError:
+            await update.message.reply_text("❌ Введите числовой Telegram ID.")
+            return True
+        if target_id == OWNER_ID:
+            await update.message.reply_text("⛔ Владельцу нельзя назначить роль зама.")
+            return True
+        if await is_deputy(target_id):
+            await update.message.reply_text("ℹ️ Уже является замом владельца.")
+            return True
+        target_user = await get_user(target_id)
+        if not target_user:
+            await update.message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден в базе.",
+                                            parse_mode="HTML")
+            return True
+        await add_deputy(target_id, added_by=OWNER_ID)
+        # Синхронная БД: is_owner=1 чтобы зам видел клавиатуру "Панель Владельца"
+        try:
+            from database.db_manager import DatabaseManager
+            import os
+            sync_db = DatabaseManager(os.getenv('DB_PATH', 'bot_database.db'))
+            sync_db.cursor.execute('UPDATE users SET is_owner = 1 WHERE user_id = ?', (target_id,))
+            sync_db.conn.commit()
+            sync_db.close()
+        except Exception as e:
+            logger.warning(f"Could not sync deputy to main DB: {e}")
+        name = target_user.get('username') or target_user.get('first_name') or target_id
+        await update.message.reply_text(
+            f"✅ @{name} (<code>{target_id}</code>) назначен <b>Замом Владельца</b>.\n"
+            f"Теперь видит полную Панель Владельца.",
+            parse_mode="HTML")
+
+    # ─── СНЯТЬ ЗАМА ───
+    elif awaiting == 'deputy_remove':
+        from database.db_friend import remove_deputy, is_deputy
+        try:
+            target_id = int(text)
+        except ValueError:
+            await update.message.reply_text("❌ Введите числовой Telegram ID.")
+            return True
+        if not await is_deputy(target_id):
+            await update.message.reply_text("ℹ️ Этот пользователь не является замом.")
+            return True
+        target_user = await get_user(target_id)
+        await remove_deputy(target_id)
+        # Синхронная БД: вернуть is_owner=0, is_admin=1
+        try:
+            from database.db_manager import DatabaseManager
+            import os
+            sync_db = DatabaseManager(os.getenv('DB_PATH', 'bot_database.db'))
+            sync_db.cursor.execute('UPDATE users SET is_owner = 0, is_admin = 1 WHERE user_id = ?', (target_id,))
+            sync_db.conn.commit()
+            sync_db.close()
+        except Exception as e:
+            logger.warning(f"Could not sync deputy removal to main DB: {e}")
+        name = (target_user.get('username') or target_user.get('first_name') or target_id) if target_user else target_id
+        await update.message.reply_text(
+            f"✅ @{name} (<code>{target_id}</code>) снят с поста зама → обычный админ.",
+            parse_mode="HTML")
 
     # ─── ДОБАВИТЬ В ЧС: сначала ждём ID, потом причину ───
     elif awaiting == 'bl_add':

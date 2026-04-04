@@ -26,12 +26,16 @@ def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
     balance_or_profile = KeyboardButton("👤 Профиль") if profile_enabled else KeyboardButton("💰 Баланс")
 
     is_owner = user_id and main_admin_id and user_id == main_admin_id
+    is_deputy = False
     is_admin = False
     if user_id and not is_owner:
         u = db.get_user(user_id)
-        is_admin = bool(u and (u.get('is_admin') or u.get('is_owner')))
+        if u and u.get('is_owner'):
+            is_deputy = True  # зам владельца — видит полную панель
+        elif u and u.get('is_admin'):
+            is_admin = True
 
-    if is_owner:
+    if is_owner or is_deputy:
         special_btn = KeyboardButton("👑 Панель Владельца")
     elif is_admin:
         special_btn = KeyboardButton("📋 Новые заявки")

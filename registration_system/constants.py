@@ -24,6 +24,7 @@ class UserRole:
     """Роли пользователей"""
     USER = "user"
     ADMIN = "admin"
+    DEPUTY = "deputy"
     OWNER = "owner"
 
 

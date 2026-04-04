@@ -96,6 +96,7 @@ ICON_LOVE_LETTER = "💌"
 ICON_GEM_STONE = '<tg-emoji emoji-id="5215420556089776398">👛</tg-emoji>'  #не брилиант а МОНЕТКИ в КОШЕЛЕК
 ICON_BEATING_HEART = "💓"
 ICON_HEART_WITH_ARROW = '<tg-emoji emoji-id="5303310030940952439">💘</tg-emoji>'
+ICON_TOP_ACT = '<tg-emoji emoji-id="5352727529511723136">❣️</tg-emoji>'
 ICON_LIGHT_BULB = "💡"
 ICON_SWEAT_DROPLETS = "💦"
 ICON_FLEXED_BICEPS = "💪"

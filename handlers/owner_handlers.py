@@ -350,29 +350,41 @@ async def show_staff_menu(query, db, admin_id: int) -> None:
         return
 
     db.cursor.execute(
-        'SELECT user_id, username, first_name FROM users WHERE is_admin = 1 OR is_owner = 1'
+        'SELECT user_id, username, first_name, is_admin, is_owner FROM users WHERE is_admin = 1 OR is_owner = 1'
     )
     admins = db.cursor.fetchall()
 
     lines = []
     for a in admins:
         name = a['username'] or a['first_name'] or f"ID:{a['user_id']}"
-        role = "👑" if a['user_id'] == admin_id else "⭐"
-        lines.append(f"  {role} @{name} (<code>{a['user_id']}</code>)")
+        if a['user_id'] == admin_id:
+            role = "👑 Владелец"
+        elif a['is_owner']:
+            role = "🥈 Зам"
+        else:
+            role = "⭐ Админ"
+        lines.append(f"  {role} — @{name} (<code>{a['user_id']}</code>)")
     admin_block = "\n".join(lines) if lines else "  — пусто —"
 
     text = (
         f"👨‍💼 <b>ПЕРСОНАЛ</b>\n"
         f"{'━' * 24}\n\n"
-        f"<b>Текущие админы:</b>\n"
+        f"<b>Текущий состав:</b>\n"
         f"{admin_block}"
     )
 
+    # Только главный владелец может назначать/снимать замов
+    is_main = query.from_user.id == admin_id
     keyboard = [
         [InlineKeyboardButton("➕ Назначить админа", callback_data="owner_staff_add")],
         [InlineKeyboardButton("➖ Разжаловать", callback_data="owner_staff_remove")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
     ]
+    if is_main:
+        keyboard.append(
+            [InlineKeyboardButton("👑 Назначить зама", callback_data="owner_staff_add_deputy"),
+             InlineKeyboardButton("👑 Снять зама", callback_data="owner_staff_remove_deputy")]
+        )
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")])
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 

@@ -854,6 +854,54 @@ async def get_all_admins() -> List[dict]:
     logger.info(f"Total recipients for notifications: {len(admins)}")
     return admins
 
+# ==================== DEPUTY OPERATIONS ====================
+
+async def add_deputy(tg_id: int, added_by: int):
+    """Назначить зама владельца (was admin → deputy)"""
+    async with db_pool.get_connection() as db:
+        # Убедиться что есть запись в admins
+        await db.execute(
+            "INSERT OR IGNORE INTO admins (tg_id, added_by) VALUES (?, ?)",
+            (tg_id, added_by)
+        )
+        await db.execute(
+            "UPDATE users SET role = ? WHERE tg_id = ?",
+            (UserRole.DEPUTY, tg_id)
+        )
+        await db.commit()
+
+
+async def remove_deputy(tg_id: int):
+    """Снять зама → обратно в обычного админа"""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            "UPDATE users SET role = ? WHERE tg_id = ?",
+            (UserRole.ADMIN, tg_id)
+        )
+        await db.commit()
+
+
+async def is_deputy(tg_id: int) -> bool:
+    """Проверка является ли пользователь замом владельца"""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT 1 FROM users WHERE tg_id = ? AND role = ?",
+            (tg_id, UserRole.DEPUTY)
+        ) as cursor:
+            return await cursor.fetchone() is not None
+
+
+async def get_all_deputies() -> list:
+    """Получить всех замов владельца"""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT * FROM users WHERE role = ?",
+            (UserRole.DEPUTY,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return rows_to_dict_list(rows)
+
+
 # ==================== BLACKLIST OPERATIONS ====================
 
 async def is_blacklisted(tg_id: int) -> bool:
