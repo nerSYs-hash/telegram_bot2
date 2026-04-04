@@ -13,6 +13,19 @@ logger = logging.getLogger(__name__)
 
 WELCOME, RULES, NAME, AGE, BIRTH_DATE, CITY, THERAPY, REF_CODE = range(8)
 
+# Тексты кнопок reply-клавиатуры, которые не должны приниматься как ответы анкеты
+_REPLY_KEYBOARD_TEXTS = {
+    "👤 Профиль", "💰 Баланс", "📊 Курс",
+    "👑 Панель Владельца", "📋 Новые заявки", "❓ FAQ",
+    "📋 Меню", "🏆 ТОП-5", "🎯 Активности",
+    "🏦 Центробанк", "❣️ Pulse BBS",
+}
+
+
+def _is_button_text(text: str) -> bool:
+    """Проверяет, является ли текст нажатием reply-кнопки."""
+    return text.strip() in _REPLY_KEYBOARD_TEXTS
+
 
 def _build_form(data: dict, next_question: str, keyboard=None) -> str:
     """Строит текст анкеты с заполненными полями и следующим вопросом."""
@@ -40,7 +53,11 @@ async def _edit_form(context, chat_id: int, msg_id: int, text: str, keyboard=Non
             reply_markup=keyboard
         )
     except Exception as e:
-        logger.warning(f"_edit_form error: {e}")
+        err = str(e)
+        if "Message is not modified" in err:
+            pass  # нормально при двойном нажатии
+        else:
+            logger.warning(f"_edit_form error: {err}")
 
 
 async def _delete_user_msg(message):
@@ -122,41 +139,11 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = await get_user(user_id)
 
-    # Проверка фактического членства в чате (is_member)
-    is_member = False
-    try:
-        from telegram.constants import ChatMemberStatus
-        from config import CHAT_ID
-        if CHAT_ID and CHAT_ID != 0:
-            member = await context.bot.get_chat_member(CHAT_ID, user_id)
-            is_member = member.status in (
-                ChatMemberStatus.MEMBER,
-                ChatMemberStatus.ADMINISTRATOR,
-                ChatMemberStatus.OWNER,
-            ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
-            logger.debug(f"start_reg: user {user_id} member status={member.status}, is_member={is_member}")
-        else:
-            logger.warning("start_reg: CHAT_ID not set, skipping API membership check")
-    except Exception as e:
-        logger.warning(f"start_reg: API membership check failed for {user_id}: {e}")
-        is_member = False
-
-    # Фоллбэк: проверяем основную БД если API не подтвердил
-    if not is_member:
-        main_db = context.bot_data.get('db')
-        if main_db:
-            try:
-                main_user = main_db.get_user(user_id)
-                if main_user:
-                    try:
-                        is_left = main_user['is_left']
-                    except (KeyError, IndexError):
-                        is_left = 1
-                    if not is_left:
-                        is_member = True
-                        logger.info(f"start_reg: user {user_id} found in main DB (is_left=0)")
-            except Exception as e:
-                logger.warning(f"start_reg: main DB fallback failed for {user_id}: {e}")
+    # Проверка фактического членства в чате (железобетонная — через API)
+    from config import CHAT_ID
+    main_db = context.bot_data.get('db')
+    from utils.membership import verify_chat_membership
+    is_member = await verify_chat_membership(context.bot, CHAT_ID, user_id, db=main_db)
 
     # Проверка блокировки по возрасту (< 18)
     if user and user.get('status') == 'blocked':
@@ -183,15 +170,8 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except ValueError:
                 pass
 
-    # Если пользователь уже одобрен или находится в чате — перенаправляем в меню
-    if is_member or (user and user.get('status') in ('approved', 'in_chat', 'registered')):
-        if is_member and user and user.get('status') not in ('approved', 'in_chat', 'registered'):
-            try:
-                from database.db_friend import update_user as update_reg_user
-                await update_reg_user(user_id, status='in_chat')
-            except Exception:
-                pass
-
+    # Если пользователь РЕАЛЬНО в чате — перенаправляем в меню
+    if is_member:
         # Закрываем все висящие заявки (если есть)
         try:
             from database.db_friend import close_user_applications
@@ -199,12 +179,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception:
             pass
 
-        # Получаем основную БД из bot_data
-        main_db = context.bot_data.get('db')
-
         if main_db:
-            # Важно: сообщение /register могло быть удалено выше, поэтому не используем reply_text.
-            # Явно отправляем новое сообщение и восстанавливаем постоянную нижнюю клавиатуру.
             from handlers.commands.system_commands import get_main_reply_keyboard
             await context.bot.send_message(
                 chat_id=user_id,
@@ -320,6 +295,9 @@ async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return NAME
     await _delete_user_msg(update.message)
     name = update.message.text.strip()
     if len(name) < 2:
@@ -340,6 +318,10 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     age_text = update.message.text
+
+    if _is_button_text(age_text):
+        await _delete_user_msg(update.message)
+        return AGE
 
     if not age_text.isdigit():
         await _delete_user_msg(update.message)
@@ -383,6 +365,9 @@ async def get_age(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
     date_text = update.message.text.strip()
     user_id = update.effective_user.id
+    if _is_button_text(date_text):
+        await _delete_user_msg(update.message)
+        return BIRTH_DATE
     await _delete_user_msg(update.message)
     msg_id = context.user_data.get('reg_msg_id')
 
@@ -429,6 +414,9 @@ async def get_birth_date(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return CITY
     await _delete_user_msg(update.message)
     city = update.message.text.strip()
     if len(city) < 2:
@@ -450,6 +438,9 @@ async def get_city(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return THERAPY
     await _delete_user_msg(update.message)
     therapy = update.message.text.strip()
     if len(therapy) < 2:
@@ -474,6 +465,9 @@ async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if _is_button_text(update.message.text):
+        await _delete_user_msg(update.message)
+        return REF_CODE
     await _delete_user_msg(update.message)
     return await finish_registration(update, context, update.message.text)
 
@@ -489,12 +483,38 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     await update_user(user_id, questionnaire_state=None)
     data = context.user_data
 
+    # Берём из context.user_data; если сессия потеряна — подтянем из БД ниже
+    reg_name = data.get('reg_name')
+    reg_age = data.get('reg_age')
+    reg_city = data.get('reg_city')
+    reg_therapy = data.get('reg_therapy')
+
+    # Если данные не в сессии — читаем из БД (бот был перезапущен)
+    if not all([reg_name, reg_age, reg_city, reg_therapy]):
+        db_user = await get_user(user_id)
+        if db_user:
+            reg_name = reg_name or db_user.get('q_name')
+            reg_age = reg_age or db_user.get('q_age')
+            reg_city = reg_city or db_user.get('q_city')
+            reg_therapy = reg_therapy or db_user.get('q_therapy')
+
+    # Защита от пустой анкеты
+    if not all([reg_name, reg_age, reg_city, reg_therapy]):
+        logger.warning(f"finish_registration: user {user_id} has incomplete form data, aborting")
+        msg_id = context.user_data.get('reg_msg_id')
+        err_text = "❌ Не удалось сохранить анкету — некоторые поля пустые. Начни заново: /register"
+        if msg_id:
+            await _edit_form(context, user_id, msg_id, err_text)
+        else:
+            await context.bot.send_message(chat_id=user_id, text=err_text)
+        return ConversationHandler.END
+
     await update_user(
         user_id,
-        q_name=data['reg_name'],
-        q_age=data['reg_age'],
-        q_city=data['reg_city'],
-        q_therapy=data['reg_therapy'],
+        q_name=reg_name,
+        q_age=reg_age,
+        q_city=reg_city,
+        q_therapy=reg_therapy,
         referred_by=ref_code,
         status='pending'
     )
@@ -505,10 +525,10 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     msg_id = context.user_data.get('reg_msg_id')
     final_text = (
         f"📋 <b>Анкета регистрации</b>\n\n"
-        f"А. Имя: <b>{data['reg_name']}</b> ✅\n"
-        f"Б. Возраст: <b>{data['reg_age']}</b> ✅\n"
-        f"В. Город: <b>{data['reg_city']}</b> ✅\n"
-        f"Г. Терапия: <b>{data['reg_therapy']}</b> ✅\n"
+        f"А. Имя: <b>{reg_name}</b> ✅\n"
+        f"Б. Возраст: <b>{reg_age}</b> ✅\n"
+        f"В. Город: <b>{reg_city}</b> ✅\n"
+        f"Г. Терапия: <b>{reg_therapy}</b> ✅\n"
         f"Д. Реф. код: <b>{ref_code or 'нет'}</b> ✅\n\n"
         f"✅ <b>Анкета отправлена администраторам!</b>\n"
         f"Ожидай уведомления об одобрении."
@@ -545,10 +565,10 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     admin_text = (
         f"📢 <b>НОВАЯ ЗАЯВКА #{app_id}</b>"
         f"{block_d}\n"
-        f"👤 Имя: {html.escape(str(data['reg_name']))} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
-        f"🎂 Возраст: {data['reg_age']}\n"
-        f"🏙 Город: {html.escape(str(data['reg_city']))}\n"
-        f"💊 Терапия: {html.escape(str(data['reg_therapy']))}\n"
+        f"👤 Имя: {html.escape(str(reg_name))} | <code>{user_id}</code> | <b>#user{user_id}</b>\n"
+        f"🎂 Возраст: {reg_age}\n"
+        f"🏙 Город: {html.escape(str(reg_city))}\n"
+        f"💊 Терапия: {html.escape(str(reg_therapy))}\n"
         f"🤝 Реферал: {html.escape(str(ref_code)) if ref_code else 'Нет'}\n"
         f"🆔 Никнейм: {username_str}\n\n"
         f"📅 <b>Блок Е:</b>\n"

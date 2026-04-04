@@ -41,6 +41,26 @@ class CommandHandler:
             # Сразу переходим к твоему обычному коду старта (лотереи и т.д.)
             pass 
         else:
+            # Проверяем чёрный список ДО всех остальных проверок
+            from database.db_friend import is_blacklisted, get_blacklist_reason
+            from config import OWNER_ID
+            if await is_blacklisted(user_id):
+                reason = await get_blacklist_reason(user_id)
+                try:
+                    owner_chat = await context.bot.get_chat(OWNER_ID)
+                    owner_name = owner_chat.full_name or str(OWNER_ID)
+                except Exception:
+                    owner_name = str(OWNER_ID)
+                await update.message.reply_text(
+                    f"⛔ {update.effective_user.first_name}, ты заблокирован(а) "
+                    f"по решению администрации чата Pulse 4ever.\n\n"
+                    f"📝 Причина: {reason}\n\n"
+                    f"Если считаешь, что это ошибка — свяжись с администратором: "
+                    f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>',
+                    parse_mode="HTML"
+                )
+                return
+
             # 2. Если это обычный юзер, проверяем регистрацию в базе друга
             user = await get_user(user_id)
 
@@ -49,65 +69,45 @@ class CommandHandler:
                     "Привет! Ты еще не зарегистрирован. Напиши /register"
                 )
                 return
-            # Проверяем фактическое нахождение в чате
-            is_member = False
-            try:
-                from telegram.constants import ChatMemberStatus
-                if self.target_chat_id and self.target_chat_id != 0:
-                    member = await context.bot.get_chat_member(self.target_chat_id, user_id)
-                    is_member = member.status in (
-                        ChatMemberStatus.MEMBER,
-                        ChatMemberStatus.ADMINISTRATOR,
-                        ChatMemberStatus.OWNER,
-                    ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
-            except Exception as e:
-                logger.warning(f"start_command: API membership check failed for {user_id}: {e}")
-                is_member = False
+            # Проверяем фактическое нахождение в чате (железобетонная проверка)
+            from utils.membership import verify_chat_membership
+            is_member = await verify_chat_membership(
+                context.bot, self.target_chat_id, user_id, db=self.db
+            )
 
-            # Фоллбэк: проверяем основную БД
-            if not is_member:
-                try:
-                    main_user = self.db.get_user(user_id)
-                    if main_user:
-                        try:
-                            is_left = main_user['is_left']
-                        except (KeyError, IndexError):
-                            is_left = 1
-                        if not is_left:
-                            is_member = True
-                            logger.info(f"start_command: user {user_id} found in main DB (is_left=0)")
-                except Exception as e:
-                    logger.warning(f"start_command: main DB fallback failed for {user_id}: {e}")
-
-            # Вышедший из чата — уже одобрен, просто вернулся; ИЛИ фактически в чате
-            if is_member or user.get('status') in ('approved', 'in_chat', 'registered', 'left'):
-                # Если он фактически в чате, но статус старый, починим
+            if is_member:
+                # Закрываем старые анкеты — статус уже синхронизирован в verify_chat_membership
                 try:
                     from database.db_friend import close_user_applications
-                    # Всегда закрываем старые анкеты, если доступ уже есть
                     await close_user_applications(user_id)
-                    
-                    if is_member and user.get('status') not in ('approved', 'in_chat', 'registered'):
-                        from database.db_friend import update_user as update_reg_user
-                        await update_reg_user(user_id, status='in_chat')
                 except Exception as e:
-                    logger.error(f"Failed to sync status/close apps for {user_id}: {e}")
-                pass  # пропускаем проверку, продолжаем обычный /start
+                    logger.error(f"Failed to close apps for {user_id}: {e}")
+                pass  # продолжаем обычный /start
             else:
-                # Проверяем есть ли активная заявка
-                pending_app = await get_user_pending_application(user_id)
-                if pending_app:
-                    await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
-                else:
-                    # Заявка потерялась — предлагаем пройти заново
-                    kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
-                    ]])
+                # Пользователь НЕ в чате. Разбираем ситуацию:
+                user_status = user.get('status', '')
+
+                if user_status in ('left', 'approved', 'in_chat', 'registered'):
+                    # Был одобрен ранее, но сейчас не в чате — предлагаем вернуться
                     await update.message.reply_text(
-                        "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
-                        "Нажми кнопку ниже, чтобы пройти анкету заново:",
-                        reply_markup=kb
+                        "👋 Ты сейчас не состоишь в чате.\n\n"
+                        "Чтобы пользоваться ботом, нужно вступить обратно в чат."
                     )
+                else:
+                    # Проверяем есть ли активная заявка
+                    pending_app = await get_user_pending_application(user_id)
+                    if pending_app:
+                        await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
+                    else:
+                        # Заявка потерялась — предлагаем пройти заново
+                        kb = InlineKeyboardMarkup([[
+                            InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
+                        ]])
+                        await update.message.reply_text(
+                            "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
+                            "Нажми кнопку ниже, чтобы пройти анкету заново:",
+                            reply_markup=kb
+                        )
                 return
         
         # --- ИНТЕГРАЦИЯ МОЕЙ РЕФЕРАЛКИ ---

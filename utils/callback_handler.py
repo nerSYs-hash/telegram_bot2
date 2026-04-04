@@ -43,7 +43,7 @@ from handlers.horoscope_handler import (
     show_horoscope_menu, publish_horoscope_today, preview_horoscope,
     diagnose_emoji,
 )
-from handlers.bbs_handlers import handle_bbs_callback
+from handlers.BBS.callback_bbs import handle_bbs_callback
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import (
     show_triggers_menu, handle_trigger_callback,

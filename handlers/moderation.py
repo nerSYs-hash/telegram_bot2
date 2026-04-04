@@ -173,6 +173,13 @@ async def mute_command(
         await _delete_silently(message)
         logger.info(f"MUTE: {target.id} by {user.id} for {human} ({seconds}s, until_ts={until_date})")
 
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_mute
+            await log_mute(context.bot, db, target.id, user.id, human)
+        except Exception as e:
+            logger.error(f"Journal log_mute error: {e}")
+
     except Exception as e:
         logger.error(f"mute_command error: {e}")
         await message.reply_text(f"❌ Не удалось замутить: {e}")
@@ -229,6 +236,13 @@ async def unmute_command(
         await _delete_silently(message)
         logger.info(f"UNMUTE: {target.id} by {user.id}")
 
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_unmute
+            await log_unmute(context.bot, db, target.id, user.id)
+        except Exception as e:
+            logger.error(f"Journal log_unmute error: {e}")
+
     except Exception as e:
         logger.error(f"unmute_command error: {e}")
         await message.reply_text(f"❌ Не удалось размутить: {e}")
@@ -276,6 +290,13 @@ async def ban_command(
         )
         await _delete_silently(message)
         logger.info(f"BAN: {target.id} by {user.id}")
+
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_ban
+            await log_ban(context.bot, db, target.id, user.id)
+        except Exception as e:
+            logger.error(f"Journal log_ban error: {e}")
 
     except Exception as e:
         logger.error(f"ban_command error: {e}")

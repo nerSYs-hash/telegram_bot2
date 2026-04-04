@@ -24,7 +24,7 @@ from handlers.messages.admin_logic import (
 )
 from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
-from handlers.bbs_handlers import process_bbs_input
+from handlers.BBS.fsm_input_bbs import process_bbs_input
 from handlers.owner_handlers import handle_owner_text_input
 
 
@@ -525,6 +525,12 @@ class MessageHandler:
             elif any(kw in clean_text for kw in ['богач', 'активист']):
                 logging.info(f"🛡️ Trigger IGNORED (not single-word match): '{raw_text}'")
 
+        # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ ===
+        if message.text:
+            from handlers.triggers_handlers import process_triggers
+            if await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id):
+                return
+
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
@@ -573,17 +579,10 @@ class MessageHandler:
 
         # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец ═══
         if user.id != self.main_admin_id:
-            try:
-                from telegram.constants import ChatMemberStatus
-                member = await context.bot.get_chat_member(self.target_chat_id, user.id)
-                # Разрешаем стандартные статусы + RESTRICTED (если пользователь все еще в чате)
-                is_member = member.status in (
-                    ChatMemberStatus.MEMBER,
-                    ChatMemberStatus.ADMINISTRATOR,
-                    ChatMemberStatus.OWNER,
-                ) or (member.status == ChatMemberStatus.RESTRICTED and getattr(member, 'is_member', True))
-            except Exception:
-                is_member = False
+            from utils.membership import verify_chat_membership
+            is_member = await verify_chat_membership(
+                context.bot, self.target_chat_id, user.id, db=self.db
+            )
 
             if not is_member:
                 # ── Exit survey: разрешаем текстовые ответы ──────
@@ -592,7 +591,10 @@ class MessageHandler:
                     if await handle_exit_survey_text(update, context, self.db):
                         return
                 if message.text and not message.text.strip().startswith(('/start', '/register')):
-                    await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
+                    try:
+                        await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
+                    except Exception:
+                        pass  # Forbidden — бот заблокирован пользователем
                 return
 
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══
@@ -705,6 +707,24 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
 
+        # ═══ TRIGGER FSM v2 (создание/редактирование триггера) ═══
+        if context.user_data.get('trigger_state') or context.user_data.get('owner_awaiting', '').startswith('trigger_'):
+            from handlers.triggers_handlers import handle_trigger_text_input, handle_trigger_media_input
+            if message.text:
+                handled = await handle_trigger_text_input(update, context, self.db)
+                if handled:
+                    return
+            elif message.photo or message.video or message.animation:
+                handled = await handle_trigger_media_input(update, context, self.db)
+                if handled:
+                    return
+
+        # ═══ ЖУРНАЛ: подключение канала (обрабатывается в admin_logic) ═══
+        if context.user_data.get('owner_awaiting') == 'journal_connect':
+            from handlers.journal_handlers import handle_journal_text_input
+            if await handle_journal_text_input(update, context, self.db):
+                return
+
         # ═══ OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Мут) ═══
         if message.text and context.user_data.get('owner_awaiting'):
             handled = await handle_owner_text_input(
@@ -752,6 +772,10 @@ class MessageHandler:
             context.user_data.pop('bbs_edit_photos', None)
             context.user_data.pop('bbs_edit_cities', None)
             context.user_data.pop('bbs_edit_goals', None)
+            context.user_data.pop('other_state', None)
+            context.user_data.pop('other_data', None)
+            context.user_data.pop('other_bot_msg_id', None)
+            context.user_data.pop('other_preview_message_ids', None)
             # Owner panel cleanup
             context.user_data.pop('owner_awaiting', None)
             await message.reply_text("❌ Действие отменено.")

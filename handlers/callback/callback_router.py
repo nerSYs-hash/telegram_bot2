@@ -18,7 +18,7 @@ from utils.helpers import format_number, generate_referral_link, get_moscow_time
 from handlers.lottery_handlers import LotteryHandler
 from handlers.bingo_handlers import BingoHandler
 from handlers.gift_handlers import GiftHandler
-from handlers.bbs_handlers import handle_bbs_callback
+from handlers.BBS.callback_bbs import handle_bbs_callback
 
 from handlers.owner_handlers import ensure_owner_columns
 from handlers.exit_survey_handlers import ensure_survey_columns
@@ -92,7 +92,7 @@ class CallbackHandler:
             await show_report_menu(self, query, context, data, user)
             return
 
-        if data.startswith('bbs_') or data == 'menu_bbs':
+        if data.startswith('bbs_') or data.startswith('other_') or data == 'menu_bbs':
             await handle_bbs_callback(query, context, self.db, self.target_chat_id, self.bbs_thread_id)
             return
 

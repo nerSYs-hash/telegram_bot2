@@ -136,6 +136,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("📊 Опросы при выходе", callback_data="owner_survey_results")],
+        [InlineKeyboardButton("🆘 Восстановление", callback_data="owner_recovery")],
         [InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")],
@@ -258,6 +259,18 @@ async def wipe_execute(query, db, admin_id: int) -> None:
         db.cursor.execute("UPDATE settings SET value = '10000000' WHERE key = 'bank_balance'")
         db.conn.commit()
         logger.warning(f"GLOBAL WIPE by {query.from_user.id}: {affected} users zeroed")
+
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_admin_action
+            bot = query._bot if hasattr(query, '_bot') else None
+            if bot:
+                await log_admin_action(
+                    bot, db, query.from_user.id,
+                    f"💀 Глобальный вайп балансов: обнулено {affected} пользователей"
+                )
+        except Exception as e:
+            logger.error(f"Journal log_admin_action (wipe) error: {e}")
 
         text = (
             f"💀 <b>ВАЙП ВЫПОЛНЕН</b>\n\n"
@@ -607,6 +620,17 @@ async def handle_owner_text_input(
             f"🏦 Банк: {format_number(new_bank)} 💎",
             InlineKeyboardMarkup([[InlineKeyboardButton("💰 К экономике", callback_data="owner_economy")]]))
         logger.info(f"EMIT: {amount} to {target_id} by {user.id}")
+
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_admin_action
+            await log_admin_action(
+                context.bot, db, user.id,
+                f"💸 Эмиссия: {format_number(amount)} 💎 → @{name} (<code>{target_id}</code>)"
+            )
+        except Exception as e:
+            logger.error(f"Journal log_admin_action (emit) error: {e}")
+
         return True
 
     # ── Добавить в блэклист ──
@@ -708,6 +732,17 @@ async def handle_owner_text_input(
                 f"🔇 <code>{name}</code> замучен на <b>{human}</b>",
                 InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
+<<<<<<< HEAD
+=======
+
+            # Журнал
+            try:
+                from handlers.journal_handlers import log_mute
+                await log_mute(context.bot, db, target_id, user.id, human)
+            except Exception as je:
+                logger.error(f"Journal log_mute error: {je}")
+
+>>>>>>> origin/dev
         except Exception as e:
             logger.error(f"Owner mute error: {e}")
             await reply(f"❌ Не удалось замутить: {e}",
@@ -743,11 +778,23 @@ async def handle_owner_text_input(
                 f"🔊 <code>{name}</code> размучен",
                 InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER UNMUTE: {target_id} by {user.id}")
+
+            # Журнал
+            try:
+                from handlers.journal_handlers import log_unmute
+                await log_unmute(context.bot, db, target_id, user.id)
+            except Exception as je:
+                logger.error(f"Journal log_unmute error: {je}")
+
         except Exception as e:
             logger.error(f"Owner unmute error: {e}")
             await reply(f"❌ Не удалось размутить: {e}",
                         InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад", callback_data="owner_moderation")]]))
         return True
+
+    # journal_connect обрабатывается в admin_logic — не сбрасываем
+    if awaiting == 'journal_connect':
+        return False
 
     # Неизвестный awaiting — сбрасываем
     context.user_data.pop('owner_awaiting', None)
@@ -857,3 +904,56 @@ async def send_database_backup(query, user, db, admin_id: int, context) -> None:
     except Exception as e:
         logger.error(f"Backup error: {e}")
         await query.answer(f"❌ Ошибка: {e}", show_alert=True)
+
+
+async def show_recovery_menu(query, db, admin_id: int) -> None:
+    """Меню восстановления веток BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    try:
+        db.cursor.execute('SELECT COUNT(*) FROM bbs_other_posts')
+        other_count = db.cursor.fetchone()[0]
+    except Exception:
+        other_count = 0
+    text = (
+        '🆘 <b>Восстановление веток</b>\n\n'
+        f'📦 Объявлений «Другое» в БД: <b>{other_count}</b>\n\n'
+        'Перепубликация удалит старые message_ids и отправит все объявления заново в ветку BBS.'
+    )
+    keyboard = [
+        [InlineKeyboardButton(f'📦 Восстановить «Другое» ({other_count} шт.)', callback_data='owner_recovery_other_confirm')],
+        [InlineKeyboardButton('🔙 Назад', callback_data='panel_main')],
+    ]
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def recovery_other_confirm(query, db, admin_id: int) -> None:
+    """Запрос подтверждения перед восстановлением «Другое»."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    await query.edit_message_text(
+        '⚠️ <b>Подтверждение</b>\n\nЗапустить перепубликацию всех объявлений раздела «Другое»?\n\n'
+        '<i>Операция может занять несколько минут из-за ограничений Telegram.</i>',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton('✅ Запустить', callback_data='owner_recovery_other_execute')],
+            [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
+        ])
+    )
+
+
+async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int) -> None:
+    """Запускает перепубликацию всех объявлений «Другое»."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+    await query.edit_message_text('⏳ Восстановление запущено...', parse_mode='HTML')
+    from handlers.BBS.fsm_other import restore_all_other_posts
+    ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
+    await query.edit_message_text(
+        f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+    )

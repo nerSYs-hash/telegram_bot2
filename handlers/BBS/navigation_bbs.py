@@ -15,9 +15,10 @@ from handlers.BBS.editing_bbs import get_edited_fields
 async def show_bbs_menu(update_or_query, context, db):
     keyboard = [
         [InlineKeyboardButton("💘 Знакомства", callback_data="bbs_dating")],
-        [InlineKeyboardButton("📦 Другое", callback_data="bbs_other_stub")],
-        [InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")],
     ]
+    if db.is_feature_enabled('bbs_other'):
+        keyboard.append([InlineKeyboardButton("📦 Другое", callback_data="bbs_other_stub")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")])
     text = "📋 <b>Pulse BBS</b>\n\nВыберите раздел:"
     if hasattr(update_or_query, 'edit_message_text'):
         await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))

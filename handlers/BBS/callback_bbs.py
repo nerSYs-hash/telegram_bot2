@@ -19,6 +19,7 @@ from handlers.BBS.helpers_bbs import (
     get_bbs_state, set_bbs_state, get_bbs_data, clear_bbs, build_profile_text,
 )
 from handlers.BBS.database_bbs import get_profile
+from handlers.BBS.fsm_other import handle_other_callback
 from handlers.BBS.fsm_steps_bbs import (
     start_photo_step, start_name_step, start_age_step,
     start_params_step, build_params_keyboard, start_role_step, build_role_keyboard,
@@ -38,6 +39,10 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
     data = query.data
     user_id = query.from_user.id
 
+    handled_other = await handle_other_callback(query, context, db, target_chat_id, bbs_thread_id)
+    if handled_other:
+        return True
+
     # ── Навигация ──
     if data == 'menu_bbs':
         clear_bbs(context)
@@ -47,10 +52,6 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
         clear_bbs(context)
         await show_dating_menu(query, context, db, user_id)
         return True
-    if data == 'bbs_other_stub':
-        await query.answer("📦 Раздел в разработке", show_alert=True)
-        return True
-
     # ── Отмена ──
     if data == 'bbs_cancel':
         clear_bbs(context)
