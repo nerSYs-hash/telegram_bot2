@@ -126,9 +126,7 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
             parse_mode='HTML',
             reply_markup=InlineKeyboardMarkup([
                 [InlineKeyboardButton("🔙 В меню BBS", callback_data="menu_bbs")]
-            ]),
-            message_effect_id="5104858069142078462"  # 💩 Эффект "Какашка" на весь экран!
-            # Если хочешь просто палец вниз 👎, замени цифры на: "5046589136895476101"
+            ])
         )
         return True
 
