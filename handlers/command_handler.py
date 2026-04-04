@@ -177,7 +177,7 @@ class CommandHandler:
 
     async def course_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /курс or /course or /kurs command"""
-        await _course_command(update=update, context=context, db=self.db, admin_id=self.main_admin_id, target_chat_id=self.target_chat_id)
+        await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
 
     async def top5_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /top5 command — delegates to top_commands"""

@@ -84,10 +84,10 @@ async def show_profile(update_or_query, context, db, user_id):
 
     # 4. ЛОГИКА СТАТУСА (Объединенная)
     from database.db_friend import is_deputy
-    if user_data['is_owner']:
-        status_text = "[👑 Создатель]"
-    elif await is_deputy(user_id):
+    if await is_deputy(user_id):
         status_text = "[🌟 Зам Владельца]"
+    elif user_data['is_owner']:
+        status_text = "[👑 Создатель]"
     elif user_data['is_admin']:
         status_text = "[⭐ Администратор]"
     else:
