@@ -12,6 +12,7 @@ BOT_TOKEN: Optional[str] = os.getenv("BOT_TOKEN")
 OWNER_ID: int = int(os.getenv("MAIN_ADMIN_ID", 7536752126))
 CHAT_ID: int = int(os.getenv("CHAT_ID", 0))  # ID основного чата
 ADMIN_CHAT_ID: int = int(os.getenv("ADMIN_CHAT_ID", -1003794322036))  # ID чата администраторов
+DEVELOPER_ID: Optional[int] = int(os.getenv("DEVELOPER_ID", 7536752126))  # ID разработчика (@Nersys)
 DOSSIER_THREAD_ID: int = int(os.getenv("DOSSIER_THREAD_ID", 176))       # Тред для досье после одобрения
 APPLICATIONS_THREAD_ID: int = int(os.getenv("APPLICATIONS_THREAD_ID", 241))  # Тред для входящих заявок
 JOURNAL_CHANNEL_ID: Optional[str] = os.getenv("JOURNAL_CHANNEL_ID")  # Устанавливается через бота

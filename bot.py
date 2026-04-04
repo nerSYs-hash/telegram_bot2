@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-BOT_VERSION = "1.9.0e2"
+BOT_VERSION = "1.9.1a"
 
 import os
 import sys
@@ -182,27 +182,39 @@ class TelegramBot:
         await self._notify_version(bot)
 
     async def _notify_version(self, bot):
-        """Отправить уведомление о версии Владельцу и замам."""
+        """Отправить уведомление о версии Владельцу, замам и разработчику."""
         try:
             from database.db_friend import get_all_deputies
+            from config import DEVELOPER_ID
             now = get_moscow_time().strftime('%d.%m.%Y %H:%M')
             text = (
                 f"🤖 Бот обновлён и запущен\n\n"
                 f"📦 Версия: <b>{BOT_VERSION}</b>\n"
                 f"🕐 {now} МСК"
             )
+            notified = set()
             # Владелец
             try:
                 await bot.send_message(self.main_admin_id, text, parse_mode='HTML')
+                notified.add(self.main_admin_id)
             except Exception as e:
                 logger.warning(f"Не удалось уведомить владельца: {e}")
             # Замы
             deputies = await get_all_deputies()
             for dep in deputies:
+                tid = dep['tg_id']
+                if tid not in notified:
+                    try:
+                        await bot.send_message(tid, text, parse_mode='HTML')
+                        notified.add(tid)
+                    except Exception as e:
+                        logger.warning(f"Не удалось уведомить зама {tid}: {e}")
+            # Разработчик
+            if DEVELOPER_ID and DEVELOPER_ID not in notified:
                 try:
-                    await bot.send_message(dep['tg_id'], text, parse_mode='HTML')
+                    await bot.send_message(DEVELOPER_ID, text, parse_mode='HTML')
                 except Exception as e:
-                    logger.warning(f"Не удалось уведомить зама {dep['tg_id']}: {e}")
+                    logger.warning(f"Не удалось уведомить разработчика: {e}")
         except Exception as e:
             logger.error(f"_notify_version error: {e}")
 

@@ -164,87 +164,125 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     }
     stats_message = f"{type_names.get(stats_type, '📊 СТАТИСТИКА ЧАТА')}\n{period_name}\n\n"
 
+    date_from = start_date.strftime('%Y-%m-%d')
+    date_to   = end_date.strftime('%Y-%m-%d')
 
-    # ── 1. Сообщений (из chat_stats, фоллбэк на user_stats) ──
+    # ── Хелпер: дельта (%) относительно предыдущего периода ──
+    def _delta_str(cur, prev):
+        """Возвращает строку дельты: 🔺 +12.3% или 🔻 -5.1%"""
+        if prev is None or prev == 0:
+            return ""
+        pct = (cur - prev) / prev * 100
+        if pct > 0:
+            return f" 🔺 +{pct:.1f}%"
+        elif pct < 0:
+            return f" 🔻 {pct:.1f}%"
+        return ""
+
+    # ── Предыдущий период для сравнения ──
+    if period == 'yesterday':
+        prev_start = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
+        prev_end   = (end_date - timedelta(days=1)).strftime('%Y-%m-%d')
+    elif period == 'day':
+        prev_start = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
+        prev_end   = date_from
+    elif period == 'week':
+        prev_start = (start_date - timedelta(days=7)).strftime('%Y-%m-%d')
+        prev_end   = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
+    elif period == 'month':
+        prev_start = (start_date - timedelta(days=30)).strftime('%Y-%m-%d')
+        prev_end   = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
+    else:
+        prev_start = prev_end = None
+
+    def _prev_val(sql, args):
+        """Получить значение за предыдущий период."""
+        if prev_start is None:
+            return None
+        db.cursor.execute(sql, args)
+        r = db.cursor.fetchone()
+        return int(r['count']) if r and r['count'] else 0
+
+    # ── 1. Сообщений ──
     db.cursor.execute('''
         SELECT COALESCE(SUM(total_messages), 0) as count
-        FROM chat_stats
+        FROM user_stats
         WHERE date >= ? AND date <= ?
-    ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    ''', (date_from, date_to))
     total_messages = int(db.cursor.fetchone()['count'])
 
-    if total_messages == 0:
-        if period == 'day':
-            db.cursor.execute('SELECT SUM(total_messages) as count FROM user_stats WHERE date = ?', (get_today_date_msk(),))
-        elif period == 'yesterday':
-            db.cursor.execute('SELECT SUM(total_messages) as count FROM user_stats WHERE date = ?', ((get_moscow_time() - timedelta(days=1)).date(),))
-        else:
-            db.cursor.execute('SELECT SUM(total_messages) as count FROM user_stats WHERE date >= ?', (start_date.date(),))
-        r = db.cursor.fetchone()
-        total_messages = int(_d(r['count'])) if r and r['count'] else 0
+    prev_msgs = _prev_val('''
+        SELECT COALESCE(SUM(total_messages), 0) as count
+        FROM user_stats
+        WHERE date >= ? AND date <= ?
+    ''', (prev_start, prev_end))
 
-    stats_message += f"💬 Всего сообщений: {total_messages}\n"
+    stats_message += f"💬 Сообщений: {format_number(total_messages)}{_delta_str(total_messages, prev_msgs)}\n"
 
-    # Активных пользователей
-    db.cursor.execute('SELECT COUNT(DISTINCT user_id) as count FROM messages WHERE timestamp >= ?', (start_date,))
-    active_users = db.cursor.fetchone()['count']
-    if active_users == 0:
-        if period == 'day':
-            db.cursor.execute('SELECT COUNT(DISTINCT user_id) as count FROM user_stats WHERE date = ? AND total_messages > 0', (get_today_date_msk(),))
-        else:
-            db.cursor.execute('SELECT COUNT(DISTINCT user_id) as count FROM user_stats WHERE date >= ? AND total_messages > 0', (start_date.date(),))
-        r = db.cursor.fetchone()
-        active_users = int(_d(r['count'])) if r and r['count'] else 0
+    # ── 2. Активных пользователей ──
+    db.cursor.execute('''
+        SELECT COUNT(DISTINCT user_id) as count
+        FROM user_stats
+        WHERE date >= ? AND date <= ? AND total_messages > 0
+    ''', (date_from, date_to))
+    active_users = int(db.cursor.fetchone()['count'])
 
-    stats_message += f"👥 Активных пользователей: {active_users}\n"
+    prev_active = _prev_val('''
+        SELECT COUNT(DISTINCT user_id) as count
+        FROM user_stats
+        WHERE date >= ? AND date <= ? AND total_messages > 0
+    ''', (prev_start, prev_end))
+
+    stats_message += f"👥 Активных: {active_users}{_delta_str(active_users, prev_active)}\n"
 
     # Средний срок в чате
-    db.cursor.execute('SELECT joined_at FROM users WHERE is_admin = 0 AND is_owner = 0 AND joined_at IS NOT NULL')
+    db.cursor.execute('SELECT joined_at FROM users WHERE is_admin = 0 AND is_owner = 0 AND is_left = 0 AND joined_at IS NOT NULL')
     all_users = db.cursor.fetchall()
     if all_users:
         total_days = sum(calculate_days_in_chat(u['joined_at']) for u in all_users)
-        avg_days   = _d(total_days) / _d(len(all_users))                 # Decimal
+        avg_days   = _d(total_days) / _d(len(all_users))
         stats_message += f"⏱ Средний срок в чате: {int(avg_days)} дней\n"
 
     # Пульсов добыто
     db.cursor.execute('''
         SELECT SUM(amount) as total FROM transactions
-        WHERE to_user_id IS NOT NULL AND transaction_type = 'message_reward' AND timestamp >= ?
-    ''', (start_date,))
+        WHERE to_user_id IS NOT NULL AND transaction_type = 'message_reward'
+          AND timestamp >= ? AND timestamp <= ?
+    ''', (start_date, end_date))
     r = db.cursor.fetchone()
-    total_pulses = _d(r['total']) if r['total'] else Decimal('0')       # Decimal
+    total_pulses = _d(r['total']) if r['total'] else Decimal('0')
     stats_message += f"💎 Добыто Пульсов: {format_number(total_pulses)}\n"
 
     # Вовлечённость
     try:
         member_count = await context.bot.get_chat_member_count(target_chat_id)
     except Exception:
-        db.cursor.execute('SELECT COUNT(*) as total FROM users')
+        db.cursor.execute('SELECT COUNT(*) as total FROM users WHERE is_left = 0')
         member_count = db.cursor.fetchone()['total']
 
     er = round_decimal(_d(active_users) / _d(member_count) * Decimal('100'), 1) if member_count > 0 else Decimal('0')
-    stats_message += f"📊 Коэффициент вовлеченности: {float(er):.1f}%\n"
+    stats_message += f"📊 Вовлечённость: {float(er):.1f}%\n"
 
-    # Динамика пользователей
+    # ── ДИНАМИКА ПОЛЬЗОВАТЕЛЕЙ ──
     stats_message += "\n📊 ДИНАМИКА ПОЛЬЗОВАТЕЛЕЙ:\n"
     db.cursor.execute('''
         SELECT COUNT(*) as joined FROM users
         WHERE DATE(joined_at) >= ? AND DATE(joined_at) <= ? AND is_admin = 0 AND is_owner = 0
-    ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    ''', (date_from, date_to))
     joined_count = db.cursor.fetchone()['joined']
 
     db.cursor.execute('''
         SELECT COUNT(*) as left_users FROM transactions
         WHERE transaction_type = 'return_on_leave' AND DATE(timestamp) >= ? AND DATE(timestamp) <= ?
-    ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+    ''', (date_from, date_to))
     left_count  = db.cursor.fetchone()['left_users']
     net_change  = joined_count - left_count
 
-    stats_message += f"🆕 Вступило за период: {joined_count}\n"
-    stats_message += f"👋 Вышло за период: {left_count}\n"
-    if net_change > 0:   stats_message += f"📈 Чистый прирост: +{net_change}\n"
-    elif net_change < 0: stats_message += f"📉 Чистая убыль: {net_change}\n"
-    else:                stats_message += "➡️ Без изменений: 0\n"
+    stats_message += f"🆕 Вступило: {joined_count}\n"
+    stats_message += f"👋 Вышло: {left_count}\n"
+    if net_change > 0:   stats_message += f"🔺 Прирост: +{net_change}\n"
+    elif net_change < 0: stats_message += f"🔻 Убыль: {net_change}\n"
+    else:                stats_message += "➡️ Без изменений\n"
 
     if period in ['week', 'month']:
         today_start = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -252,7 +290,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         j_today = db.cursor.fetchone()['joined']
         db.cursor.execute("SELECT COUNT(*) as l FROM transactions WHERE transaction_type = 'return_on_leave' AND timestamp >= ? AND timestamp <= ?", (today_start, now))
         l_today = db.cursor.fetchone()['l']
-        stats_message += f"\n📅 За сегодня:\n   🆕 Вступило: {j_today}\n   👋 Вышло: {l_today}\n"
+        stats_message += f"\n📅 За сегодня: 🆕 {j_today}  👋 {l_today}\n"
 
         if period == 'month':
             week_start = now - timedelta(days=7)
@@ -260,35 +298,33 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
             j_week = db.cursor.fetchone()['joined']
             db.cursor.execute("SELECT COUNT(*) as l FROM transactions WHERE transaction_type = 'return_on_leave' AND timestamp >= ? AND timestamp <= ?", (week_start, now))
             l_week = db.cursor.fetchone()['l']
-            stats_message += f"\n📅 За последние 7 дней:\n   🆕 Вступило: {j_week}\n   👋 Вышло: {l_week}\n"
+            stats_message += f"📅 За 7 дней: 🆕 {j_week}  👋 {l_week}\n"
 
     stats_message += "\n"
 
-    # Детальные параметры
-    stats_message += "\n📈 ДЕТАЛЬНЫЕ ПАРАМЕТРЫ:\n"
-    date_from = start_date.strftime('%Y-%m-%d')
-    date_to   = end_date.strftime('%Y-%m-%d')
+    # ── ДЕТАЛЬНЫЕ ПАРАМЕТРЫ ──
+    stats_message += "📈 ДЕТАЛЬНЫЕ ПАРАМЕТРЫ:\n"
 
     params_queries = [
-        ('ОКС(Ч) (общее кол-во символов)',    'SELECT COALESCE(SUM(total_chars), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',       False),
-        ('СДС(Ч) (средняя длина сообщения)',  'SELECT COALESCE(AVG(avg_message_length), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?', True),
-        ('Медиа(Ч) (медиа контент)',           'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
-        ('КОР(Ч) (реакции оставленные)',       'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
-        ('КПР(Ч) (реакции полученные)',        'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
-        ('КОтв(Ч) (ответы полученные)',        'SELECT COALESCE(SUM(replies_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',   False),
-        ('КОтп(Ч) (ответы отправленные)',      'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('КУП(Ч) (упоминания @)',              'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
-        ('ПДВ(Ч) (публ. в других ветках)',     'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
+        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',       False),
+        ('СДС — ср. длина сообщ.',  'SELECT COALESCE(AVG(avg_message_length), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?', True),
+        ('Медиа',                   'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
+        ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
+        ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
+        ('Ответы ↙',                'SELECT COALESCE(SUM(replies_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',   False),
+        ('Ответы ↗',                'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
+        ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
+        ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
     ]
 
     for label, sql, is_avg in params_queries:
         db.cursor.execute(sql, (date_from, date_to))
         raw_val = db.cursor.fetchone()['v']
-        val_d   = round_decimal(_d(raw_val), 1 if is_avg else 0)  # Decimal
+        val_d   = round_decimal(_d(raw_val), 1 if is_avg else 0)
         if is_avg:
             stats_message += f"• {label}: {float(val_d):.1f}\n"
         else:
-            stats_message += f"• {label}: {format_number(val_d)}\n"
+            stats_message += f"• {label}: {format_number(int(val_d))}\n"
 
     stats_message += "\n"
 
