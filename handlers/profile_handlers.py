@@ -83,9 +83,12 @@ async def show_profile(update_or_query, context, db, user_id):
         title_row = None
 
     # 4. ЛОГИКА СТАТУСА (Объединенная)
-    if user_data['is_owner']: 
+    from database.db_friend import is_deputy
+    if user_data['is_owner']:
         status_text = "[👑 Создатель]"
-    elif user_data['is_admin']: 
+    elif await is_deputy(user_id):
+        status_text = "[🌟 Зам Владельца]"
+    elif user_data['is_admin']:
         status_text = "[⭐ Администратор]"
     else:
         reg_status = reg_user.get('status') if reg_user else None
@@ -93,10 +96,6 @@ async def show_profile(update_or_query, context, db, user_id):
             status_text = "[✅ Участник]"
         else:
             status_text = f"[{title_row['emoji']} {title_row['title_name']}]" if title_row else "[📝 Новичок]"
-
-    # ДАЛЬШЕ ИДЕТ ТВОЙ КОД КОШЕЛЬКА (balance = float... и так далее)
-    
-    status_text = f"[{title_row['emoji']} {title_row['title_name']}]" if title_row else "[Участник]"
 
     balance = float(user_data['balance'] or 0)
     frozen = float(user_data['frozen_balance'] or 0)
