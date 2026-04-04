@@ -1057,12 +1057,16 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await add_deputy(target_id, added_by=OWNER_ID)
         # Синхронная БД: is_owner=1 чтобы зам видел клавиатуру "Панель Владельца"
         try:
-            from database.db_manager import DatabaseManager
-            import os
-            sync_db = DatabaseManager(os.getenv('DB_PATH', 'bot_database.db'))
+            from database.db_manager import Database
+            import os, sqlite3
+            sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            try:
+                sync_db.cursor.execute('ALTER TABLE users ADD COLUMN is_owner INTEGER DEFAULT 0')
+            except sqlite3.OperationalError:
+                pass
             sync_db.cursor.execute('UPDATE users SET is_owner = 1 WHERE user_id = ?', (target_id,))
             sync_db.conn.commit()
-            sync_db.close()
+            sync_db.conn.close()
         except Exception as e:
             logger.warning(f"Could not sync deputy to main DB: {e}")
         name = target_user.get('username') or target_user.get('first_name') or target_id
@@ -1084,14 +1088,14 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             return True
         target_user = await get_user(target_id)
         await remove_deputy(target_id)
-        # Синхронная БД: вернуть is_owner=0, is_admin=1
+        # Синхронная БД: вернуть is_owner=0
         try:
-            from database.db_manager import DatabaseManager
+            from database.db_manager import Database
             import os
-            sync_db = DatabaseManager(os.getenv('DB_PATH', 'bot_database.db'))
-            sync_db.cursor.execute('UPDATE users SET is_owner = 0, is_admin = 1 WHERE user_id = ?', (target_id,))
+            sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            sync_db.cursor.execute('UPDATE users SET is_owner = 0 WHERE user_id = ?', (target_id,))
             sync_db.conn.commit()
-            sync_db.close()
+            sync_db.conn.close()
         except Exception as e:
             logger.warning(f"Could not sync deputy removal to main DB: {e}")
         name = (target_user.get('username') or target_user.get('first_name') or target_id) if target_user else target_id
