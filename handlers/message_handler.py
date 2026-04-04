@@ -136,7 +136,11 @@ class MessageHandler:
             return
         
         user = message.from_user
-        
+
+        # Игнорируем сообщения от ботов (ChatKeeper и т.д.)
+        if user and user.is_bot:
+            return
+
         # Get thread/topic information
         thread_id = message.message_thread_id  # None for main chat, int for topics
         # Передаем None для веток, чтобы БД не стирала реальное красивое имя фейковым!
