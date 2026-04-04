@@ -32,7 +32,7 @@ from handlers.BBS.editing_bbs import (
     _build_edit_params_keyboard, _build_edit_role_keyboard,
     _build_edit_city_keyboard, _build_edit_goal_keyboard,
 )
-from handlers.BBS.navigation_bbs import show_bbs_menu, show_dating_menu
+from handlers.BBS.navigation_bbs import show_bbs_menu, show_dating_menu, handle_bbs_view_profile
 
 
 async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id):
@@ -51,6 +51,9 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
     if data == 'bbs_dating':
         clear_bbs(context)
         await show_dating_menu(query, context, db, user_id)
+        return True
+    if data == 'bbs_view_profile':
+        await handle_bbs_view_profile(query, context, db)
         return True
     # ── Отмена ──
     if data == 'bbs_cancel':

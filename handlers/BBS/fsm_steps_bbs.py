@@ -449,14 +449,27 @@ async def show_preview(message_or_query, context):
 
     try:
         if len(photos) == 1:
-            await context.bot.send_photo(
-                chat_id=chat_id, photo=photos[0],
-                caption=preview_caption, parse_mode='HTML',
-            )
+            if len(preview_caption) <= 1024:
+                await context.bot.send_photo(
+                    chat_id=chat_id, photo=photos[0],
+                    caption=preview_caption, parse_mode='HTML',
+                )
+            else:
+                await context.bot.send_photo(chat_id=chat_id, photo=photos[0])
+                await context.bot.send_message(
+                    chat_id=chat_id, text=preview_caption, parse_mode='HTML',
+                )
         elif len(photos) > 1:
-            media = [InputMediaPhoto(media=photos[0], caption=preview_caption, parse_mode='HTML')]
+            if len(preview_caption) <= 1024:
+                media = [InputMediaPhoto(media=photos[0], caption=preview_caption, parse_mode='HTML')]
+            else:
+                media = [InputMediaPhoto(media=photos[0])]
             media += [InputMediaPhoto(media=fid) for fid in photos[1:]]
             await context.bot.send_media_group(chat_id=chat_id, media=media)
+            if len(preview_caption) > 1024:
+                await context.bot.send_message(
+                    chat_id=chat_id, text=preview_caption, parse_mode='HTML',
+                )
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
@@ -465,6 +478,9 @@ async def show_preview(message_or_query, context):
             )
     except Exception as e:
         logging.error(f"BBS preview photos error: {e}")
+        await context.bot.send_message(
+            chat_id=chat_id, text=preview_caption, parse_mode='HTML',
+        )
 
     # Кнопки — на отдельном сообщении (чтобы edit работал)
     msg = await context.bot.send_message(

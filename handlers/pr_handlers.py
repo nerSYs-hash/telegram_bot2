@@ -44,6 +44,7 @@ from handlers.PR.press_release_pr import (
     handle_pr_edit_publish_now,
     handle_pr_add_photo,
     handle_pr_remove_photo,
+    handle_pr_full_preview,
     handle_pr_retarget,
     handle_pr_refresh_topics,
 )

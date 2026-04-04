@@ -138,7 +138,8 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
             photo_line = "📷 С фото\n"
 
     keyboard = [
-        [InlineKeyboardButton("🚀 Опубликовать сейчас", callback_data="pr_publish_now")],
+        [InlineKeyboardButton("� Полный предпросмотр", callback_data="pr_full_preview")],
+        [InlineKeyboardButton("�🚀 Опубликовать сейчас", callback_data="pr_publish_now")],
         [InlineKeyboardButton("⏰ Запланировать", callback_data="pr_schedule")],
     ]
     if pr_data.get('photo_file_id'):
@@ -219,6 +220,74 @@ async def handle_pr_remove_photo(query, user, context, db, admin_id):
     preview_msg += "\n🎯 Выберите куда опубликовать:"
 
     await query.edit_message_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ═══════════════════════════════════════════════════════════════
+# ПОЛНЫЙ ПРЕДПРОСМОТР (медиа + весь текст)
+# ═══════════════════════════════════════════════════════════════
+
+async def handle_pr_full_preview(query, user, context, db, admin_id):
+    """Отправляет полный предпросмотр: медиа + весь текст, как будет в чате."""
+    if user.id != admin_id:
+        await query.answer("У вас нет доступа.", show_alert=True)
+        return
+
+    pr_data = context.user_data.get('pr_data', {})
+    if not pr_data:
+        await query.answer("❌ Данные потеряны. Начните заново.", show_alert=True)
+        return
+
+    text = pr_data.get('text', '')
+    photo_file_id = pr_data.get('photo_file_id')
+    chat_id = query.message.chat.id
+
+    lines = text.split('\n', 1)
+    if len(lines) > 1:
+        formatted_text = f"<b>{lines[0]}</b>\n{lines[1]}"
+    else:
+        formatted_text = f"<b>{lines[0]}</b>"
+
+    press_release = (
+        f"👁 <b>ПОЛНЫЙ ПРЕДПРОСМОТР</b>\n"
+        f"{'━' * 20}\n\n"
+        f"{formatted_text}\n\n"
+        f"<i>© Сообщество Pulse</i>"
+    )
+
+    try:
+        if photo_file_id:
+            is_video = False
+            raw_file_id = photo_file_id
+
+            if str(photo_file_id).startswith('video:'):
+                is_video = True
+                raw_file_id = photo_file_id.split(':', 1)[1]
+            elif str(photo_file_id).startswith('photo:'):
+                raw_file_id = photo_file_id.split(':', 1)[1]
+
+            if len(press_release) > 1024:
+                if is_video:
+                    await context.bot.send_video(chat_id=chat_id, video=raw_file_id)
+                else:
+                    await context.bot.send_photo(chat_id=chat_id, photo=raw_file_id)
+                await _send_long_text(context.bot, chat_id, press_release)
+            else:
+                if is_video:
+                    await context.bot.send_video(
+                        chat_id=chat_id, video=raw_file_id,
+                        caption=press_release, parse_mode='HTML',
+                    )
+                else:
+                    await context.bot.send_photo(
+                        chat_id=chat_id, photo=raw_file_id,
+                        caption=press_release, parse_mode='HTML',
+                    )
+        else:
+            await _send_long_text(context.bot, chat_id, press_release)
+
+        await query.answer("👆 Полный предпросмотр отправлен выше")
+    except Exception as e:
+        await query.answer(f"❌ Ошибка предпросмотра: {e}", show_alert=True)
 
 
 # ═══════════════════════════════════════════════════════════════

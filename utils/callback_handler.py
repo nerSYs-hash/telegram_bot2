@@ -104,7 +104,10 @@ class CallbackHandler:
             await query.answer()
         
         # ═══ PRIVATE-ONLY для обычных пользователей ═══
-        is_owner = user.id == self.main_admin_id
+        _u_caller = self.db.get_user(user.id)
+        is_owner = user.id == self.main_admin_id or (_u_caller and _u_caller['is_owner'])
+        # Эффективный admin_id для функций с проверкой user.id != admin_id: зам получает свой user.id
+        eff_admin = user.id if is_owner else self.main_admin_id
         if not is_owner and query.message.chat.type != 'private':
             bot_me = await context.bot.get_me()
             try:
@@ -311,66 +314,66 @@ class CallbackHandler:
         
         # Press release callbacks
         elif data == "press_release_start":
-            await start_press_release(query, user, context, self.db, self.main_admin_id)
+            await start_press_release(query, user, context, self.db, eff_admin)
         elif data.startswith("pr_target_"):
-            await handle_pr_target_selection(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_target_selection(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         elif data == "pr_publish_now":
-            await handle_pr_publish_now(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_publish_now(query, user, context, self.db, eff_admin, self.target_chat_id)
         elif data == "pr_schedule":
-            await handle_pr_schedule(query, user, context, self.db, self.main_admin_id)
+            await handle_pr_schedule(query, user, context, self.db, eff_admin)
         elif data == "pr_scheduled_list":
-            await show_scheduled_posts(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await show_scheduled_posts(query, user, context, self.db, eff_admin, self.target_chat_id)
         elif data.startswith("pr_delete_"):
-            await handle_pr_delete(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_delete(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         elif data == "pr_cancel":
-            await handle_pr_cancel(query, user, context, self.db, self.main_admin_id)
+            await handle_pr_cancel(query, user, context, self.db, eff_admin)
         elif data == "pr_refresh_topics":
-            await handle_pr_refresh_topics(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
-        
+            await handle_pr_refresh_topics(query, user, context, self.db, eff_admin, self.target_chat_id)
+
         # Press release: add/remove photo
         elif data == "pr_add_photo":
-            await handle_pr_add_photo(query, user, context, self.db, self.main_admin_id)
+            await handle_pr_add_photo(query, user, context, self.db, eff_admin)
         elif data == "pr_remove_photo":
-            await handle_pr_remove_photo(query, user, context, self.db, self.main_admin_id)
-        
+            await handle_pr_remove_photo(query, user, context, self.db, eff_admin)
+
         # Press release: edit scheduled posts
         elif data.startswith("pr_edit_text_"):
-            await handle_pr_edit_text(query, data, user, context, self.db, self.main_admin_id)
+            await handle_pr_edit_text(query, data, user, context, self.db, eff_admin)
         elif data.startswith("pr_edit_photo_"):
-            await handle_pr_edit_photo(query, data, user, context, self.db, self.main_admin_id)
+            await handle_pr_edit_photo(query, data, user, context, self.db, eff_admin)
         elif data.startswith("pr_edit_remove_photo_"):
-            await handle_pr_edit_remove_photo(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_edit_remove_photo(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         elif data.startswith("pr_edit_time_"):
-            await handle_pr_edit_time(query, data, user, context, self.db, self.main_admin_id)
+            await handle_pr_edit_time(query, data, user, context, self.db, eff_admin)
         elif data.startswith("pr_edit_target_"):
-            await handle_pr_edit_target(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_edit_target(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         elif data.startswith("pr_edit_publishnow_"):
-            await handle_pr_edit_publish_now(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await handle_pr_edit_publish_now(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         elif data.startswith("pr_edit_"):
-            await handle_pr_edit(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
-        
+            await handle_pr_edit(query, data, user, context, self.db, eff_admin, self.target_chat_id)
+
         # Press release: retarget (change thread of existing post)
         elif data.startswith("pr_retarget_"):
-            await handle_pr_retarget(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
-        
+            await handle_pr_retarget(query, data, user, context, self.db, eff_admin, self.target_chat_id)
+
         # Features management callbacks
         elif data == "manage_features":
-            await show_features_management(query, user, self.db, self.main_admin_id)
+            await show_features_management(query, user, self.db, eff_admin)
         elif data.startswith("feature_on_") or data.startswith("feature_off_"):
-            await toggle_feature(query, data, user, self.db, self.main_admin_id)
+            await toggle_feature(query, data, user, self.db, eff_admin)
         elif data == "feature_info":
             # Just a label, do nothing
             await query.answer()
-        
+
         # Horoscope callbacks
         elif data == "horoscope_menu":
-            await show_horoscope_menu(query, user, self.db, self.main_admin_id)
+            await show_horoscope_menu(query, user, self.db, eff_admin)
         elif data == "horoscope_publish":
-            await publish_horoscope_today(query, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await publish_horoscope_today(query, user, context, self.db, eff_admin, self.target_chat_id)
         elif data == "horoscope_preview":
-            await preview_horoscope(query, user, context, self.db, self.main_admin_id)
+            await preview_horoscope(query, user, context, self.db, eff_admin)
         elif data == "horoscope_diagnose":
-            await diagnose_emoji(query, user, context, self.db, self.main_admin_id)
+            await diagnose_emoji(query, user, context, self.db, eff_admin)
         
         # Exchange rate callbacks
         elif data == "set_exchange_rate":
