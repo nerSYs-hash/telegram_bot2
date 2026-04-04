@@ -62,7 +62,8 @@ class CallbackHandler:
             pass
 
         # ═══ PRIVATE-ONLY для обычных пользователей ═══
-        is_owner = user.id == self.main_admin_id
+        _u_caller = self.db.get_user(user.id)
+        is_owner = user.id == self.main_admin_id or bool(_u_caller and _u_caller['is_owner'])
         if not is_owner and query.message and query.message.chat.type != 'private':
             private_callbacks = {
                 'menu_profile', 'menu_balance', 'menu_lottery', 'menu_bingo',
@@ -128,7 +129,7 @@ class CallbackHandler:
             await query.edit_message_text("Сначала используй /start")
             return
 
-        is_owner = user.id == self.main_admin_id
+        is_owner = user.id == self.main_admin_id or bool(user_data and user_data['is_owner'])
         balance = user_data['balance']
 
         message = f"📱 ГЛАВНОЕ МЕНЮ\n\n"
@@ -155,12 +156,12 @@ class CallbackHandler:
 
         keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
 
-        # ── Статистика: для админов И владельца ──
+        # ── Статистика: для админов И владельца/зама ──
         is_admin_user = user_data and (user_data['is_admin'] or user_data['is_owner'])
         if (is_owner or is_admin_user) and self.db.is_feature_enabled('statistics'):
             keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
 
-        # ── Владелец ──
+        # ── Владелец/Зам ──
         if is_owner:
             keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])

@@ -32,10 +32,10 @@ async def course_command(update: Update, context: ContextTypes.DEFAULT_TYPE,
     rate_data = rate_cache.get_rate_data()
     balance = user_data['balance'] if user_data else None
 
-    # Расширенное — ТОЛЬКО владелец + ТОЛЬКО в ЛС бота
+    # Расширенное — ТОЛЬКО владелец/зам + ТОЛЬКО в ЛС бота
     import os
     main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    is_owner = (user.id == main_admin_id)
+    is_owner = user.id == main_admin_id or bool(user_data and user_data['is_owner'])
 
     is_private = update.message.chat.type == 'private'
 
@@ -49,8 +49,11 @@ async def course_command(update: Update, context: ContextTypes.DEFAULT_TYPE,
 
 
 async def recalc_rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, admin_id, target_chat_id):
-    """/recalc — перезапуск курса (только для владельца)."""
-    if update.effective_user.id != admin_id:
+    """/recalc — перезапуск курса (только для владельца/зама)."""
+    caller = update.effective_user
+    caller_data = db.get_user(caller.id)
+    _is_owner = caller.id == admin_id or bool(caller_data and caller_data['is_owner'])
+    if not _is_owner:
         return
 
     import logging

@@ -35,6 +35,13 @@ class BingoHandler:
         self.bot_username = bot_username
         self._ensure_tables()
 
+    def _is_owner_user(self, user) -> bool:
+        """Проверка: главный владелец ИЛИ зам (is_owner=1)."""
+        if user.id == self.main_admin_id:
+            return True
+        u = self.db.get_user(user.id)
+        return bool(u and u['is_owner'])
+
     # ══════════════════════════════════════════
     #  ТАБЛИЦЫ
     # ══════════════════════════════════════════
@@ -179,7 +186,7 @@ class BingoHandler:
     # ══════════════════════════════════════════
 
     async def show_bingo_menu(self, query, user):
-        if user.id == self.main_admin_id:
+        if self._is_owner_user(user):
             await self._admin_menu(query)
         else:
             await self._user_menu(query, user)
@@ -245,7 +252,7 @@ class BingoHandler:
         """Роутер для bingo_* колбэков."""
 
         if data == "bingo_create":
-            if user.id != self.main_admin_id:
+            if not self._is_owner_user(user):
                 await query.answer("⛔", show_alert=True); return
             kb = [
                 [InlineKeyboardButton("💎 100", callback_data="bingo_price_100"),
@@ -297,7 +304,7 @@ class BingoHandler:
                     [InlineKeyboardButton("🔙 К Бинго", callback_data="menu_bingo")]]))
 
         elif data.startswith("bingo_start_"):
-            if user.id != self.main_admin_id:
+            if not self._is_owner_user(user):
                 await query.answer("⛔", show_alert=True); return
             gid = int(data.split('_')[2])
             game = self._game(gid, status='waiting')
@@ -331,7 +338,7 @@ class BingoHandler:
                     [InlineKeyboardButton("🔙 К Бинго", callback_data="menu_bingo")]]))
 
         elif data.startswith("bingo_cancel_"):
-            if user.id != self.main_admin_id:
+            if not self._is_owner_user(user):
                 await query.answer("⛔", show_alert=True); return
             gid = int(data.split('_')[2])
             game = self._game(gid)
@@ -379,7 +386,7 @@ class BingoHandler:
         if not game or game['status'] not in ('waiting', 'active'):
             await query.answer("❌ Игра недоступна.", show_alert=True); return
 
-        if user.id == self.main_admin_id:
+        if self._is_owner_user(user):
             await query.answer("⚠️ Админ не может играть!", show_alert=True); return
 
         # Уже есть карточка?

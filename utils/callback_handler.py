@@ -170,9 +170,9 @@ class CallbackHandler:
         elif data == "menu_top":
             await show_top(query, self.db, self.target_chat_id, context)
         elif data == "menu_bank":
-            await show_bank_menu(query, user, self.db, self.main_admin_id)
+            await show_bank_menu(query, user, self.db, eff_admin)
         elif data == "bank_panel":
-            await show_bank(query, user, self.db, self.main_admin_id)
+            await show_bank(query, user, self.db, eff_admin)
         elif data == "menu_stats":
             # Доступ для владельца И админов
             _u = self.db.get_user(user.id)
@@ -284,11 +284,11 @@ class CallbackHandler:
         
         # Bank callbacks
         elif data == "bank_k_up":
-            await adjust_difficulty(query, user, 'up', self.db, self.main_admin_id)
+            await adjust_difficulty(query, user, 'up', self.db, eff_admin)
         elif data == "bank_k_down":
-            await adjust_difficulty(query, user, 'down', self.db, self.main_admin_id)
+            await adjust_difficulty(query, user, 'down', self.db, eff_admin)
         elif data == "bank_refresh":
-            await show_bank(query, user, self.db, self.main_admin_id)
+            await show_bank(query, user, self.db, eff_admin)
         
         # Lottery callbacks — ПОЛЬЗОВАТЕЛЬСКИЕ (покупка, мои билеты)
         elif data.startswith("buy_ticket_"):
@@ -377,7 +377,7 @@ class CallbackHandler:
         
         # Exchange rate callbacks
         elif data == "set_exchange_rate":
-            await start_set_exchange_rate(query, user, context, self.db, self.main_admin_id)
+            await start_set_exchange_rate(query, user, context, self.db, eff_admin)
         elif data == "show_exchange_rate":
             await show_exchange_rate(query, user, self.db)
         
@@ -417,15 +417,15 @@ class CallbackHandler:
         
         # Bank transfer callbacks
         elif data == "bank_transfer_start":
-            await start_bank_transfer(query, user, context, self.db, self.main_admin_id)
+            await start_bank_transfer(query, user, context, self.db, eff_admin)
         elif data.startswith("bt_user_"):
             user_id = int(data.replace("bt_user_", ""))
-            await select_transfer_amount(query, user_id, user, context, self.db, self.main_admin_id)
+            await select_transfer_amount(query, user_id, user, context, self.db, eff_admin)
         elif data.startswith("bt_amount_"):
             parts = data.replace("bt_amount_", "").split("_")
             user_id = int(parts[0])
             amount = float(parts[1])
-            await execute_bank_transfer(query, user_id, amount, user, context, self.db, self.main_admin_id)
+            await execute_bank_transfer(query, user_id, amount, user, context, self.db, eff_admin)
         elif data.startswith("bt_custom_"):
             user_id = int(data.replace("bt_custom_", ""))
             context.user_data['bt_custom_user_id'] = user_id
@@ -443,7 +443,7 @@ class CallbackHandler:
         
         # Export callbacks
         elif data.startswith("export_"):
-            await generate_export_file(query, data, user, context, self.db, self.main_admin_id, self.target_chat_id)
+            await generate_export_file(query, data, user, context, self.db, eff_admin, self.target_chat_id)
         
         # Accruals (начисления) callbacks
         elif data == "my_accruals":

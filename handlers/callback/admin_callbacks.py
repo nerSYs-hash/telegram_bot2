@@ -67,11 +67,11 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
 
     # ── Банк ──
     if data == "menu_bank":
-        await show_bank_menu(query, user, db, admin_id)
+        await show_bank_menu(query, user, db, eff_admin)
     elif data == "bank_panel":
-        await show_bank(query, user, db, admin_id)
+        await show_bank(query, user, db, eff_admin)
     elif data == "bank_refresh":
-        await show_bank(query, user, db, admin_id)
+        await show_bank(query, user, db, eff_admin)
     elif data == "show_exchange_rate":
         await show_exchange_rate(query, user, db)
 
@@ -96,7 +96,7 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
 
     # ── Экспорт файлов ──
     elif data.startswith("export_"):
-        await generate_export_file(query, data, user, context, db, admin_id, target_chat_id)
+        await generate_export_file(query, data, user, context, db, eff_admin, target_chat_id)
 
     # ── Пресс-релиз ──
     elif data == "menu_settings":

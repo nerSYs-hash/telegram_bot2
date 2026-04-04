@@ -444,11 +444,11 @@ class MessageHandler:
                     kb.append([InlineKeyboardButton("🎁 Донаты", callback_data="donate_menu")])
                 if self.db.is_feature_enabled('referral'):
                     kb.append([InlineKeyboardButton("👥 Реферальная система", callback_data="menu_referral")])
+                _u_act = self.db.get_user(user.id)
+                is_owner = user.id == self.main_admin_id or bool(_u_act and _u_act['is_owner'])
                 if self.db.is_feature_enabled('lottery'):
-                    is_owner = user.id == self.main_admin_id
                     label = "🎰 Лотерея (управление)" if is_owner else "🎰 Лотерея"
                     kb.append([InlineKeyboardButton(label, callback_data="menu_lottery")])
-                is_owner = user.id == self.main_admin_id
                 if self.db.is_feature_enabled('bingo'):
                     if is_owner:
                         kb.append([InlineKeyboardButton("🎱 Бинго (управление)", callback_data="menu_bingo")])
@@ -465,13 +465,15 @@ class MessageHandler:
                 kb = [
                     [InlineKeyboardButton("💱 Курс Пульса", callback_data="show_exchange_rate")],
                 ]
-                is_owner = user.id == self.main_admin_id
+                _u_bank = self.db.get_user(user.id)
+                is_owner = user.id == self.main_admin_id or bool(_u_bank and _u_bank['is_owner'])
                 if is_owner:
                     kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
                 await context.bot.send_message(chat_id=message.chat.id, text="🏦 ЦЕНТРОБАНК\n\nВыберите действие:", reply_markup=InlineKeyboardMarkup(kb))
                 return
             elif btn == REPLY_BTN_DETAIL:
-                if not self.db.is_feature_enabled('detalization') and user.id != self.main_admin_id:
+                _u_det = self.db.get_user(user.id)
+                if not self.db.is_feature_enabled('detalization') and user.id != self.main_admin_id and not (_u_det and _u_det['is_owner']):
                     await context.bot.send_message(chat_id=message.chat.id, text="📋 Детализация временно отключена.")
                     return
                 kb = [
@@ -613,8 +615,10 @@ class MessageHandler:
         user = message.from_user
         chat_id = message.chat.id
 
-        # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец ═══
-        if user.id != self.main_admin_id:
+        # ═══ ПРОВЕРКА ДОСТУПА — только члены чата + владелец/зам ═══
+        _u_access = self.db.get_user(user.id)
+        _is_owner_or_dep = user.id == self.main_admin_id or bool(_u_access and _u_access['is_owner'])
+        if not _is_owner_or_dep:
             from utils.membership import verify_chat_membership
             is_member = await verify_chat_membership(
                 context.bot, self.target_chat_id, user.id, db=self.db
@@ -675,11 +679,11 @@ class MessageHandler:
                     kb.append([InlineKeyboardButton("🎁 Донаты", callback_data="donate_menu")])
                 if self.db.is_feature_enabled('referral'):
                     kb.append([InlineKeyboardButton("👥 Реферальная система", callback_data="menu_referral")])
+                _u_act2 = self.db.get_user(user.id)
+                is_owner = user.id == self.main_admin_id or bool(_u_act2 and _u_act2['is_owner'])
                 if self.db.is_feature_enabled('lottery'):
-                    is_owner = user.id == self.main_admin_id
                     label = "🎰 Лотерея (управление)" if is_owner else "🎰 Лотерея"
                     kb.append([InlineKeyboardButton(label, callback_data="menu_lottery")])
-                is_owner = user.id == self.main_admin_id
                 if self.db.is_feature_enabled('bingo'):
                     if is_owner:
                         kb.append([InlineKeyboardButton("🎱 Бинго (управление)", callback_data="menu_bingo")])
@@ -698,7 +702,8 @@ class MessageHandler:
                 kb = [
                     [InlineKeyboardButton("💱 Курс Пульса", callback_data="show_exchange_rate")],
                 ]
-                is_owner = user.id == self.main_admin_id
+                _u_bank2 = self.db.get_user(user.id)
+                is_owner = user.id == self.main_admin_id or bool(_u_bank2 and _u_bank2['is_owner'])
                 if is_owner:
                     kb.append([InlineKeyboardButton("💸 Перевод из банка", callback_data="bank_transfer_start")])
                 kb.append([InlineKeyboardButton("🔙 Меню", callback_data="back_to_menu")])
@@ -706,7 +711,8 @@ class MessageHandler:
                 context.user_data['menu_msg_id'] = sent.message_id
                 return
             elif btn == REPLY_BTN_DETAIL:
-                if not self.db.is_feature_enabled('detalization') and user.id != self.main_admin_id:
+                _u_det2 = self.db.get_user(user.id)
+                if not self.db.is_feature_enabled('detalization') and user.id != self.main_admin_id and not (_u_det2 and _u_det2['is_owner']):
                     await context.bot.send_message(chat_id=chat_id, text="📋 Детализация временно отключена.")
                     return
                 kb = [

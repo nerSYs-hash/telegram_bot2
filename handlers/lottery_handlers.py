@@ -34,6 +34,14 @@ class LotteryHandler:
         self.main_admin_id = main_admin_id
         self.bot_username = bot_username
         self._ensure_tables()
+
+    def _is_owner_user(self, user) -> bool:
+        """Проверка: главный владелец ИЛИ зам (is_owner=1)."""
+        if user.id == self.main_admin_id:
+            return True
+        u = self.db.get_user(user.id)
+        return bool(u and u['is_owner'])
+
 #####
     # ══════════════════════════════════════════
     #  ТАБЛИЦЫ
@@ -245,7 +253,7 @@ class LotteryHandler:
     # ══════════════════════════════════════════
 
     async def show_lottery_menu(self, query, user):
-        if user.id == self.main_admin_id:
+        if self._is_owner_user(user):
             await self._admin_menu(query)
         else:
             await self._user_menu(query, user)
@@ -367,7 +375,7 @@ class LotteryHandler:
     async def handle_lottery_callback(self, query, data, user, context):
 
         if data == "lottery_create":
-            if user.id != self.main_admin_id:
+            if not self._is_owner_user(user):
                 await query.answer("⛔", show_alert=True); return
             kb = [[InlineKeyboardButton("💎 10", callback_data="lottery_price_10"),
                    InlineKeyboardButton("💎 100", callback_data="lottery_price_100"),
@@ -446,7 +454,7 @@ class LotteryHandler:
                                           reply_markup=InlineKeyboardMarkup(kb))
 
         elif data.startswith("lottery_draw_"):
-            if user.id != self.main_admin_id:
+            if not self._is_owner_user(user):
                 await query.answer("⛔", show_alert=True); return
             lid = int(data.split('_')[2])
             res = await self._draw(lid, context)
@@ -476,7 +484,7 @@ class LotteryHandler:
 
     async def _do_buy(self, query, lid, lot, count, user, context, from_dm=False):
         """Общая логика покупки — из чата и из ЛС."""
-        if user.id == self.main_admin_id:
+        if self._is_owner_user(user):
             await query.answer("⚠️ Админ не может покупать!", show_alert=True); return
 
         ud = self.db.get_user(user.id)
