@@ -26,6 +26,7 @@ from handlers.command_handler import CommandHandler as BotCommandHandler
 from handlers.message_handler import MessageHandler as BotMessageHandler
 from handlers.callback import CallbackHandler
 from handlers.commands.exchange_commands import recalc_rate_command
+from handlers.shipper_logic import bootstrap_shipper
 from utils.helpers import get_moscow_time, format_number
 from utils.exchange_rate import rate_cache, scheduled_rate_update, scheduled_top5_update
 
@@ -162,6 +163,9 @@ class TelegramBot:
         
         # Записываем db в bot_data — для доступа из ConversationHandler/admin_moderation
         application.bot_data['db'] = self.db
+
+        # Шиппер: стартовая постановка в очередь job_queue
+        await bootstrap_shipper(application, self.db, self.target_chat_id)
 
         logger.info("Handlers initialized")
 
@@ -733,14 +737,10 @@ class TelegramBot:
     def run(self):
         """Run the bot"""
         try:
-            # Create application without job queue (we use APScheduler instead)
+            # Create application (job_queue включен для модулей, которым нужен run_once)
             builder = Application.builder()
             builder.token(self.bot_token)
             builder.post_init(self.post_init)
-            
-            # Disable job queue since we use APScheduler
-            from telegram.ext import JobQueue
-            builder.job_queue(None)
             
             self.application = builder.build()
             

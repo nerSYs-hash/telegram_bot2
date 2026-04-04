@@ -391,6 +391,40 @@ class Database:
                 FOREIGN KEY (author_id) REFERENCES users(user_id)
             )
         ''')
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS shipper_phrases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                category TEXT NOT NULL,
+                text TEXT NOT NULL
+            )
+        ''')
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS shipper_matches (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user1_id INTEGER NOT NULL,
+                user2_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
+                message_id INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL,
+                triggered INTEGER DEFAULT 0,
+                triggered_at TIMESTAMP
+            )
+        ''')
+
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS shipper_resonance_stats (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER NOT NULL,
+                match_id INTEGER NOT NULL,
+                trigger_type TEXT NOT NULL,
+                multiplier REAL DEFAULT 2.0,
+                activated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                expires_at TIMESTAMP NOT NULL
+            )
+        ''')
         
         # Combo claims (daily quests tracking)
         self.cursor.execute('''
@@ -484,6 +518,8 @@ class Database:
             self.conn.commit()
         except Exception:
             pass  # Column already exists
+
+        self.seed_shipper_phrases_if_empty()
 
     # ── Settings ──
     def get_setting(self, key, default=None):
@@ -636,6 +672,181 @@ class Database:
 
     def delete_scheduled_post(self, post_id):
         return _delete_scheduled_post(self, post_id)
+
+    # ── Shipper Roulette ──
+    def seed_shipper_phrases_if_empty(self):
+        """Заполняет стартовые шаблоны шиппера, если таблица пуста."""
+        try:
+            self.cursor.execute('SELECT COUNT(*) AS cnt FROM shipper_phrases')
+            row = self.cursor.fetchone()
+            count = int(row['cnt']) if row and row['cnt'] is not None else 0
+            if count > 0:
+                return
+
+            seed_rows = [
+                ('hot18', '{user1} и {user2} были замечены в одной кабинке туалета клуба...'),
+                ('hot18', '{user1} обещал показать {user2} свою "коллекцию игрушек" на выходных 🔞'),
+                ('hot18', '{user1} теперь официально папик для {user2} 💸'),
+                ('hot18', '{user1} делает {user2} такой массаж, после которого не ходят на работу 💆‍♂️'),
+                ('hot18', '{user1} и {user2} сегодня тестируют наручники. Главное — не потерять ключи ⛓'),
+                ('hot18', '{user1} стонет имя {user2} во сне. Совпадение? Не думаем! 💦'),
+                ('hot18', '{user1} оставил засос на шее {user2}. Придется носить водолазку 🧣'),
+                ('hot18', 'Кажется, {user1} и {user2} вчера переборщили с ролевыми играми 🩺'),
+                ('hot18', '{user1} просит {user2} скинуть нюдсы. Чат требует того же! 📸'),
+                ('hot18', '{user1} и {user2} заперлись в спальне. Просьба не беспокоить до утра 🚷'),
+                ('hot18', '{user1} использует {user2} вместо подушки для обнимашек... и не только 🛏'),
+                ('hot18', 'У {user1} фетиш на {user2}. Это уже не скрыть! 🥵'),
+                ('hot18', '{user1} и {user2} еблись в сенях чата, пока админы спали! 😈'),
+                ('hot18', '{user1} отшлепал {user2} за плохое поведение. И ему понравилось! 👏'),
+                ('hot18', '{user1} делает {user2} минет. Приятного аппетита! 🍌'),
+                ('funny', '{user1} и {user2} делят один аккаунт на сайте знакомств 🤡'),
+                ('funny', '{user1} задолжал {user2} ящик пива за проигранный спор 🍻'),
+                ('funny', '{user1} и {user2} — спонсоры локального дурдома в этом чате 🏥'),
+                ('funny', '{user1} пытался соблазнить {user2}, но забыл выключить микрофон 🎤'),
+                ('funny', '{user1} и {user2} поругались из-за того, кто сегодня снизу 🤼‍♂️'),
+                ('funny', 'Кажется, {user1} тайно ворует мемы у {user2} 🥷'),
+                ('funny', '{user1} и {user2} идут сдавать анализы вместе. Настоящая мужская дружба! 🩸'),
+                ('funny', '{user1} записан в телефоне у {user2} как "Не брать трубку" 📵'),
+                ('funny', '{user1} и {user2} собирают деньги на совместный поход к психотерапевту 🛋'),
+                ('funny', '{user1} съел шаурму, которую {user2} оставил в холодильнике 🌯'),
+                ('funny', '{user1} и {user2} опять спорят, кто из них красивее. Чат, рассудите! 🪞'),
+                ('funny', '{user1} учит {user2} правильно флиртовать. Пока безуспешно 🤦‍♂️'),
+                ('funny', '{user1} и {user2} — как Биба и Боба нашего чата 🤪'),
+                ('funny', '{user1} кинул {user2} в ЧС, но мы-то знаем, что это любовь 💔'),
+                ('funny', '{user1} и {user2} планируют захват админки. Готовьтесь! 🏴‍☠️'),
+                ('romantic', '{user1} + {user2} = любовь и химия, которую не скрыть ❤️'),
+                ('romantic', '{user1} тайно улыбается, когда видит сообщения от {user2} 😊'),
+                ('romantic', '{user1} и {user2} могли бы стать отличной парой. Подумайте об этом! 👨‍❤️‍👨'),
+                ('romantic', '{user1} хочет пригласить {user2} на кофе, но стесняется ☕️'),
+                ('romantic', '{user1} и {user2} звучат в унисон. Идеальный мэтч! 🎵'),
+                ('romantic', '{user1} готов отдать {user2} свой последний кусочек пиццы 🍕'),
+                ('romantic', '{user1} и {user2} сегодня на одной волне ✨'),
+                ('romantic', '{user1} хочет обнять {user2}. Но это не точно! 🫂'),
+                ('romantic', '{user1} и {user2} — самое милое, что случалось с этим чатом за сегодня 🥺'),
+                ('romantic', '{user1} смотрит на аватарку {user2} чаще, чем на себя в зеркало 🖼'),
+                ('romantic', '{user1} и {user2} просто созданы друг для друга 🧩'),
+                ('romantic', '{user1} готов слушать голосовые от {user2} часами 🎧'),
+                ('romantic', '{user1} и {user2} — наша новая любимая пара! Горько! 🥂'),
+                ('romantic', '{user1} греет ручки {user2} в этот холодный день 🧤'),
+                ('romantic', '{user1} и {user2} сегодня делят один плед на двоих 🛋'),
+            ]
+            self.cursor.executemany(
+                'INSERT INTO shipper_phrases (category, text) VALUES (?, ?)',
+                seed_rows,
+            )
+            self.conn.commit()
+        except Exception as e:
+            logging.error(f"seed_shipper_phrases_if_empty error: {e}")
+
+    def get_shipper_phrases(self):
+        try:
+            self.cursor.execute('SELECT id, category, text FROM shipper_phrases ORDER BY id DESC')
+            return self.cursor.fetchall()
+        except Exception as e:
+            logging.error(f"get_shipper_phrases error: {e}")
+            return []
+
+    def get_shipper_phrases_by_category(self, category):
+        try:
+            self.cursor.execute(
+                'SELECT id, category, text FROM shipper_phrases WHERE category = ? ORDER BY id DESC',
+                (category,),
+            )
+            return self.cursor.fetchall()
+        except Exception as e:
+            logging.error(f"get_shipper_phrases_by_category error: {e}")
+            return []
+
+    def add_shipper_phrase(self, category, text):
+        try:
+            self.cursor.execute(
+                'INSERT INTO shipper_phrases (category, text) VALUES (?, ?)',
+                (category, text),
+            )
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"add_shipper_phrase error: {e}")
+            return None
+
+    def delete_shipper_phrase(self, phrase_id):
+        try:
+            self.cursor.execute('DELETE FROM shipper_phrases WHERE id = ?', (phrase_id,))
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            logging.error(f"delete_shipper_phrase error: {e}")
+            return False
+
+    def get_random_shipper_phrase(self):
+        try:
+            self.cursor.execute('SELECT id, category, text FROM shipper_phrases ORDER BY RANDOM() LIMIT 1')
+            return self.cursor.fetchone()
+        except Exception as e:
+            logging.error(f"get_random_shipper_phrase error: {e}")
+            return None
+
+    def create_shipper_match(self, user1_id, user2_id, chat_id, message_id, expires_at):
+        try:
+            self.cursor.execute(
+                '''
+                INSERT INTO shipper_matches (user1_id, user2_id, chat_id, message_id, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+                ''',
+                (user1_id, user2_id, chat_id, message_id, expires_at),
+            )
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"create_shipper_match error: {e}")
+            return None
+
+    def get_active_shipper_match_for_user(self, chat_id, user_id):
+        try:
+            self.cursor.execute(
+                '''
+                SELECT id, user1_id, user2_id, message_id, expires_at, triggered
+                FROM shipper_matches
+                WHERE chat_id = ?
+                  AND triggered = 0
+                  AND expires_at > CURRENT_TIMESTAMP
+                  AND (user1_id = ? OR user2_id = ?)
+                ORDER BY id DESC
+                LIMIT 1
+                ''',
+                (chat_id, user_id, user_id),
+            )
+            return self.cursor.fetchone()
+        except Exception as e:
+            logging.error(f"get_active_shipper_match_for_user error: {e}")
+            return None
+
+    def mark_shipper_match_triggered(self, match_id):
+        try:
+            self.cursor.execute(
+                'UPDATE shipper_matches SET triggered = 1, triggered_at = CURRENT_TIMESTAMP WHERE id = ?',
+                (match_id,),
+            )
+            self.conn.commit()
+            return self.cursor.rowcount > 0
+        except Exception as e:
+            logging.error(f"mark_shipper_match_triggered error: {e}")
+            return False
+
+    def add_shipper_resonance_stat(self, user_id, match_id, trigger_type, expires_at, multiplier=2.0):
+        try:
+            self.cursor.execute(
+                '''
+                INSERT INTO shipper_resonance_stats (user_id, match_id, trigger_type, multiplier, expires_at)
+                VALUES (?, ?, ?, ?, ?)
+                ''',
+                (user_id, match_id, trigger_type, multiplier, expires_at),
+            )
+            self.conn.commit()
+            return self.cursor.lastrowid
+        except Exception as e:
+            logging.error(f"add_shipper_resonance_stat error: {e}")
+            return None
 
     # ── Close ──
     def close(self):

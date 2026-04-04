@@ -26,6 +26,7 @@ from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.BBS.fsm_input_bbs import process_bbs_input
 from handlers.owner_handlers import handle_owner_text_input
+from handlers.shipper_logic import try_activate_shipper_resonance
 
 
 # ═══ Тексты кнопок ReplyKeyboard (должны совпадать с system_commands.py) ═══
@@ -332,6 +333,13 @@ class MessageHandler:
             VALUES (?, ?, ?, ?, ?, ?)
         ''', (user.id, message.chat.id, text[:500], message_type, thread_id, message.message_id))
         self.db.conn.commit()
+
+        # Скрытое комбо "Мэтч дня": если сведенная пара взаимодействует в течение часа,
+        # активируется x2 бафф майнинга для обоих участников.
+        try:
+            try_activate_shipper_resonance(message, self.db)
+        except Exception as e:
+            logging.error(f"shipper resonance hook error: {e}")
         
         # === ОБНОВЛЕНИЕ СТАТИСТИКИ ЧАТА ===
         # Check if user is admin for message counting
