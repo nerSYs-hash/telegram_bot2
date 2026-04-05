@@ -133,7 +133,6 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
         [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
-        [InlineKeyboardButton("💘 Рулетка пар (Шиппер)", callback_data="owner_shipper_menu")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],

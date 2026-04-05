@@ -26,10 +26,34 @@ TARGET_MODE_LABELS = {
 
 def _is_shipper_manager(db, user_id: int) -> bool:
     try:
+        import os
+        admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
+        if user_id == admin_id:
+            return True
         user = db.get_user(user_id)
-        return bool(user and user["is_owner"] and user["is_admin"])
+        return bool(user and user["is_owner"])
     except Exception:
         return False
+
+
+async def send_shipper_panel(message, context, db, target_chat_id):
+    """Открывает меню шиппера из reply-кнопки (новое сообщение)."""
+    try:
+        if not _is_shipper_manager(db, message.from_user.id):
+            await message.reply_text("⛔ Нет доступа")
+            return
+        text = _shipper_status_text(db)
+        keyboard = [
+            [InlineKeyboardButton("🔁 Вкл/Выкл рулетку", callback_data="owner_shipper_toggle")],
+            [InlineKeyboardButton("⏱ Настроить тайминг", callback_data="owner_shipper_timing")],
+            [InlineKeyboardButton("🎯 Кого тегать", callback_data="owner_shipper_target_menu")],
+            [InlineKeyboardButton("➕ Добавить фразу", callback_data="owner_shipper_add_phrase")],
+            [InlineKeyboardButton("📋 Список фраз", callback_data="owner_shipper_list_1")],
+            [InlineKeyboardButton("▶️ Запустить сейчас", callback_data="owner_shipper_run_now")],
+        ]
+        await message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
+    except Exception as e:
+        logger.error(f"send_shipper_panel error: {e}")
 
 
 def _shipper_status_text(db):

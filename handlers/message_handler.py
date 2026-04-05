@@ -40,6 +40,7 @@ REPLY_BTN_BANK = "🏦 Центробанк"
 REPLY_BTN_DETAIL = "📋 Детализация"
 REPLY_BTN_FAQ = "❓ FAQ"
 REPLY_BTN_OWNER_PANEL = "👑 Панель Владельца"
+REPLY_BTN_SHIPPER = "💘 Шиппер"
 REPLY_BTN_NEW_APPS = "📋 Новые заявки"
 # Кнопки панели владельца в треде заявок
 REPLY_BTN_ADMINS = "👥 Админы"
@@ -54,7 +55,7 @@ REPLY_BTN_SYSTEM = "⚙️ Система"
 REPLY_BTN_BACKUP = "💾 Скачать БД"
 REPLY_BUTTONS = {REPLY_BTN_BALANCE, REPLY_BTN_PROFILE, REPLY_BTN_COURSE, REPLY_BTN_TOP5, REPLY_BTN_MENU,
                  REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ,
-                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_NEW_APPS,
+                 REPLY_BTN_OWNER_PANEL, REPLY_BTN_SHIPPER, REPLY_BTN_NEW_APPS,
                  REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
                  REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
                  REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM, REPLY_BTN_BACKUP}
@@ -188,6 +189,10 @@ class MessageHandler:
                         from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
                         is_owner = await _is_owner_or_deputy(user.id)
                         await send_admin_panel(context.bot, message.chat.id, is_owner=is_owner)
+                        return
+                    elif btn == REPLY_BTN_SHIPPER:
+                        from handlers.shipper_handlers import send_shipper_panel
+                        await send_shipper_panel(message, context, self.db, self.target_chat_id)
                         return
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
@@ -500,6 +505,10 @@ class MessageHandler:
                 from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
                 await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
                 return
+            elif btn == REPLY_BTN_SHIPPER:
+                from handlers.shipper_handlers import send_shipper_panel
+                await send_shipper_panel(message, context, self.db, self.target_chat_id)
+                return
             elif btn == REPLY_BTN_NEW_APPS:
                 from handlers.admin_moderation import handle_new_apps_text
                 await handle_new_apps_text(update, context)
@@ -740,6 +749,10 @@ class MessageHandler:
             elif btn == REPLY_BTN_OWNER_PANEL:
                 from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
                 await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
+                return
+            elif btn == REPLY_BTN_SHIPPER:
+                from handlers.shipper_handlers import send_shipper_panel
+                await send_shipper_panel(message, context, self.db, self.target_chat_id)
                 return
             elif btn == REPLY_BTN_NEW_APPS:
                 from handlers.admin_moderation import handle_new_apps_text
