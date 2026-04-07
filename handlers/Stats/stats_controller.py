@@ -185,11 +185,16 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         'users':    '👤 По пользователям',
         'combined': '📈 Чат + пользователи',
     }
-    stats_message = f"{type_names.get(stats_type, '📊 СТАТИСТИКА ЧАТА')}\n{period_name}\n\n"
-
-    
     date_from = start_date.strftime('%Y-%m-%d')
     date_to   = end_date.strftime('%Y-%m-%d')
+
+    # Точный диапазон дат для синхронизации с Excel
+    if date_from == date_to:
+        date_label = date_from
+    else:
+        date_label = f"{date_from} — {date_to}"
+
+    stats_message = f"{type_names.get(stats_type, '📊 СТАТИСТИКА ЧАТА')}\n{period_name} ({date_label})\n\n"
 
     # ── Хелпер: дельта (%) относительно предыдущего периода ──
     def _delta_str(cur, prev):
@@ -209,7 +214,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         prev_end   = (end_date - timedelta(days=1)).strftime('%Y-%m-%d')
     elif period == 'day':
         prev_start = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
-        prev_end   = date_from
+        prev_end   = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')  # только вчера, не сегодня
     elif period == 'week':
         prev_start = (start_date - timedelta(days=7)).strftime('%Y-%m-%d')
         prev_end   = (start_date - timedelta(days=1)).strftime('%Y-%m-%d')
@@ -330,15 +335,15 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     stats_message += "📈 ДЕТАЛЬНЫЕ ПАРАМЕТРЫ:\n"
 
     params_queries = [
-        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',       False),
-        ('СДС — ср. длина сообщ.',  'SELECT COALESCE(AVG(avg_message_length), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?', True),
-        ('Медиа',                   'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
-        ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
-        ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
-        ('Ответы ↙',                'SELECT COALESCE(SUM(replies_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',   False),
-        ('Ответы ↗',                'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
-        ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
+        ('ОКС — символов',              'SELECT COALESCE(SUM(total_chars), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',       False),
+        ('СДС — ср. длина сообщ.',      'SELECT COALESCE(AVG(avg_message_length), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?', True),
+        ('Медиа',                       'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
+        ('Реакции оставлены пользователями', 'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
+        ('Реакции получены пользователями', 'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
+        ('Ответы отправлены',            'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
+        ('Ответы получены',              'SELECT COALESCE(SUM(replies_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',   False),
+        ('Упоминания @',                'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
+        ('Др. ветки',                   'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
     ]
 
     for label, sql, is_avg in params_queries:
