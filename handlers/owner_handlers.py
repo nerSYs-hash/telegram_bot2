@@ -133,6 +133,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
         [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
         [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
+        [InlineKeyboardButton("💘 Рулетка пар (Шиппер)", callback_data="owner_shipper_menu")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
         [InlineKeyboardButton("📢 Журнал событий", callback_data="owner_journal"),
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
@@ -758,12 +759,14 @@ async def handle_owner_text_input(
                 InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
             logger.info(f"OWNER MUTE: {target_id} for {human} ({seconds}s) by {user.id}")
 
+
             # Журнал
             try:
                 from handlers.journal_handlers import log_mute
                 await log_mute(context.bot, db, target_id, user.id, human)
             except Exception as je:
                 logger.error(f"Journal log_mute error: {je}")
+
 
         except Exception as e:
             logger.error(f"Owner mute error: {e}")

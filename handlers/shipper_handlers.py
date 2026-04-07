@@ -26,12 +26,17 @@ TARGET_MODE_LABELS = {
 
 def _is_shipper_manager(db, user_id: int) -> bool:
     try:
+
         import os
         admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
         if user_id == admin_id:
             return True
         user = db.get_user(user_id)
         return bool(user and user["is_owner"])
+
+        user = db.get_user(user_id)
+        return bool(user and user["is_owner"] and user["is_admin"])
+
     except Exception:
         return False
 
@@ -54,6 +59,8 @@ async def send_shipper_panel(message, context, db, target_chat_id):
         await message.reply_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
         logger.error(f"send_shipper_panel error: {e}")
+
+
 
 
 def _shipper_status_text(db):

@@ -854,6 +854,7 @@ async def get_all_admins() -> List[dict]:
     logger.info(f"Total recipients for notifications: {len(admins)}")
     return admins
 
+
 # ==================== DEPUTY OPERATIONS ====================
 
 async def add_deputy(tg_id: int, added_by: int):
@@ -889,6 +890,7 @@ async def is_deputy(tg_id: int) -> bool:
             (tg_id, UserRole.DEPUTY)
         ) as cursor:
             return await cursor.fetchone() is not None
+
 
 
 async def get_all_deputies() -> list:

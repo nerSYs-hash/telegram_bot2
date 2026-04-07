@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
-BOT_VERSION = "1.9.1a"
+BOT_VERSION = "1.9.1b"
 
 import os
 import sys
