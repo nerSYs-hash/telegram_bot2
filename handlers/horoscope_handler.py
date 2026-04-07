@@ -12,6 +12,14 @@ from utils.horoscope_parser import get_all_horoscopes
 
 logger = logging.getLogger(__name__)
 
+
+async def _is_horoscope_privileged(user_id: int, admin_id: int) -> bool:
+    """Владелец или зам владельца."""
+    if user_id == admin_id:
+        return True
+    from database.db_friend import is_deputy
+    return await is_deputy(user_id)
+
 # Имя стикерпака
 EMOJI_STICKER_SET = "fgsdgsdfg"
 _emoji_data_cache = {}
@@ -137,7 +145,7 @@ def build_single_message(horoscopes: dict, cache: dict) -> str:
 # --- ОБРАБОТЧИКИ ---
 
 async def show_horoscope_menu(query, user, db, admin_id):
-    if user.id != admin_id: return
+    if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.edit_message_text(
         f"🔮 <b>Гороскоп Pulse</b>\n\nСкоростной парринг расширенных текстов включен.",
         parse_mode='HTML',
@@ -149,7 +157,7 @@ async def show_horoscope_menu(query, user, db, admin_id):
     )
 
 async def publish_horoscope_today(query, user, context, db, admin_id, target_chat_id):
-    if user.id != admin_id: return
+    if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.edit_message_text("🚀 <b>Скоростная сборка данных...</b>", parse_mode='HTML')
     try:
         cache = await _load_custom_emoji(context.bot)
@@ -163,7 +171,7 @@ async def publish_horoscope_today(query, user, context, db, admin_id, target_cha
         await query.edit_message_text(f"❌ Ошибка: {str(e)}")
 
 async def preview_horoscope(query, user, context, db, admin_id):
-    if user.id != admin_id: return
+    if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.answer("Сборка...")
     try:
         cache = await _load_custom_emoji(context.bot)
@@ -174,5 +182,5 @@ async def preview_horoscope(query, user, context, db, admin_id):
         await context.bot.send_message(chat_id=user.id, text=f"❌ Ошибка превью: {e}")
 
 async def diagnose_emoji(query, user, context, db, admin_id):
-    if user.id != admin_id: return
+    if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.answer("Плитки в порядке!", show_alert=True)

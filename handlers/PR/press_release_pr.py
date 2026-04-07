@@ -21,6 +21,14 @@ from utils.helpers import get_moscow_time
 MSG_LIMIT = 4096
 
 
+async def _is_pr_privileged(user_id: int, admin_id: int) -> bool:
+    """Владелец или зам владельца."""
+    if user_id == admin_id:
+        return True
+    from database.db_friend import is_deputy
+    return await is_deputy(user_id)
+
+
 async def _send_long_text(bot, chat_id, text, parse_mode='HTML', thread_id=None):
     """Отправляет длинный текст, разбивая на части по MSG_LIMIT (4096)."""
     base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode}
@@ -65,7 +73,7 @@ def _resolve_thread_name(db, target_chat_id, thread_id):
 
 async def start_press_release(query, user, context, db, admin_id):
     """Start press release creation (owner only)"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа к этой функции.", show_alert=True)
         return
 
@@ -91,7 +99,7 @@ async def start_press_release(query, user, context, db, admin_id):
 
 async def handle_pr_target_selection(query, data, user, context, db, admin_id, target_chat_id):
     """Handle press release target (chat/thread) selection"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -172,7 +180,7 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
 
 async def handle_pr_add_photo(query, user, context, db, admin_id):
     """Кнопка '📷 Добавить фото' — во время создания пресс-релиза"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -195,7 +203,7 @@ async def handle_pr_add_photo(query, user, context, db, admin_id):
 
 async def handle_pr_remove_photo(query, user, context, db, admin_id):
     """Кнопка '🗑 Убрать фото' — убрать прикреплённое фото"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -228,7 +236,7 @@ async def handle_pr_remove_photo(query, user, context, db, admin_id):
 
 async def handle_pr_full_preview(query, user, context, db, admin_id):
     """Отправляет полный предпросмотр: медиа + весь текст, как будет в чате."""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -296,7 +304,7 @@ async def handle_pr_full_preview(query, user, context, db, admin_id):
 
 async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_id):
     """Publish press release immediately"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -412,7 +420,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
 
 async def handle_pr_schedule(query, user, context, db, admin_id):
     """Start scheduling flow - ask for date/time"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -448,7 +456,7 @@ async def handle_pr_schedule(query, user, context, db, admin_id):
 
 async def show_scheduled_posts(query, user, context, db, admin_id, target_chat_id=None):
     """Show list of scheduled posts with real thread names"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -505,7 +513,7 @@ async def show_scheduled_posts(query, user, context, db, admin_id, target_chat_i
 
 async def handle_pr_delete(query, data, user, context, db, admin_id, target_chat_id=None):
     """Delete a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -526,7 +534,7 @@ async def handle_pr_delete(query, data, user, context, db, admin_id, target_chat
 
 async def handle_pr_edit(query, data, user, context, db, admin_id, target_chat_id=None):
     """Show edit menu for a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -584,7 +592,7 @@ async def handle_pr_edit(query, data, user, context, db, admin_id, target_chat_i
 
 async def handle_pr_edit_text(query, data, user, context, db, admin_id):
     """Start editing text of a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -609,7 +617,7 @@ async def handle_pr_edit_text(query, data, user, context, db, admin_id):
 
 async def handle_pr_edit_photo(query, data, user, context, db, admin_id):
     """Start adding/replacing photo of a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -634,7 +642,7 @@ async def handle_pr_edit_photo(query, data, user, context, db, admin_id):
 
 async def handle_pr_edit_remove_photo(query, data, user, context, db, admin_id, target_chat_id=None):
     """Remove photo from a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -651,7 +659,7 @@ async def handle_pr_edit_remove_photo(query, data, user, context, db, admin_id, 
 
 async def handle_pr_edit_time(query, data, user, context, db, admin_id):
     """Start editing publish time of a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -685,7 +693,7 @@ async def handle_pr_edit_time(query, data, user, context, db, admin_id):
 
 async def handle_pr_edit_target(query, data, user, context, db, admin_id, target_chat_id):
     """Start changing target thread of a scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -729,7 +737,7 @@ async def handle_pr_edit_target(query, data, user, context, db, admin_id, target
 
 async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, target_chat_id):
     """Publish a scheduled post immediately from the edit menu"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -832,7 +840,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
 
 async def handle_pr_retarget(query, data, user, context, db, admin_id, target_chat_id):
     """Handle new target selection for an existing scheduled post"""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 
@@ -880,7 +888,7 @@ async def handle_pr_retarget(query, data, user, context, db, admin_id, target_ch
 
 async def handle_pr_refresh_topics(query, user, context, db, admin_id, target_chat_id):
     """Refresh topic list: purge generic names, probe alive threads, rebuild keyboard."""
-    if user.id != admin_id:
+    if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
 

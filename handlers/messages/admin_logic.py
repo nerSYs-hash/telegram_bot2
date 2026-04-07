@@ -285,63 +285,68 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     """
     if message.chat.type != 'private':
         return False
+
+    # Проверяем права: владелец или зам
+    from database.db_friend import is_deputy as _is_deputy_fn
+    _is_privileged = user.id == admin_id or await _is_deputy_fn(user.id)
+
     # === ОБРАБОТКА ВВОДА ID ВЕТКИ (для пресс-релиза) ===
-    if context.user_data.get('awaiting_thread_id') and user.id == admin_id:
+    if context.user_data.get('awaiting_thread_id') and _is_privileged:
         await _handle_awaiting_thread_id(message, user, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА ФОТО ДЛЯ ПРЕСС-РЕЛИЗА (кнопка «📷 Добавить фото») ===
-    if context.user_data.get('awaiting_pr_photo') and user.id == admin_id:
+    if context.user_data.get('awaiting_pr_photo') and _is_privileged:
         await _handle_awaiting_pr_photo(message, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА ИЗМЕНЕНИЯ ТЕКСТА ТЕКУЩЕГО ПРЕСС-РЕЛИЗА ===
-    if context.user_data.get('awaiting_pr_current_text_edit') and user.id == admin_id:
+    if context.user_data.get('awaiting_pr_current_text_edit') and _is_privileged:
         await _handle_awaiting_pr_current_text_edit(message, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА РЕДАКТИРОВАНИЯ ТЕКСТА ===
-    if context.user_data.get('awaiting_edit_text') and user.id == admin_id:
+    if context.user_data.get('awaiting_edit_text') and _is_privileged:
         await _handle_awaiting_edit_text(message, context, db)
         return True
 
     # === ОБРАБОТКА РЕДАКТИРОВАНИЯ ФОТО ===
-    if context.user_data.get('awaiting_edit_photo') and user.id == admin_id:
+    if context.user_data.get('awaiting_edit_photo') and _is_privileged:
         await _handle_awaiting_edit_photo(message, context, db)
         return True
 
     # === ОБРАБОТКА РЕДАКТИРОВАНИЯ ВРЕМЕНИ ===
-    if context.user_data.get('awaiting_edit_time') and user.id == admin_id:
+    if context.user_data.get('awaiting_edit_time') and _is_privileged:
         await _handle_awaiting_edit_time(message, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА РУЧНОГО ВВОДА ВЕТКИ ПРИ РЕДАКТИРОВАНИИ ===
-    if context.user_data.get('awaiting_edit_target_manual') and user.id == admin_id:
+    if context.user_data.get('awaiting_edit_target_manual') and _is_privileged:
         await _handle_awaiting_edit_target_manual(message, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА ВВОДА ВРЕМЕНИ (для отложенного пресс-релиза) ===
-    if context.user_data.get('awaiting_schedule_time') and user.id == admin_id:
+    if context.user_data.get('awaiting_schedule_time') and _is_privileged:
         await _handle_awaiting_schedule_time(message, user, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА ПРЕСС-РЕЛИЗА ===
-    if context.user_data.get('awaiting_press_release') and user.id == admin_id:
+    if context.user_data.get('awaiting_press_release') and _is_privileged:
         await _handle_awaiting_press_release(message, context, db, target_chat_id)
         return True
 
     # === ОБРАБОТКА УСТАНОВКИ КУРСА ===
-    if context.user_data.get('awaiting_exchange_rate') and user.id == admin_id:
+    if context.user_data.get('awaiting_exchange_rate') and _is_privileged:
         await _handle_awaiting_exchange_rate(message, context, db)
         return True
 
     # === ОБРАБОТКА ВВОДА @USERNAME ДЛЯ БАНКОВОГО ПЕРЕВОДА ===
-    if context.user_data.get('awaiting_bt_username') and user.id == admin_id:
+    if context.user_data.get('awaiting_bt_username') and _is_privileged:
         await _handle_awaiting_bt_username(message, user, context, db)
         return True
 
     # === ОБРАБОТКА ПЕРЕВОДА ИЗ БАНКА ===
-    if context.user_data.get('awaiting_bank_transfer') and user.id == admin_id:
+    if context.user_data.get('awaiting_bank_transfer') and _is_privileged:
         await _handle_awaiting_bank_transfer(message, user, context, db)
         return True
 
@@ -352,7 +357,7 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
         return True
 
     # === OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Журнал) ===
-    if context.user_data.get('owner_awaiting') and user.id == admin_id:
+    if context.user_data.get('owner_awaiting') and _is_privileged:
         _upd = update  # may be None if caller didn't pass it
         if context.user_data['owner_awaiting'] == 'journal_connect':
             from handlers.journal_handlers import handle_journal_text_input
