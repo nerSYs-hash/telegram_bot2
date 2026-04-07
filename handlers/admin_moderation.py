@@ -617,9 +617,10 @@ async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYP
 
     apps = await get_new_applications(exclude_locked=True)
     if not apps:
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
-        ])
+        buttons = [[InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]]
+        if update.effective_chat.type == 'private':
+            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="owner_dashboard")])
+        kb = InlineKeyboardMarkup(buttons)
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
             message_thread_id=update.message.message_thread_id,
@@ -718,9 +719,10 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
     if prev_app_id:
         apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
-        kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]
-        ])
+        buttons = [[InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]]
+        if query.message.chat.type == 'private':
+            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="owner_dashboard")])
+        kb = InlineKeyboardMarkup(buttons)
         try:
             await query.edit_message_text(
                 "✅ <b>Все заявки обработаны.</b>\n\nНажмите кнопку когда появятся новые.",
@@ -1143,6 +1145,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         # Определяем способ ввода и получаем данные
         search_by_id = False
         user_data = None
+        tg_id = None
 
         if text.startswith('#user'):
             # Формат #user123456789
@@ -1166,6 +1169,27 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             except ValueError:
                 await update.message.reply_text("❌ Введите #userID, числовой ID или @username.")
                 return True
+
+        # Если не нашли в db_friend — ищем в основной БД
+        if not user_data:
+            main_db = context.bot_data.get('db')
+            if main_db:
+                try:
+                    if search_by_id and tg_id:
+                        row = main_db.get_user(tg_id)
+                    else:
+                        row = main_db.get_user_by_username(text.lstrip('@'))
+                    if row:
+                        user_data = {
+                            'tg_id': row['user_id'],
+                            'first_name': row['first_name'],
+                            'last_name': row['last_name'],
+                            'username': row['username'],
+                            'q_name': None,
+                        }
+                        tg_id = row['user_id']
+                except Exception:
+                    pass
 
         # Если не нашли в базе — пробуем через Telegram API (только если есть username)
         tg_member = None

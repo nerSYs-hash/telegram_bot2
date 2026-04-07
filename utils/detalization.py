@@ -60,6 +60,26 @@ TX_TYPE_NAMES = {
     'secret_event': '🔮 Тайное событие',
     'easter_egg': '🔮 Тайная Пасхалка',
     'wandering_anomaly': '🔮 Блуждающая Аномалия',
+    # BBS
+    'bbs_popularity': '💫 Популярность BBS',
+    # Реакции
+    'reaction_given_reward': '❤️ Реакция (поставлена)',
+    'reaction_received_reward': '❤️ Реакция (получена)',
+    # Донаты
+    'donate_to_user': '💝 Донат участнику',
+    'donate_to_bank': '🏦 Донат в банк',
+    # Бинго
+    'bingo_win': '🎯 Бинго (выигрыш)',
+    'bingo_ticket': '🎯 Бинго (билет)',
+    'bingo_refund': '🎯 Бинго (возврат)',
+    'bingo_penalty': '🎯 Бинго (штраф)',
+    # Магазин
+    'shop_purchase': '🛒 Покупка в магазине',
+    'lootbox_win': '📦 Лутбокс (выигрыш)',
+    # Лотерея
+    'lottery_commission': '🎰 Комиссия лотереи',
+    # Прочее
+    'compensation_reward': '🔧 Компенсация',
 }
 
 # Маппинг описаний на чистые русские (для старых записей в БД)
