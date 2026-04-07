@@ -265,9 +265,9 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
     if (is_owner or is_admin_user) and db.is_feature_enabled('statistics'):
         keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
 
-    # ── Владелец ──
+    # ── Владелец/Зам ──
     if is_owner:
-        keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
+        keyboard.append([InlineKeyboardButton("💘 Шиппер", callback_data="owner_shipper_menu")])
         keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
         if db.is_feature_enabled('horoscope'):
             keyboard.append([InlineKeyboardButton("🔮 Гороскоп", callback_data="horoscope_menu")])
