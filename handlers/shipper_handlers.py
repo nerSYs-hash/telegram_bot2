@@ -62,7 +62,6 @@ async def send_shipper_panel(message, context, db, target_chat_id):
 
 
 
-
 def _shipper_status_text(db):
     try:
         enabled = db.get_setting("shipper_enabled", "0") == "1"
@@ -98,7 +97,7 @@ async def show_shipper_menu(query, context, db, target_chat_id):
             [InlineKeyboardButton("➕ Добавить фразу", callback_data="owner_shipper_add_phrase")],
             [InlineKeyboardButton("📋 Список фраз", callback_data="owner_shipper_list_1")],
             [InlineKeyboardButton("▶️ Запустить сейчас", callback_data="owner_shipper_run_now")],
-            [InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="back_to_menu")],
         ]
         await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:

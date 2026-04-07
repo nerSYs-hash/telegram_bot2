@@ -54,6 +54,7 @@ async def show_features_management(query, user, db, admin_id):
         return
 
     features = [
+        ('💘 Шиппер (Рулетка пар)', 'shipper'),
         ('👤 Личный кабинет (Профиль)', 'profile'),
         ('📊 Статистика', 'statistics'),
         ('🏆 ТОП-5 и команды', 'top'),
@@ -78,10 +79,14 @@ async def show_features_management(query, user, db, admin_id):
     keyboard = []
 
     for feature_name, feature_id in features:
-        is_enabled = db.is_feature_enabled(feature_id)
-        # Объединённый переключатель: показываем Вкл только если обе части активны
-        if feature_id == 'top':
-            is_enabled = is_enabled and db.is_feature_enabled('top_commands')
+        # Шиппер: источник правды — shipper_enabled (не feature_shipper)
+        if feature_id == 'shipper':
+            is_enabled = db.get_setting('shipper_enabled', '0') == '1'
+        else:
+            is_enabled = db.is_feature_enabled(feature_id)
+            # Объединённый переключатель для top
+            if feature_id == 'top':
+                is_enabled = is_enabled and db.is_feature_enabled('top_commands')
 
         if is_enabled:
             toggle_btn = InlineKeyboardButton("🟢 Вкл", callback_data=f"feature_off_{feature_id}")
@@ -93,7 +98,7 @@ async def show_features_management(query, user, db, admin_id):
             toggle_btn
         ])
 
-    keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="owner_system")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)
     await query.edit_message_text(message, reply_markup=reply_markup)
@@ -113,11 +118,15 @@ async def toggle_feature(query, data, user, db, admin_id):
         db.set_setting(f'feature_{feature_id}', '1')
         if feature_id == 'top':
             db.set_setting('feature_top_commands', '1')
+        if feature_id == 'shipper':
+            db.set_setting('shipper_enabled', '1')
         await query.answer("✅ Функция включена!", show_alert=False)
     elif action == 'off':
         db.set_setting(f'feature_{feature_id}', '0')
         if feature_id == 'top':
             db.set_setting('feature_top_commands', '0')
+        if feature_id == 'shipper':
+            db.set_setting('shipper_enabled', '0')
         await query.answer("❌ Функция отключена!", show_alert=False)
 
     await show_features_management(query, user, db, admin_id)

@@ -311,6 +311,8 @@ async def show_system_menu(query, db, admin_id: int) -> None:
 
     keyboard = [
         [InlineKeyboardButton(btn_label, callback_data="owner_maintenance_toggle")],
+        [InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")],
+        [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))

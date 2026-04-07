@@ -46,8 +46,6 @@ def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
         [balance_or_profile, KeyboardButton("📊 Курс")],
         [special_btn, KeyboardButton("📋 Меню")],
     ]
-    if is_owner or is_deputy:
-        keyboard.append([KeyboardButton("💘 Шиппер")])
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
 
 

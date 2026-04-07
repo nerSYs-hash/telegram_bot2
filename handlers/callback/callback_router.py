@@ -163,7 +163,7 @@ class CallbackHandler:
 
         # ── Владелец/Зам ──
         if is_owner:
-            keyboard.append([InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")])
+            keyboard.append([InlineKeyboardButton("💘 Шиппер", callback_data="owner_shipper_menu")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
             if self.db.is_feature_enabled('horoscope'):
