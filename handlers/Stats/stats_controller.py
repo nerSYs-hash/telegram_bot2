@@ -232,17 +232,17 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         r = db.cursor.fetchone()
         return int(r['count']) if r and r['count'] else 0
 
-    # ── 1. Сообщений (все люди, боты отфильтрованы при записи) ──
+    # ── 1. Сообщений — из chat_stats (единый источник с Excel) ──
     db.cursor.execute('''
         SELECT COALESCE(SUM(total_messages), 0) as count
-        FROM user_stats
+        FROM chat_stats
         WHERE date >= ? AND date <= ?
     ''', (date_from, date_to))
     total_messages = int(db.cursor.fetchone()['count'])
 
     prev_msgs = _prev_val('''
         SELECT COALESCE(SUM(total_messages), 0) as count
-        FROM user_stats
+        FROM chat_stats
         WHERE date >= ? AND date <= ?
     ''', (prev_start, prev_end))
 
@@ -272,15 +272,21 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         avg_days   = _d(total_days) / _d(len(all_users))
         stats_message += f"⏱ Средний срок в чате: {int(avg_days)} дней\n"
 
-    # Пульсов добыто
+    # Пульсов заработано — все квесты и активности
     db.cursor.execute('''
-        SELECT SUM(amount) as total FROM transactions
-        WHERE to_user_id IS NOT NULL AND transaction_type = 'message_reward'
+        SELECT COALESCE(SUM(amount), 0) as total FROM transactions
+        WHERE to_user_id IS NOT NULL
+          AND transaction_type IN (
+              'message_reward', 'combo_reward', 'sprint_reward',
+              'referral_reward', 'lottery_win', 'bingo_win',
+              'monthly_gift', 'reaction_given_reward', 'reaction_received_reward',
+              'lootbox_win', 'bbs_popularity', 'admin_give', 'compensation_reward'
+          )
           AND timestamp >= ? AND timestamp <= ?
     ''', (start_date, end_date))
     r = db.cursor.fetchone()
     total_pulses = _d(r['total']) if r['total'] else Decimal('0')
-    stats_message += f"💎 Добыто Пульсов: {format_number(total_pulses)}\n"
+    stats_message += f"💎 Заработано Пульсов: {format_number(total_pulses)}\n"
 
     # Вовлечённость
     try:
