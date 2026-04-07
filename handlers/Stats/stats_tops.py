@@ -35,6 +35,25 @@ def _mark_user_left(db, user_id):
         db.conn.commit()
         logging.info(f"💰 TOP filter: user {user_id} balance {balance} → frozen 30d, returned to bank")
 
+async def _get_excluded_ids(context, chat_id):
+    """Get set of user IDs to exclude: Telegram admins + bot deputies."""
+    excluded = set()
+    try:
+        admins = await context.bot.get_chat_administrators(chat_id)
+        excluded = {a.user.id for a in admins}
+    except Exception as e:
+        logging.warning(f"Could not fetch admins: {e}")
+    try:
+        from database.db_friend import get_all_deputies
+        deputies = await get_all_deputies()
+        for d in deputies:
+            deputy_id = d.get('tg_id') or d.get('user_id')
+            if deputy_id:
+                excluded.add(deputy_id)
+    except Exception as e:
+        logging.warning(f"Could not fetch deputies for top filter: {e}")
+    return excluded
+
 async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limit=5):
     """Живая проверка через Telegram API: в топе только те, кто реально в чате."""
     active_users = []
@@ -63,8 +82,7 @@ async def show_top(query, db, target_chat_id, context=None):
     admin_ids = set()
     if context:
         try:
-            admins = await context.bot.get_chat_administrators(target_chat_id)
-            admin_ids = {a.user.id for a in admins}
+            admin_ids = await _get_excluded_ids(context, target_chat_id)
         except: pass
     db.cursor.execute('''
         SELECT u.user_id, u.username, u.first_name, u.balance,
@@ -98,7 +116,15 @@ async def show_top5_menu(query, user):
 
 async def show_top5_activists(query, user, db, context=None):
     # Берём кешированные % из БД (обновляются каждый час)
-    top_users = db.get_top5_percent()
+    excluded_ids = set()
+    if context:
+        try:
+            target_chat_id = int(os.getenv('TARGET_CHAT_ID', 0))
+            excluded_ids = await _get_excluded_ids(context, target_chat_id)
+        except Exception:
+            pass
+    top_users = [u for u in db.get_top5_percent()
+                 if u['user_id'] not in excluded_ids][:5]
 
     message = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
 
@@ -121,23 +147,22 @@ async def show_top5_rich(query, user, db, context=None):
     today = get_today_date_msk()
     target_chat_id = int(os.getenv('TARGET_CHAT_ID'))
     
-    admin_ids = set()
+    excluded_ids = set()
     if context:
         try:
-            admins_list = await context.bot.get_chat_administrators(target_chat_id)
-            admin_ids = {a.user.id for a in admins_list}
+            excluded_ids = await _get_excluded_ids(context, target_chat_id)
         except Exception:
             pass
-    
+
     db.cursor.execute('''
         SELECT u.user_id, u.username, u.first_name, u.balance, COALESCE(us_today.pulses_mined, 0) as pulses_today
         FROM users u LEFT JOIN user_stats us_today ON u.user_id = us_today.user_id AND us_today.date = ?
         WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         ORDER BY u.balance DESC LIMIT 20
     ''', (today,))
-    
+
     all_users = db.cursor.fetchall()
-    top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
+    top_users = await _filter_active_users(context, target_chat_id, all_users, excluded_ids, db, limit=5)
 
     message = "💰 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
     if top_users:

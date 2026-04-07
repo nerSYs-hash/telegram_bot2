@@ -369,7 +369,7 @@ def calculate_top5_percent(db):
     total_ai = sum(float(r['activity_index']) for r in rows) if rows else 0
 
     result = []
-    for rank, row in enumerate(rows[:5], 1):
+    for rank, row in enumerate(rows[:10], 1):
         ai = float(row['activity_index'])
         pct = (ai / total_ai * 100) if total_ai > 0 else 0
         result.append({

@@ -17,14 +17,24 @@ from utils.helpers import format_number, get_today_date_msk, get_moscow_time
 # ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ══════════════════════════════════════════════════════════════════
 
-async def _get_admin_ids(context, chat_id):
-    """Get set of admin user IDs from Telegram API."""
+async def _get_excluded_ids(context, chat_id):
+    """Get set of user IDs to exclude from tops: Telegram admins + bot deputies."""
+    excluded = set()
     try:
         admins = await context.bot.get_chat_administrators(chat_id)
-        return {admin.user.id for admin in admins}
+        excluded = {admin.user.id for admin in admins}
     except Exception as e:
         logging.warning(f"Could not fetch admins from API: {e}")
-        return set()
+    try:
+        from database.db_friend import get_all_deputies
+        deputies = await get_all_deputies()
+        for d in deputies:
+            deputy_id = d.get('tg_id') or d.get('user_id')
+            if deputy_id:
+                excluded.add(deputy_id)
+    except Exception as e:
+        logging.warning(f"Could not fetch deputies for top filter: {e}")
+    return excluded
 
 def _mark_user_left(db, user_id):
     """Пометить ушедшего: is_left=1 + заморозить баланс + вернуть пульсы в банк."""
@@ -85,7 +95,7 @@ async def _filter_active_users(context, chat_id, users_list, admin_ids, db, limi
 async def show_top_rich(message, context, db):
     try:
         today = get_today_date_msk()
-        admin_ids = await _get_admin_ids(context, message.chat.id)
+        admin_ids = await _get_excluded_ids(context,message.chat.id)
 
         # Берем 20 человек с запасом
         db.cursor.execute('''
@@ -124,7 +134,9 @@ async def show_top_rich(message, context, db):
 async def show_top_activists(message, context, db):
     try:
         # Берём кешированные % из БД (обновляются каждый час)
-        top_users = db.get_top5_percent()
+        excluded_ids = await _get_excluded_ids(context, message.chat.id)
+        top_users = [u for u in db.get_top5_percent()
+                     if u['user_id'] not in excluded_ids][:5]
 
         if not top_users:
             await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности.")
@@ -152,7 +164,7 @@ async def show_top_activists(message, context, db):
 
 async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     today = get_today_date_msk()
-    admin_ids = await _get_admin_ids(context, update.message.chat.id)
+    admin_ids = await _get_excluded_ids(context,update.message.chat.id)
 
     db.cursor.execute('''
         SELECT u.user_id, u.username, u.first_name, u.balance, 
@@ -192,7 +204,7 @@ async def top5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
         return
 
     try:
-        admin_ids = await _get_admin_ids(context, target_chat_id)
+        admin_ids = await _get_excluded_ids(context,target_chat_id)
         all_users = db.get_top_users_by_balance(limit=20, exclude_admins=True)
         top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
 

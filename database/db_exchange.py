@@ -375,13 +375,13 @@ def save_top5_percent(db, entries, window_start, window_end):
 
 
 def get_top5_percent(db):
-    """Получить кешированный ТОП-5 % активности."""
+    """Получить кешированный ТОП-5 % активности (возвращает до 10 для фильтрации замов)."""
     db.cursor.execute('''
         SELECT tap.*, u.username, u.first_name
         FROM top_activists_percent tap
         JOIN users u ON tap.user_id = u.user_id
         ORDER BY tap.rank ASC
-        LIMIT 5
+        LIMIT 10
     ''')
     return db.cursor.fetchall()
 
