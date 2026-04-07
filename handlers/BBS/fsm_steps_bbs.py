@@ -384,11 +384,10 @@ async def start_about_step(src, context):
     set_bbs_state(context, BBS.AWAITING_ABOUT)
     text = (
         "💬 <b>Шаг 8/8 — О себе</b>\n\n"
-        "Напишите немного о себе (до 400 символов).\n"
-        "Или нажмите <b>«Пропустить»</b>."
+        "Расскажите немного о себе (до 400 символов).\n\n"
+        "<i>Обязательное поле — без него анкета не выйдет.</i>"
     )
     keyboard = [
-        [InlineKeyboardButton("⏭ Пропустить", callback_data="bbs_about_skip")],
         [InlineKeyboardButton("🔙 Назад", callback_data="bbs_back_to_goal")],
         [InlineKeyboardButton("❌ Отмена", callback_data="bbs_cancel")],
     ]
@@ -397,15 +396,22 @@ async def start_about_step(src, context):
 
 async def handle_about_input(message, context):
     text = (message.text or '').strip()
+    if not text:
+        await _step_msg(message, context,
+            "❌ Поле «О себе» обязательно. Напишите хотя бы пару слов о себе:",
+            [[InlineKeyboardButton("🔙 Назад", callback_data="bbs_back_to_goal")],
+             [InlineKeyboardButton("❌ Отмена", callback_data="bbs_cancel")]])
+        set_bbs_state(context, BBS.AWAITING_ABOUT)
+        return
     if len(text) > 400:
         await _step_msg(message, context,
             f"❌ Слишком длинный текст ({len(text)}/400). Сократите.",
-            [[InlineKeyboardButton("⏭ Пропустить", callback_data="bbs_about_skip")],
+            [[InlineKeyboardButton("🔙 Назад", callback_data="bbs_back_to_goal")],
              [InlineKeyboardButton("❌ Отмена", callback_data="bbs_cancel")]])
         set_bbs_state(context, BBS.AWAITING_ABOUT)
         return
 
-    get_bbs_data(context)['about'] = text if text else None
+    get_bbs_data(context)['about'] = text
     context.user_data.pop('bbs_tweaking', None)
     return True
 

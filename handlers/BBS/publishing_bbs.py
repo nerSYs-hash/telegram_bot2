@@ -95,10 +95,11 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 message_thread_id=bbs_thread_id,
                 media=media,
             )
+            sent_message_ids.extend([m.message_id for m in messages])
             btn_msg = await context.bot.send_message(
                 chat_id=target_chat_id,
                 message_thread_id=bbs_thread_id,
-                text=" 👆<b>Понравился ?</b>", 
+                text=" 👆<b>Понравился ?</b>",
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
             )
@@ -257,8 +258,6 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
     
     # Теперь текст соберется без ошибок
     profile_text = build_profile_text(parsed_profile)
-    profile_text += f"\n\n<i>© Pulse Chat Community 2026</i>"
-    
     sent_ids =[]
 
     try:
@@ -345,3 +344,76 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
     except Exception as e:
         logging.error(f"BBS: Error updating message_ids: {e}")
         raise e
+
+
+# ═══════════════════════════════════════════════════════════════
+# РЕДАКТИРОВАНИЕ НА МЕСТЕ (без удаления и перемещения)
+# ═══════════════════════════════════════════════════════════════
+
+async def update_profile_in_place(bot, db, user_id, target_chat_id):
+    """
+    Обновляет анкету «на месте»: редактирует caption/text существующих
+    сообщений через edit_message_caption / edit_message_text.
+    Если редактирование невозможно — fallback на delete+republish.
+    """
+    profile = get_profile(db, user_id)
+    if not profile:
+        raise ValueError("Анкета не найдена в БД")
+
+    parsed = dict(profile)
+    for field in ['photos', 'params', 'roles', 'city', 'goals', 'message_ids']:
+        if field in parsed and isinstance(parsed[field], str):
+            try:
+                parsed[field] = json.loads(parsed[field])
+            except Exception:
+                parsed[field] = [] if field != 'params' else {}
+
+    msg_ids = parsed.get('message_ids') or []
+    photos = parsed.get('photos') or []
+    thread_id = profile.get('thread_id')
+
+    profile_text = build_profile_text(parsed)
+
+    if not msg_ids:
+        # Нет сохранённых ID — fallback на republish
+        logging.info(f"BBS update_in_place: no message_ids for user {user_id}, fallback republish")
+        await republish_profile(bot, db, user_id, target_chat_id, thread_id)
+        return
+
+    first_msg_id = msg_ids[0]
+    edited_in_place = False
+
+    if photos:
+        # Первое сообщение — фото с caption
+        try:
+            await bot.edit_message_caption(
+                chat_id=target_chat_id,
+                message_id=first_msg_id,
+                caption=profile_text,
+                parse_mode='HTML',
+                reply_markup=write_button(user_id, bot.username),
+            )
+            edited_in_place = True
+            logging.info(f"BBS update_in_place: caption edited for user {user_id}")
+        except Exception as e:
+            logging.warning(f"BBS update_in_place: edit_message_caption failed: {e}")
+    else:
+        # Текстовое сообщение
+        try:
+            await bot.edit_message_text(
+                chat_id=target_chat_id,
+                message_id=first_msg_id,
+                text=profile_text,
+                parse_mode='HTML',
+                reply_markup=write_button(user_id, bot.username),
+            )
+            edited_in_place = True
+            logging.info(f"BBS update_in_place: text edited for user {user_id}")
+        except Exception as e:
+            logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
+
+    if not edited_in_place:
+        # Fallback: удалить старые и перепубликовать
+        logging.info(f"BBS update_in_place: fallback to republish for user {user_id}")
+        await delete_profile_chat_messages(bot, profile, target_chat_id)
+        await republish_profile(bot, db, user_id, target_chat_id, thread_id)

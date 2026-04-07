@@ -145,22 +145,11 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         db.update_bank_balance(balance, 'add')
         db.add_transaction(
             user_id,
-            None,  # To bank
+            None,
             balance,
             'return_on_leave',
-            f'Покинул чат, баланс заморожен на 30 дней и возвращён в банк'
+            'Покинул чат, баланс заморожен на 30 дней и возвращён в банк'
         )
-    else:
-        # Баланс 0 — транзакцию всё равно создаём для учёта в статистике
-        db.add_transaction(
-            user_id,
-            None,
-            0,
-            'return_on_leave',
-            'Покинул чат (баланс 0)'
-        )
-        
-        # Notify owner with detailed info
         try:
             await context.bot.send_message(
                 chat_id=admin_id,
@@ -173,7 +162,14 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         except Exception as e:
             logging.error(f"Error sending leave notification: {e}")
     else:
-        # Notify even if balance is 0
+        # Баланс 0 — транзакцию всё равно создаём для учёта в статистике
+        db.add_transaction(
+            user_id,
+            None,
+            0,
+            'return_on_leave',
+            'Покинул чат (баланс 0)'
+        )
         try:
             await context.bot.send_message(
                 chat_id=admin_id,

@@ -15,7 +15,7 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from handlers.BBS.constants_bbs import BBS, EDITABLE_FIELDS, PARAM_OPTIONS, ROLE_OPTIONS, GOAL_OPTIONS
 from handlers.BBS.helpers_bbs import set_bbs_state
 from handlers.BBS.database_bbs import get_profile
-from handlers.BBS.publishing_bbs import delete_profile_chat_messages, republish_profile, safe_answer
+from handlers.BBS.publishing_bbs import safe_answer
 
 
 def _get_chat_id(context, explicit=None):
@@ -91,6 +91,7 @@ def _build_edit_menu_keyboard(edited: list) -> list:
             rows.append([InlineKeyboardButton(f"🔒 {label}", callback_data="bbs_noop")])
         else:
             rows.append([InlineKeyboardButton(label, callback_data=f"bbs_edit_field_{fkey}")])
+    rows.append([InlineKeyboardButton("📤 Опубликовать изменения", callback_data="bbs_publish_now")])
     rows.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_dating")])
     return rows
 
@@ -172,29 +173,7 @@ async def apply_edit_and_republish(
     # 2) MARK EDITED
     mark_field_edited(db, profile_id, field_name)
 
-    # 3) DELETE OLD MESSAGES + 4) REPUBLISH
-    ok = False
-    if chat_id:
-        profile = get_profile(db, user_id)
-        if profile:
-            try:
-                await delete_profile_chat_messages(context.bot, profile, chat_id)
-                logging.info("BBS EDIT: msgs deleted")
-            except Exception as e:
-                logging.warning(f"BBS EDIT delete error: {e}")
-
-            t = profile.get('thread_id') or thread_id
-            try:
-                await republish_profile(context.bot, db, user_id, chat_id, t)
-                ok = True
-                logging.info(f"BBS EDIT: republished thread={t}")
-            except Exception as e:
-                # Теперь ошибка доходит сюда, и 'ok' остается False
-                logging.error(f"BBS EDIT republish error: {e}")
-    else:
-        logging.error("BBS EDIT: NO chat_id!")
-
-    # 5) SHOW EDIT MENU
+    # 3) SHOW EDIT MENU with publish button
     set_bbs_state(context, BBS.EDIT_CHOOSE_FIELD)
     profile = get_profile(db, user_id)
     label = EDITABLE_FIELDS.get(field_name, (field_name,))[0]
@@ -207,15 +186,12 @@ async def apply_edit_and_republish(
     edited = get_edited_fields(profile)
     kb = _build_edit_menu_keyboard(edited)
     left = len(EDITABLE_FIELDS) - len(edited)
-    
-    # --- ИСПРАВЛЕНИЕ: Четкий статус о том, удалось ли отправить в ветку ---
-    status = "✅ Пост в чате успешно обновлён!" if ok else "⚠️ Ошибка обновления поста (он мог быть удалён или проблема с текстом)."
 
     text = (
-        f"<b>Редактирование: «{label}»</b>\n\n"
-        f"Статус: {status}\n\n"
+        f"✅ <b>«{label}»</b> сохранено.\n\n"
         f"✏️ Доступно: <b>{left}</b> из {len(EDITABLE_FIELDS)}.\n"
-        f"🔒 = уже изменено за 24 часа."
+        f"🔒 = уже изменено за 24 часа.\n\n"
+        f"Нажмите <b>«Опубликовать изменения»</b> чтобы применить в чате."
     )
     await _reply(src, text, InlineKeyboardMarkup(kb))
 

@@ -8,6 +8,7 @@ bbs_*, menu_bbs. Маршрутизирует нажатия: навигация
 """
 
 import json
+import logging
 from datetime import datetime
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
@@ -26,7 +27,7 @@ from handlers.BBS.fsm_steps_bbs import (
     start_city_step, build_city_keyboard, start_goal_step, build_goal_keyboard,
     start_about_step, show_preview,
 )
-from handlers.BBS.publishing_bbs import publish_profile, delete_profile_messages
+from handlers.BBS.publishing_bbs import publish_profile, delete_profile_messages, update_profile_in_place
 from handlers.BBS.editing_bbs import (
     apply_edit_and_republish, get_edited_fields, _build_edit_menu_keyboard,
     _build_edit_params_keyboard, _build_edit_role_keyboard,
@@ -315,12 +316,9 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
             await start_about_step(query, context)
         return True
 
-    # ── О себе: пропуск ──
+    # ── О себе: пропуск (отключён — поле обязательное) ──
     if data == 'bbs_about_skip':
-        get_bbs_data(context)['about'] = None
-        set_bbs_state(context, None)
-        context.user_data.pop('bbs_tweaking', None)
-        await show_preview(query, context)
+        await query.answer("❌ Поле «О себе» обязательно для заполнения.", show_alert=True)
         return True
 
     # ── Доработка анкеты (из превью) ──
@@ -473,25 +471,39 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
         if field == 'photo':
             set_bbs_state(context, BBS.EDIT_PHOTO)
             context.user_data['bbs_edit_photos'] = []
+            cur_photos = json.loads(profile.get('photos') or '[]')
             await query.edit_message_text(
-                "📷 Отправьте новые фото (1–3).\nЗатем нажмите «Готово».",
+                f"📷 <b>Фото</b>\n\nТекущее: <b>{len(cur_photos)} фото</b>\n\nОтправьте новые фото (1–3), затем нажмите «Готово».",
+                parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("✅ Готово", callback_data="bbs_edit_photo_done")],
                     [InlineKeyboardButton("🔙 Назад", callback_data="bbs_edit_start")],
                 ]),
             )
         elif field == 'name':
             set_bbs_state(context, BBS.EDIT_NAME)
-            await query.edit_message_text("✍️ Введите новое имя (кириллица, 2–30 символов):", reply_markup=back_kb)
+            cur = profile.get('name') or '—'
+            await query.edit_message_text(
+                f"✍️ <b>Имя</b>\n\nТекущее: <b>{cur}</b>\n\nВведите новое имя (кириллица, 2–30 символов):",
+                parse_mode='HTML',
+                reply_markup=back_kb,
+            )
         elif field == 'age':
             set_bbs_state(context, BBS.EDIT_AGE)
-            await query.edit_message_text("🎂 Введите новый возраст или дату рождения:", reply_markup=back_kb)
+            cur = str(profile.get('age') or '—')
+            await query.edit_message_text(
+                f"🎂 <b>Возраст</b>\n\nТекущее: <b>{cur}</b>\n\nВведите новый возраст или дату рождения (ДД.ММ.ГГГГ):",
+                parse_mode='HTML',
+                reply_markup=back_kb,
+            )
         elif field == 'params':
             set_bbs_state(context, BBS.EDIT_PARAMS)
             params = json.loads(profile.get('params') or '{}')
             context.user_data['bbs_edit_params'] = params
             context.user_data['bbs_edit_param_editing'] = None
+            cur_parts = [f"{k}: {v}" for k, v in params.items() if v]
+            cur = ', '.join(cur_parts) if cur_parts else '—'
             await query.edit_message_text(
-                "📏 <b>Редактирование параметров</b>\n\nНажмите на параметр для изменения.",
+                f"📏 <b>Параметры</b>\n\nТекущие: <code>{cur}</code>\n\nНажмите на параметр для изменения.",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(_build_edit_params_keyboard(params)),
             )
@@ -499,8 +511,9 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
             set_bbs_state(context, BBS.EDIT_ROLE)
             roles = json.loads(profile.get('roles') or '[]')
             context.user_data['bbs_edit_roles'] = roles
+            cur = ', '.join(roles) if roles else '—'
             await query.edit_message_text(
-                "🎭 <b>Редактирование роли</b>\n\nВыберите вашу роль (она сразу сохранится):",
+                f"🎭 <b>Роль</b>\n\nТекущая: <b>{cur}</b>\n\nВыберите новую роль (сохранится сразу):",
                 parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(_build_edit_role_keyboard(roles)),
             )
@@ -508,21 +521,30 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
             set_bbs_state(context, BBS.EDIT_CITY)
             cities = json.loads(profile.get('city') or '[]')
             context.user_data['bbs_edit_cities'] = cities
+            cur = ', '.join(cities) if cities else '—'
             await query.edit_message_text(
-                "🏙 Выберите город:", parse_mode='HTML',
+                f"🏙 <b>Город</b>\n\nТекущие: <code>{cur}</code>\n\nВыберите город или введите свой:",
+                parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(_build_edit_city_keyboard(cities)),
             )
         elif field == 'goal':
             set_bbs_state(context, BBS.EDIT_GOAL)
             goals = json.loads(profile.get('goals') or '[]')
             context.user_data['bbs_edit_goals'] = goals
+            cur = ', '.join(goals) if goals else '—'
             await query.edit_message_text(
-                "🎯 Выберите цели:", parse_mode='HTML',
+                f"🎯 <b>Цель</b>\n\nТекущие: <code>{cur}</code>\n\nВыберите новые цели:",
+                parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup(_build_edit_goal_keyboard(goals)),
             )
         elif field == 'about':
             set_bbs_state(context, BBS.EDIT_ABOUT)
-            await query.edit_message_text("💬 Введите новый текст «О себе» (до 400 символов):", reply_markup=back_kb)
+            cur = profile.get('about') or '—'
+            await query.edit_message_text(
+                f"💬 <b>О себе</b>\n\nТекущее:\n<i>{cur}</i>\n\nВведите новый текст (до 400 символов):",
+                parse_mode='HTML',
+                reply_markup=back_kb,
+            )
         return True
 
     # ── Edit: фото готово ──
@@ -646,6 +668,27 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
             query, context, db, target_chat_id, bbs_thread_id,
             field_name='goal', db_column='goals', value=json.dumps(goals),
         )
+        return True
+
+    # ── Публикация изменений на месте ──
+    if data == 'bbs_publish_now':
+        profile = get_profile(db, user_id)
+        if not profile:
+            await query.answer("Анкета не найдена.", show_alert=True)
+            return True
+        try:
+            await update_profile_in_place(context.bot, db, user_id, target_chat_id)
+            await query.edit_message_text(
+                "✅ <b>Анкета обновлена в чате!</b>\n\nИзменения применены на месте.",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("✏️ Ещё редактировать", callback_data="bbs_edit_start")],
+                    [InlineKeyboardButton("🔙 В меню", callback_data="menu_bbs")],
+                ]),
+            )
+        except Exception as e:
+            logging.error(f"BBS bbs_publish_now error: {e}")
+            await query.answer("❌ Ошибка публикации. Попробуйте ещё раз.", show_alert=True)
         return True
 
     return False
