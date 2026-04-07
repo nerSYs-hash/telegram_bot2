@@ -139,6 +139,7 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     ''', (balance, freeze_until, user_id))
     db.conn.commit()
     
+    # Всегда фиксируем выход (транзакция нужна для подсчёта вышедших в статистике)
     if balance > 0:
         db.update_user_balance(user_id, 0, 'set')
         db.update_bank_balance(balance, 'add')
@@ -148,6 +149,15 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
             balance,
             'return_on_leave',
             f'Покинул чат, баланс заморожен на 30 дней и возвращён в банк'
+        )
+    else:
+        # Баланс 0 — транзакцию всё равно создаём для учёта в статистике
+        db.add_transaction(
+            user_id,
+            None,
+            0,
+            'return_on_leave',
+            'Покинул чат (баланс 0)'
         )
         
         # Notify owner with detailed info
