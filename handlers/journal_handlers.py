@@ -357,7 +357,6 @@ async def handle_journal_text_input(update, context, db) -> bool:
     if context.user_data.get('owner_awaiting') != 'journal_connect':
         return False
 
-    context.user_data.pop('owner_awaiting', None)
     message = update.effective_message
 
     channel_id = None
@@ -370,13 +369,14 @@ async def handle_journal_text_input(update, context, db) -> bool:
         # Если переслано от имени канала (sender_chat)
         elif hasattr(message.forward_origin, 'sender_chat'):
             channel_id = message.forward_origin.sender_chat.id
-            
+
     elif message.text:
         # Ручной ввод ID (оставляем как было)
         text = message.text.strip()
         try:
             channel_id = int(text)
         except (ValueError, TypeError):
+            # Состояние НЕ сбрасываем — пользователь может попробовать снова
             await message.reply_text(
                 "❌ Некорректный ID.\nПерешлите сообщение из канала или введите ID.",
                 reply_markup=InlineKeyboardMarkup([
@@ -411,7 +411,8 @@ async def handle_journal_text_input(update, context, db) -> bool:
         )
         return True
 
-    # Сохраняем
+    # Сохраняем (сбрасываем состояние только здесь — после успешной проверки)
+    context.user_data.pop('owner_awaiting', None)
     db.set_setting('journal_channel_id', str(channel_id))
 
     # Тестовое сообщение
