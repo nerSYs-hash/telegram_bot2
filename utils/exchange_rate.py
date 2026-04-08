@@ -320,7 +320,7 @@ ACTIVITY_INDEX_HOURLY_SQL = ' + '.join(SQL_WEIGHTS_HOURLY.values())
 
 def calculate_top5_percent(db):
     """
-    Рассчитать ТОП-5 % активности за скользящее 4-часовое окно.
+    Рассчитать ТОП-5 % активности за скользящие 24 часа.
     Каждый пользователь = его AI / сумма AI всех × 100%.
 
     Returns:
@@ -330,9 +330,9 @@ def calculate_top5_percent(db):
     from utils.helpers import get_moscow_time
     now = get_moscow_time()
 
-    # Определяем окно: последние 4 часа
+    # Определяем окно: последние 24 часа (скользящие сутки)
     window_end = now
-    window_start = now - timedelta(hours=4)
+    window_start = now - timedelta(hours=24)
 
     # Строим условие WHERE для часов
     # Окно может пересекать границу дней (напр. 22:00 - 02:00)
