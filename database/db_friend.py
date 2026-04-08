@@ -885,14 +885,17 @@ async def get_all_admins() -> List[dict]:
             rows = await cursor.fetchall()
             admins = rows_to_dict_list(rows)
     
-    # Добавляем владельца в список (если его там еще нет)
+    # Добавляем владельца в список (даже если его нет в таблице users)
     owner_in_list = any(admin['tg_id'] == OWNER_ID for admin in admins)
     if not owner_in_list:
         owner = await get_user(OWNER_ID)
         if owner:
             admins.append(owner)
-            logger = logging.getLogger(__name__)
-            logger.info(f"Added owner {OWNER_ID} to admins list")
+        else:
+            # Владелец не зарегистрирован в БД — всё равно включаем минимальную запись
+            admins.append({'tg_id': OWNER_ID})
+        logger = logging.getLogger(__name__)
+        logger.info(f"Added owner {OWNER_ID} to admins list")
     
     logger = logging.getLogger(__name__)
     logger.info(f"Total recipients for notifications: {len(admins)}")
