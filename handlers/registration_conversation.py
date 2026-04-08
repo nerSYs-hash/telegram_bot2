@@ -139,15 +139,18 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             owner_name = owner_chat.full_name or str(OWNER_ID)
         except Exception:
             owner_name = str(OWNER_ID)
+        blacklist_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✉️ Написать администратору", url=f"tg://user?id={OWNER_ID}")]
+        ])
         await context.bot.send_message(
             chat_id=user_id,
             text=(
                 f"{user_name}, мы сожалеем, но ты заблокирован администрацией "
                 f"чата Pulse 4ever из-за: {reason}.\n\n"
-                f"Если считаешь, что попал в ЧС по ошибке, свяжись с администратором: "
-                f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>'
+                f"Если считаешь, что попал в ЧС по ошибке — нажми кнопку ниже."
             ),
-            parse_mode="HTML"
+            parse_mode="HTML",
+            reply_markup=blacklist_kb
         )
         return ConversationHandler.END
 
