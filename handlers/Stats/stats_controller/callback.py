@@ -311,8 +311,9 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         ('Медиа',                   'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
         ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
         ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
-        ('Ответы ↙',                'SELECT COALESCE(SUM(replies_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',   False),
-        ('Ответы ↗',                'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
+        ('Ответов всего',           'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
+        ('Отвечали (уник.)',        'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_sent > 0',     False),
+        ('Получили ответ (уник.)',  'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_received > 0', False),
         ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
         ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
     ]
