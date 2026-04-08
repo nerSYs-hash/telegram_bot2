@@ -865,6 +865,12 @@ async def add_deputy(tg_id: int, added_by: int):
             "INSERT OR IGNORE INTO admins (tg_id, added_by) VALUES (?, ?)",
             (tg_id, added_by)
         )
+        # Убедиться что есть запись в users (иначе UPDATE ниже ничего не сделает
+        # и is_deputy() будет возвращать False)
+        await db.execute(
+            "INSERT OR IGNORE INTO users (tg_id, role) VALUES (?, ?)",
+            (tg_id, UserRole.DEPUTY)
+        )
         await db.execute(
             "UPDATE users SET role = ? WHERE tg_id = ?",
             (UserRole.DEPUTY, tg_id)
