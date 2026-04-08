@@ -137,7 +137,7 @@ async def _send_invite_friends_after_delay(bot, user_id: int, user_name: str, de
             text=(
                 f"{user_name},\n"
                 f"Приглашай своих знакомых и друзей в чат Pulse 💗💗💗\n\n"
-                f"Отправь нашего бота @Pulse_4ever_bot своему «статусному» другу!"
+                f"Отправь нашего бота @Pulse_On_bot своему «статусному» другу!"
             )
         )
         logger.info(f"✅ Invite friends message sent to {user_id}")
