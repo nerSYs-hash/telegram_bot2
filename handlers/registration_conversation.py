@@ -6,7 +6,7 @@ from dateutil.relativedelta import relativedelta
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, ReplyKeyboardRemove
 from telegram.ext import ContextTypes, ConversationHandler, CommandHandler, MessageHandler, filters, CallbackQueryHandler
 
-from database.db_friend import get_user, create_user, update_user, create_application, save_application_message_id
+from database.db_friend import get_user, create_user, update_user, create_application, save_application_message_id, get_all_admins, add_application_message
 from config import OWNER_ID, ADMIN_CHAT_ID, APPLICATIONS_THREAD_ID
 
 logger = logging.getLogger(__name__)
@@ -588,28 +588,30 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"📅 <b>Блок Е:</b>\n"
         f"Дата заявки: {now_msk}"
     )
-    sent = None
-    try:
-        sent = await context.bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            message_thread_id=APPLICATIONS_THREAD_ID,
-            text=admin_text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
-    except Exception as e:
-        logger.warning(f"Не удалось отправить в тред {APPLICATIONS_THREAD_ID}: {e}. Пробуем без треда.")
+    # Broadcast: рассылаем карточку заявки в ЛС всем админам и владельцу
+    admins = await get_all_admins()
+    sent_count = 0
+    last_sent = None
+    for admin in admins:
+        admin_id = admin.get('tg_id')
+        if not admin_id:
+            continue
         try:
             sent = await context.bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
+                chat_id=admin_id,
                 text=admin_text,
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
-        except Exception as e2:
-            logger.error(f"Не удалось отправить заявку админам: {e2}")
-    if sent:
-        await save_application_message_id(app_id, sent.message_id)
+            await add_application_message(app_id, admin_id, admin_id, sent.message_id)
+            sent_count += 1
+            last_sent = sent
+        except Exception as e:
+            logger.warning(f"Не удалось отправить заявку #{app_id} админу {admin_id}: {e}")
+    if last_sent:
+        # Сохраняем хоть один message_id для обратной совместимости
+        await save_application_message_id(app_id, last_sent.message_id)
+    logger.info(f"Заявка #{app_id} разослана {sent_count}/{len(admins)} админам в ЛС")
     return ConversationHandler.END
 
 

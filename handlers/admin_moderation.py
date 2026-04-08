@@ -309,17 +309,23 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
                                       disable_web_page_preview=True)
 
-        # 5. Удаляем карточку заявки из треда APPLICATIONS_THREAD_ID
-        app_msg_id = app_data.get('message_id') if app_data else None
-        logger.info(f"Удаляем заявку #{app_id}: message_id={app_msg_id}, chat={ADMIN_CHAT_ID}")
-        if app_msg_id:
+        # 5. Помечаем карточки в ЛС остальных админов как «✅ Одобрено @username»
+        from database.db_friend import get_application_messages, clear_application_messages
+        msgs = await get_application_messages(app_id)
+        mark_text = f"✅ <b>Заявка #{app_id} одобрена</b> {admin_name}"
+        for m in msgs:
+            if m['admin_tg_id'] == query.from_user.id:
+                continue  # текущему админу карточку уже заменили на полную через query.edit_message_text
             try:
-                await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
-                logger.info(f"✅ Сообщение заявки {app_msg_id} удалено из треда")
+                await context.bot.edit_message_text(
+                    chat_id=m['chat_id'],
+                    message_id=m['message_id'],
+                    text=mark_text,
+                    parse_mode="HTML"
+                )
             except Exception as e:
-                logger.error(f"❌ Не удалось удалить сообщение заявки {app_msg_id}: {e}")
-        else:
-            logger.warning(f"⚠️ message_id не сохранён для заявки #{app_id} — удаление пропущено")
+                logger.warning(f"Не удалось обновить карточку #{app_id} у {m['admin_tg_id']}: {e}")
+        await clear_application_messages(app_id)
 
         # 6. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
         asyncio.create_task(
@@ -374,13 +380,23 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
 
         admin_name = f"@{query.from_user.username}" if query.from_user.username else str(query.from_user.id)
 
-        # Удаляем карточку из треда заявок
-        app_msg_id = app_data.get('message_id') if app_data else None
-        if app_msg_id:
+        # Помечаем карточки в ЛС остальных админов
+        from database.db_friend import get_application_messages, clear_application_messages
+        msgs = await get_application_messages(app_id)
+        mark = f"🗑 <b>Заявка #{app_id} удалена</b> {admin_name}"
+        for m in msgs:
+            if m['admin_tg_id'] == query.from_user.id:
+                continue
             try:
-                await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
+                await context.bot.edit_message_text(
+                    chat_id=m['chat_id'],
+                    message_id=m['message_id'],
+                    text=mark,
+                    parse_mode="HTML"
+                )
             except Exception as e:
-                logger.warning(f"Не удалось удалить сообщение заявки {app_msg_id}: {e}")
+                logger.warning(f"Не удалось обновить карточку удаления #{app_id} у {m['admin_tg_id']}: {e}")
+        await clear_application_messages(app_id)
 
         kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("📋 Следующая заявка", callback_data="new_app")]
@@ -446,11 +462,8 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception as e:
         logger.error(f"Не смог написать юзеру {target_user_id}: {e}")
 
-    # 3.4.2 Карточка отказа в тред заявок
-    await context.bot.send_message(
-        chat_id=ADMIN_CHAT_ID,
-        message_thread_id=APPLICATIONS_THREAD_ID,
-        text=
+    # 3.4.2 Помечаем карточки в ЛС всех админов
+    reject_card = (
         f"❌ <b>#Отказ — Заявка #{app_id}</b>\n\n"
         f"👤 {html.escape(reg_data.get('q_name') or '—')} | "
         f"<code>{target_user_id}</code>\n"
@@ -462,23 +475,24 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
         f"💊 Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n\n"
         f"📅 Дата заявки: {applied_at}\n\n"
         f"🚫 <b>Причина отказа:</b> {html.escape(reason)}\n\n"
-        f"👨‍💼 Обработал: {admin_name}",
-        parse_mode="HTML"
+        f"👨‍💼 Обработал: {admin_name}"
     )
+    short_mark = f"❌ <b>Заявка #{app_id} отклонена</b> {admin_name}"
 
-
-    # 3.4.3 УДАЛЯЕМ старую карточку заявки из треда заявок
-    app_msg_id = app_data.get('message_id') if app_data else None
-    if not app_msg_id:
-        # Пытаемся взять из текущей сессии если не сохранили в БД
-        app_msg_id = context.user_data.get('current_app_msg_id')
-
-    if app_msg_id:
+    from database.db_friend import get_application_messages, clear_application_messages
+    msgs = await get_application_messages(app_id)
+    for m in msgs:
         try:
-            await context.bot.delete_message(chat_id=ADMIN_CHAT_ID, message_id=app_msg_id)
-            logger.info(f"✅ Сообщение заявки {app_msg_id} удалено после ОТКАЗА")
+            text = reject_card if m['admin_tg_id'] == update.effective_user.id else short_mark
+            await context.bot.edit_message_text(
+                chat_id=m['chat_id'],
+                message_id=m['message_id'],
+                text=text,
+                parse_mode="HTML"
+            )
         except Exception as e:
-            logger.error(f"❌ Не удалось удалить сообщение заявки {app_msg_id} при отказе: {e}")
+            logger.warning(f"Не удалось обновить карточку отказа #{app_id} у {m['admin_tg_id']}: {e}")
+    await clear_application_messages(app_id)
 
     logger.info(f"Application #{app_id} rejected by {update.effective_user.id}, reason: {reason}")
 

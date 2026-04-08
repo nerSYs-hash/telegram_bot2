@@ -210,6 +210,18 @@ async def init_db():
         except Exception:
             pass  # колонка уже есть
 
+        # Карточки заявок в ЛС админов (broadcast по ЛС)
+        await db.execute("""
+            CREATE TABLE IF NOT EXISTS application_messages (
+                app_id INTEGER NOT NULL,
+                admin_tg_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                PRIMARY KEY (app_id, admin_tg_id)
+            )
+        """)
+        await db.execute("CREATE INDEX IF NOT EXISTS idx_app_messages_app ON application_messages(app_id)")
+
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_status ON applications(status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_user_id ON applications(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_applications_locked_until ON applications(locked_until)")
@@ -681,6 +693,38 @@ async def save_application_message_id(app_id: int, message_id: int):
             "UPDATE applications SET message_id = ? WHERE id = ?",
             (message_id, app_id)
         )
+        await db.commit()
+
+
+async def add_application_message(app_id: int, admin_tg_id: int, chat_id: int, message_id: int):
+    """Сохраняет ID карточки заявки, отправленной в ЛС админу."""
+    async with db_pool.get_connection() as db:
+        await db.execute(
+            """INSERT OR REPLACE INTO application_messages (app_id, admin_tg_id, chat_id, message_id)
+               VALUES (?, ?, ?, ?)""",
+            (app_id, admin_tg_id, chat_id, message_id)
+        )
+        await db.commit()
+
+
+async def get_application_messages(app_id: int) -> List[dict]:
+    """Возвращает все ЛС-карточки заявки: [{admin_tg_id, chat_id, message_id}, ...]"""
+    async with db_pool.get_connection() as db:
+        async with db.execute(
+            "SELECT admin_tg_id, chat_id, message_id FROM application_messages WHERE app_id = ?",
+            (app_id,)
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [
+                {'admin_tg_id': r[0], 'chat_id': r[1], 'message_id': r[2]}
+                for r in rows
+            ]
+
+
+async def clear_application_messages(app_id: int):
+    """Удаляет записи карточек заявки из application_messages."""
+    async with db_pool.get_connection() as db:
+        await db.execute("DELETE FROM application_messages WHERE app_id = ?", (app_id,))
         await db.commit()
 
 
