@@ -327,7 +327,21 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
                 logger.warning(f"Не удалось обновить карточку #{app_id} у {m['admin_tg_id']}: {e}")
         await clear_application_messages(app_id)
 
-        # 6. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
+        # 6. Карточка в тред ADMIN_CHAT_ID/APPLICATIONS_THREAD_ID
+        try:
+            await context.bot.send_message(
+                chat_id=ADMIN_CHAT_ID,
+                message_thread_id=APPLICATIONS_THREAD_ID,
+                text=card_text,
+                reply_markup=card_kb,
+                parse_mode="HTML",
+                disable_web_page_preview=True
+            )
+            logger.info(f"✅ Одобренная карточка #{app_id} отправлена в тред {ADMIN_CHAT_ID}/{APPLICATIONS_THREAD_ID}")
+        except Exception as e:
+            logger.error(f"❌ Не удалось отправить карточку #{app_id} в тред: {e}")
+
+        # 7. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
         asyncio.create_task(
             _send_dossier(context.bot, target_user_id, card_text, card_kb)
         )
