@@ -302,6 +302,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             f"Терапия: {html.escape(reg_data.get('q_therapy') or '—')}\n\n"
             f"📅 Дата заявки: {applied_at}\n"
             f"✅ Дата вступления: {joined_at}"
+            + (f"\n🔁 Первое вступление: {_fmt_date(reg_data.get('created_at'))}" if is_returning else "")
         )
         card_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}")]
