@@ -306,25 +306,22 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         card_kb = InlineKeyboardMarkup([
             [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_user_id}")]
         ])
-        await query.edit_message_text(card_text, reply_markup=card_kb, parse_mode="HTML",
-                                      disable_web_page_preview=True)
-
-        # 5. Помечаем карточки в ЛС остальных админов как «✅ Одобрено @username»
+        # Удаляем карточку из ЛС всех админов
         from database.db_friend import get_application_messages, clear_application_messages
         msgs = await get_application_messages(app_id)
-        mark_text = f"✅ <b>Заявка #{app_id} одобрена</b> {admin_name}"
+        # Удаляем у текущего (того кто нажал)
+        try:
+            await query.message.delete()
+        except Exception as e:
+            logger.warning(f"Не удалось удалить карточку #{app_id} у текущего админа: {e}")
+        # Удаляем у остальных
         for m in msgs:
             if m['admin_tg_id'] == query.from_user.id:
-                continue  # текущему админу карточку уже заменили на полную через query.edit_message_text
+                continue
             try:
-                await context.bot.edit_message_text(
-                    chat_id=m['chat_id'],
-                    message_id=m['message_id'],
-                    text=mark_text,
-                    parse_mode="HTML"
-                )
+                await context.bot.delete_message(chat_id=m['chat_id'], message_id=m['message_id'])
             except Exception as e:
-                logger.warning(f"Не удалось обновить карточку #{app_id} у {m['admin_tg_id']}: {e}")
+                logger.warning(f"Не удалось удалить карточку #{app_id} у {m['admin_tg_id']}: {e}")
         await clear_application_messages(app_id)
 
         # 6. Карточка в тред ADMIN_CHAT_ID/APPLICATIONS_THREAD_ID
