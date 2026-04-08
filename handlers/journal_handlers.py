@@ -412,7 +412,10 @@ async def journal_connect_start(query, context, db, admin_id: int, num: int = 1)
         f"🔗 <b>Подключение канала {num}</b>\n\n"
         "1. Добавьте бота как <b>админа</b> в канал/группу\n"
         "2. Перешлите сюда <b>любое сообщение</b> из этого канала\n\n"
-        "<i>Или отправьте ID чата (например: -1001234567890)</i>"
+        "<i>Или введите ID чата:</i>\n"
+        "• <code>-1002756313911</code> — только чат\n"
+        "• <code>2756313911/2</code> — чат + топик (тред)\n"
+        "• <code>-1002756313911/2</code> — тоже работает"
     )
     back_cb = f"journal_ch{num}_menu"
     keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=back_cb)]]
@@ -526,17 +529,39 @@ async def handle_journal_text_input(update, context, db) -> bool:
 
     elif message.text:
         text = message.text.strip()
+        thread_from_slash = None
+
+        # Поддержка формата CHATID/THREADID (из ссылки t.me/c/...)
+        if '/' in text:
+            parts = text.split('/')
+            text = parts[0].strip()
+            try:
+                thread_from_slash = int(parts[1].strip())
+            except (ValueError, IndexError):
+                pass
+
         try:
-            channel_id = int(text)
+            raw = int(text)
+            # Если ID без минуса и больше 0 — добавляем -100 префикс
+            if raw > 0:
+                channel_id = int(f"-100{raw}")
+            else:
+                channel_id = raw
         except (ValueError, TypeError):
             back_cb = f"journal_ch{num}_menu"
             await message.reply_text(
-                "❌ Некорректный ID.\nПерешлите сообщение из канала или введите ID.",
+                "❌ Некорректный ID.\nПерешлите сообщение из канала или введите ID.\n"
+                "<i>Форматы: -1001234567890 или 1234567890/2 (с тредом)</i>",
+                parse_mode='HTML',
                 reply_markup=InlineKeyboardMarkup([
                     [InlineKeyboardButton("🔙 Назад", callback_data=back_cb)]
                 ])
             )
             return True
+
+        # Если из формата CHATID/THREADID — сразу сохраняем тред
+        if thread_from_slash is not None and num in (2, 3):
+            db.set_setting(f'journal_thread_id_{num}', str(thread_from_slash))
 
     if not channel_id:
         await message.reply_text("❌ Не удалось определить канал.")
