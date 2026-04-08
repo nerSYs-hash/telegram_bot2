@@ -44,7 +44,8 @@ from handlers.owner_handlers import show_owner_dashboard
 from handlers.moderation import handle_restrict_callback
 from handlers.triggers_handlers import show_triggers_menu, handle_trigger_callback
 from handlers.journal_handlers import (
-    show_journal_menu, journal_connect_start,
+    show_journal_menu, show_journal_channel_menu,
+    journal_connect_start, journal_thread_start,
     journal_disconnect, journal_test,
 )
 
@@ -193,12 +194,29 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
     # ── Журнал ──
     elif data == "owner_journal":
         await show_journal_menu(query, db, admin_id)
+    # Обратная совместимость (старый journal_connect → канал 1)
     elif data == "journal_connect":
-        await journal_connect_start(query, context, db, admin_id)
+        await journal_connect_start(query, context, db, admin_id, num=1)
     elif data == "journal_disconnect":
-        await journal_disconnect(query, db, admin_id)
+        await journal_disconnect(query, db, admin_id, num=1)
     elif data == "journal_test":
-        await journal_test(query, context, db, admin_id)
+        await journal_test(query, context, db, admin_id, num=1)
+    # Sub-меню каналов
+    elif data in ("journal_ch1_menu", "journal_ch2_menu", "journal_ch3_menu"):
+        num = int(data[10])  # "journal_chN_menu"
+        await show_journal_channel_menu(query, db, admin_id, num)
+    elif data in ("journal_ch1_connect", "journal_ch2_connect", "journal_ch3_connect"):
+        num = int(data[10])
+        await journal_connect_start(query, context, db, admin_id, num=num)
+    elif data in ("journal_ch2_thread", "journal_ch3_thread"):
+        num = int(data[10])
+        await journal_thread_start(query, context, db, admin_id, num=num)
+    elif data in ("journal_ch1_disconnect", "journal_ch2_disconnect", "journal_ch3_disconnect"):
+        num = int(data[10])
+        await journal_disconnect(query, db, admin_id, num=num)
+    elif data in ("journal_ch1_test", "journal_ch2_test", "journal_ch3_test"):
+        num = int(data[10])
+        await journal_test(query, context, db, admin_id, num=num)
 
     else:
         return False

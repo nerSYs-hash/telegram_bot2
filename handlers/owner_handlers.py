@@ -864,7 +864,7 @@ async def handle_owner_text_input(
             ]),
         )
         return True
-    if awaiting == 'journal_connect':
+    if awaiting and (awaiting.startswith('journal_connect_') or awaiting.startswith('journal_thread_')):
         return False
 
     # Неизвестный awaiting — сбрасываем

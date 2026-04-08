@@ -58,7 +58,8 @@ from handlers.exit_survey_handlers import (
     show_survey_results, ensure_survey_columns,
 )
 from handlers.journal_handlers import (
-    show_journal_menu, journal_connect_start,
+    show_journal_menu, show_journal_channel_menu,
+    journal_connect_start, journal_thread_start,
     journal_disconnect, journal_test,
     ensure_journal_tables,
 )
@@ -512,11 +513,26 @@ class CallbackHandler:
         elif data == "owner_journal":
             await show_journal_menu(query, self.db, self.main_admin_id)
         elif data == "journal_connect":
-            await journal_connect_start(query, context, self.db, self.main_admin_id)
+            await journal_connect_start(query, context, self.db, self.main_admin_id, num=1)
         elif data == "journal_disconnect":
-            await journal_disconnect(query, self.db, self.main_admin_id)
+            await journal_disconnect(query, self.db, self.main_admin_id, num=1)
         elif data == "journal_test":
-            await journal_test(query, context, self.db, self.main_admin_id)
+            await journal_test(query, context, self.db, self.main_admin_id, num=1)
+        elif data in ("journal_ch1_menu", "journal_ch2_menu", "journal_ch3_menu"):
+            num = int(data[10])
+            await show_journal_channel_menu(query, self.db, self.main_admin_id, num)
+        elif data in ("journal_ch1_connect", "journal_ch2_connect", "journal_ch3_connect"):
+            num = int(data[10])
+            await journal_connect_start(query, context, self.db, self.main_admin_id, num=num)
+        elif data in ("journal_ch2_thread", "journal_ch3_thread"):
+            num = int(data[10])
+            await journal_thread_start(query, context, self.db, self.main_admin_id, num=num)
+        elif data in ("journal_ch1_disconnect", "journal_ch2_disconnect", "journal_ch3_disconnect"):
+            num = int(data[10])
+            await journal_disconnect(query, self.db, self.main_admin_id, num=num)
+        elif data in ("journal_ch1_test", "journal_ch2_test", "journal_ch3_test"):
+            num = int(data[10])
+            await journal_test(query, context, self.db, self.main_admin_id, num=num)
 
         # ═══ DONATE CALLBACKS ═══
         elif data == "donate_menu":
