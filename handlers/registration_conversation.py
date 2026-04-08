@@ -590,6 +590,7 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
     # Broadcast: рассылаем карточку заявки в ЛС всем админам и владельцу
     admins = await get_all_admins()
+    logger.info(f"Рассылка заявки #{app_id}: получателей {len(admins)}")
     sent_count = 0
     last_sent = None
     for admin in admins:
@@ -603,14 +604,19 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
-            await add_application_message(app_id, admin_id, admin_id, sent.message_id)
             sent_count += 1
             last_sent = sent
+            try:
+                await add_application_message(app_id, admin_id, admin_id, sent.message_id)
+            except Exception as db_err:
+                logger.warning(f"Не удалось сохранить message_id заявки #{app_id} для {admin_id}: {db_err}")
         except Exception as e:
             logger.warning(f"Не удалось отправить заявку #{app_id} админу {admin_id}: {e}")
     if last_sent:
-        # Сохраняем хоть один message_id для обратной совместимости
-        await save_application_message_id(app_id, last_sent.message_id)
+        try:
+            await save_application_message_id(app_id, last_sent.message_id)
+        except Exception:
+            pass
     logger.info(f"Заявка #{app_id} разослана {sent_count}/{len(admins)} админам в ЛС")
     return ConversationHandler.END
 
