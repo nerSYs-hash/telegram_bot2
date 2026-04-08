@@ -853,6 +853,6 @@ async def show_survey_results(query, db, admin_id: int) -> None:
         text,
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
-            InlineKeyboardButton("🔙 Назад", callback_data="owner_dashboard")
+            InlineKeyboardButton("🔙 Назад", callback_data="panel_main")
         ]])
     )

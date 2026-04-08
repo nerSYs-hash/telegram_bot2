@@ -66,8 +66,14 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         return True
 
     # ── Дашборд ──
+    # Старый «Пульт Владельца» отключён — оба алиаса ведут на новую Панель Владельца.
     if data in ("owner_dashboard", "panel_main"):
-        await show_owner_dashboard(query, context, db, admin_id)
+        from handlers.admin_moderation import send_admin_panel
+        await send_admin_panel(context.bot, query.message.chat.id, is_owner=True)
+        try:
+            await query.message.delete()
+        except Exception:
+            pass
     elif data == "owner_backup":
         await send_database_backup(query, user, db, admin_id, context)
 

@@ -619,7 +619,7 @@ async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYP
     if not apps:
         buttons = [[InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]]
         if update.effective_chat.type == 'private':
-            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="owner_dashboard")])
+            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="panel_main")])
         kb = InlineKeyboardMarkup(buttons)
         await context.bot.send_message(
             chat_id=update.effective_chat.id,
@@ -721,7 +721,7 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
     if not apps:
         buttons = [[InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]]
         if query.message.chat.type == 'private':
-            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="owner_dashboard")])
+            buttons.append([InlineKeyboardButton("🔙 Назад в Панель Владельца", callback_data="panel_main")])
         kb = InlineKeyboardMarkup(buttons)
         try:
             await query.edit_message_text(

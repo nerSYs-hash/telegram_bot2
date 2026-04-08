@@ -458,8 +458,14 @@ class CallbackHandler:
             await self.export_user_detalization(query, data, user, context)
         
         # ═══ OWNER DASHBOARD CALLBACKS ═══
+        # Старый «Пульт Владельца» отключён — алиас owner_dashboard ведёт на новую Панель Владельца.
         elif data == "owner_dashboard":
-            await show_owner_dashboard(query, context, self.db, self.main_admin_id)
+            from handlers.admin_moderation import send_admin_panel
+            await send_admin_panel(context.bot, query.message.chat.id, is_owner=True)
+            try:
+                await query.message.delete()
+            except Exception:
+                pass
         elif data == "owner_economy":
             await show_economy_menu(query, self.db, self.main_admin_id)
         elif data == "owner_emit":
