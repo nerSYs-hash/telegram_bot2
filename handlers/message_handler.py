@@ -151,6 +151,12 @@ class MessageHandler:
         logging.info(f"📨 Incoming message from user_id={user.id} (@{user.username}), "
                     f"chat_id={message.chat.id}, thread_id={thread_id} ({thread_name})")
         
+        # Ввод причины отказа по заявке — работает и в ЛС, и в админ-чате
+        if message.text and context.user_data.get('awaiting_reject_reason'):
+            from handlers.admin_moderation import handle_reject_reason
+            await handle_reject_reason(update, context)
+            return
+
         # Only process messages from target chat
         # EXCEPTION: handle private messages from admin for press release / scheduled posts
         if message.chat.type == 'private':
