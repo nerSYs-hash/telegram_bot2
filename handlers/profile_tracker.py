@@ -21,14 +21,16 @@ from typing import Optional, List, Tuple
 logger = logging.getLogger(__name__)
 
 
-async def track_profile_changes(bot, db, user) -> None:
+async def track_profile_changes(bot, db, user, chat=None) -> None:
     """
     Сравнивает текущий профиль с БД, логирует изменения в журнал.
+    Должен вызываться ДО db.add_user(), чтобы получить старое состояние.
 
     Args:
         bot: telegram.Bot
         db: Database
-        user: telegram.User (from_user)
+        user: telegram.User (from_user) — новое состояние
+        chat: telegram.Chat — чат где произошло событие (опционально)
     """
     if not user:
         return
@@ -41,40 +43,69 @@ async def track_profile_changes(bot, db, user) -> None:
     if not user_data:
         return
 
-    changes: List[str] = []
+    has_changes = False
 
     # ── Username ──
-    old_username = user_data['username']
-    new_username = user.username
-    if old_username != new_username:
-        old_val = f"@{old_username}" if old_username else "<i>пусто</i>"
-        new_val = f"@{new_username}" if new_username else "<i>пусто</i>"
-        changes.append(f"📛 Ник: {old_val} → {new_val}")
+    try:
+        old_username = user_data['username']
+    except (KeyError, IndexError):
+        old_username = None
+    if old_username != user.username:
+        has_changes = True
 
     # ── Имя ──
-    old_first = user_data['first_name']
-    new_first = user.first_name
-    if old_first != new_first:
-        old_val = old_first or "<i>пусто</i>"
-        new_val = new_first or "<i>пусто</i>"
-        changes.append(f"👤 Имя: {old_val} → {new_val}")
+    try:
+        old_first = user_data['first_name']
+    except (KeyError, IndexError):
+        old_first = None
+    if old_first != user.first_name:
+        has_changes = True
 
     # ── Фамилия ──
-    old_last = user_data['last_name']
-    new_last = user.last_name
-    if old_last != new_last:
-        old_val = old_last or "<i>пусто</i>"
-        new_val = new_last or "<i>пусто</i>"
-        changes.append(f"👤 Фамилия: {old_val} → {new_val}")
-
-    if not changes:
-        return
-
-    # Логируем в журнал
     try:
-        from handlers.journal_handlers import log_profile_change
-        changes_text = "\n".join(changes)
-        await log_profile_change(bot, db, user.id, changes_text)
-        logger.info(f"PROFILE CHANGE: user {user.id} — {len(changes)} changes")
+        old_last = user_data['last_name']
+    except (KeyError, IndexError):
+        old_last = None
+    if old_last != user.last_name:
+        has_changes = True
+
+    if has_changes:
+        try:
+            from handlers.journal_handlers import log_profile_change
+            from datetime import datetime, timezone
+            await log_profile_change(
+                bot, db, user.id,
+                tg_user=user,
+                old_user_data=user_data,
+                chat=chat,
+                changed_at=datetime.now(timezone.utc),
+            )
+            logger.info(f"PROFILE CHANGE: user {user.id}")
+        except Exception as e:
+            logger.error(f"Profile tracker journal error: {e}")
+
+    # ── Фото профиля ──
+    try:
+        photos = await bot.get_user_profile_photos(user.id, limit=1)
+        if photos.total_count > 0:
+            current_uid = photos.photos[0][0].file_unique_id
+        else:
+            current_uid = ''
+
+        stored_uid = db.get_setting(f'photo_uid_{user.id}') or ''
+
+        if current_uid != stored_uid:
+            db.set_setting(f'photo_uid_{user.id}', current_uid)
+            if stored_uid == '' and current_uid:
+                action = 'opened'   # раньше не было / не было доступа — открыл
+            elif current_uid == '':
+                action = 'removed'  # убрал фото — не логируем
+            else:
+                action = 'changed'  # сменил фото
+
+            if action in ('changed', 'opened'):
+                from handlers.journal_handlers import log_photo
+                await log_photo(bot, db, user.id, chat=chat, tg_user=user, action=action)
+                logger.info(f"PHOTO CHANGE ({action}): user {user.id}")
     except Exception as e:
-        logger.error(f"Profile tracker journal error: {e}")
+        logger.debug(f"Photo tracker error (user {user.id}): {e}")

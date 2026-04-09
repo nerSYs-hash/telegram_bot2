@@ -393,6 +393,26 @@ class CommandHandler:
             logger.error(f"unfreeze error: {e}", exc_info=True)
             await update.message.reply_text(f"❌ Ошибка: {e}")
 
+    async def mute_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /mute command — делегирует moderation.mute_command."""
+        from handlers.moderation import mute_command as _mute
+        await _mute(update, context, self.db, self.main_admin_id, self.target_chat_id)
+
+    async def unmute_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /unmute command — делегирует moderation.unmute_command."""
+        from handlers.moderation import unmute_command as _unmute
+        await _unmute(update, context, self.db, self.main_admin_id, self.target_chat_id)
+
+    async def ban_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /ban command — делегирует moderation.ban_command."""
+        from handlers.moderation import ban_command as _ban
+        await _ban(update, context, self.db, self.main_admin_id, self.target_chat_id)
+
+    async def unban_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /unban command — делегирует moderation.unban_command."""
+        from handlers.moderation import unban_command as _unban
+        await _unban(update, context, self.db, self.main_admin_id, self.target_chat_id)
+
     async def _show_lottery_deeplink(self, update: Update, context: ContextTypes.DEFAULT_TYPE, lottery_id: int):
         """Показать виджет покупки лотереи при переходе по deep link."""
         user = update.effective_user

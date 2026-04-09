@@ -22,7 +22,7 @@ from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number, get_today_date_msk, get_moscow_time
 from handlers.bbs_handlers import handle_bbs_reaction, on_member_left_cleanup
-from handlers.journal_handlers import log_join, log_leave
+from handlers.journal_handlers import log_join, log_leave, log_kick
 from handlers.messages.mining_logic import (
     calculate_social_combos, calculate_reaction_given_reward,
     calculate_reaction_received_reward, _get_claimed_combos,
@@ -57,6 +57,25 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
         logging.info(f"🔇 User {user_id} got TEMPORARY BAN until {new_member.until_date} — treating as mute, ignoring")
         return
         
+    # === ПОЛЬЗОВАТЕЛЬ ИСКЛЮЧЁН АДМИНОМ ===
+    if not is_now_in_chat and was_in_chat and new_status == 'kicked':
+        kicker = update.chat_member.from_user
+        if kicker and kicker.id != user_id:
+            logging.info(f"🆘 Triggering KICK log for user {user_id} by {kicker.id}")
+            try:
+                await log_kick(
+                    context.bot, db,
+                    target_id=user_id,
+                    admin_id=kicker.id,
+                    chat_id=update.chat_member.chat.id,
+                    chat_title=update.chat_member.chat.title,
+                    kicked_at=update.chat_member.date,
+                    target_user=update.chat_member.new_chat_member.user,
+                    admin_user=kicker,
+                )
+            except Exception as e:
+                logging.error(f"Journal log_kick error: {e}")
+
     # === ПОЛЬЗОВАТЕЛЬ УШЁЛ ===
     if not is_now_in_chat and was_in_chat:
         logging.info(f"👋 Triggering LEAVE logic for user {user_id}")
@@ -188,7 +207,17 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     except Exception as e:
         logging.error(f"db_friend last_exit_at update error: {e}")
 
-    # log_leave отключён — уход из чата не публикуется в журнал
+    # ═══ ЖУРНАЛ: логируем выход ═══
+    try:
+        cm = update.chat_member
+        await log_leave(
+            context.bot, db, user_id,
+            chat=cm.chat,
+            tg_user=cm.new_chat_member.user,
+            left_at=cm.date,
+        )
+    except Exception as e:
+        logging.error(f"Journal log_leave error: {e}")
 
     # ═══ BBS: удалить анкету покинувшего пользователя ═══
     try:
@@ -505,7 +534,20 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
 
     # ═══ ЖУРНАЛ: логируем вход ═══
     try:
-        await log_join(context.bot, db, user_id)
+        cm = update.chat_member
+        try:
+            _is_ret = bool(user_data['is_left'])
+        except (KeyError, IndexError, TypeError):
+            _is_ret = False
+        await log_join(
+            context.bot, db, user_id,
+            chat=cm.chat,
+            tg_user=cm.new_chat_member.user,
+            from_user=cm.from_user,
+            invite_link=cm.invite_link,
+            joined_at=cm.date,
+            is_returning=_is_ret,
+        )
     except Exception as e:
         logging.error(f"Journal log_join error: {e}")
 

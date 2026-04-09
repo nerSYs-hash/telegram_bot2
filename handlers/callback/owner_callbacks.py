@@ -47,6 +47,7 @@ from handlers.journal_handlers import (
     show_journal_menu, show_journal_channel_menu,
     journal_connect_start, journal_thread_start,
     journal_disconnect, journal_test,
+    log_kick, log_ban, log_unban, log_unmute,
 )
 
 logger = logging.getLogger(__name__)
@@ -190,6 +191,129 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await compensate_bbs_start(query, context, db, admin_id)
     elif data == "confirm_compensate_bbs":
         await compensate_bbs_confirm(query, context, db, admin_id)
+
+    # ── Журнал: действия из записи (jban/jkick/jmute) ──
+    elif data.startswith("jremute_"):
+        uid = int(data.split("_", 1)[1])
+        from telegram import ChatPermissions
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id=target_chat_id,
+                user_id=uid,
+                permissions=ChatPermissions(
+                    can_send_messages=True,
+                    can_send_audios=True,
+                    can_send_documents=True,
+                    can_send_photos=True,
+                    can_send_videos=True,
+                    can_send_video_notes=True,
+                    can_send_voice_notes=True,
+                    can_send_polls=True,
+                    can_send_other_messages=True,
+                    can_add_web_page_previews=True,
+                ),
+            )
+            await query.answer("✅ Ограничения сняты.", show_alert=True)
+            try:
+                chat_obj = await context.bot.get_chat(target_chat_id)
+                await log_unmute(
+                    context.bot, db,
+                    target_id=uid,
+                    admin_id=user.id,
+                    chat=chat_obj,
+                    admin_user=user,
+                )
+            except Exception as je:
+                logger.error(f"Journal log_unmute error: {je}")
+        except Exception as e:
+            await query.answer(f"❌ {e}", show_alert=True)
+
+    elif data.startswith("junban_"):
+        uid = int(data.split("_", 1)[1])
+        try:
+            await context.bot.unban_chat_member(
+                chat_id=target_chat_id,
+                user_id=uid,
+                only_if_banned=True,
+            )
+            await query.answer("✅ Пользователь разбанен.", show_alert=True)
+            try:
+                chat_obj = await context.bot.get_chat(target_chat_id)
+                await log_unban(
+                    context.bot, db,
+                    target_id=uid,
+                    admin_id=user.id,
+                    chat=chat_obj,
+                    admin_user=user,
+                )
+            except Exception as je:
+                logger.error(f"Journal log_unban error: {je}")
+        except Exception as e:
+            await query.answer(f"❌ {e}", show_alert=True)
+
+    elif data.startswith("jban_"):
+        uid = int(data.split("_", 1)[1])
+        try:
+            await context.bot.ban_chat_member(chat_id=target_chat_id, user_id=uid)
+            await query.answer("✅ Пользователь забанен.", show_alert=True)
+            try:
+                chat_obj = await context.bot.get_chat(target_chat_id)
+                await log_ban(
+                    context.bot, db,
+                    target_id=uid,
+                    admin_id=user.id,
+                    chat=chat_obj,
+                    admin_user=user,
+                )
+            except Exception as je:
+                logger.error(f"Journal log_ban error: {je}")
+        except Exception as e:
+            await query.answer(f"❌ {e}", show_alert=True)
+
+    elif data.startswith("jkick_"):
+        uid = int(data.split("_", 1)[1])
+        try:
+            await context.bot.ban_chat_member(chat_id=target_chat_id, user_id=uid)
+            await context.bot.unban_chat_member(chat_id=target_chat_id, user_id=uid, only_if_banned=True)
+            await query.answer("✅ Пользователь удалён из чата.", show_alert=True)
+            try:
+                chat_obj = await context.bot.get_chat(target_chat_id)
+                await log_kick(
+                    context.bot, db,
+                    target_id=uid,
+                    admin_id=user.id,
+                    chat_id=target_chat_id,
+                    chat_title=chat_obj.title,
+                    admin_user=user,
+                )
+            except Exception as je:
+                logger.error(f"Journal log_kick error: {je}")
+        except Exception as e:
+            await query.answer(f"❌ {e}", show_alert=True)
+
+    elif data.startswith("jmute_"):
+        uid = int(data.split("_", 1)[1])
+        from telegram import ChatPermissions
+        try:
+            await context.bot.restrict_chat_member(
+                chat_id=target_chat_id,
+                user_id=uid,
+                permissions=ChatPermissions(
+                    can_send_messages=False,
+                    can_send_audios=False,
+                    can_send_documents=False,
+                    can_send_photos=False,
+                    can_send_videos=False,
+                    can_send_video_notes=False,
+                    can_send_voice_notes=False,
+                    can_send_polls=False,
+                    can_send_other_messages=False,
+                    can_add_web_page_previews=False,
+                ),
+            )
+            await query.answer("✅ Пользователь заглушён навсегда.", show_alert=True)
+        except Exception as e:
+            await query.answer(f"❌ {e}", show_alert=True)
 
     # ── Журнал ──
     elif data == "owner_journal":

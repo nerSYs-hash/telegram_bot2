@@ -222,6 +222,13 @@ class MessageHandler:
         # Log message processing
         logging.info(f"✅ Processing message from {user.id} (@{user.username}) in {thread_name}")
         
+        # ═══ ТРЕКЕР ПРОФИЛЯ: вызываем ДО add_user, чтобы поймать старые данные ═══
+        try:
+            from handlers.profile_tracker import track_profile_changes
+            await track_profile_changes(context.bot, self.db, user, chat=message.chat)
+        except Exception as _pte:
+            logging.debug(f"profile_tracker error: {_pte}")
+
         # Add/update user in database
         self.db.add_user(
             user.id,

@@ -558,6 +558,10 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("remove_from_top", self.command_handler.remove_from_top_command))
         # Разморозить пульсы пользователя (вернуть баланс)
         self.application.add_handler(CommandHandler("unfreeze", self.command_handler.unfreeze_command))
+        self.application.add_handler(CommandHandler("mute", self.command_handler.mute_command))
+        self.application.add_handler(CommandHandler("unmute", self.command_handler.unmute_command))
+        self.application.add_handler(CommandHandler("ban", self.command_handler.ban_command))
+        self.application.add_handler(CommandHandler("unban", self.command_handler.unban_command))
         # Forum topic event handlers (MUST be before general message handler)
         self.application.add_handler(
             MessageHandler(

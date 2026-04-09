@@ -176,7 +176,16 @@ async def mute_command(
         # Журнал
         try:
             from handlers.journal_handlers import log_mute
-            await log_mute(context.bot, db, target.id, user.id, human)
+            from datetime import datetime, timezone
+            await log_mute(
+                context.bot, db, target.id, user.id,
+                duration_human=human,
+                chat=message.chat,
+                target_user=target,
+                admin_user=user,
+                trigger_message=message.reply_to_message,
+                muted_at=datetime.now(timezone.utc),
+            )
         except Exception as e:
             logger.error(f"Journal log_mute error: {e}")
 
@@ -239,7 +248,14 @@ async def unmute_command(
         # Журнал
         try:
             from handlers.journal_handlers import log_unmute
-            await log_unmute(context.bot, db, target.id, user.id)
+            from datetime import datetime, timezone
+            await log_unmute(
+                context.bot, db, target.id, user.id,
+                chat=message.chat,
+                target_user=target,
+                admin_user=user,
+                unmuted_at=datetime.now(timezone.utc),
+            )
         except Exception as e:
             logger.error(f"Journal log_unmute error: {e}")
 
@@ -294,13 +310,80 @@ async def ban_command(
         # Журнал
         try:
             from handlers.journal_handlers import log_ban
-            await log_ban(context.bot, db, target.id, user.id)
+            from datetime import datetime, timezone
+            await log_ban(
+                context.bot, db, target.id, user.id,
+                chat=message.chat,
+                target_user=target,
+                admin_user=user,
+                banned_at=datetime.now(timezone.utc),
+                trigger_message=message.reply_to_message,
+            )
         except Exception as e:
             logger.error(f"Journal log_ban error: {e}")
 
     except Exception as e:
         logger.error(f"ban_command error: {e}")
         await message.reply_text(f"❌ Не удалось забанить: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  /unban
+# ═══════════════════════════════════════════════════════════════
+
+async def unban_command(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    db,
+    main_admin_id: int,
+    target_chat_id: int,
+) -> None:
+    """Разбан пользователя по реплаю."""
+    message = update.effective_message
+    user = update.effective_user
+
+    if not await _is_admin_or_owner(db, user.id, main_admin_id):
+        return
+
+    if not message.reply_to_message:
+        await message.reply_text("↩️ Ответьте на сообщение пользователя для разбана.")
+        return
+
+    target = message.reply_to_message.from_user
+    if not target:
+        return
+
+    try:
+        await context.bot.unban_chat_member(
+            chat_id=target_chat_id,
+            user_id=target.id,
+            only_if_banned=True,
+        )
+
+        await message.reply_text(
+            f"✅ {_user_link(target)} разбанен",
+            parse_mode='HTML',
+        )
+        await _delete_silently(message)
+        logger.info(f"UNBAN: {target.id} by {user.id}")
+
+        # Журнал
+        try:
+            from handlers.journal_handlers import log_unban
+            from datetime import datetime, timezone
+            await log_unban(
+                context.bot, db, target.id, user.id,
+                chat=message.chat,
+                target_user=target,
+                admin_user=user,
+                unbanned_at=datetime.now(timezone.utc),
+            )
+        except Exception as e:
+            logger.error(f"Journal log_unban error: {e}")
+
+    except Exception as e:
+        logger.error(f"unban_command error: {e}")
+        await message.reply_text(f"❌ Не удалось разбанить: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

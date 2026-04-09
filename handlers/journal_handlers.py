@@ -22,8 +22,10 @@
 """
 
 import logging
+import pytz
+from datetime import datetime, timezone
 from typing import Optional
-from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import Bot, InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
@@ -97,6 +99,34 @@ def _get_journal_channel_3(db) -> tuple:
     return None, None
 
 
+def _chat_id_clean(chat_id: int) -> str:
+    """Возвращает числовую часть ID суперчата (без -100 префикса)."""
+    s = str(abs(chat_id))
+    return s[3:] if s.startswith('100') else s
+
+
+def _fmt_user_block(user_obj, user_id: int, db) -> str:
+    """
+    Формирует строку блока В для пользователя/инициатора.
+    Формат: <a href>First Last</a> [@user][id] #userID
+    """
+    if user_obj:
+        first = getattr(user_obj, 'first_name', '') or ''
+        last = getattr(user_obj, 'last_name', '') or ''
+        full = f"{first} {last}".strip() or str(user_id)
+        uname = getattr(user_obj, 'username', None)
+    else:
+        u = db.get_user(user_id)
+        if u:
+            full = u['first_name'] or str(user_id)
+            uname = u['username']
+        else:
+            full = str(user_id)
+            uname = None
+    uname_str = f"[@{uname}]" if uname else "[ ]"
+    return f'<a href="tg://user?id={user_id}">{full}</a> {uname_str}[{user_id}] #user{user_id}'
+
+
 def _dm_button(user_id: int) -> InlineKeyboardMarkup:
     """Кнопка 'Написать в ЛС' под записью журнала."""
     return InlineKeyboardMarkup([
@@ -125,6 +155,7 @@ async def log_event(
     user_id: int = None,
     hashtag: str = None,
     channel_num: int = 1,
+    markup: Optional[InlineKeyboardMarkup] = None,
 ) -> None:
     """
     Отправляет запись в канал-журнал.
@@ -153,7 +184,8 @@ async def log_event(
     if hashtag:
         full_text = f"{hashtag}\n\n{text}"
 
-    markup = _dm_button(user_id) if user_id else None
+    if markup is None:
+        markup = _dm_button(user_id) if user_id else None
 
     send_kwargs = dict(
         chat_id=channel_id,
@@ -189,23 +221,177 @@ async def log_event(
 #  ГОТОВЫЕ ЛОГГЕРЫ (вызываются из других модулей)
 # ═══════════════════════════════════════════════════════════════
 
-async def log_join(bot, db, user_id: int) -> None:
-    """Логирует вход пользователя в чат → второй канал."""
-    tag = _user_tag(db, user_id)
+_MSK = pytz.timezone('Europe/Moscow')
+_MONTHS = ['января','февраля','марта','апреля','мая','июня',
+           'июля','августа','сентября','октября','ноября','декабря']
+
+
+async def log_join(
+    bot: Bot,
+    db,
+    user_id: int,
+    chat=None,
+    tg_user=None,
+    from_user=None,
+    invite_link=None,
+    joined_at=None,
+    is_returning: bool = False,
+) -> None:
+    """
+    Логирует вход пользователя в чат → канал 3.
+
+    Args:
+        chat: telegram.Chat объект чата
+        tg_user: telegram.User — вступивший пользователь
+        from_user: telegram.User — кто инициировал (admin/bot)
+        invite_link: telegram.ChatInviteLink — ссылка-приглашение
+        joined_at: datetime — время вступления
+        is_returning: True если пользователь возвращается
+    """
+    lines = ["🆔 #Вход", ""]
+
+    # ─ Блок Б: пригласительная ссылка ─
+    invite_display = None
+    if invite_link:
+        link_name = getattr(invite_link, 'name', None)
+        link_url = getattr(invite_link, 'invite_link', None)
+        invite_display = link_name or link_url
+    if not invite_display:
+        invite_display = f"(User {user_id})"
+    lines.append(f"Пригласительная ссылка: {invite_display}")
+    lines.append("")
+
+    # ─ Блок В: группа ─
+    if chat:
+        chat_id = chat.id
+        clean = _chat_id_clean(chat_id)
+        title = chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    # ─ Блок В: инициатор ─
+    initiator = None
+    if from_user and from_user.id != user_id:
+        initiator = from_user
+    elif invite_link:
+        creator = getattr(invite_link, 'creator', None)
+        if creator and creator.id != user_id:
+            initiator = creator
+    if initiator:
+        lines.append(f"Инициатор: {_fmt_user_block(initiator, initiator.id, db)}")
+
+    # ─ Блок В: пользователь ─
+    lines.append(f"Пользователь: {_fmt_user_block(tg_user, user_id, db)}")
+
+    # ─ Блок Г: анкета (если есть) ─
+    u_db = db.get_user(user_id)
+    q_parts = []
+    if u_db:
+        for key, label in [('q_name', 'Имя'), ('q_age', 'Возраст'),
+                           ('q_city', 'Город'), ('q_therapy', 'Терапия')]:
+            try:
+                val = u_db[key]
+                if val:
+                    q_parts.append(f"{label}: {val}")
+            except (KeyError, IndexError):
+                pass
+    if q_parts:
+        lines.append("")
+        lines.append(" | ".join(q_parts))
+
+    # ─ Блок Е: время ─
+    lines.append("")
+    if joined_at:
+        tz = getattr(joined_at, 'tzinfo', None)
+        if tz is None:
+            dt = joined_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        else:
+            dt = joined_at.astimezone(_MSK)
+    else:
+        dt = datetime.now(_MSK)
+    date_str = f"{dt.day} {_MONTHS[dt.month - 1]} {dt.year} г. {dt.strftime('%H:%M:%S')} MSK"
+    lines.append(f"👋Время: {date_str}")
+
+    # Дата первой регистрации при возврате
+    if is_returning and u_db:
+        try:
+            first_seen = u_db['created_at']
+            if first_seen:
+                lines.append(f"📅 Первая регистрация: {first_seen}")
+        except (KeyError, IndexError):
+            pass
+
+    text = "\n".join(lines)
+
+    # ─ Блок Ж: кнопки действий ─
+    action_markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🚫 Забанить", callback_data=f"jban_{user_id}"),
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"jkick_{user_id}"),
+        ],
+        [
+            InlineKeyboardButton("🔇 Заглушить навсегда", callback_data=f"jmute_{user_id}"),
+        ],
+    ])
+
     await log_event(
-        bot, db, 'join',
-        f"👋 {tag} вступил(а) в чат",
-        user_id=user_id, hashtag="#Вход", channel_num=2
+        bot, db, 'join', text,
+        user_id=None,
+        channel_num=3,
+        markup=action_markup,
     )
 
 
-async def log_leave(bot, db, user_id: int, reason: str = None) -> None:
-    """Логирует выход пользователя из чата → второй канал."""
-    tag = _user_tag(db, user_id)
-    text = f"🚪 {tag} покинул(а) чат"
-    if reason:
-        text += f"\n📝 Причина: {reason}"
-    await log_event(bot, db, 'leave', text, user_id=user_id, hashtag="#Выход", channel_num=2)
+async def log_leave(
+    bot: Bot,
+    db,
+    user_id: int,
+    chat=None,
+    tg_user=None,
+    left_at=None,
+) -> None:
+    """
+    Логирует выход пользователя из чата → канал 3.
+
+    Args:
+        chat: telegram.Chat объект чата
+        tg_user: telegram.User — покинувший пользователь
+        left_at: datetime — время выхода
+    """
+    lines = ["⚠️Пользователь покинул чат #Выход", ""]
+
+    # ─ Блок В: группа ─
+    if chat:
+        chat_id = chat.id
+        clean = _chat_id_clean(chat_id)
+        title = chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    # ─ Блок В: пользователь ─
+    lines.append(f"Пользователь: {_fmt_user_block(tg_user, user_id, db)}")
+
+    # ─ Блок Е: время ─
+    lines.append("")
+    if left_at:
+        tz = getattr(left_at, 'tzinfo', None)
+        if tz is None:
+            dt = left_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        else:
+            dt = left_at.astimezone(_MSK)
+    else:
+        dt = datetime.now(_MSK)
+    date_str = f"{dt.day} {_MONTHS[dt.month - 1]} {dt.year} г. {dt.strftime('%H:%M:%S')} MSK"
+    lines.append(f"👋Время: {date_str}")
+
+    text = "\n".join(lines)
+
+    # ─ Блок Ж: кнопка «Написать в ЛС» ─
+    await log_event(
+        bot, db, 'leave', text,
+        user_id=user_id,
+        channel_num=3,
+    )
 
 
 async def log_mute(bot, db, target_id: int, admin_id: int, duration: str) -> None:
@@ -230,15 +416,377 @@ async def log_unmute(bot, db, target_id: int, admin_id: int) -> None:
     )
 
 
-async def log_ban(bot, db, target_id: int, admin_id: int) -> None:
-    """Логирует бан."""
-    target_tag = _user_tag(db, target_id)
-    admin_tag = _user_tag(db, admin_id)
-    await log_event(
-        bot, db, 'ban',
-        f"🚫 {target_tag} забанен\n👮 Админ: {admin_tag}",
-        user_id=target_id, hashtag="#Бан"
+async def log_kick(
+    bot: Bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    chat_id: int = None,
+    chat_title: str = None,
+    kicked_at=None,
+    target_user=None,
+    admin_user=None,
+) -> None:
+    """
+    Логирует удаление пользователя из чата (#Исключен) → канал 3.
+
+    Args:
+        target_id: ID удалённого пользователя
+        admin_id: ID администратора
+        chat_id: ID чата (опционально)
+        chat_title: название чата (опционально)
+        kicked_at: datetime — время исключения
+        target_user: telegram.User объект (опционально)
+        admin_user: telegram.User объект (опционально)
+    """
+    admin_block = _fmt_user_block(admin_user, admin_id, db)
+    target_block = _fmt_user_block(target_user, target_id, db)
+
+    lines = ["🆘 Пользователь удален из группы командой #Исключен", ""]
+
+    # Сводная строка
+    lines.append(f"{admin_block} удалил из чата {target_block}")
+    lines.append("")
+
+    # ─ Блок В: группа ─
+    if chat_id:
+        clean = _chat_id_clean(chat_id)
+        title = chat_title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    lines.append(f"Инициатор: {admin_block}")
+    lines.append(f"Пользователь: {target_block}")
+
+    # ─ Блок Е: время ─
+    if kicked_at:
+        tz = getattr(kicked_at, 'tzinfo', None)
+        if tz is None:
+            dt = kicked_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        else:
+            dt = kicked_at.astimezone(_MSK)
+    else:
+        dt = datetime.now(_MSK)
+    date_str = f"{dt.day} {_MONTHS[dt.month - 1]} {dt.year} г. {dt.strftime('%H:%M:%S')} MSK"
+    lines.append(f"👋Время: {date_str}")
+    lines.append("Действие: Удаление из группы")
+
+    text = "\n".join(lines)
+
+    # Без кнопок
+    await log_event(bot, db, 'kick', text, user_id=None, channel_num=3)
+
+
+async def log_ban(
+    bot: Bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    chat=None,
+    target_user=None,
+    admin_user=None,
+    banned_at=None,
+    trigger_message=None,
+) -> None:
+    """
+    Логирует бан (#Бан) → канал 3. Без Блока Ж (кнопки действий).
+
+    Args:
+        chat: telegram.Chat
+        target_user: telegram.User — кого банят
+        admin_user: telegram.User — кто банит
+        banned_at: datetime — время бана
+        trigger_message: telegram.Message — сообщение-триггер (опционально)
+    """
+    lines = ["⚠️Пользователь #Бан", ""]
+
+    # ─ Блок В: группа ─
+    if chat:
+        chat_id = chat.id
+        clean = _chat_id_clean(chat_id)
+        title = chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+    elif trigger_message:
+        cid = trigger_message.chat.id
+        clean = _chat_id_clean(cid)
+        title = trigger_message.chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{cid}] #c{clean}')
+
+    lines.append(f"Инициатор: {_fmt_user_block(admin_user, admin_id, db)}")
+    lines.append(f"Пользователь: {_fmt_user_block(target_user, target_id, db)}")
+    lines.append("Действие: #Бан")
+
+    # ─ Блок Е: время ─
+    if banned_at:
+        tz = getattr(banned_at, 'tzinfo', None)
+        if tz is None:
+            dt = banned_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        else:
+            dt = banned_at.astimezone(_MSK)
+    else:
+        dt = datetime.now(_MSK)
+    date_str = f"{dt.day} {_MONTHS[dt.month - 1]} {dt.year} г. {dt.strftime('%H:%M:%S')} MSK"
+    lines.append(f"Время: {date_str}")
+
+    # ─ Сообщение-триггер (если есть) ─
+    if trigger_message:
+        cid = trigger_message.chat.id
+        clean = _chat_id_clean(cid)
+        msg_id = trigger_message.message_id
+        msg_link = f"https://t.me/c/{clean}/{msg_id}"
+
+        # Кому отвечал (если реплай)
+        reply_to = getattr(trigger_message, 'reply_to_message', None)
+        if reply_to and getattr(reply_to, 'from_user', None):
+            rt_user = reply_to.from_user
+            rt_block = _fmt_user_block(rt_user, rt_user.id, db)
+        else:
+            rt_block = None
+
+        # Время сообщения
+        msg_date = trigger_message.date
+        if msg_date:
+            tz = getattr(msg_date, 'tzinfo', None)
+            if tz is None:
+                msg_dt = msg_date.replace(tzinfo=timezone.utc).astimezone(_MSK)
+            else:
+                msg_dt = msg_date.astimezone(_MSK)
+            msg_ts = f"[{msg_dt.strftime('%Y-%m-%d %H:%M:%S')}]"
+        else:
+            msg_ts = ""
+
+        if rt_block:
+            lines.append(
+                f'Сообщение пользователя: {rt_block} {msg_ts} '
+                f'ветка (<a href="{msg_link}">{msg_link}</a>)'
+            )
+        else:
+            lines.append(f'Сообщение пользователя: {msg_ts} <a href="{msg_link}">ветка</a>')
+
+        lines.append(f'<a href="{msg_link}">Перейти к сообщению</a>')
+
+        # Текст сообщения
+        msg_text = trigger_message.text or trigger_message.caption or ''
+        if msg_text:
+            lines.append("")
+            lines.append(msg_text)
+
+    text = "\n".join(lines)
+
+    # ─ Кнопки действий ─
+    action_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔊 Размьютить", callback_data=f"jremute_{target_id}")],
+        [
+            InlineKeyboardButton("🚫 Забанить", callback_data=f"jban_{target_id}"),
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"jkick_{target_id}"),
+        ],
+        [InlineKeyboardButton("🔇 Заглушить навсегда", callback_data=f"jmute_{target_id}")],
+    ])
+
+    await log_event(bot, db, 'ban', text, user_id=target_id, channel_num=3, markup=action_markup)
+
+
+async def log_mute(
+    bot: Bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    duration_human: str = 'Навсегда',
+    chat=None,
+    target_user=None,
+    admin_user=None,
+    trigger_message=None,
+    muted_at=None,
+) -> None:
+    """Логирует мут пользователя (#Мут) → канал 3."""
+    now_msk = datetime.now(timezone.utc).astimezone(_MSK) if muted_at is None else (
+        muted_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        if getattr(muted_at, 'tzinfo', None) is None
+        else muted_at.astimezone(_MSK)
     )
+    ts = now_msk.strftime(f"%d {_MONTHS[now_msk.month]} %Y, %H:%M:%S МСК")
+
+    chat_id_raw = chat.id if chat else None
+    chat_title = chat.title if chat else None
+    chat_id_display = _chat_id_clean(chat_id_raw) if chat_id_raw else "—"
+
+    target_block = _fmt_user_block(target_user, target_id, db)
+    admin_block = _fmt_user_block(admin_user, admin_id, db)
+
+    # Отображение длительности
+    is_forever = duration_human.lower() in ('навсегда', 'forever', '∞', '♾️')
+    duration_display = "♾️" if is_forever else f"на {duration_human}"
+    action_text = f"Навсегда" if is_forever else duration_human
+
+    lines = [
+        "🆘 <b>Пользователь наказан командой #Мут (Команды модерации)</b>",
+        "",
+        f"{admin_block} ограничил возможность писать сообщения {target_block} {duration_display}",
+        "",
+        f"Группа: {chat_title or '—'} [{chat_id_display}]",
+        f"Инициатор: {admin_block}",
+        f"Действие: Запрещено писать #muted {action_text}",
+        f"✉️Время: {ts}",
+    ]
+
+    # ─ Сообщение-причина (реплай) ─
+    if trigger_message:
+        rt_user = trigger_message.from_user
+        rt_block = _fmt_user_block(rt_user, rt_user.id if rt_user else target_id, db) if rt_user else target_block
+
+        msg_date = trigger_message.date
+        if msg_date:
+            tz = getattr(msg_date, 'tzinfo', None)
+            msg_dt = msg_date.replace(tzinfo=timezone.utc).astimezone(_MSK) if tz is None else msg_date.astimezone(_MSK)
+            msg_ts = f"[{msg_dt.strftime('%Y-%m-%d %H:%M:%S')}]"
+        else:
+            msg_ts = ""
+
+        chat_id_link = _chat_id_clean(chat_id_raw) if chat_id_raw else ""
+        msg_id = trigger_message.message_id
+        thread_id = getattr(trigger_message, 'message_thread_id', None) or msg_id
+        msg_link = f"https://t.me/c/{chat_id_link}/{thread_id}/{msg_id}" if chat_id_link else ""
+
+        lines.append("")
+        if msg_link:
+            lines.append(f"Сообщение пользователя: {rt_block} {msg_ts} <a href=\"{msg_link}\">ветка</a>")
+        else:
+            lines.append(f"Сообщение пользователя: {rt_block} {msg_ts}")
+
+        msg_text = trigger_message.text or trigger_message.caption or ''
+        if msg_text:
+            lines.append("")
+            lines.append(msg_text)
+
+    text = "\n".join(lines)
+
+    # ─ Кнопки: Размьютить / Забанить / Удалить ─
+    action_markup = InlineKeyboardMarkup([
+        [InlineKeyboardButton("🔊 Размьютить", callback_data=f"jremute_{target_id}")],
+        [
+            InlineKeyboardButton("🚫 Забанить", callback_data=f"jban_{target_id}"),
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"jkick_{target_id}"),
+        ],
+    ])
+
+    await log_event(bot, db, 'mute', text, user_id=target_id, channel_num=3, markup=action_markup)
+
+
+async def log_unmute(
+    bot: Bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    chat=None,
+    target_user=None,
+    admin_user=None,
+    unmuted_at=None,
+) -> None:
+    """Логирует снятие мута (#Размут) → канал 3."""
+    now_msk = datetime.now(timezone.utc).astimezone(_MSK) if unmuted_at is None else (
+        unmuted_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        if getattr(unmuted_at, 'tzinfo', None) is None
+        else unmuted_at.astimezone(_MSK)
+    )
+    ts = now_msk.strftime(f"%d {_MONTHS[now_msk.month]} %Y, %H:%M:%S МСК")
+
+    chat_id_raw = chat.id if chat else None
+    chat_title = chat.title if chat else None
+    chat_id_display = _chat_id_clean(chat_id_raw) if chat_id_raw else "—"
+
+    target_block = _fmt_user_block(target_user, target_id, db)
+    admin_block = _fmt_user_block(admin_user, admin_id, db)
+
+    lines = [
+        "✅ <b>#Размут</b>",
+        "",
+        f"Группа: {chat_title or '—'} [{chat_id_display}]",
+        f"Инициатор: {admin_block}",
+        f"Пользователь: {target_block}",
+        f"Действие: Ограничения на отправку сообщений сняты",
+    ]
+
+    # ─ Предыдущий мут ─
+    try:
+        db.cursor.execute(
+            "SELECT text_preview, created_at FROM journal_messages "
+            "WHERE event_type='mute' AND user_id=? ORDER BY created_at DESC LIMIT 1",
+            (target_id,),
+        )
+        prev_mute = db.cursor.fetchone()
+        if prev_mute:
+            lines.append("")
+            lines.append(f"Предыдущий мут: {prev_mute['created_at']}")
+            preview = (prev_mute['text_preview'] or '')[:120]
+            if preview:
+                lines.append(f"<i>{preview}</i>")
+    except Exception:
+        pass
+
+    lines += ["", f"🕐 {ts}"]
+    text = "\n".join(lines)
+
+    await log_event(bot, db, 'unmute', text, user_id=target_id, channel_num=3)
+
+
+async def log_unban(
+    bot: Bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    chat=None,
+    target_user=None,
+    admin_user=None,
+    unbanned_at=None,
+) -> None:
+    """Логирует разбан пользователя (#Разбан) → канал 3."""
+    now_msk = datetime.now(timezone.utc).astimezone(_MSK) if unbanned_at is None else (
+        unbanned_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        if getattr(unbanned_at, 'tzinfo', None) is None
+        else unbanned_at.astimezone(_MSK)
+    )
+    ts = now_msk.strftime(f"%d {_MONTHS[now_msk.month]} %Y, %H:%M:%S МСК")
+
+    chat_id_raw = chat.id if chat else None
+    chat_title = chat.title if chat else None
+    chat_id_display = _chat_id_clean(chat_id_raw) if chat_id_raw else "—"
+
+    target_block = _fmt_user_block(target_user, target_id, db)
+    admin_block = _fmt_user_block(admin_user, admin_id, db)
+
+    lines = [
+        "✅ <b>#Разбан</b>",
+        "",
+        f"Группа: {chat_title or '—'} [{chat_id_display}]",
+        f"Инициатор: {admin_block}",
+        f"Пользователь: {target_block}",
+        f"Действие: Пользователь разбанен",
+    ]
+
+    # ─ Предыдущий бан ─
+    try:
+        db.cursor.execute(
+            "SELECT text_preview, created_at FROM journal_messages "
+            "WHERE event_type='ban' AND user_id=? ORDER BY created_at DESC LIMIT 1",
+            (target_id,),
+        )
+        prev_ban = db.cursor.fetchone()
+        if prev_ban:
+            ban_dt_raw = prev_ban['created_at']
+            ban_preview = (prev_ban['text_preview'] or '')[:120]
+            lines.append("")
+            lines.append(f"Предыдущий бан: {ban_dt_raw}")
+            if ban_preview:
+                lines.append(f"<i>{ban_preview}</i>")
+    except Exception:
+        pass
+
+    lines += ["", f"🕐 {ts}"]
+    text = "\n".join(lines)
+
+    await log_event(bot, db, 'unban', text, user_id=target_id, channel_num=3)
 
 
 async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str) -> None:
@@ -284,14 +832,215 @@ async def log_exit_survey(bot, db, user_id: int, reason: str) -> None:
     )
 
 
-async def log_profile_change(bot, db, user_id: int, changes: str) -> None:
-    """Логирует изменения профиля."""
-    tag = _user_tag(db, user_id)
-    await log_event(
-        bot, db, 'profile',
-        f"👤 {tag} обновил(а) профиль\n{changes}",
-        user_id=user_id, hashtag="#Профиль"
-    )
+async def log_profile_change(
+    bot: Bot,
+    db,
+    user_id: int,
+    changes: str = '',
+    tg_user=None,
+    old_user_data=None,
+    chat=None,
+    changed_at=None,
+) -> None:
+    """
+    Логирует изменение профиля (#Профиль) → канал 3.
+
+    Args:
+        tg_user: telegram.User — новое состояние
+        old_user_data: sqlite3.Row — старые данные из БД
+        chat: telegram.Chat — чат где было сообщение
+        changed_at: datetime — время изменения
+    """
+    # ─ Блок А ─
+    lines = ["👥 #Профиль", ""]
+    lines.append("Пользователь из Вашей группы изменил данные своего профиля.")
+
+    # ─ Было / Стало ─
+    if old_user_data and tg_user:
+        # Старое состояние из БД
+        try:
+            old_first = old_user_data['first_name'] or ''
+            old_last = old_user_data['last_name'] or ''
+        except (KeyError, IndexError):
+            old_first, old_last = '', ''
+        try:
+            old_uname = old_user_data['username']
+        except (KeyError, IndexError):
+            old_uname = None
+
+        old_full = f"{old_first} {old_last}".strip() or str(user_id)
+        old_uname_str = f"[@{old_uname}]" if old_uname else "[ ]"
+        was_line = f'<a href="tg://user?id={user_id}">{old_full}</a> {old_uname_str}[{user_id}] #user{user_id}'
+        became_line = _fmt_user_block(tg_user, user_id, db)
+
+        lines.append(f"Было {was_line}")
+        lines.append(f"Стало {became_line}")
+    elif changes:
+        # Fallback: старый текстовый формат
+        lines.append(changes)
+
+    lines.append("")
+
+    # ─ Блок В: группа + пользователь ─
+    if chat:
+        chat_id = chat.id
+        clean = _chat_id_clean(chat_id)
+        title = chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    lines.append(f"Пользователь: {_fmt_user_block(tg_user, user_id, db)}")
+
+    # ─ Блок Г: анкета ─
+    u_db = db.get_user(user_id)
+    q_parts = []
+    if u_db:
+        for key, label in [('q_name', 'Имя'), ('q_age', 'Возраст'),
+                           ('q_city', 'Город'), ('q_therapy', 'Терапия')]:
+            try:
+                val = u_db[key]
+                if val:
+                    q_parts.append(f"{label}: {val}")
+            except (KeyError, IndexError):
+                pass
+    if q_parts:
+        lines.append(" | ".join(q_parts))
+
+    # ─ Блок Е: время ─
+    lines.append("")
+    if changed_at:
+        tz = getattr(changed_at, 'tzinfo', None)
+        if tz is None:
+            dt = changed_at.replace(tzinfo=timezone.utc).astimezone(_MSK)
+        else:
+            dt = changed_at.astimezone(_MSK)
+    else:
+        dt = datetime.now(_MSK)
+    date_str = f"{dt.day} {_MONTHS[dt.month - 1]} {dt.year} г. {dt.strftime('%H:%M:%S')} MSK"
+    lines.append(f"Время: {date_str}")
+
+    text = "\n".join(lines)
+
+    # Без кнопок
+    await log_event(bot, db, 'profile', text, user_id=None, channel_num=3)
+
+
+async def log_activity(
+    bot: Bot,
+    db,
+    user_id: int,
+    chat_id: int = None,
+    chat_title: str = None,
+    tg_user=None,
+    days_inactive: int = 60,
+) -> None:
+    """
+    Логирует неактивность пользователя 60+ дней (#Активность) → канал 3.
+    Блок В без анкетных данных, Блок Ж — кнопка «Написать в ЛС».
+    """
+    lines = ["⏰ #Активность", ""]
+
+    # ─ Блок В: группа ─
+    if chat_id:
+        clean = _chat_id_clean(chat_id)
+        title = chat_title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    # ─ Блок В: пользователь (многострочный, без анкеты) ─
+    if tg_user:
+        first = tg_user.first_name or ''
+        last = getattr(tg_user, 'last_name', '') or ''
+        full = f"{first} {last}".strip() or str(user_id)
+        uname = getattr(tg_user, 'username', None)
+    else:
+        u = db.get_user(user_id)
+        if u:
+            try:
+                full = u['first_name'] or str(user_id)
+            except (KeyError, IndexError):
+                full = str(user_id)
+            try:
+                uname = u['username']
+            except (KeyError, IndexError):
+                uname = None
+        else:
+            full = str(user_id)
+            uname = None
+
+    lines.append(f'Пользователь: <a href="tg://user?id={user_id}">{full}</a>')
+    lines.append(f'Никнейм: @{uname}' if uname else 'Никнейм: не указан')
+    lines.append(f'ID-пользователя: #user{user_id}')
+    lines.append("")
+    lines.append(f"Активность: Пользователь не был онлайн более {days_inactive} дней.")
+
+    text = "\n".join(lines)
+
+    # ─ Блок Ж: кнопка «Написать в ЛС» ─
+    await log_event(bot, db, 'inactivity', text, user_id=user_id, channel_num=3)
+
+
+async def log_photo(
+    bot: Bot,
+    db,
+    user_id: int,
+    chat=None,
+    tg_user=None,
+    action: str = 'changed',
+) -> None:
+    """
+    Логирует смену/открытие фото профиля (#Фото) → канал 3.
+    Без Блока Г, без Блока Е, без кнопок.
+
+    Args:
+        action: 'changed' — сменил фото, 'opened' — открыл доступ для всех
+    """
+    if action == 'opened':
+        action_text = "открыл(а) доступ к фото профиля для всех"
+    else:
+        action_text = "сменил(а) фото профиля"
+
+    lines = ["📸 #Фото", ""]
+    lines.append(f"Пользователь из Вашей группы {action_text}.")
+    lines.append("")
+
+    # ─ Блок В: группа ─
+    if chat:
+        chat_id = chat.id
+        clean = _chat_id_clean(chat_id)
+        title = chat.title or "Pulse 4ever"
+        link = f"https://t.me/c/{clean}/2147483647"
+        lines.append(f'Группа: <a href="{link}">{title}</a> [{chat_id}] #c{clean}')
+
+    # ─ Блок В: пользователь (многострочный формат) ─
+    if tg_user:
+        first = tg_user.first_name or ''
+        last = getattr(tg_user, 'last_name', '') or ''
+        full = f"{first} {last}".strip() or str(user_id)
+        uname = getattr(tg_user, 'username', None)
+    else:
+        u = db.get_user(user_id)
+        if u:
+            try:
+                full = u['first_name'] or str(user_id)
+            except (KeyError, IndexError):
+                full = str(user_id)
+            try:
+                uname = u['username']
+            except (KeyError, IndexError):
+                uname = None
+        else:
+            full = str(user_id)
+            uname = None
+
+    lines.append(f'Пользователь: <a href="tg://user?id={user_id}">{full}</a>')
+    lines.append(f'Никнейм: @{uname}' if uname else 'Никнейм: не указан')
+    lines.append(f'ID-пользователя: #user{user_id}')
+
+    text = "\n".join(lines)
+
+    # Без кнопок
+    await log_event(bot, db, 'photo', text, user_id=None, channel_num=3)
 
 
 # ═══════════════════════════════════════════════════════════════

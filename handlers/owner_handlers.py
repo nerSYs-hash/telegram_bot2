@@ -765,7 +765,17 @@ async def handle_owner_text_input(
             # Журнал
             try:
                 from handlers.journal_handlers import log_mute
-                await log_mute(context.bot, db, target_id, user.id, human)
+
+                class _FakeChat:
+                    id = target_chat_id
+                    title = None
+
+                await log_mute(
+                    context.bot, db, target_id, user.id,
+                    duration_human=human,
+                    chat=_FakeChat(),
+                    admin_user=user,
+                )
             except Exception as je:
                 logger.error(f"Journal log_mute error: {je}")
 

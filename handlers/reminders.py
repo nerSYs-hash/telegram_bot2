@@ -33,6 +33,7 @@ async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> N
     Вызывается из scheduler каждые 24 часа.
     """
     try:
+        # Пользователи 60+ дней без активности, ещё не уведомлённые за последние 30 дней
         db.cursor.execute('''
             SELECT user_id, username, first_name, last_active
             FROM users
@@ -41,7 +42,9 @@ async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> N
               AND is_owner = 0
               AND last_active < datetime('now', '-60 days')
               AND user_id NOT IN (
-                  SELECT user_id FROM users WHERE is_left = 1
+                  SELECT user_id FROM journal_messages
+                  WHERE event_type = 'inactivity'
+                    AND created_at >= datetime('now', '-30 days')
               )
             ORDER BY last_active ASC
             LIMIT 20
@@ -51,17 +54,23 @@ async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> N
         if not inactive:
             return
 
+        # Получаем инфо о чате один раз
+        chat_title = None
+        try:
+            chat_obj = await bot.get_chat(target_chat_id)
+            chat_title = chat_obj.title
+        except Exception:
+            pass
+
         # Журнал
         try:
-            from handlers.journal_handlers import log_event
+            from handlers.journal_handlers import log_activity
             for u in inactive:
-                name = u['username'] or u['first_name'] or f"ID:{u['user_id']}"
-                last = str(u['last_active'])[:10] if u['last_active'] else '—'
-                await log_event(
-                    bot, db, 'inactivity',
-                    f"💤 @{name} неактивен с {last}\n🆔 <code>{u['user_id']}</code>",
-                    user_id=u['user_id'],
-                    hashtag="#Неактивность"
+                await log_activity(
+                    bot, db, u['user_id'],
+                    chat_id=target_chat_id,
+                    chat_title=chat_title,
+                    days_inactive=60,
                 )
         except Exception as e:
             logger.error(f"Journal inactive log error: {e}")
