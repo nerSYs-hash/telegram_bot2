@@ -795,8 +795,13 @@ class MessageHandler:
                 if handled:
                     return
 
-        # ═══ ЖУРНАЛ: подключение канала (обрабатывается в admin_logic) ═══
-        if context.user_data.get('owner_awaiting') == 'journal_connect':
+        # ═══ ЖУРНАЛ: подключение канала или треда ═══
+        _awaiting = context.user_data.get('owner_awaiting', '')
+        if (
+            _awaiting == 'journal_connect'
+            or _awaiting.startswith('journal_connect_')
+            or _awaiting.startswith('journal_thread_')
+        ):
             from handlers.journal_handlers import handle_journal_text_input
             if await handle_journal_text_input(update, context, self.db):
                 return

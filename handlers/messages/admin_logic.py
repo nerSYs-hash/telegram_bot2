@@ -359,7 +359,12 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     # === OWNER PANEL FSM (Персонал, Эмиссия, Блэклист, Журнал) ===
     if context.user_data.get('owner_awaiting') and _is_privileged:
         _upd = update  # may be None if caller didn't pass it
-        if context.user_data['owner_awaiting'] == 'journal_connect':
+        awaiting_val = context.user_data['owner_awaiting']
+        if (
+            awaiting_val == 'journal_connect'
+            or awaiting_val.startswith('journal_connect_')
+            or awaiting_val.startswith('journal_thread_')
+        ):
             from handlers.journal_handlers import handle_journal_text_input
             if _upd is not None:
                 return await handle_journal_text_input(_upd, context, db)

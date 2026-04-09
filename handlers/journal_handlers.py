@@ -336,7 +336,7 @@ async def log_join(
 
     await log_event(
         bot, db, 'join', text,
-        user_id=None,
+        user_id=user_id,
         channel_num=3,
         markup=action_markup,
     )
@@ -391,28 +391,6 @@ async def log_leave(
         bot, db, 'leave', text,
         user_id=user_id,
         channel_num=3,
-    )
-
-
-async def log_mute(bot, db, target_id: int, admin_id: int, duration: str) -> None:
-    """Логирует мут."""
-    target_tag = _user_tag(db, target_id)
-    admin_tag = _user_tag(db, admin_id)
-    await log_event(
-        bot, db, 'mute',
-        f"🔇 {target_tag} замучен на {duration}\n👮 Админ: {admin_tag}",
-        user_id=target_id, hashtag="#Мут"
-    )
-
-
-async def log_unmute(bot, db, target_id: int, admin_id: int) -> None:
-    """Логирует размут."""
-    target_tag = _user_tag(db, target_id)
-    admin_tag = _user_tag(db, admin_id)
-    await log_event(
-        bot, db, 'unmute',
-        f"🔊 {target_tag} размучен\n👮 Админ: {admin_tag}",
-        user_id=target_id, hashtag="#Размут"
     )
 
 
@@ -473,7 +451,7 @@ async def log_kick(
 
     text = "\n".join(lines)
 
-    # Без кнопок
+    # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
     await log_event(bot, db, 'kick', text, user_id=None, channel_num=3)
 
 
@@ -790,17 +768,17 @@ async def log_unban(
 
 
 async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str) -> None:
-    """Логирует срабатывание триггера."""
+    """Логирует срабатывание триггера → канал 3."""
     tag = _user_tag(db, user_id)
     await log_event(
         bot, db, 'trigger',
         f"⚡ Триггер <b>{trigger_name}</b>\n👤 {tag}\n⚙️ Действие: {action}",
-        user_id=user_id, hashtag="#Триггер"
+        user_id=user_id, hashtag="#Триггер", channel_num=3
     )
 
 
 async def log_blacklist(bot, db, target_id: int, admin_id: int, added: bool) -> None:
-    """Логирует добавление/удаление из блэклиста."""
+    """Логирует добавление/удаление из блэклиста → канал 3."""
     target_tag = _user_tag(db, target_id)
     admin_tag = _user_tag(db, admin_id)
     if added:
@@ -809,26 +787,26 @@ async def log_blacklist(bot, db, target_id: int, admin_id: int, added: bool) -> 
     else:
         text = f"✅ {target_tag} убран из блэклиста\n👮 {admin_tag}"
         hashtag = "#Разблокировка"
-    await log_event(bot, db, 'blacklist', text, user_id=target_id, hashtag=hashtag)
+    await log_event(bot, db, 'blacklist', text, user_id=target_id, hashtag=hashtag, channel_num=3)
 
 
 async def log_admin_action(bot, db, admin_id: int, action_text: str) -> None:
-    """Логирует административное действие (эмиссия, вайп и т.д.)."""
+    """Логирует административное действие (эмиссия, вайп и т.д.) → канал 3."""
     admin_tag = _user_tag(db, admin_id)
     await log_event(
         bot, db, 'admin',
         f"🔧 {admin_tag}\n{action_text}",
-        hashtag="#Админ"
+        hashtag="#Админ", channel_num=3
     )
 
 
 async def log_exit_survey(bot, db, user_id: int, reason: str) -> None:
-    """Логирует ответ exit-опроса → второй канал."""
+    """Логирует ответ exit-опроса → канал 3."""
     tag = _user_tag(db, user_id)
     await log_event(
         bot, db, 'exit_survey',
         f"📋 {tag} ответил(а) на опрос\n📝 Причина: {reason}",
-        user_id=user_id, hashtag="#Опрос", channel_num=2
+        user_id=user_id, hashtag="#Опрос", channel_num=3
     )
 
 
@@ -921,7 +899,7 @@ async def log_profile_change(
 
     text = "\n".join(lines)
 
-    # Без кнопок
+    # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
     await log_event(bot, db, 'profile', text, user_id=None, channel_num=3)
 
 
@@ -1039,7 +1017,7 @@ async def log_photo(
 
     text = "\n".join(lines)
 
-    # Без кнопок
+    # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
     await log_event(bot, db, 'photo', text, user_id=None, channel_num=3)
 
 
@@ -1081,12 +1059,12 @@ async def show_journal_menu(query, db, admin_id: int) -> None:
 
     text = (
         f"📢 <b>ЖУРНАЛ СОБЫТИЙ</b>\n\n"
-        f"📡 Канал 1 (общий): {s1}\n"
-        f"📡 Канал 2 (вход/выход/опросы): {s2}\n"
-        f"📡 Канал 3 (доп. канал): {s3}\n\n"
+        f"📡 Канал 1 (резерв): {s1}\n"
+        f"📡 Канал 2 (резерв): {s2}\n"
+        f"📡 Канал 3 (основной — все события): {s3}\n\n"
         f"📊 Всего записей: <b>{total}</b>\n"
         f"📅 За 24 часа: <b>{today}</b>\n\n"
-        f"<b>Хештеги:</b> <code>#Вход #Выход #Мут #Бан #Триггер #Опрос #Профиль #Админ</code>"
+        f"<b>Хештеги:</b> <code>#Вход #Выход #Исключен #Бан #Разбан #Мут #Размут #Профиль #Фото #Активность</code>"
     )
 
     keyboard = [
@@ -1106,9 +1084,9 @@ async def show_journal_menu(query, db, admin_id: int) -> None:
 async def show_journal_channel_menu(query, db, admin_id: int, num: int) -> None:
     """Sub-меню для конкретного канала (1, 2 или 3)."""
     labels = {
-        1: "Канал 1 — общий журнал",
-        2: "Канал 2 — входы/выходы/опросы",
-        3: "Канал 3 — дополнительный",
+        1: "Канал 1 — резерв",
+        2: "Канал 2 — резерв",
+        3: "Канал 3 — основной (все события)",
     }
     title = labels.get(num, f"Канал {num}")
     status = _channel_status_line(db, num)

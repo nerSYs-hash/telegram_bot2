@@ -765,16 +765,20 @@ async def handle_owner_text_input(
             # Журнал
             try:
                 from handlers.journal_handlers import log_mute
-
-                class _FakeChat:
-                    id = target_chat_id
-                    title = None
-
+                try:
+                    real_chat = await context.bot.get_chat(target_chat_id)
+                except Exception:
+                    real_chat = None
+                try:
+                    target_tg = (await context.bot.get_chat_member(target_chat_id, target_id)).user
+                except Exception:
+                    target_tg = None
                 await log_mute(
                     context.bot, db, target_id, user.id,
                     duration_human=human,
-                    chat=_FakeChat(),
+                    chat=real_chat,
                     admin_user=user,
+                    target_user=target_tg,
                 )
             except Exception as je:
                 logger.error(f"Journal log_mute error: {je}")
@@ -819,7 +823,20 @@ async def handle_owner_text_input(
             # Журнал
             try:
                 from handlers.journal_handlers import log_unmute
-                await log_unmute(context.bot, db, target_id, user.id)
+                try:
+                    real_chat = await context.bot.get_chat(target_chat_id)
+                except Exception:
+                    real_chat = None
+                try:
+                    target_tg = (await context.bot.get_chat_member(target_chat_id, target_id)).user
+                except Exception:
+                    target_tg = None
+                await log_unmute(
+                    context.bot, db, target_id, user.id,
+                    chat=real_chat,
+                    admin_user=user,
+                    target_user=target_tg,
+                )
             except Exception as je:
                 logger.error(f"Journal log_unmute error: {je}")
 
