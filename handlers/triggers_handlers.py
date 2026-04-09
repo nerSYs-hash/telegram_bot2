@@ -1308,10 +1308,13 @@ async def process_triggers(
         # Журнал
         try:
             from handlers.journal_handlers import log_trigger
-            await log_trigger(context.bot, db, user.id, trigger['name'],
-                              ', '.join(actions) if actions else 'info')
-        except Exception:
-            pass
+            await log_trigger(
+                context.bot, db, user.id, trigger['name'],
+                ', '.join(actions) if actions else 'info',
+                chat=message.chat, tg_user=user, triggered_at=message.date,
+            )
+        except Exception as _je:
+            logger.error(f"log_trigger error: {_je}")
 
         for act in actions:
             try:

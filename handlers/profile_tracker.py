@@ -38,38 +38,36 @@ async def track_profile_changes(bot, db, user, chat=None) -> None:
     try:
         user_data = db.get_user(user.id)
     except Exception:
-        return
-
-    if not user_data:
-        return
+        user_data = None
 
     has_changes = False
 
-    # ── Username ──
-    try:
-        old_username = user_data['username']
-    except (KeyError, IndexError):
-        old_username = None
-    if old_username != user.username:
-        has_changes = True
+    if user_data:
+        # ── Username ──
+        try:
+            old_username = user_data['username']
+        except (KeyError, IndexError):
+            old_username = None
+        if old_username != user.username:
+            has_changes = True
 
-    # ── Имя ──
-    try:
-        old_first = user_data['first_name']
-    except (KeyError, IndexError):
-        old_first = None
-    if old_first != user.first_name:
-        has_changes = True
+        # ── Имя ──
+        try:
+            old_first = user_data['first_name']
+        except (KeyError, IndexError):
+            old_first = None
+        if old_first != user.first_name:
+            has_changes = True
 
-    # ── Фамилия ──
-    try:
-        old_last = user_data['last_name']
-    except (KeyError, IndexError):
-        old_last = None
-    if old_last != user.last_name:
-        has_changes = True
+        # ── Фамилия ──
+        try:
+            old_last = user_data['last_name']
+        except (KeyError, IndexError):
+            old_last = None
+        if old_last != user.last_name:
+            has_changes = True
 
-    if has_changes:
+    if has_changes and user_data:
         try:
             from handlers.journal_handlers import log_profile_change
             from datetime import datetime, timezone
@@ -87,25 +85,30 @@ async def track_profile_changes(bot, db, user, chat=None) -> None:
     # ── Фото профиля ──
     try:
         photos = await bot.get_user_profile_photos(user.id, limit=1)
-        if photos.total_count > 0:
+        if photos and photos.total_count > 0:
             current_uid = photos.photos[0][0].file_unique_id
         else:
             current_uid = ''
 
-        stored_uid = db.get_setting(f'photo_uid_{user.id}') or ''
+        stored_raw = db.get_setting(f'photo_uid_{user.id}')
+        # None = ещё не отслеживали этого юзера (первое сообщение) — инициализируем без лога
+        first_seen = stored_raw is None
+        stored_uid = stored_raw or ''
 
-        if current_uid != stored_uid:
+        if first_seen:
+            db.set_setting(f'photo_uid_{user.id}', current_uid)
+            logger.info(f"PHOTO TRACKER INIT: user {user.id} uid={current_uid!r}")
+        elif current_uid != stored_uid:
             db.set_setting(f'photo_uid_{user.id}', current_uid)
             if stored_uid == '' and current_uid:
-                action = 'opened'   # раньше не было / не было доступа — открыл
+                action = 'opened'   # раньше не было / скрыто — открыл
             elif current_uid == '':
-                action = 'removed'  # убрал фото — не логируем
+                action = 'removed'  # скрыл/удалил фото
             else:
                 action = 'changed'  # сменил фото
 
-            if action in ('changed', 'opened'):
-                from handlers.journal_handlers import log_photo
-                await log_photo(bot, db, user.id, chat=chat, tg_user=user, action=action)
-                logger.info(f"PHOTO CHANGE ({action}): user {user.id}")
+            from handlers.journal_handlers import log_photo
+            await log_photo(bot, db, user.id, chat=chat, tg_user=user, action=action)
+            logger.info(f"PHOTO CHANGE ({action}): user {user.id} {stored_uid!r} -> {current_uid!r}")
     except Exception as e:
-        logger.debug(f"Photo tracker error (user {user.id}): {e}")
+        logger.error(f"Photo tracker error (user {user.id}): {e}", exc_info=True)

@@ -660,18 +660,31 @@ async def _show_thanks(message, user_id: int, db, context) -> None:
         reply_markup=reply_markup
     )
 
-    # Журнал: логируем завершение exit-опроса
+    # Журнал: логируем завершение exit-опроса (полный отчёт)
     try:
         from handlers.journal_handlers import log_exit_survey
         db.cursor.execute(
-            'SELECT reason_category FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1',
+            'SELECT * FROM exit_interviews WHERE user_id = ? ORDER BY id DESC LIMIT 1',
             (user_id,)
         )
         row = db.cursor.fetchone()
-        reason = row['reason_category'] if row else 'Не указана'
         bot = context.bot if context else None
         if bot:
-            await log_exit_survey(bot, db, user_id, reason)
+            # Получаем основной чат (target_chat) для блока «Группа»
+            chat_obj = None
+            try:
+                from config import TARGET_CHAT_ID
+                chat_obj = await bot.get_chat(TARGET_CHAT_ID)
+            except Exception:
+                chat_obj = None
+            try:
+                tg_user = (await bot.get_chat(user_id))
+            except Exception:
+                tg_user = None
+            await log_exit_survey(
+                bot, db, user_id, survey_row=row,
+                chat=chat_obj, tg_user=tg_user,
+            )
     except Exception as e:
         logger.error(f"Journal log_exit_survey error: {e}")
 
