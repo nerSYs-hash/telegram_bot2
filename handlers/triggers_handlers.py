@@ -1312,6 +1312,7 @@ async def process_triggers(
                 context.bot, db, user.id, trigger['name'],
                 ', '.join(actions) if actions else 'info',
                 chat=message.chat, tg_user=user, triggered_at=message.date,
+                trigger_message=message,
             )
         except Exception as _je:
             logger.error(f"log_trigger error: {_je}")

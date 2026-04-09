@@ -370,7 +370,7 @@ async def log_leave(
         tg_user: telegram.User — покинувший пользователь
         left_at: datetime — время выхода
     """
-    lines = ["⚠️Пользователь покинул чат #Выход", ""]
+    lines = ["⚠️ #Выход", ""]
 
     # ─ Блок В: группа ─
     if chat:
@@ -716,7 +716,8 @@ def _localize_trigger_actions(action: str) -> str:
 
 
 async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
-                      chat=None, tg_user=None, triggered_at=None) -> None:
+                      chat=None, tg_user=None, triggered_at=None,
+                      trigger_message=None) -> None:
     """Логирует срабатывание триггера (#Триггер) → канал 3."""
     # Тег триггера: пробелы → подчёркивания, чтобы получился валидный хештег
     name_tag = (trigger_name or 'unknown').strip().replace(' ', '_')
@@ -733,11 +734,40 @@ async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
     action_ru = _localize_trigger_actions(action)
     lines.append(f"⚙️ Действие: {action_ru}")
     lines.append("")
+
+    # ─ Сообщение, на которое сработал триггер ─
+    if trigger_message:
+        cid = trigger_message.chat.id if trigger_message.chat else (chat.id if chat else None)
+        clean = _chat_id_clean(cid) if cid else ""
+        msg_id = trigger_message.message_id
+        thread_id = getattr(trigger_message, 'message_thread_id', None) or msg_id
+        msg_link = f"https://t.me/c/{clean}/{thread_id}/{msg_id}" if clean else ""
+
+        msg_date = trigger_message.date
+        if msg_date:
+            tz = getattr(msg_date, 'tzinfo', None)
+            msg_dt = msg_date.replace(tzinfo=timezone.utc).astimezone(_MSK) if tz is None else msg_date.astimezone(_MSK)
+            msg_ts = f"[{msg_dt.strftime('%Y-%m-%d %H:%M:%S')}]"
+        else:
+            msg_ts = ""
+
+        if msg_link:
+            lines.append(f'Сообщение пользователя: {msg_ts} <a href="{msg_link}">ветка</a>')
+            lines.append(f'<a href="{msg_link}">Перейти к сообщению</a>')
+        else:
+            lines.append(f"Сообщение пользователя: {msg_ts}")
+
+        msg_text = trigger_message.text or trigger_message.caption or ''
+        if msg_text:
+            lines.append("")
+            lines.append(msg_text)
+        lines.append("")
+
     lines.append(f"🕐 {_fmt_time_msk(triggered_at)}")
 
     await log_event(
         bot, db, 'trigger', "\n".join(lines),
-        user_id=user_id, hashtag="#Триггер", channel_num=3
+        user_id=user_id, channel_num=3
     )
 
 
@@ -810,7 +840,7 @@ async def log_exit_survey(bot, db, user_id: int, reason: str = '', survey_row=No
 
     await log_event(
         bot, db, 'exit_survey', text,
-        user_id=user_id, hashtag="#Опрос", channel_num=3
+        user_id=user_id, channel_num=3
     )
 
 
