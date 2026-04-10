@@ -215,8 +215,11 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                                        dossier_chat_id=sent.chat.id)
                 return
             elif is_photo and not custom_photo:
-                # Была фото-версия, теперь убираем фото — отправляем как текст
-                # (edit_message_media не умеет переключать тип, отправим новое)
+                # Была фото-версия, теперь убираем фото — удаляем старое, отправляем текст
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                except Exception:
+                    pass
                 sent = await bot.send_message(
                     chat_id=chat_id,
                     message_thread_id=DOSSIER_THREAD_ID,
