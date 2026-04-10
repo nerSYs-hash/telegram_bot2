@@ -243,15 +243,31 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         avg_days   = _d(total_days) / _d(len(all_users))
         stats_message += f"⏱ Средний срок в чате: {int(avg_days)} дней\n"
 
-    # Пульсов добыто
+    # Пульсов заработано — все виды наград
     db.cursor.execute('''
-        SELECT SUM(amount) as total FROM transactions
-        WHERE to_user_id IS NOT NULL AND transaction_type = 'message_reward'
+        SELECT
+            COALESCE(SUM(CASE WHEN transaction_type IN ('message_reward','combo_reward','sprint_reward') THEN amount ELSE 0 END), 0) AS mined,
+            COALESCE(SUM(CASE WHEN transaction_type IN (
+                'message_reward','combo_reward','sprint_reward',
+                'referral_reward','lottery_win','bingo_win',
+                'monthly_gift','reaction_given_reward','reaction_received_reward',
+                'lootbox_win','bbs_popularity','admin_give','compensation_reward'
+            ) THEN amount ELSE 0 END), 0) AS total_earned,
+            COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalized
+        FROM transactions
+        WHERE to_user_id IS NOT NULL
           AND timestamp >= ? AND timestamp <= ?
     ''', (start_date, end_date))
     r = db.cursor.fetchone()
-    total_pulses = _d(r['total']) if r['total'] else Decimal('0')
-    stats_message += f"💎 Добыто Пульсов: {format_number(total_pulses)}\n"
+    _mined   = _d(r['mined'])
+    _earned  = _d(r['total_earned'])
+    _penalty = _d(r['penalized'])
+    net_mined  = max(_mined - _penalty, Decimal('0'))
+    net_earned = max(_earned - _penalty, Decimal('0'))
+    stats_message += (
+        f"💎 Добыто Пульсов: {format_number(net_mined)}"
+        f" | Всего заработано: {format_number(net_earned)}\n"
+    )
 
     # Вовлечённость
     try:

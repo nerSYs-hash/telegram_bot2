@@ -178,6 +178,17 @@ class TelegramBot:
         # Initialize rate cache
         await self.init_rate_cache()
 
+        # Прогреваем кеш ТОП-5 активистов при старте (иначе первый час пустой)
+        try:
+            from utils.exchange_rate import scheduled_top5_percent_update
+            import asyncio as _asyncio
+            await _asyncio.get_event_loop().run_in_executor(
+                None, scheduled_top5_percent_update, self.db
+            )
+            logger.info("TOP-5% cache warmed up on startup")
+        except Exception as _e:
+            logger.warning(f"TOP-5% warmup failed: {_e}")
+
         # ── Уведомление о версии при старте ──
         await self._notify_version(bot)
 
