@@ -22,7 +22,7 @@ FSM: context.user_data['anketa_edit'] = {'action': 'photo'|'note', 'user_id': in
 
 import asyncio
 import logging
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from config import ADMIN_CHAT_ID, DOSSIER_THREAD_ID
 
 logger = logging.getLogger(__name__)
@@ -418,26 +418,21 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
 
     # ── начало ввода примечания ──
     if action == 'note':
-        context.user_data['anketa_edit'] = {'action': 'note', 'user_id': user_id}
         row = get_anketa_edit(db, user_id) or {}
         cur = row.get('note') or ''
-        hint = f"\n\nТекущее: <i>{cur[:100]}</i>" if cur else ''
-        prompt_text = (
-            f"📝 <b>Введите примечание</b> для анкеты #{user_id}{hint}\n\n"
-            "<i>Просто напишите текст в этот чат.</i>"
+        hint = f" (сейчас: {cur[:60]})" if cur else ''
+        prompt = await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            message_thread_id=query.message.message_thread_id,
+            text=f"📝 Примечание к анкете #{user_id}{hint}:",
+            reply_markup=ForceReply(selective=True, input_field_placeholder="Введите примечание…"),
         )
-        prompt_kb = InlineKeyboardMarkup([[IKB("❌ Отмена", callback_data=f"anketa_edit_{user_id}")]])
-        try:
-            await query.edit_message_text(prompt_text, parse_mode='HTML', reply_markup=prompt_kb)
-        except Exception:
-            try:
-                await query.edit_message_caption(prompt_text, parse_mode='HTML', reply_markup=prompt_kb)
-            except Exception:
-                await context.bot.send_message(
-                    chat_id=query.message.chat.id,
-                    message_thread_id=query.message.message_thread_id,
-                    text=prompt_text, parse_mode='HTML', reply_markup=prompt_kb,
-                )
+        await query.answer()
+        context.user_data['anketa_edit'] = {
+            'action': 'note',
+            'user_id': user_id,
+            'prompt_msg_id': prompt.message_id,
+        }
         return True
 
     # ── убрать кастомное фото ──
@@ -545,17 +540,23 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
     if action == 'note':
         text = (message.text or '').strip()
         if not text:
-            await message.reply_text("⚠️ Пустое примечание не сохранено.")
+            conf = await message.reply_text("⚠️ Пустое примечание не сохранено.")
+            asyncio.create_task(_autodelete(conf, delay=3))
             return True
 
+        prompt_msg_id = state.get('prompt_msg_id')
         context.user_data.pop('anketa_edit', None)
         upsert_anketa_edit(db, user_id, note=text)
 
         if reg_data:
             await _rebuild_and_update(context.bot, db, user_id, reg_data)
 
-        conf = await message.reply_text(f"✅ Примечание к анкете #{user_id} сохранено.")
-        asyncio.create_task(_autodelete(conf, delay=4))
+        # Удаляем ForceReply-промпт и ответ пользователя
+        if prompt_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+            except Exception:
+                pass
         try:
             await message.delete()
         except Exception:
