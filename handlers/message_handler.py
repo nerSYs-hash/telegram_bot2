@@ -25,6 +25,27 @@ from handlers.messages.admin_logic import (
 from handlers.messages.top_and_stats import show_top_rich, show_top_activists
 from handlers.commands.exchange_commands import course_command as _course_command
 from handlers.BBS.fsm_input_bbs import process_bbs_input
+
+
+async def _delete_msg_job(context):
+    """Job: удаляет сообщение бота через минуту после триггера курс/активисты/богач."""
+    try:
+        d = context.job.data
+        await context.bot.delete_message(chat_id=d['chat_id'], message_id=d['message_id'])
+    except Exception:
+        pass
+
+
+def _schedule_auto_delete(context, chat_id: int, message_id: int, delay: int = 60):
+    """Планирует удаление сообщения через delay секунд."""
+    try:
+        context.job_queue.run_once(
+            _delete_msg_job, when=delay,
+            data={'chat_id': chat_id, 'message_id': message_id},
+            name=f"autodel_{message_id}",
+        )
+    except Exception as e:
+        logging.warning(f"_schedule_auto_delete: {e}")
 from handlers.owner_handlers import handle_owner_text_input
 from handlers.shipper_logic import try_activate_shipper_resonance
 
@@ -457,7 +478,13 @@ class MessageHandler:
                 await show_profile(update, context, self.db, user.id)
                 return
             elif btn == REPLY_BTN_COURSE:
-                await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
+                bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
+                if bot_msg:
+                    _schedule_auto_delete(context, bot_msg.chat.id, bot_msg.message_id, delay=60)
+                try:
+                    await message.delete()
+                except Exception:
+                    pass
                 return
             elif btn == REPLY_BTN_TOP5:
                 kb = [[InlineKeyboardButton("\u26a1 Активисты", callback_data="top5_activists")],[InlineKeyboardButton("\U0001f4b0 Богачи", callback_data="top5_rich")]]
@@ -570,17 +597,22 @@ class MessageHandler:
             # === ВЫПОЛНЕНИЕ ТРИГГЕРА ===
             if triggered:
                 # Сначала отвечаем, потом удаляем триггер
+                bot_msg = None
                 if trigger_type in ('rich', 'activist') and self.db.is_feature_enabled('top_commands'):
                     if trigger_type == 'rich':
                         logging.info(f"✅ TRIGGER ACTIVATED: 'богач' by {message.from_user.id}")
-                        await show_top_rich(message, context, self.db)
+                        bot_msg = await show_top_rich(message, context, self.db)
                     elif trigger_type == 'activist':
                         logging.info(f"✅ TRIGGER ACTIVATED: 'активист' by {message.from_user.id}")
-                        await show_top_activists(message, context, self.db)
+                        bot_msg = await show_top_activists(message, context, self.db)
                 elif trigger_type == 'course':
                     logging.info(f"✅ TRIGGER ACTIVATED: 'курс' by {message.from_user.id}")
-                    await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
-                
+                    bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
+
+                # Удаляем ответ бота через 60 секунд
+                if bot_msg:
+                    _schedule_auto_delete(context, bot_msg.chat.id, bot_msg.message_id, delay=60)
+
                 # Удаляем триггерное сообщение пользователя ПОСЛЕ ответа
                 try:
                     await message.delete()

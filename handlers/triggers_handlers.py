@@ -934,23 +934,40 @@ async def _configure_action(src, ctx, action: str):
         rot_items = _get_rotation_items(data)
         rot_ready = sum(1 for item in rot_items if item.get('text') or item.get('media_id'))
         rot_status = f"🔁 Ротация: {'✅' if rot_ready else '❌'} ({rot_ready}/5)"
-        text = f"💬 <b>Сообщение в чат</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n📐 Режим: {pos}\n{rot_status}"
+        link_prev = cfg.get('link_preview', True)
+        link_prev_icon = '✅' if link_prev else '❌'
+        with_reply = cfg.get('reply_to_user', False)
+        reply_icon = '✅' if with_reply else '❌'
+        text = (
+            f"💬 <b>Сообщение в чат</b>\n\n"
+            f"📝 Текст: {cur_text[:200]}\n"
+            f"🖼 Медиа: {has_media}\n"
+            f"📐 Режим: {pos}\n"
+            f"{rot_status}\n"
+            f"🔗 Превью ссылок: {link_prev_icon}\n"
+            f"↩️ Реплай на сообщение: {reply_icon}"
+        )
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_chat_media")],
             [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
             [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
             [IKB(f"🔁 Ротация ({rot_ready}/5)", callback_data="trigger_acfg_rotation")],
+            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle"),
+             IKB(f"{reply_icon} Реплай", callback_data="trigger_acfg_reply_toggle")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
     elif action == 'msg_dm':
         cur_text = cfg.get('text', '<i>не задан</i>')
         has_media = '✅' if cfg.get('media_id') else '❌'
-        text = f"✉️ <b>Сообщение в ЛС</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}"
+        link_prev = cfg.get('link_preview', True)
+        link_prev_icon = '✅' if link_prev else '❌'
+        text = f"✉️ <b>Сообщение в ЛС</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n🔗 Превью ссылок: {link_prev_icon}"
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_dm_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_dm_media")],
+            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
@@ -1326,6 +1343,7 @@ async def process_triggers(
                         bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
                     else:
                         reply_text = (act_cfg.get('text') or trigger['name']).strip()
+                        reply_id = message.message_id if act_cfg.get('reply_to_user', False) else None
                         bot_msg = await _send_action_message(
                             bot=context.bot,
                             chat_id=message.chat.id,
@@ -1333,6 +1351,7 @@ async def process_triggers(
                             text=reply_text,
                             act_cfg=act_cfg,
                             parse_mode='HTML',
+                            reply_to_message_id=reply_id,
                         )
                     if bot_msg:
                         sent_public_bot_message = True
@@ -1442,19 +1461,26 @@ def _resolve_target(user, target_type: str, tdata: dict) -> Optional[int]:
 
 
 async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text: str,
-                               act_cfg: dict, parse_mode: str = 'HTML'):
+                               act_cfg: dict, parse_mode: str = 'HTML',
+                               reply_to_message_id: Optional[int] = None):
     """Отправка сообщения действия с опциональным медиа (для чат/ЛС)."""
     media_id = act_cfg.get('media_id')
     media_type = act_cfg.get('media_type')
     media_pos = act_cfg.get('media_pos', 'above')
+    link_preview = act_cfg.get('link_preview', True)
     text = (text or '').strip()
 
     if not media_id or not media_type:
         if not text:
             return None
-        kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+        kwargs = {
+            'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode,
+            'disable_web_page_preview': not link_preview,
+        }
         if thread_id is not None:
             kwargs['message_thread_id'] = thread_id
+        if reply_to_message_id is not None:
+            kwargs['reply_to_message_id'] = reply_to_message_id
         return await bot.send_message(**kwargs)
 
     if media_pos == 'above':
@@ -1466,13 +1492,19 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             media_type=media_type,
             caption=text or None,
             parse_mode=parse_mode,
+            reply_to_message_id=reply_to_message_id,
         )
 
     sent_text = None
     if text:
-        kwargs = {'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode}
+        kwargs = {
+            'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode,
+            'disable_web_page_preview': not link_preview,
+        }
         if thread_id is not None:
             kwargs['message_thread_id'] = thread_id
+        if reply_to_message_id is not None:
+            kwargs['reply_to_message_id'] = reply_to_message_id
         sent_text = await bot.send_message(**kwargs)
 
     sent_media = await _send_action_media(
@@ -1481,7 +1513,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         thread_id=thread_id,
         media_id=media_id,
         media_type=media_type,
-        reply_to_message_id=sent_text.message_id if sent_text else None,
+        reply_to_message_id=sent_text.message_id if sent_text else reply_to_message_id,
     )
 
     return sent_text or sent_media
@@ -2285,6 +2317,30 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             _set_data(ctx, draft)
             await query.answer("✅ Без уведомления")
             await _show_actions_menu(query, ctx)
+
+        elif sub == "link_preview_toggle":
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.setdefault(act, {})
+            cfg['link_preview'] = not cfg.get('link_preview', True)
+            cfgs[act] = cfg
+            draft['action_configs'] = cfgs
+            _set_data(ctx, draft)
+            state = '✅ включено' if cfg['link_preview'] else '❌ отключено'
+            await query.answer(f"Превью ссылок: {state}")
+            await _configure_action(query, ctx, act)
+
+        elif sub == "reply_toggle":
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.setdefault(act, {})
+            cfg['reply_to_user'] = not cfg.get('reply_to_user', False)
+            cfgs[act] = cfg
+            draft['action_configs'] = cfgs
+            _set_data(ctx, draft)
+            state = '✅ включен' if cfg['reply_to_user'] else '❌ отключен'
+            await query.answer(f"Реплай: {state}")
+            await _configure_action(query, ctx, act)
 
         elif sub.startswith("del_"):
             dsub = sub[4:]

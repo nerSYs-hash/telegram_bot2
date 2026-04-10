@@ -45,7 +45,7 @@ async def course_command(update: Update, context: ContextTypes.DEFAULT_TYPE,
         username = user.username or user.first_name or None
         message = format_user_rate_message(rate_data, balance, username, is_private)
 
-    await update.message.reply_text(message)
+    return await update.message.reply_text(message)
 
 
 async def recalc_rate_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, admin_id, target_chat_id):

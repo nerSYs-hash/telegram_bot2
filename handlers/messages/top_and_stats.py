@@ -114,8 +114,8 @@ async def show_top_rich(message, context, db):
         top_users = await _filter_active_users(context, message.chat.id, all_users, admin_ids, db, limit=5)
 
         if not top_users:
-            await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных о богачах.")
-            return
+            sent = await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных о богачах.")
+            return sent
 
         response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
         emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
@@ -126,9 +126,11 @@ async def show_top_rich(message, context, db):
             pulses_today = format_number(user['pulses_today'])
             response += f"{emojis[idx]} @{username}\n   💰 Баланс: {balance} 💎\n   ⛏ Добыто сегодня: {pulses_today} 💎\n\n"
 
-        await context.bot.send_message(chat_id=message.chat.id, text=response)
+        sent = await context.bot.send_message(chat_id=message.chat.id, text=response)
+        return sent
     except Exception as e:
         logging.error(f"Error showing top rich: {e}")
+        return None
 
 
 async def show_top_activists(message, context, db):
@@ -139,8 +141,8 @@ async def show_top_activists(message, context, db):
                      if u['user_id'] not in excluded_ids][:5]
 
         if not top_users:
-            await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности.")
-            return
+            sent = await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных об активности.")
+            return sent
 
         response = "🏆 ТОП-5 АКТИВИСТОВ ЧАТА\n\n"
         from config.emojis import ICON_TOP_ACT
@@ -153,9 +155,11 @@ async def show_top_activists(message, context, db):
             fire = ICON_TOP_ACT if idx == 0 else ''
             response += f"{emojis[idx]} @{username} {bar} {pct:.1f}%{fire}\n"
 
-        await context.bot.send_message(chat_id=message.chat.id, text=response, parse_mode='HTML')
+        sent = await context.bot.send_message(chat_id=message.chat.id, text=response, parse_mode='HTML')
+        return sent
     except Exception as e:
         logging.error(f"Error showing top activists: {e}")
+        return None
 
 
 # ══════════════════════════════════════════════════════════════════
