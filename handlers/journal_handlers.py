@@ -561,8 +561,14 @@ async def log_mute(
         cid = trigger_message.chat.id if trigger_message.chat else (chat.id if chat else None)
         clean = _chat_id_clean(cid) if cid else ""
         msg_id = trigger_message.message_id
-        thread_id = getattr(trigger_message, 'message_thread_id', None) or msg_id
-        msg_link = f"https://t.me/c/{clean}/{thread_id}/{msg_id}" if clean else ""
+        thread_id = getattr(trigger_message, 'message_thread_id', None)
+        if clean:
+            if thread_id and thread_id != msg_id:
+                msg_link = f"https://t.me/c/{clean}/{thread_id}/{msg_id}"
+            else:
+                msg_link = f"https://t.me/c/{clean}/{msg_id}"
+        else:
+            msg_link = ""
 
         msg_date = trigger_message.date
         if msg_date:
@@ -740,8 +746,14 @@ async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
         cid = trigger_message.chat.id if trigger_message.chat else (chat.id if chat else None)
         clean = _chat_id_clean(cid) if cid else ""
         msg_id = trigger_message.message_id
-        thread_id = getattr(trigger_message, 'message_thread_id', None) or msg_id
-        msg_link = f"https://t.me/c/{clean}/{thread_id}/{msg_id}" if clean else ""
+        thread_id = getattr(trigger_message, 'message_thread_id', None)
+        if clean:
+            if thread_id and thread_id != msg_id:
+                msg_link = f"https://t.me/c/{clean}/{thread_id}/{msg_id}"
+            else:
+                msg_link = f"https://t.me/c/{clean}/{msg_id}"
+        else:
+            msg_link = ""
 
         msg_date = trigger_message.date
         if msg_date:
