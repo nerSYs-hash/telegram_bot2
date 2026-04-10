@@ -324,9 +324,17 @@ async def _show_edit_menu(query_or_msg, context, db, user_id: int,
             await query_or_msg.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
             return
         except Exception:
-            pass
+            # Фото-сообщение — редактируем подпись
+            try:
+                await query_or_msg.edit_message_caption(text, parse_mode='HTML', reply_markup=markup)
+                return
+            except Exception:
+                pass
+    # Fallback: новое сообщение (сохраняем тред)
+    msg = query_or_msg.message if hasattr(query_or_msg, 'message') else query_or_msg
     await context.bot.send_message(
-        chat_id=query_or_msg.message.chat.id if hasattr(query_or_msg, 'message') else query_or_msg.chat.id,
+        chat_id=msg.chat.id,
+        message_thread_id=msg.message_thread_id,
         text=text, parse_mode='HTML', reply_markup=markup,
     )
 
