@@ -366,6 +366,16 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
                     pass  # Сообщение уже удалено или недоступно
                 await update_reg_user(user_id, invite_message_id=None)
 
+            # Удаляем сообщение с ссылкой возвращения (отправленное при вводе имени в FSM)
+            new_invite_msg_id = reg_user.get('invite_msg_id')
+            if new_invite_msg_id:
+                try:
+                    await context.bot.delete_message(chat_id=user_id, message_id=new_invite_msg_id)
+                    logging.info(f"🗑 Deleted return invite message for user {user_id}")
+                except Exception:
+                    pass
+                await update_reg_user(user_id, invite_msg_id=None)
+
             # Деактивируем ссылку в БД
             active_link = await get_active_invite_link(user_id)
             if active_link:

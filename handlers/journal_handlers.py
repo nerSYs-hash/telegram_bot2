@@ -278,7 +278,7 @@ async def log_join(
         joined_at: datetime — время вступления
         is_returning: True если пользователь возвращается
     """
-    lines = ["🆔 #Вход", ""]
+    lines = ["🔄 #Возвращение" if is_returning else "🆔 #Вход", ""]
 
     # ─ Блок Б: пригласительная ссылка (если есть) ─
     invite_display = None

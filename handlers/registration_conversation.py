@@ -311,6 +311,7 @@ async def start_form_callback(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 
 async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    from database.db_friend import db_pool
     user_id = update.effective_user.id
     if _is_button_text(update.message.text):
         await _delete_user_msg(update.message)
@@ -324,6 +325,81 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _build_form(context.user_data, "А. Как тебя зовут?\n\n❌ Имя должно быть не менее 2 символов."))
         return NAME
     context.user_data['reg_name'] = name
+
+    # Проверяем: есть ли одобренная анкета (возвращение в чат)
+    try:
+        async with db_pool.get_connection() as db:
+            async with db.execute(
+                "SELECT id FROM applications WHERE user_id = ? AND status = 'approved' ORDER BY updated_at DESC LIMIT 1",
+                (user_id,)
+            ) as cursor:
+                app_row = await cursor.fetchone()
+    except Exception:
+        app_row = None
+
+    if app_row:
+        app_id = app_row[0]
+        # Обновляем дату возвращения в applications
+        try:
+            async with db_pool.get_connection() as db:
+                await db.execute(
+                    "UPDATE applications SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (app_id,)
+                )
+                await db.commit()
+        except Exception as e:
+            logger.warning(f"get_name: не удалось обновить updated_at заявки #{app_id}: {e}")
+
+        # Создаём одноразовую ссылку
+        from config import CHAT_ID
+        try:
+            invite = await context.bot.create_chat_invite_link(
+                chat_id=CHAT_ID,
+                member_limit=1,
+                creates_join_request=False
+            )
+            link = invite.invite_link
+        except Exception as e:
+            logger.error(f"get_name: не удалось создать invite link для {user_id}: {e}")
+            link = None
+
+        msg_id = context.user_data.get('reg_msg_id')
+        welcome_back_text = (
+            f"🎉 <b>{name}, мы рады, что ты вернулся!</b>\n\n"
+            "Я нашел твою анкету в базе. Тебе не нужно заполнять её заново!\n\n"
+            f"Твоя личная одноразовая ссылка для входа:\n{link}\n\n"
+            "<i>⚠️ Ссылка сгорит сразу после перехода и это сообщение удалится.</i>"
+        )
+
+        # Удаляем окно анкеты
+        if msg_id:
+            try:
+                await context.bot.delete_message(chat_id=user_id, message_id=msg_id)
+            except Exception:
+                pass
+
+        # Отправляем сообщение с эффектом сердечек
+        try:
+            sent = await context.bot.send_message(
+                chat_id=user_id,
+                text=welcome_back_text,
+                parse_mode="HTML",
+                message_effect_id="5104858069142078462"
+            )
+        except Exception:
+            # Без эффекта, если не поддерживается
+            sent = await context.bot.send_message(
+                chat_id=user_id,
+                text=welcome_back_text,
+                parse_mode="HTML"
+            )
+
+        # Сохраняем message_id в БД для последующего удаления
+        await update_user(user_id, invite_msg_id=sent.message_id)
+
+        return ConversationHandler.END
+
+    # Обычная регистрация — продолжаем анкету
     await update_user(user_id, questionnaire_state="AGE", q_name=name)
 
     msg_id = context.user_data.get('reg_msg_id')

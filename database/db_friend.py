@@ -166,7 +166,14 @@ async def init_db():
         except sqlite3.OperationalError:
             await db.execute("ALTER TABLE users ADD COLUMN referral_earnings INTEGER DEFAULT 0")
             print("✅ Added referral_earnings column to users table")
-        
+
+        # Проверяем и добавляем колонку invite_msg_id, если её нет
+        try:
+            await db.execute("SELECT invite_msg_id FROM users LIMIT 1")
+        except sqlite3.OperationalError:
+            await db.execute("ALTER TABLE users ADD COLUMN invite_msg_id INTEGER DEFAULT NULL")
+            print("✅ Added invite_msg_id column to users table")
+
         # Индексы для оптимизации запросов
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_status ON users(status)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_users_role ON users(role)")
