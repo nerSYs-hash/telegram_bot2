@@ -100,7 +100,8 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
                                    dossier_chat_id=sent.chat.id,
                                    dossier_msg_id=sent.message_id,
                                    dossier_is_photo=1,
-                                   admin_username=admin_username)
+                                   admin_username=admin_username,
+                                   base_text=dossier_text)
         else:
             no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
             sent = await bot.send_message(
@@ -116,7 +117,8 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
                                    dossier_chat_id=sent.chat.id,
                                    dossier_msg_id=sent.message_id,
                                    dossier_is_photo=0,
-                                   admin_username=admin_username)
+                                   admin_username=admin_username,
+                                   base_text=no_face_text)
     except Exception as e:
         logger.error(f"_send_dossier: ошибка отправки досье для {user_id}: {e}")
 

@@ -43,15 +43,19 @@ def ensure_anketa_edit_tables(db) -> None:
             custom_photo_id TEXT,
             note            TEXT,
             admin_username  TEXT,
+            base_text       TEXT,
             updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # Миграция: добавляем admin_username если таблица уже существует
-    try:
-        db.cursor.execute('ALTER TABLE anketa_edits ADD COLUMN admin_username TEXT')
-        db.conn.commit()
-    except Exception:
-        pass
+    for col, definition in [
+        ('admin_username', 'TEXT'),
+        ('base_text',      'TEXT'),
+    ]:
+        try:
+            db.cursor.execute(f'ALTER TABLE anketa_edits ADD COLUMN {col} {definition}')
+            db.conn.commit()
+        except Exception:
+            pass
     db.conn.commit()
 
 
@@ -152,16 +156,26 @@ def _build_dossier_text(reg_data: dict, target_user_id: int, admin_username: str
 
 async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
     """Перестраивает досье и редактирует / пересылает сообщение в треде."""
+    import html as _html
     row = get_anketa_edit(db, user_id) or {}
 
-    admin_username = row.get('admin_username') or '—'
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
     chat_id = row.get('dossier_chat_id') or ADMIN_CHAT_ID
     msg_id  = row.get('dossier_msg_id')
     is_photo = bool(row.get('dossier_is_photo'))
 
-    text = _build_dossier_text(reg_data, user_id, admin_username, note)
+    # Используем оригинальный текст досье (сохранённый при создании).
+    # Если base_text не сохранён — fallback на _build_dossier_text.
+    base_text = row.get('base_text') or ''
+    if not base_text:
+        admin_username = row.get('admin_username') or '—'
+        base_text = _build_dossier_text(reg_data, user_id, admin_username)
+
+    if note:
+        text = base_text + f"\n\n📝 <b>Примечание:</b> {_html.escape(note)}"
+    else:
+        text = base_text
     kb = InlineKeyboardMarkup([
         [IKB("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
          IKB("✏️ Редактировать", callback_data=f"anketa_edit_{user_id}")],
@@ -234,6 +248,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                 )
             return
         except Exception as e:
+            if "Message is not modified" in str(e):
+                return  # контент уже актуален — новое сообщение не нужно
             logger.warning(f"anketa_edit: edit_message failed ({e}), sending new")
 
     # Нет msg_id или редактирование не удалось — отправляем новое
@@ -357,6 +373,12 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
 
     # ── меню ──
     if action == 'menu':
+        # Сохраняем base_text при первом открытии (для старых досье без base_text)
+        row = get_anketa_edit(db, user_id) or {}
+        if not row.get('base_text'):
+            current_text = query.message.caption or query.message.text or ''
+            if current_text:
+                upsert_anketa_edit(db, user_id, base_text=current_text)
         await _show_edit_menu(query, context, db, user_id, reg_data)
         return True
 
