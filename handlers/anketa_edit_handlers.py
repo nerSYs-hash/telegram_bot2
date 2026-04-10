@@ -20,8 +20,9 @@
 FSM: context.user_data['anketa_edit'] = {'action': 'photo'|'note', 'user_id': int}
 """
 
+import asyncio
 import logging
-from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from config import ADMIN_CHAT_ID, DOSSIER_THREAD_ID
 
 logger = logging.getLogger(__name__)
@@ -43,15 +44,19 @@ def ensure_anketa_edit_tables(db) -> None:
             custom_photo_id TEXT,
             note            TEXT,
             admin_username  TEXT,
+            base_text       TEXT,
             updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
-    # Миграция: добавляем admin_username если таблица уже существует
-    try:
-        db.cursor.execute('ALTER TABLE anketa_edits ADD COLUMN admin_username TEXT')
-        db.conn.commit()
-    except Exception:
-        pass
+    for col, definition in [
+        ('admin_username', 'TEXT'),
+        ('base_text',      'TEXT'),
+    ]:
+        try:
+            db.cursor.execute(f'ALTER TABLE anketa_edits ADD COLUMN {col} {definition}')
+            db.conn.commit()
+        except Exception:
+            pass
     db.conn.commit()
 
 
@@ -152,16 +157,26 @@ def _build_dossier_text(reg_data: dict, target_user_id: int, admin_username: str
 
 async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
     """Перестраивает досье и редактирует / пересылает сообщение в треде."""
+    import html as _html
     row = get_anketa_edit(db, user_id) or {}
 
-    admin_username = row.get('admin_username') or '—'
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
     chat_id = row.get('dossier_chat_id') or ADMIN_CHAT_ID
     msg_id  = row.get('dossier_msg_id')
     is_photo = bool(row.get('dossier_is_photo'))
 
-    text = _build_dossier_text(reg_data, user_id, admin_username, note)
+    # Используем оригинальный текст досье (сохранённый при создании).
+    # Если base_text не сохранён — fallback на _build_dossier_text.
+    base_text = row.get('base_text') or ''
+    if not base_text:
+        admin_username = row.get('admin_username') or '—'
+        base_text = _build_dossier_text(reg_data, user_id, admin_username)
+
+    if note:
+        text = base_text + f"\n\n📝 <b>Примечание:</b> {_html.escape(note)}"
+    else:
+        text = base_text
     kb = InlineKeyboardMarkup([
         [IKB("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
          IKB("✏️ Редактировать", callback_data=f"anketa_edit_{user_id}")],
@@ -170,18 +185,41 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
     if msg_id:
         try:
             if custom_photo:
-                # Заменяем медиа
-                from telegram import InputMediaPhoto
-                await bot.edit_message_media(
-                    chat_id=chat_id,
-                    message_id=msg_id,
-                    media=InputMediaPhoto(media=custom_photo, caption=text, parse_mode='HTML'),
-                    reply_markup=kb,
-                )
-                upsert_anketa_edit(db, user_id, dossier_is_photo=1)
+                if is_photo:
+                    # Досье уже фото — просто меняем медиа
+                    from telegram import InputMediaPhoto
+                    await bot.edit_message_media(
+                        chat_id=chat_id,
+                        message_id=msg_id,
+                        media=InputMediaPhoto(media=custom_photo, caption=text, parse_mode='HTML'),
+                        reply_markup=kb,
+                    )
+                    upsert_anketa_edit(db, user_id, dossier_is_photo=1)
+                else:
+                    # Досье было текстом — удаляем старое, отправляем фото
+                    try:
+                        await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                    except Exception:
+                        pass
+                    sent = await bot.send_photo(
+                        chat_id=ADMIN_CHAT_ID,
+                        message_thread_id=DOSSIER_THREAD_ID,
+                        photo=custom_photo,
+                        caption=text,
+                        parse_mode='HTML',
+                        reply_markup=kb,
+                    )
+                    upsert_anketa_edit(db, user_id,
+                                       dossier_msg_id=sent.message_id,
+                                       dossier_is_photo=1,
+                                       dossier_chat_id=sent.chat.id)
+                return
             elif is_photo and not custom_photo:
-                # Была фото-версия, теперь убираем фото — отправляем как текст
-                # (edit_message_media не умеет переключать тип, отправим новое)
+                # Была фото-версия, теперь убираем фото — удаляем старое, отправляем текст
+                try:
+                    await bot.delete_message(chat_id=chat_id, message_id=msg_id)
+                except Exception:
+                    pass
                 sent = await bot.send_message(
                     chat_id=chat_id,
                     message_thread_id=DOSSIER_THREAD_ID,
@@ -214,6 +252,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                 )
             return
         except Exception as e:
+            if "Message is not modified" in str(e):
+                return  # контент уже актуален — новое сообщение не нужно
             logger.warning(f"anketa_edit: edit_message failed ({e}), sending new")
 
     # Нет msg_id или редактирование не удалось — отправляем новое
@@ -251,33 +291,35 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
 # ─────────────────────────────────────────────
 
 async def _show_edit_menu(query_or_msg, context, db, user_id: int,
-                           reg_data: dict, is_edit: bool = True) -> None:
+                           reg_data: dict, is_edit: bool = True,
+                           expanded_photo: bool = False) -> None:
+    import html as _html
     row = get_anketa_edit(db, user_id) or {}
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
 
-    display_name = reg_data.get('q_name') or reg_data.get('first_name') or '—'
-    username = reg_data.get('username')
-    name_str = f"@{username}" if username else display_name
-
-    photo_status = '📷 Кастомное' if custom_photo else '👤 Из профиля Telegram'
-    note_str = f"<i>{note[:80]}{'…' if len(note) > 80 else ''}</i>" if note else '—'
-
-    text = (
-        f"✏️ <b>Редактирование анкеты</b>\n\n"
-        f"👤 {name_str}\n"
-        f"🆔 <code>#{user_id}</code>\n\n"
-        f"📷 Фото: {photo_status}\n"
-        f"📝 Примечание: {note_str}"
-    )
+    # Используем полный текст досье — как в _rebuild_and_update
+    base_text = row.get('base_text') or ''
+    if not base_text:
+        admin_username = row.get('admin_username') or '—'
+        base_text = _build_dossier_text(reg_data, user_id, admin_username)
+    if note:
+        text = base_text + f"\n\n📝 <b>Примечание:</b> {_html.escape(note)}"
+    else:
+        text = base_text
 
     kb = []
-    kb.append([IKB("📷 Изменить фото",    callback_data=f"anketa_edit_photo_{user_id}")])
-    if custom_photo:
-        kb.append([IKB("🗑 Убрать кастомное фото", callback_data=f"anketa_edit_clrphoto_{user_id}")])
+    if expanded_photo:
+        # Раскрытые кнопки медиа
+        photo_row = [IKB("📸 Заменить фото", callback_data=f"anketa_edit_photo_{user_id}")]
+        if custom_photo:
+            photo_row.append(IKB("🗑 Убрать фото", callback_data=f"anketa_edit_clrphoto_{user_id}"))
+        kb.append(photo_row)
+    else:
+        kb.append([IKB("📷 Медиа ▾", callback_data=f"anketa_edit_photomenu_{user_id}")])
     if note:
-        kb.append([IKB("✏️ Изменить примечание", callback_data=f"anketa_edit_note_{user_id}")])
-        kb.append([IKB("🗑 Убрать примечание",   callback_data=f"anketa_edit_clrnote_{user_id}")])
+        kb.append([IKB("✏️ Изменить примечание", callback_data=f"anketa_edit_note_{user_id}"),
+                   IKB("🗑",                      callback_data=f"anketa_edit_clrnote_{user_id}")])
     else:
         kb.append([IKB("📝 Добавить примечание", callback_data=f"anketa_edit_note_{user_id}")])
     kb.append([IKB("✅ Готово", callback_data=f"anketa_edit_done_{user_id}")])
@@ -288,9 +330,17 @@ async def _show_edit_menu(query_or_msg, context, db, user_id: int,
             await query_or_msg.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
             return
         except Exception:
-            pass
+            # Фото-сообщение — редактируем подпись
+            try:
+                await query_or_msg.edit_message_caption(text, parse_mode='HTML', reply_markup=markup)
+                return
+            except Exception:
+                pass
+    # Fallback: новое сообщение (сохраняем тред)
+    msg = query_or_msg.message if hasattr(query_or_msg, 'message') else query_or_msg
     await context.bot.send_message(
-        chat_id=query_or_msg.message.chat.id if hasattr(query_or_msg, 'message') else query_or_msg.chat.id,
+        chat_id=msg.chat.id,
+        message_thread_id=msg.message_thread_id,
         text=text, parse_mode='HTML', reply_markup=markup,
     )
 
@@ -337,36 +387,60 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
 
     # ── меню ──
     if action == 'menu':
+        # Сохраняем base_text при первом открытии (для старых досье без base_text)
+        row = get_anketa_edit(db, user_id) or {}
+        if not row.get('base_text'):
+            current_text = query.message.caption or query.message.text or ''
+            if current_text:
+                upsert_anketa_edit(db, user_id, base_text=current_text)
         await _show_edit_menu(query, context, db, user_id, reg_data)
+        return True
+
+    # ── раскрытие кнопок медиа ──
+    if action == 'photomenu':
+        await query.answer()
+        await _show_edit_menu(query, context, db, user_id, reg_data, expanded_photo=True)
         return True
 
     # ── начало ввода фото ──
     if action == 'photo':
         context.user_data['anketa_edit'] = {'action': 'photo', 'user_id': user_id}
-        await query.edit_message_text(
+        prompt_text = (
             f"📷 <b>Отправьте новое фото</b> для анкеты #{user_id}\n\n"
-            "<i>Просто пришлите изображение в этот чат.</i>",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [IKB("❌ Отмена", callback_data=f"anketa_edit_{user_id}")]
-            ])
+            "<i>Просто пришлите изображение в этот чат.</i>"
         )
+        prompt_kb = InlineKeyboardMarkup([[IKB("❌ Отмена", callback_data=f"anketa_edit_{user_id}")]])
+        try:
+            await query.edit_message_text(prompt_text, parse_mode='HTML', reply_markup=prompt_kb)
+        except Exception:
+            # Фото-сообщение нельзя edit_message_text — редактируем подпись
+            try:
+                await query.edit_message_caption(prompt_text, parse_mode='HTML', reply_markup=prompt_kb)
+            except Exception:
+                await context.bot.send_message(
+                    chat_id=query.message.chat.id,
+                    message_thread_id=query.message.message_thread_id,
+                    text=prompt_text, parse_mode='HTML', reply_markup=prompt_kb,
+                )
         return True
 
     # ── начало ввода примечания ──
     if action == 'note':
-        context.user_data['anketa_edit'] = {'action': 'note', 'user_id': user_id}
         row = get_anketa_edit(db, user_id) or {}
         cur = row.get('note') or ''
-        hint = f"\n\nТекущее: <i>{cur[:100]}</i>" if cur else ''
-        await query.edit_message_text(
-            f"📝 <b>Введите примечание</b> для анкеты #{user_id}{hint}\n\n"
-            "<i>Просто напишите текст в этот чат.</i>",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [IKB("❌ Отмена", callback_data=f"anketa_edit_{user_id}")]
-            ])
+        hint = f" (сейчас: {cur[:60]})" if cur else ''
+        prompt = await context.bot.send_message(
+            chat_id=query.message.chat.id,
+            message_thread_id=query.message.message_thread_id,
+            text=f"📝 Примечание к анкете #{user_id}{hint}:",
+            reply_markup=ForceReply(selective=True, input_field_placeholder="Введите примечание…"),
         )
+        await query.answer()
+        context.user_data['anketa_edit'] = {
+            'action': 'note',
+            'user_id': user_id,
+            'prompt_msg_id': prompt.message_id,
+        }
         return True
 
     # ── убрать кастомное фото ──
@@ -388,11 +462,27 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
     # ── готово ──
     if action == 'done':
         context.user_data.pop('anketa_edit', None)
-        await query.answer("✅ Готово")
-        try:
-            await query.delete_message()
-        except Exception:
-            pass
+        await query.answer("✅ Сохранено")
+        # Восстанавливаем досье вместо удаления — меню редактировало досье in-place,
+        # и delete_message() убирало бы само досье навсегда.
+        menu_msg_id = query.message.message_id
+        if reg_data:
+            await _rebuild_and_update(context.bot, db, user_id, reg_data)
+            # Если rebuild создал НОВОЕ сообщение (msg_id изменился) — удаляем старое меню
+            updated_row = get_anketa_edit(db, user_id) or {}
+            if updated_row.get('dossier_msg_id') != menu_msg_id:
+                try:
+                    await context.bot.delete_message(
+                        chat_id=query.message.chat.id,
+                        message_id=menu_msg_id,
+                    )
+                except Exception:
+                    pass
+        else:
+            try:
+                await query.delete_message()
+            except Exception:
+                pass
         return True
 
     return False
@@ -401,6 +491,15 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
 # ─────────────────────────────────────────────
 #  FSM: обработка медиа и текста
 # ─────────────────────────────────────────────
+
+async def _autodelete(msg, delay: int = 4):
+    """Удаляет сообщение через delay секунд."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
 
 async def handle_anketa_edit_input(message, context, db) -> bool:
     """
@@ -437,13 +536,8 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
         if reg_data:
             await _rebuild_and_update(context.bot, db, user_id, reg_data)
 
-        kb = InlineKeyboardMarkup([
-            [IKB("✏️ Продолжить редактирование", callback_data=f"anketa_edit_{user_id}")]
-        ])
-        await message.reply_text(
-            f"✅ Фото анкеты #{user_id} обновлено.",
-            reply_markup=kb,
-        )
+        conf = await message.reply_text(f"✅ Фото анкеты #{user_id} обновлено.")
+        asyncio.create_task(_autodelete(conf, delay=4))
         try:
             await message.delete()
         except Exception:
@@ -454,22 +548,23 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
     if action == 'note':
         text = (message.text or '').strip()
         if not text:
-            await message.reply_text("⚠️ Пустое примечание не сохранено.")
+            conf = await message.reply_text("⚠️ Пустое примечание не сохранено.")
+            asyncio.create_task(_autodelete(conf, delay=3))
             return True
 
+        prompt_msg_id = state.get('prompt_msg_id')
         context.user_data.pop('anketa_edit', None)
         upsert_anketa_edit(db, user_id, note=text)
 
         if reg_data:
             await _rebuild_and_update(context.bot, db, user_id, reg_data)
 
-        kb = InlineKeyboardMarkup([
-            [IKB("✏️ Продолжить редактирование", callback_data=f"anketa_edit_{user_id}")]
-        ])
-        await message.reply_text(
-            f"✅ Примечание к анкете #{user_id} сохранено.",
-            reply_markup=kb,
-        )
+        # Удаляем ForceReply-промпт и ответ пользователя
+        if prompt_msg_id:
+            try:
+                await context.bot.delete_message(chat_id=message.chat.id, message_id=prompt_msg_id)
+            except Exception:
+                pass
         try:
             await message.delete()
         except Exception:
