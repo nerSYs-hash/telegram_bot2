@@ -12,8 +12,7 @@
         safe_name, show_donate_menu, donate_to_user_start, donate_pick_user,
         donate_user_amount, donate_user_custom, donate_user_confirm,
         donate_to_bank_start, donate_bank_custom, donate_bank_amount,
-        donate_bank_confirm, donate_to_reactor_start, donate_reactor_custom,
-        donate_reactor_amount, donate_reactor_confirm, donate_show_history,
+        donate_bank_confirm, donate_show_history,
     )
 """
 
@@ -55,7 +54,6 @@ async def show_donate_menu(query, user, db):
     keyboard = [
         [InlineKeyboardButton("🎁 Пользователю", callback_data="donate_to_user_start")],
         [InlineKeyboardButton("🏦 В Центробанк", callback_data="donate_to_bank_start")],
-        [InlineKeyboardButton("🔋 В Реактор", callback_data="donate_to_reactor_start")],
         [InlineKeyboardButton("📜 Мои донаты", callback_data="donate_history")],
         [InlineKeyboardButton("🔙 Меню", callback_data="back_to_menu")]
     ]
@@ -305,116 +303,18 @@ async def donate_bank_confirm(query, data, user, context, db):
     ]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
-# ─── Донат в Реактор ───
-
-async def donate_to_reactor_start(query, user, context, db):
-    """Выбор суммы для доната в реактор"""
-    user_data = db.get_user(user.id)
-    if not user_data:
-        await query.edit_message_text("Сначала используй /start")
-        return
-    
-    balance = float(user_data['balance'])
-    reactor_balance = float(db.get_setting('reactor_balance', 0))
-    reactor_goal = float(db.get_setting('reactor_goal', 10000))
-    progress = (reactor_balance / reactor_goal) * 100 if reactor_goal > 0 else 0
-    
-    message = (
-        f"🔋 ДОНАТ В РЕАКТОР\n\n"
-        f"💰 Ваш баланс: {format_number(balance)} 💎\n"
-        f"🔋 Реактор: {format_number(reactor_balance)} / {format_number(reactor_goal)}\n"
-        f"📊 Прогресс: {progress:.1f}%\n\n"
-        f"Выберите сумму:"
-    )
-    
-    amounts = [10, 25, 50, 100, 250, 500, 1000]
-    keyboard = []
-    row = []
-    for amt in amounts:
-        if balance >= amt:
-            row.append(InlineKeyboardButton(f"{format_number(amt)} 💎", callback_data=f"donate_reactor_amount_{amt}"))
-            if len(row) == 3:
-                keyboard.append(row)
-                row = []
-    if row:
-        keyboard.append(row)
-    # ВСЕГДА показываем кнопку «Своя сумма»
-    keyboard.append([InlineKeyboardButton("✏️ Своя сумма", callback_data="donate_reactor_custom")])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="donate_menu")])
-    
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def donate_reactor_custom(query, user, context, db):
-    """Ввод своей суммы для реактора"""
-    context.user_data['awaiting_donate_amount'] = 'reactor'
-    message = "✏️ СВОЯ СУММА В РЕАКТОР\n\nОтправьте сумму числом (например: 5.00):"
-    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="donate_to_reactor_start")]]
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def donate_reactor_amount(query, data, user, context, db):
-    """Подтверждение суммы доната в реактор"""
-    amount = float(data.replace("donate_reactor_amount_", ""))
-    user_data = db.get_user(user.id)
-    if not user_data or float(user_data['balance']) < amount:
-        await query.answer("Недостаточно средств!", show_alert=True)
-        return
-    
-    message = (
-        f"🔋 ПОДТВЕРЖДЕНИЕ\n\n"
-        f"💎 Сумма: {format_number(amount)} Пульсов\n"
-        f"💰 После: {format_number(float(user_data['balance']) - amount)} 💎\n\nПодтвердить?"
-    )
-    keyboard = [
-        [InlineKeyboardButton("✅ Да", callback_data=f"donate_reactor_confirm_{amount}")],
-        [InlineKeyboardButton("❌ Отмена", callback_data="donate_to_reactor_start")]
-    ]
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-
-async def donate_reactor_confirm(query, data, user, context, db):
-    """Выполнение доната в реактор"""
-    amount = round(float(data.replace("donate_reactor_confirm_", "")), 2)
-    user_data = db.get_user(user.id)
-    if not user_data or float(user_data['balance']) < amount:
-        await query.answer("Недостаточно средств!", show_alert=True)
-        return
-    
-    db.update_user_balance(user.id, amount, 'subtract')
-    db.update_bank_balance(amount, 'add')
-    db.cursor.execute('INSERT INTO reactor (user_id, amount) VALUES (?, ?)', (user.id, amount))
-    current_reactor = float(db.get_setting('reactor_balance', 0))
-    db.set_setting('reactor_balance', current_reactor + amount)
-    db.add_transaction(user.id, None, amount, 'reactor_donation', 'Донат в Реактор')
-    db.conn.commit()
-
-    reactor_balance = float(db.get_setting('reactor_balance', 0))
-    reactor_goal = float(db.get_setting('reactor_goal', 10000))
-    progress = (reactor_balance / reactor_goal) * 100 if reactor_goal > 0 else 0
-    
-    message = (
-        f"✅ ДОНАТ В РЕАКТОР!\n\n"
-        f"💎 Сумма: {format_number(amount)} Пульсов\n"
-        f"🔋 Реактор: {format_number(reactor_balance)} / {format_number(reactor_goal)}\n"
-        f"📊 Прогресс: {progress:.1f}%"
-    )
-    keyboard = [
-        [InlineKeyboardButton("🔋 Ещё в реактор", callback_data="donate_to_reactor_start")],
-        [InlineKeyboardButton("🔙 Меню донатов", callback_data="donate_menu")]
-    ]
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
-
 # ─── История донатов ───
 
 async def donate_show_history(query, user, db):
     """История донатов пользователя"""
     # Итоги отправленных
     db.cursor.execute('''
-        SELECT 
+        SELECT
             COALESCE(SUM(CASE WHEN transaction_type = 'donate_to_user' THEN amount ELSE 0 END), 0) as sent_users,
-            COALESCE(SUM(CASE WHEN transaction_type = 'donate_to_bank' THEN amount ELSE 0 END), 0) as sent_bank,
-            COALESCE(SUM(CASE WHEN transaction_type = 'reactor_donation' THEN amount ELSE 0 END), 0) as sent_reactor
+            COALESCE(SUM(CASE WHEN transaction_type = 'donate_to_bank' THEN amount ELSE 0 END), 0) as sent_bank
         FROM transactions
         WHERE from_user_id = ?
-          AND transaction_type IN ('donate_to_user', 'donate_to_bank', 'reactor_donation')
+          AND transaction_type IN ('donate_to_user', 'donate_to_bank')
     ''', (user.id,))
     sent = db.cursor.fetchone()
     
@@ -433,7 +333,7 @@ async def donate_show_history(query, user, db):
         FROM transactions t
         LEFT JOIN users u_to ON t.to_user_id = u_to.user_id
         WHERE t.from_user_id = ?
-          AND t.transaction_type IN ('donate_to_user', 'donate_to_bank', 'reactor_donation')
+          AND t.transaction_type IN ('donate_to_user', 'donate_to_bank')
         ORDER BY t.timestamp DESC LIMIT 10
     ''', (user.id,))
     sent_list = db.cursor.fetchall()
@@ -449,13 +349,12 @@ async def donate_show_history(query, user, db):
     ''', (user.id,))
     recv_list = db.cursor.fetchall()
     
-    total_sent = sent['sent_users'] + sent['sent_bank'] + sent['sent_reactor']
-    
+    total_sent = sent['sent_users'] + sent['sent_bank']
+
     message = "📜 ИСТОРИЯ ДОНАТОВ\n\n"
     message += "📊 ИТОГИ:\n"
     message += f"   🎁 Пользователям: {format_number(sent['sent_users'])} 💎\n"
     message += f"   🏦 В Центробанк: {format_number(sent['sent_bank'])} 💎\n"
-    message += f"   🔋 В Реактор: {format_number(sent['sent_reactor'])} 💎\n"
     message += f"   ▸ Всего отправлено: {format_number(total_sent)} 💎\n"
     message += f"   📥 Получено: {format_number(received_total)} 💎\n\n"
     
@@ -466,10 +365,8 @@ async def donate_show_history(query, user, db):
             if d['transaction_type'] == 'donate_to_user':
                 to_name = d['to_username'] or d['to_first_name'] or f"ID:{d['to_uid']}"
                 message += f"   🎁 @{to_name}: {format_number(d['amount'])} 💎 ({ts})\n"
-            elif d['transaction_type'] == 'donate_to_bank':
-                message += f"   🏦 Банк: {format_number(d['amount'])} 💎 ({ts})\n"
             else:
-                message += f"   🔋 Реактор: {format_number(d['amount'])} 💎 ({ts})\n"
+                message += f"   🏦 Банк: {format_number(d['amount'])} 💎 ({ts})\n"
         message += "\n"
     
     if recv_list:
