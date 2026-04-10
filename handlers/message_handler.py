@@ -221,6 +221,11 @@ class MessageHandler:
                         from handlers.shipper_handlers import send_shipper_panel
                         await send_shipper_panel(message, context, self.db, self.target_chat_id)
                         return
+                # FSM: редактирование анкеты (фото / примечание) в ADMIN_CHAT
+                if context.user_data.get('anketa_edit'):
+                    from handlers.anketa_edit_handlers import handle_anketa_edit_input
+                    if await handle_anketa_edit_input(message, context, self.db):
+                        return
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
