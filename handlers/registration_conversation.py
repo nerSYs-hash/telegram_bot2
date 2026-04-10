@@ -326,7 +326,10 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return NAME
     context.user_data['reg_name'] = name
 
-    # Проверяем: есть ли одобренная анкета (возвращение в чат)
+    # Проверяем: пользователь ранее был в чате (возвращение)
+    # 1) Одобренная заявка в db_friend
+    app_row = None
+    app_id = None
     try:
         async with db_pool.get_connection() as db:
             async with db.execute(
@@ -334,21 +337,44 @@ async def get_name(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 (user_id,)
             ) as cursor:
                 app_row = await cursor.fetchone()
+        if app_row:
+            app_id = app_row[0]
     except Exception:
-        app_row = None
+        pass
+
+    # 2) Статус 'left' в db_friend (выходил через ChatMemberUpdated)
+    if not app_row:
+        try:
+            from database.db_friend import get_user as get_reg_user
+            reg_user = await get_reg_user(user_id)
+            if reg_user and reg_user.get('status') == 'left':
+                app_row = True  # флаг возвращения без конкретной заявки
+        except Exception:
+            pass
+
+    # 3) is_left=1 в db_manager (для пользователей старой системы)
+    if not app_row:
+        try:
+            main_db = context.bot_data.get('db')
+            if main_db:
+                db_user = main_db.get_user(user_id)
+                if db_user and db_user['is_left']:
+                    app_row = True
+        except Exception:
+            pass
 
     if app_row:
-        app_id = app_row[0]
-        # Обновляем дату возвращения в applications
-        try:
-            async with db_pool.get_connection() as db:
-                await db.execute(
-                    "UPDATE applications SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (app_id,)
-                )
-                await db.commit()
-        except Exception as e:
-            logger.warning(f"get_name: не удалось обновить updated_at заявки #{app_id}: {e}")
+        # Обновляем дату возвращения в applications (если есть запись)
+        if app_id:
+            try:
+                async with db_pool.get_connection() as db:
+                    await db.execute(
+                        "UPDATE applications SET updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                        (app_id,)
+                    )
+                    await db.commit()
+            except Exception as e:
+                logger.warning(f"get_name: не удалось обновить updated_at заявки #{app_id}: {e}")
 
         # Создаём одноразовую ссылку
         from config import CHAT_ID
