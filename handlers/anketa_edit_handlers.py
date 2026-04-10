@@ -20,6 +20,7 @@
 FSM: context.user_data['anketa_edit'] = {'action': 'photo'|'note', 'user_id': int}
 """
 
+import asyncio
 import logging
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton
 from config import ADMIN_CHAT_ID, DOSSIER_THREAD_ID
@@ -485,6 +486,15 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
 #  FSM: обработка медиа и текста
 # ─────────────────────────────────────────────
 
+async def _autodelete(msg, delay: int = 4):
+    """Удаляет сообщение через delay секунд."""
+    await asyncio.sleep(delay)
+    try:
+        await msg.delete()
+    except Exception:
+        pass
+
+
 async def handle_anketa_edit_input(message, context, db) -> bool:
     """
     Вызывается из message_handler / admin_logic для обработки ввода в FSM.
@@ -520,13 +530,8 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
         if reg_data:
             await _rebuild_and_update(context.bot, db, user_id, reg_data)
 
-        kb = InlineKeyboardMarkup([
-            [IKB("✏️ Продолжить редактирование", callback_data=f"anketa_edit_{user_id}")]
-        ])
-        await message.reply_text(
-            f"✅ Фото анкеты #{user_id} обновлено.",
-            reply_markup=kb,
-        )
+        conf = await message.reply_text(f"✅ Фото анкеты #{user_id} обновлено.")
+        asyncio.create_task(_autodelete(conf, delay=4))
         try:
             await message.delete()
         except Exception:
@@ -546,13 +551,8 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
         if reg_data:
             await _rebuild_and_update(context.bot, db, user_id, reg_data)
 
-        kb = InlineKeyboardMarkup([
-            [IKB("✏️ Продолжить редактирование", callback_data=f"anketa_edit_{user_id}")]
-        ])
-        await message.reply_text(
-            f"✅ Примечание к анкете #{user_id} сохранено.",
-            reply_markup=kb,
-        )
+        conf = await message.reply_text(f"✅ Примечание к анкете #{user_id} сохранено.")
+        asyncio.create_task(_autodelete(conf, delay=4))
         try:
             await message.delete()
         except Exception:
