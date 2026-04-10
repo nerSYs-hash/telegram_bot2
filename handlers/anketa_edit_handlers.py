@@ -291,7 +291,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
 # ─────────────────────────────────────────────
 
 async def _show_edit_menu(query_or_msg, context, db, user_id: int,
-                           reg_data: dict, is_edit: bool = True) -> None:
+                           reg_data: dict, is_edit: bool = True,
+                           expanded_photo: bool = False) -> None:
     row = get_anketa_edit(db, user_id) or {}
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
@@ -312,12 +313,17 @@ async def _show_edit_menu(query_or_msg, context, db, user_id: int,
     )
 
     kb = []
-    kb.append([IKB("📷 Изменить фото",    callback_data=f"anketa_edit_photo_{user_id}")])
-    if custom_photo:
-        kb.append([IKB("🗑 Убрать кастомное фото", callback_data=f"anketa_edit_clrphoto_{user_id}")])
+    if expanded_photo:
+        # Раскрытые кнопки медиа
+        photo_row = [IKB("📸 Заменить фото", callback_data=f"anketa_edit_photo_{user_id}")]
+        if custom_photo:
+            photo_row.append(IKB("🗑 Убрать фото", callback_data=f"anketa_edit_clrphoto_{user_id}"))
+        kb.append(photo_row)
+    else:
+        kb.append([IKB("📷 Медиа ▾", callback_data=f"anketa_edit_photomenu_{user_id}")])
     if note:
-        kb.append([IKB("✏️ Изменить примечание", callback_data=f"anketa_edit_note_{user_id}")])
-        kb.append([IKB("🗑 Убрать примечание",   callback_data=f"anketa_edit_clrnote_{user_id}")])
+        kb.append([IKB("✏️ Изменить примечание", callback_data=f"anketa_edit_note_{user_id}"),
+                   IKB("🗑",                      callback_data=f"anketa_edit_clrnote_{user_id}")])
     else:
         kb.append([IKB("📝 Добавить примечание", callback_data=f"anketa_edit_note_{user_id}")])
     kb.append([IKB("✅ Готово", callback_data=f"anketa_edit_done_{user_id}")])
@@ -392,6 +398,12 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
             if current_text:
                 upsert_anketa_edit(db, user_id, base_text=current_text)
         await _show_edit_menu(query, context, db, user_id, reg_data)
+        return True
+
+    # ── раскрытие кнопок медиа ──
+    if action == 'photomenu':
+        await query.answer()
+        await _show_edit_menu(query, context, db, user_id, reg_data, expanded_photo=True)
         return True
 
     # ── начало ввода фото ──
