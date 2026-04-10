@@ -435,7 +435,7 @@ def _trigger_to_data(t) -> dict:
     data = {
         'name': t['name'],
         'keywords': t['keywords'],
-        'probability': t['probability'] or 100,
+        'probability': t['probability'] if t['probability'] is not None else 100,
         'condition': t['condition'] or 'contains',
         'where_fires': t['where_fires'] or 'all',
         'initiator': t['initiator'] or 'all',
