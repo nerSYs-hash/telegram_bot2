@@ -47,8 +47,30 @@ def get_applications_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True, selective=True)
 
 
-async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
-    """Отправляет досье с фото (если найдено лицо) в тред администраторов."""
+async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
+                        admin_username: str = '—'):
+    """Отправляет досье с фото (если найдено лицо) в тред администраторов.
+    Сохраняет msg_id в anketa_edits для последующего редактирования.
+    """
+    from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+    from handlers.anketa_edit_handlers import ensure_anketa_edit_tables, upsert_anketa_edit
+
+    # Добавляем ✏️ к переданной клавиатуре
+    try:
+        existing_rows = keyboard.inline_keyboard if keyboard else []
+    except Exception:
+        existing_rows = []
+    edit_row = [
+        InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
+        InlineKeyboardButton("✏️ Редактировать", callback_data=f"anketa_edit_{user_id}"),
+    ]
+    new_kb = InlineKeyboardMarkup([edit_row] + [r for r in existing_rows
+                                                if not any(b.url and 'tg://user' in b.url
+                                                           for b in r)])
+
+    if db:
+        ensure_anketa_edit_tables(db)
+
     try:
         photos = await bot.get_user_profile_photos(user_id, limit=3)
         face_photo = None
@@ -65,24 +87,36 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard):
                 continue
 
         if face_photo:
-            await bot.send_photo(
+            sent = await bot.send_photo(
                 chat_id=ADMIN_CHAT_ID,
                 message_thread_id=DOSSIER_THREAD_ID,
                 photo=face_photo,
                 caption=dossier_text,
                 parse_mode="HTML",
-                reply_markup=keyboard,
+                reply_markup=new_kb,
             )
+            if db:
+                upsert_anketa_edit(db, user_id,
+                                   dossier_chat_id=sent.chat.id,
+                                   dossier_msg_id=sent.message_id,
+                                   dossier_is_photo=1,
+                                   admin_username=admin_username)
         else:
             no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
-            await bot.send_message(
+            sent = await bot.send_message(
                 chat_id=ADMIN_CHAT_ID,
                 message_thread_id=DOSSIER_THREAD_ID,
                 text=no_face_text,
                 parse_mode="HTML",
-                reply_markup=keyboard,
+                reply_markup=new_kb,
                 disable_web_page_preview=True,
             )
+            if db:
+                upsert_anketa_edit(db, user_id,
+                                   dossier_chat_id=sent.chat.id,
+                                   dossier_msg_id=sent.message_id,
+                                   dossier_is_photo=0,
+                                   admin_username=admin_username)
     except Exception as e:
         logger.error(f"_send_dossier: ошибка отправки досье для {user_id}: {e}")
 
@@ -326,8 +360,10 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await clear_application_messages(app_id)
 
         # 6. ДОСЬЕ С ФОТО — отправляем в тред ADMIN_CHAT_ID/DOSSIER_THREAD_ID
+        _admin_name = f"@{query.from_user.username}" if query.from_user.username else str(query.from_user.id)
         asyncio.create_task(
-            _send_dossier(context.bot, target_user_id, card_text, card_kb)
+            _send_dossier(context.bot, target_user_id, card_text, card_kb,
+                          db=main_db, admin_username=_admin_name)
         )
 
     elif action == "rej":

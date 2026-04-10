@@ -46,6 +46,8 @@ class CallbackHandler:
         ensure_owner_columns(db)
         ensure_survey_columns(db)
         ensure_journal_tables(db)
+        from handlers.anketa_edit_handlers import ensure_anketa_edit_tables
+        ensure_anketa_edit_tables(db)
 
     async def handle_callback(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle all callback queries — dispatches to sub-modules."""
@@ -81,6 +83,13 @@ class CallbackHandler:
                 except Exception:
                     pass
                 return
+
+        # ═══ ANKETA EDIT CALLBACKS ═══
+        if data.startswith('anketa_edit_'):
+            from handlers.anketa_edit_handlers import handle_anketa_edit_callback, ensure_anketa_edit_tables
+            ensure_anketa_edit_tables(self.db)
+            await handle_anketa_edit_callback(query, context, self.db, data)
+            return
 
         # ═══ BBS CALLBACKS (ранний возврат) ═══
         if data.startswith('report_reason_') or data == 'report_cancel':

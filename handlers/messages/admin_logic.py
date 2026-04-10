@@ -290,6 +290,12 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     from database.db_friend import is_deputy as _is_deputy_fn
     _is_privileged = user.id == admin_id or await _is_deputy_fn(user.id)
 
+    # === РЕДАКТИРОВАНИЕ АНКЕТЫ (фото / примечание) ===
+    if context.user_data.get('anketa_edit') and _is_privileged:
+        from handlers.anketa_edit_handlers import handle_anketa_edit_input
+        if await handle_anketa_edit_input(message, context, db):
+            return True
+
     # === ОБРАБОТКА ВВОДА ID ВЕТКИ (для пресс-релиза) ===
     if context.user_data.get('awaiting_thread_id') and _is_privileged:
         await _handle_awaiting_thread_id(message, user, context, db, target_chat_id)
