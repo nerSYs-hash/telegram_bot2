@@ -293,24 +293,20 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
 async def _show_edit_menu(query_or_msg, context, db, user_id: int,
                            reg_data: dict, is_edit: bool = True,
                            expanded_photo: bool = False) -> None:
+    import html as _html
     row = get_anketa_edit(db, user_id) or {}
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
 
-    display_name = reg_data.get('q_name') or reg_data.get('first_name') or '—'
-    username = reg_data.get('username')
-    name_str = f"@{username}" if username else display_name
-
-    photo_status = '📷 Кастомное' if custom_photo else '👤 Из профиля Telegram'
-    note_str = f"<i>{note[:80]}{'…' if len(note) > 80 else ''}</i>" if note else '—'
-
-    text = (
-        f"✏️ <b>Редактирование анкеты</b>\n\n"
-        f"👤 {name_str}\n"
-        f"🆔 <code>#{user_id}</code>\n\n"
-        f"📷 Фото: {photo_status}\n"
-        f"📝 Примечание: {note_str}"
-    )
+    # Используем полный текст досье — как в _rebuild_and_update
+    base_text = row.get('base_text') or ''
+    if not base_text:
+        admin_username = row.get('admin_username') or '—'
+        base_text = _build_dossier_text(reg_data, user_id, admin_username)
+    if note:
+        text = base_text + f"\n\n📝 <b>Примечание:</b> {_html.escape(note)}"
+    else:
+        text = base_text
 
     kb = []
     if expanded_photo:
