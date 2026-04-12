@@ -75,6 +75,7 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
         photos = await bot.get_user_profile_photos(user_id, limit=3)
         face_photo = None
 
+        # Сначала проверяем profile_photos
         for photo_size_list in (photos.photos or []):
             try:
                 file = await bot.get_file(photo_size_list[-1].file_id)
@@ -85,6 +86,21 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
             except Exception as e:
                 logger.warning(f"_send_dossier: ошибка обработки фото: {e}")
                 continue
+
+        # Если не найдено ни одного фото с лицом — пробуем главное фото-аватар
+        if not face_photo:
+            try:
+                user = await bot.get_chat(user_id)
+                if hasattr(user, 'photo') and user.photo:
+                    # Берём маленькую или большую версию аватара
+                    avatar_file_id = getattr(user.photo, 'big_file_id', None) or getattr(user.photo, 'small_file_id', None)
+                    if avatar_file_id:
+                        file = await bot.get_file(avatar_file_id)
+                        byte_array = await file.download_as_bytearray()
+                        if await has_human_face(byte_array):
+                            face_photo = avatar_file_id
+            except Exception as e:
+                logger.warning(f"_send_dossier: ошибка обработки главного аватара: {e}")
 
         if face_photo:
             sent = await bot.send_photo(
