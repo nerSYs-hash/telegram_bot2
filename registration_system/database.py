@@ -134,6 +134,11 @@ async def init_db():
             ("triggers", "actions",               "TEXT DEFAULT '[]'"),
             ("triggers", "last_bot_msg_id",       "INTEGER"),
             ("triggers", "created_by",            "INTEGER"),
+            # новые поля для лимитов и счетчиков
+            ("triggers", "fire_limit",            "INTEGER"),
+            ("triggers", "pin_count",             "INTEGER DEFAULT 0"),
+            ("triggers", "fired_count",           "INTEGER DEFAULT 0"),
+            ("triggers", "pinned_count",          "INTEGER DEFAULT 0"),
         ]
         async with db.execute("SELECT name FROM sqlite_master WHERE type='table'") as cur:
             existing_tables = {r[0] for r in await cur.fetchall()}
@@ -775,3 +780,45 @@ async def get_referral_code(tg_id: int) -> Optional[str]:
 async def send_to_journal(*args, **kwargs):
     """Устаревший псевдоним — логирование теперь в utils/journal.py."""
     pass
+
+# === FIRE/PIN LIMITS ===
+
+async def increment_trigger_fired(trigger_id: int) -> int:
+    """Увеличить счетчик срабатываний триггера. Возвращает новое значение."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            'UPDATE triggers SET fired_count = COALESCE(fired_count, 0) + 1 WHERE id = ?',
+            (trigger_id,)
+        )
+        await db.commit()
+        async with db.execute('SELECT fired_count FROM triggers WHERE id = ?', (trigger_id,)) as cur:
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+async def increment_trigger_pinned(trigger_id: int) -> int:
+    """Увеличить счетчик закреплений триггера. Возвращает новое значение."""
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute(
+            'UPDATE triggers SET pinned_count = COALESCE(pinned_count, 0) + 1 WHERE id = ?',
+            (trigger_id,)
+        )
+        await db.commit()
+        async with db.execute('SELECT pinned_count FROM triggers WHERE id = ?', (trigger_id,)) as cur:
+            row = await cur.fetchone()
+            return row[0] if row else 0
+
+async def reset_trigger_fired(trigger_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE triggers SET fired_count = 0 WHERE id = ?', (trigger_id,))
+        await db.commit()
+
+async def reset_trigger_pinned(trigger_id: int) -> None:
+    async with aiosqlite.connect(DB_PATH) as db:
+        await db.execute('UPDATE triggers SET pinned_count = 0 WHERE id = ?', (trigger_id,))
+        await db.commit()
+
+async def get_trigger_counters(trigger_id: int) -> dict:
+    async with aiosqlite.connect(DB_PATH) as db:
+        async with db.execute('SELECT fired_count, pinned_count FROM triggers WHERE id = ?', (trigger_id,)) as cur:
+            row = await cur.fetchone()
+            return dict(row) if row else {'fired_count': 0, 'pinned_count': 0}

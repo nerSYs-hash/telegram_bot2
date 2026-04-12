@@ -28,6 +28,8 @@ from database import (
     inc_trigger_violation, reset_trigger_violations,
     get_chat_threads, save_chat_threads,
     is_admin, get_user,
+    increment_trigger_fired, increment_trigger_pinned,
+    reset_trigger_fired, reset_trigger_pinned, get_trigger_counters,
 )
 from config import OWNER_ID, CHAT_ID
 from constants import UserRole
@@ -104,6 +106,8 @@ class TriggerCreate(StatesGroup):
     emoji_input    = State()
     warn_period    = State()   # 7.4.6.2
     delay_value    = State()   # 7.4.8
+    fire_limit     = State()   # лимит срабатываний
+    pin_count      = State()   # количество закреплений
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -127,6 +131,8 @@ def _empty_draft(mode: str = 'create', edit_id: int = None) -> dict:
         'actions': [],
         'action_details': {},
         'delay': {'enabled': False, 'actions': [], 'details': {}},
+        'fire_limit': None,  # лимит срабатываний (None = бесконечно)
+        'pin_count': 0,     # количество закреплений (по умолчанию 0)
         '_step': 'name',
         '_action_queue': [],
         '_current_action': None,
@@ -153,6 +159,8 @@ def _draft_to_save(draft: dict) -> dict:
         'initiator':            draft.get('initiator', 'all'),
         'target':               draft.get('target', 'nobody'),
         'actions':              json.dumps(actions_list),
+        'fire_limit':           draft.get('fire_limit'),
+        'pin_count':            draft.get('pin_count', 0),
     }
 
 
@@ -180,12 +188,18 @@ def _config_text(draft: dict) -> str:
     del_info = draft.get('delete_bot_msg', 'no')
     if del_info == 'period' and draft.get('delete_bot_msg_period'):
         del_info = f'через {draft["delete_bot_msg_period"]} мин'
+    fire_limit = draft.get('fire_limit')
+    pin_count = draft.get('pin_count', 0)
+    fire_limit_str = f"<b>{fire_limit}</b>" if fire_limit else "<i>∞</i>"
+    pin_count_str = f"<b>{pin_count}</b>" if pin_count else "<i>0</i>"
     return (
         f"⚡ <b>Настройка триггера</b>\n{'━' * 24}\n\n"
         f"📛 Название: <b>{draft.get('name', '?')}</b>\n"
         f"🔑 Слова: <code>{draft.get('keywords', '—')}</code>\n"
         f"🎲 Вероятность: <b>{draft.get('probability', 100)}%</b>\n"
-        f"🗑 Удаление ответа бота: <b>{del_info}</b>\n\n"
+        f"🗑 Удаление ответа бота: <b>{del_info}</b>\n"
+        f"🔢 Лимит срабатываний: {fire_limit_str}\n"
+        f"📌 Кол-во закреплений: {pin_count_str}\n\n"
         f"🔍 Условие: {CONDITIONS.get(draft.get('condition', 'contains'), '?')}\n"
         f"📍 Где: {where_str}\n"
         f"👤 Инициатор: {INITIATORS.get(draft.get('initiator', 'all'), '?')}\n"
@@ -205,6 +219,10 @@ def _config_kb() -> InlineKeyboardMarkup:
         InlineKeyboardButton(text="Цель",       callback_data="tg_cfg_target"),
     )
     b.row(InlineKeyboardButton(text="⚡ Действия", callback_data="tg_cfg_actions"))
+    b.row(
+        InlineKeyboardButton(text="🔢 Лимит срабатываний", callback_data="tg_cfg_fire_limit"),
+        InlineKeyboardButton(text="📌 Кол-во закреплений", callback_data="tg_cfg_pin_count"),
+    )
     b.row(
         InlineKeyboardButton(text="◀ Назад",      callback_data="tg_back"),
         InlineKeyboardButton(text="❌ Сброс",     callback_data="tg_reset"),
@@ -475,6 +493,8 @@ async def _start_edit(callback: CallbackQuery, state: FSMContext, trigger_id: in
         'actions': act_keys,
         'action_details': act_details,
         'delay': {'enabled': False, 'actions': [], 'details': {}},
+        'fire_limit': t.get('fire_limit'),
+        'pin_count': t.get('pin_count', 0),
         '_step': 'config',
         '_action_queue': [],
         '_current_action': None,
@@ -779,342 +799,44 @@ async def trigger_callback(callback: CallbackQuery, state: FSMContext):
         await callback.answer("⛔ Нет доступа.", show_alert=True)
         return
 
-    data = callback.data
-    fsm_data = await state.get_data()
-    draft = fsm_data.get('draft', _empty_draft())
 
-    # ── Menu / navigation ──
-    if data == "tg_menu":
-        await show_triggers_menu(callback, state)
 
-    elif data == "tg_list":
-        await _show_list(callback, state)
-
-    elif data == "tg_create":
-        await _start_create(callback, state)
-
-    elif data == "tg_quick":
-        await callback.answer("⚡ Быстротриг будет реализован позже.", show_alert=True)
-
-    elif data == "tg_reset":
-        await state.clear()
-        await _start_create(callback, state)
-
-    elif data == "tg_back":
-        step = fsm_data.get('_step', 'name')
-        if step == 'name':
-            await state.clear()
-            await show_triggers_menu(callback)
-        elif step == 'keywords':
-            draft['_step'] = 'name'
-            await state.update_data(draft=draft, _step='name')
-            await state.set_state(TriggerCreate.name)
-            b = InlineKeyboardBuilder()
-            b.row(InlineKeyboardButton(text="❌ Сброс", callback_data="tg_reset"))
-            await callback.message.edit_text(
-                f"🔔 <b>Создание триггера</b> — Шаг 1/4\n\n"
-                f"📛 Введите <b>название триггера</b>:\n<i>Текущее: {draft.get('name', '—')}</i>",
-                reply_markup=b.as_markup(), parse_mode='HTML'
-            )
-        elif step == 'probability':
-            draft['_step'] = 'keywords'
-            await state.update_data(draft=draft, _step='keywords')
-            await state.set_state(TriggerCreate.keywords)
-            b = InlineKeyboardBuilder()
-            b.row(InlineKeyboardButton(text="◀ Назад", callback_data="tg_back"),
-                  InlineKeyboardButton(text="❌ Сброс", callback_data="tg_reset"))
-            await callback.message.edit_text(
-                f"🔔 Шаг 2/4\n🔑 Введите слова-триггеры через запятую:\n<i>Текущие: {draft.get('keywords', '—')}</i>",
-                reply_markup=b.as_markup(), parse_mode='HTML'
-            )
-        elif step in ('delete_bot_msg', 'config'):
-            draft['_step'] = 'probability'
-            await state.update_data(draft=draft, _step='probability')
-            await state.set_state(TriggerCreate.probability)
-            b = InlineKeyboardBuilder()
-            b.row(InlineKeyboardButton(text="◀ Назад", callback_data="tg_back"),
-                  InlineKeyboardButton(text="❌ Сброс", callback_data="tg_reset"),
-                  InlineKeyboardButton(text="⏩ Пропустить", callback_data="tg_skip"))
-            await callback.message.edit_text(
-                f"🔔 Шаг 3/4\n🎲 Вероятность (0-100%):\n<i>Текущая: {draft.get('probability', 100)}%</i>",
-                reply_markup=b.as_markup(), parse_mode='HTML'
-            )
-        else:
-            await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_back_cfg":
-        await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_skip":
-        step = fsm_data.get('_step', '')
-        if step == 'probability':
-            draft['probability'] = 100
-            await state.update_data(draft=draft, _step='delete_bot_msg')
-            await _ask_delete_bot_msg(callback, state)
-        elif step in ('config', 'actions'):
-            await _show_config_menu(callback, draft, state)
-        else:
-            # Skipping action config
-            await state.set_state(None)
-            await _next_action_config(callback, state)
-
-    elif data == "tg_save":
-        await _save_trigger(callback, state)
-
-    # ── 7.2.4 delete bot msg ──
-    elif data == "tg_delmsg_no":
-        draft['delete_bot_msg'] = 'no'
-        await state.update_data(draft=draft, _step='config')
-        await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_delmsg_previous":
-        draft['delete_bot_msg'] = 'previous'
-        await state.update_data(draft=draft, _step='config')
-        await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_delmsg_period":
-        draft['delete_bot_msg'] = 'period'
-        await state.update_data(draft=draft, _step='del_period')
-        await state.set_state(TriggerCreate.del_period)
-        b = InlineKeyboardBuilder()
-        b.row(InlineKeyboardButton(text="◀ Назад", callback_data="tg_back"))
-        await callback.message.edit_text(
-            "🗑 Укажите период автоудаления в <b>минутах</b>:",
-            reply_markup=b.as_markup(), parse_mode='HTML'
-        )
-
-    # ── 7.3.1 Condition ──
-    elif data == "tg_cfg_condition":
-        await _show_condition_menu(callback, draft, state)
-
-    elif data.startswith("tg_cond_"):
-        draft['condition'] = data[len("tg_cond_"):]
-        await state.update_data(draft=draft)
-        await _show_config_menu(callback, draft, state)
-
-    # ── 7.3.2 Where ──
-    elif data == "tg_cfg_where":
-        await _show_where_menu(callback, draft, state)
-
-    elif data == "tg_where_all":
-        draft['where_fires'] = 'all'
-        draft['threads'] = []
-        await state.update_data(draft=draft)
-        await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_where_threads":
-        draft['where_fires'] = 'threads'
-        await state.update_data(draft=draft)
-        await _show_where_menu(callback, draft, state)
-
-    elif data.startswith("tg_thread_"):
-        try:
-            tid = int(data[len("tg_thread_"):])
-            threads = draft.get('threads', [])
-            if tid in threads:
-                threads.remove(tid)
-            else:
-                threads.append(tid)
-            draft['threads'] = threads
-            await state.update_data(draft=draft)
-            await _show_where_menu(callback, draft, state)
-        except ValueError:
-            pass
-
-    # ── 7.3.3 Initiator ──
-    elif data == "tg_cfg_initiator":
-        await _show_initiator_menu(callback, draft, state)
-
-    elif data.startswith("tg_init_"):
-        draft['initiator'] = data[len("tg_init_"):]
-        await state.update_data(draft=draft)
-        await _show_config_menu(callback, draft, state)
-
-    # ── 7.3.4 Target ──
-    elif data == "tg_cfg_target":
-        await _show_target_menu(callback, draft, state)
-
-    elif data.startswith("tg_target_"):
-        draft['target'] = data[len("tg_target_"):]
-        await state.update_data(draft=draft)
-        await _show_config_menu(callback, draft, state)
-
-    # ── 7.3.5 Actions multi-select ──
-    elif data == "tg_cfg_actions":
-        await _show_actions_menu(callback, draft, state)
-
-    elif data.startswith("tg_act_toggle_"):
-        atype = data[len("tg_act_toggle_"):]
-        acts = draft.get('actions', [])
-        if atype in acts:
-            acts.remove(atype)
-        else:
-            acts.append(atype)
-        draft['actions'] = acts
-        await state.update_data(draft=draft)
-        await _show_actions_menu(callback, draft, state)
-
-    elif data == "tg_act_configure":
-        await _start_action_config(callback, state)
-
-    elif data == "tg_act_skip":
-        await state.set_state(None)
-        await _next_action_config(callback, state)
-
-    # ── 7.4.3 Pin ──
-    elif data.startswith("tg_pin_notify_"):
-        notify = data == "tg_pin_notify_yes"
-        action_details = draft.get('action_details', {})
-        action_details['pin'] = {'notify': notify}
-        draft['action_details'] = action_details
-        await state.update_data(draft=draft)
-        await _next_action_config(callback, state)
-
-    # ── 7.4.4 Delete what ──
-    elif data.startswith("tg_del_what_"):
-        what_key = 'trigger_word' if data == 'tg_del_what_trigger' else 'user_message'
-        action_details = draft.get('action_details', {})
-        del_details = action_details.get('delete', {'what': []})
-        what_list = del_details.get('what', [])
-        if what_key in what_list:
-            what_list.remove(what_key)
-        else:
-            what_list.append(what_key)
-        del_details['what'] = what_list
-        action_details['delete'] = del_details
-        draft['action_details'] = action_details
-        await state.update_data(draft=draft)
-        # Re-show delete config
-        await _configure_action(callback, draft, 'delete', state)
-
-    # ── 7.4.5 Mute ──
-    elif data.startswith("tg_mute_"):
-        key = data[len("tg_mute_"):]
-        secs, _ = MUTE_OPTIONS.get(key, (300, ''))
-        action_details = draft.get('action_details', {})
-        action_details['mute'] = {'duration': secs}
-        draft['action_details'] = action_details
-        await state.update_data(draft=draft)
-        await _next_action_config(callback, state)
-
-    # ── 7.4.6.2 Warn period unit ──
-    elif data.startswith("tg_warn_unit_"):
-        unit = data[len("tg_warn_unit_"):]
-        action_details = draft.get('action_details', {})
-        action_details.setdefault('warn', {})['period_unit'] = unit
-        draft['action_details'] = action_details
-        await state.update_data(draft=draft)
-        b = InlineKeyboardBuilder()
-        b.row(InlineKeyboardButton(text="⏩ Пропустить (30)", callback_data="tg_act_skip"))
-        await callback.message.edit_text(
-            f"⚠️ Период накопления ({unit}) — введите число:",
-            reply_markup=b.as_markup(), parse_mode='HTML'
-        )
-        await state.set_state(TriggerCreate.warn_period)
-
-    # ── 7.4.8 Delay ──
-    elif data == "tg_delay_no":
-        draft['delay'] = {'enabled': False, 'actions': [], 'details': {}}
-        await state.update_data(draft=draft)
-        await _show_config_menu(callback, draft, state)
-
-    elif data == "tg_delay_yes":
-        draft['delay'] = {'enabled': True, 'actions': [], 'details': {}}
-        await state.update_data(draft=draft)
-        await _ask_delay_actions(callback, state)
-
-    elif data.startswith("tg_delay_act_"):
-        atype = data[len("tg_delay_act_"):]
-        delay = draft.get('delay', {})
-        delay_acts = delay.get('actions', [])
-        if atype in delay_acts:
-            delay_acts.remove(atype)
-        else:
-            delay_acts.append(atype)
-        delay['actions'] = delay_acts
-        draft['delay'] = delay
-        await state.update_data(draft=draft)
-        await _ask_delay_actions(callback, state)
-
-    elif data == "tg_delay_set_period":
-        data2 = await state.get_data()
-        draft2 = data2.get('draft', draft)
-        delay = draft2.get('delay', {})
-        queue = list(delay.get('actions', []))
-        delay['_queue'] = queue
-        draft2['delay'] = delay
-        await state.update_data(draft=draft2)
-        await _next_delay_period(callback, state)
-
-    elif data.startswith("tg_delay_unit_"):
-        # Store unit, then ask value
-        unit = data[len("tg_delay_unit_"):]
-        data2 = await state.get_data()
-        draft2 = data2.get('draft', draft)
-        delay = draft2.get('delay', {})
-        delay['_cur_unit'] = unit
-        draft2['delay'] = delay
-        await state.update_data(draft=draft2)
-        await state.set_state(TriggerCreate.delay_value)
-        await callback.message.edit_text(f"⏱ Введите задержку ({unit}):")
-
-    # ── List actions ──
-    elif data.startswith("tg_view_"):
-        try:
-            tid = int(data[len("tg_view_"):])
-            await _show_trigger_detail(callback, tid)
-        except ValueError:
-            pass
-
-    elif data.startswith("tg_edit_"):
-        try:
-            tid = int(data[len("tg_edit_"):])
-            await _start_edit(callback, state, tid)
-        except ValueError:
-            pass
-
-    elif data.startswith("tg_toggle_"):
-        try:
-            tid = int(data[len("tg_toggle_"):])
-            new_state = await toggle_trigger(tid)
-            label = "включён 🟢" if new_state else "выключен 🔴"
-            await callback.answer(f"Триггер {label}", show_alert=True)
-            # Refresh view
-            await _show_trigger_detail(callback, tid)
-        except Exception as e:
-            await callback.answer(f"❌ {e}", show_alert=True)
-
-    elif data.startswith("tg_del_"):
-        if data.startswith("tg_del_confirm_"):
-            try:
-                tid = int(data[len("tg_del_confirm_"):])
-                await delete_trigger_db(tid)
-                await callback.answer("✅ Удалён.", show_alert=True)
-                await _show_list(callback, state)
-            except Exception as e:
-                await callback.answer(f"❌ {e}", show_alert=True)
-        else:
-            try:
-                tid = int(data[len("tg_del_"):])
-                t = await get_trigger(tid)
-                if t:
-                    b = InlineKeyboardBuilder()
-                    b.row(
-                        InlineKeyboardButton(text="⚠️ ДА, удалить", callback_data=f"tg_del_confirm_{tid}"),
-                        InlineKeyboardButton(text="Отмена",          callback_data=f"tg_view_{tid}"),
-                    )
-                    await callback.message.edit_text(
-                        f"🚫 Удалить триггер <b>{t['name']}</b>?\n\n<i>Это действие нельзя отменить.</i>",
-                        reply_markup=b.as_markup(), parse_mode='HTML'
-                    )
-            except ValueError:
-                pass
-
-    elif data == "tg_noop":
-        await callback.answer()
-
+# === HANDLERS FOR FIRE_LIMIT AND PIN_COUNT INPUT ===
+@router.message(TriggerCreate.fire_limit, F.chat.type == ChatType.PRIVATE)
+async def handle_fire_limit_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    draft = data.get('draft', _empty_draft())
+    text = message.text.strip() if message.text else ''
+    if text in ('∞', 'бесконечно', 'нет', 'none', 'None'):
+        draft['fire_limit'] = None
     else:
-        await callback.answer()
+        try:
+            val = int(text)
+            if val <= 0:
+                raise ValueError
+            draft['fire_limit'] = val
+        except Exception:
+            await message.answer("❌ Введите положительное число или выберите 'Без лимита'.")
+            return
+    await state.update_data(draft=draft, _step='config')
+    await _show_config_menu(message, draft, state)
+
+@router.message(TriggerCreate.pin_count, F.chat.type == ChatType.PRIVATE)
+async def handle_pin_count_input(message: Message, state: FSMContext):
+    data = await state.get_data()
+    draft = data.get('draft', _empty_draft())
+    text = message.text.strip() if message.text else ''
+    if text in ('0', 'нет', 'none', 'None'):
+        draft['pin_count'] = 0
+    else:
+        try:
+            val = int(text)
+            if val < 0:
+                raise ValueError
+            draft['pin_count'] = val
+        except Exception:
+            await message.answer("❌ Введите неотрицательное число или выберите 'Не закреплять'.")
+            return
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -1392,6 +1114,19 @@ async def process_triggers(message: Message):
 
     for trigger in triggers:
         try:
+            # Проверка fire_limit (глобальный лимит срабатываний)
+            fire_limit = trigger.get('fire_limit')
+            fired_count = trigger.get('fired_count', 0)
+            if fire_limit is not None:
+                try:
+                    fire_limit = int(fire_limit)
+                    fired_count = int(fired_count)
+                except Exception:
+                    fire_limit = None
+                    fired_count = 0
+                if fire_limit is not None and fired_count >= fire_limit:
+                    logger.info(f"TRIGGER '{trigger.get('name')}' fire_limit reached: {fired_count}/{fire_limit}")
+                    continue
             # Check initiator filter
             initiator = trigger.get('initiator', 'all')
             if initiator == 'users' and user_role in (UserRole.ADMIN, UserRole.OWNER):
@@ -1447,6 +1182,10 @@ async def process_triggers(message: Message):
                 # Legacy: use old action field
                 actions_raw = [{'type': trigger.get('action', 'delete')}]
 
+
+            # Если дошли до сюда — триггер сработал, увеличиваем счетчик fired_count
+            await increment_trigger_fired(trigger['id'])
+
             for action in actions_raw:
                 atype = action.get('type', '')
                 delay_info = action.get('delay')
@@ -1481,6 +1220,20 @@ async def _execute_trigger_action(message: Message, trigger: dict, action: dict,
     user = message.from_user
 
     try:
+        # Проверка pin_count для действия pin
+        if atype == 'pin':
+            pin_count = trigger.get('pin_count', 0)
+            pinned_count = trigger.get('pinned_count', 0)
+            try:
+                pin_count = int(pin_count)
+                pinned_count = int(pinned_count)
+            except Exception:
+                pin_count = 0
+                pinned_count = 0
+            if pin_count > 0 and pinned_count >= pin_count:
+                logger.info(f"TRIGGER '{trigger.get('name')}' pin_count reached: {pinned_count}/{pin_count}")
+                return
+
         if atype == 'chat_msg':
             text = action.get('text', f"⚡ {trigger.get('name', 'Триггер')}")
             media_id = action.get('media_file_id')
@@ -1523,6 +1276,8 @@ async def _execute_trigger_action(message: Message, trigger: dict, action: dict,
                     message.chat.id, message.message_id,
                     disable_notification=not notify
                 )
+                # Увеличиваем счетчик закреплений
+                await increment_trigger_pinned(trigger['id'])
             except Exception as e:
                 logger.error(f"Pin action failed: {e}")
 
