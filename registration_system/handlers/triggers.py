@@ -419,6 +419,25 @@ async def handle_trigger_probability(message: Message, state: FSMContext):
     await state.update_data(draft=draft, _step='delete_bot_msg')
     await _ask_delete_bot_msg(message, state)
 
+@router.callback_query(F.data == "tg_cfg_fire_limit", F.message.chat.type == ChatType.PRIVATE)
+async def ask_fire_limit(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(TriggerCreate.fire_limit)
+    await callback.message.edit_text(
+        "🔢 Введите лимит срабатываний (число, либо '∞' для безлимитного):",
+        reply_markup=InlineKeyboardBuilder().row(
+            InlineKeyboardButton(text="◀ Назад", callback_data="tg_back_cfg")
+        ).as_markup()
+    )
+
+@router.callback_query(F.data == "tg_cfg_pin_count", F.message.chat.type == ChatType.PRIVATE)
+async def ask_pin_count(callback: CallbackQuery, state: FSMContext):
+    await state.set_state(TriggerCreate.pin_count)
+    await callback.message.edit_text(
+        "📌 Введите количество закреплений (0 — не закреплять):",
+        reply_markup=InlineKeyboardBuilder().row(
+            InlineKeyboardButton(text="◀ Назад", callback_data="tg_back_cfg")
+        ).as_markup()
+    )
 
 async def _ask_delete_bot_msg(target, state: FSMContext):
     """7.2.4 — ask delete_bot_msg setting."""
