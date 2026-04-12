@@ -313,6 +313,10 @@ async def _show_trigger_detail(callback: CallbackQuery, trigger_id: int):
         acts_str = ', '.join(ACTIONS.get(a.get('type', ''), a.get('type', '')) for a in acts_list) or '—'
     except Exception:
         acts_str = t.get('action', '—')
+    fire_limit = t.get('fire_limit')
+    pin_count = t.get('pin_count', 0)
+    fire_limit_str = f"<b>{fire_limit}</b>" if fire_limit else "<i>∞</i>"
+    pin_count_str = f"<b>{pin_count}</b>" if pin_count else "<i>0</i>"    
     text = (
         f"⚡ <b>{t['name']}</b>\n{'━' * 24}\n\n"
         f"🔑 Слова: <code>{t.get('keywords') or t.get('pattern', '—')}</code>\n"
@@ -320,6 +324,8 @@ async def _show_trigger_detail(callback: CallbackQuery, trigger_id: int):
         f"🎲 Вероятность: {t.get('probability', 100)}%\n"
         f"⚡ Действия: {acts_str}\n"
         f"📡 Статус: {status}\n"
+        f"🔢 Лимит срабатываний: {fire_limit_str}\n"
+        f"📌 Кол-во закреплений: {pin_count_str}\n" 
     )
     toggle_label = "🔴 Выключить" if t.get('enabled') else "🟢 Включить"
     b = InlineKeyboardBuilder()
