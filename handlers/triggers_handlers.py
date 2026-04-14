@@ -1454,7 +1454,19 @@ async def process_triggers(
                     if has_rotation:
                         bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
                     else:
-                        reply_text = (act_cfg.get('text') or trigger['name']).strip()
+                        raw_text = (act_cfg.get('text') or trigger['name']).strip()
+                        # Применяем плейсхолдеры
+                        try:
+                            from handlers.placeholder_handlers import apply_placeholders
+                            quoted_user = getattr(getattr(message, 'reply_to_message', None), 'from_user', None)
+                            reply_text = apply_placeholders(raw_text, db, {
+                                'user': user,
+                                'quoted_user': quoted_user,
+                                'chat': message.chat,
+                            })
+                        except Exception as _pe:
+                            logger.warning(f"apply_placeholders: {_pe}")
+                            reply_text = raw_text
                         # Определяем reply_to_message_id по настройке reply_target
                         reply_target = act_cfg.get('reply_target', 'none')
                         if reply_target == 'none' and act_cfg.get('reply_to_user', False):
