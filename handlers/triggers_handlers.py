@@ -1023,14 +1023,15 @@ async def _configure_action(src, ctx, action: str):
             f"↩️ Реплай на сообщение: {reply_icon}\n"
             f"🔘 Кнопки-ссылки: <b>{btn_count}</b> шт."
         )
+        reply_lbl = f"↩️ Ответить на сообщение: {'✅ Да' if with_reply else '❌ Нет'}"
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_chat_media")],
             [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
             [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
             [IKB(f"🔁 Ротация ({rot_ready}/5)", callback_data="trigger_acfg_rotation")],
-            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle"),
-             IKB(f"{reply_icon} Реплай", callback_data="trigger_acfg_reply_toggle")],
+            [IKB(reply_lbl, callback_data="trigger_acfg_reply_toggle")],
+            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle")],
             [IKB(f"🔘 Кнопки-ссылки ({btn_count})", callback_data="trigger_acfg_chat_buttons")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
@@ -2627,6 +2628,47 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
                 "<i>Примеры: <code>30 мин</code>, <code>24 часа</code>, <code>7 дней</code></i>",
                 [[IKB("◀ К действиям", callback_data="trigger_set_actions")]])
 
+        elif sub == "chat_buttons":
+            await _show_buttons_menu(query, ctx, 'msg_chat')
+
+        elif sub == "dm_buttons":
+            await _show_buttons_menu(query, ctx, 'msg_dm')
+
+        elif sub == "btn_add":
+            _set_state(ctx, TS.ACT_BTN_TEXT)
+            await _send_step(query, ctx,
+                "🔘 <b>Добавить кнопку-ссылку</b>\n\nВведите <b>текст</b> кнопки:",
+                [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]])
+
+        elif sub == "btn_cancel":
+            _set_state(ctx, None)
+            action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
+            ctx.user_data.pop('trigger_btn_text_tmp', None)
+            await _show_buttons_menu(query, ctx, action_key)
+
+        elif sub.startswith("btn_del_"):
+            idx_str = sub[len("btn_del_"):]
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                await query.answer("❌ Ошибка", show_alert=True)
+                return
+            action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.get(action_key, {})
+            buttons = cfg.get('buttons', [])
+            if 0 <= idx < len(buttons):
+                buttons.pop(idx)
+                cfg['buttons'] = buttons
+                cfgs[action_key] = cfg
+                draft['action_configs'] = cfgs
+                _set_data(ctx, draft)
+                await query.answer("✅ Кнопка удалена")
+            await _show_buttons_menu(query, ctx, action_key)
+
+        elif sub == "msg_dm":
+            await _configure_action(query, ctx, 'msg_dm')
+
         elif sub in ACTIONS_AVAILABLE:
             await _configure_action(query, ctx, sub)
         else:
@@ -2799,51 +2841,6 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             await _show_edit_menu(query, ctx, db, edit_id)
         else:
             await _show_settings_menu(query, ctx)
-
-    # ═══ КНОПКИ-ССЫЛКИ ═══
-    elif d == "trigger_acfg_chat_buttons":
-        await _show_buttons_menu(query, ctx, 'msg_chat')
-
-    elif d == "trigger_acfg_dm_buttons":
-        await _show_buttons_menu(query, ctx, 'msg_dm')
-
-    elif d == "trigger_acfg_btn_add":
-        _set_state(ctx, TS.ACT_BTN_TEXT)
-        await _send_step(query, ctx,
-            "🔘 <b>Добавить кнопку-ссылку</b>\n\nВведите <b>текст</b> кнопки:",
-            [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]])
-
-    elif d == "trigger_acfg_btn_cancel":
-        _set_state(ctx, None)
-        action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
-        ctx.user_data.pop('trigger_btn_text_tmp', None)
-        await _show_buttons_menu(query, ctx, action_key)
-
-    elif d.startswith("trigger_acfg_btn_del_"):
-        idx_str = d[len("trigger_acfg_btn_del_"):]
-        try:
-            idx = int(idx_str)
-        except ValueError:
-            await query.answer("❌ Ошибка", show_alert=True)
-            return
-        action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
-        cfgs = draft.get('action_configs', {})
-        cfg = cfgs.get(action_key, {})
-        buttons = cfg.get('buttons', [])
-        if 0 <= idx < len(buttons):
-            buttons.pop(idx)
-            cfg['buttons'] = buttons
-            cfgs[action_key] = cfg
-            draft['action_configs'] = cfgs
-            _set_data(ctx, draft)
-            await query.answer("✅ Кнопка удалена")
-        await _show_buttons_menu(query, ctx, action_key)
-
-    elif d == "trigger_acfg_msg_chat":
-        await _configure_action(query, ctx, 'msg_chat')
-
-    elif d == "trigger_acfg_msg_dm":
-        await _configure_action(query, ctx, 'msg_dm')
 
     else:
         await query.answer("❓", show_alert=True)
