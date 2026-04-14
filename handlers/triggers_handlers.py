@@ -82,8 +82,8 @@ MUTE_OPTIONS = {
 }
 
 DELETE_OPTIONS = {
-    'trigger_word': '💬 Слово-триггер',
-    'user_message': '📝 Сообщение пользователя',
+    'trigger_word':   '💬 Слово-триггер (сообщение инициатора)',
+    'quoted_message': '🎯 Цитируемое сообщение (нарушителя)',
 }
 
 # Эскалация предупреждений (7.4.6.1)
@@ -1009,8 +1009,16 @@ async def _configure_action(src, ctx, action: str):
         rot_status = f"🔁 Ротация: {'✅' if rot_ready else '❌'} ({rot_ready}/5)"
         link_prev = cfg.get('link_preview', True)
         link_prev_icon = '✅' if link_prev else '❌'
-        with_reply = cfg.get('reply_to_user', False)
-        reply_icon = '✅' if with_reply else '❌'
+        # reply_target: 'none' | 'initiator' | 'quoted'
+        reply_target = cfg.get('reply_target', 'none')
+        if reply_target == 'none' and cfg.get('reply_to_user', False):
+            reply_target = 'initiator'  # backward compat
+        _REPLY_LABELS = {
+            'none':      '❌ Без реплая',
+            'initiator': '↩️ На инициатора (кто написал слово)',
+            'quoted':    '🎯 На цитируемое сообщение',
+        }
+        reply_lbl = _REPLY_LABELS.get(reply_target, '❌ Без реплая')
         buttons = cfg.get('buttons', [])
         btn_count = len(buttons)
         text = (
@@ -1020,17 +1028,16 @@ async def _configure_action(src, ctx, action: str):
             f"📐 Режим: {pos}\n"
             f"{rot_status}\n"
             f"🔗 Превью ссылок: {link_prev_icon}\n"
-            f"↩️ Реплай на сообщение: {reply_icon}\n"
+            f"↩️ Реплай: {reply_lbl}\n"
             f"🔘 Кнопки-ссылки: <b>{btn_count}</b> шт."
         )
-        reply_lbl = f"↩️ Ответить на сообщение: {'✅ Да' if with_reply else '❌ Нет'}"
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_chat_media")],
             [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
             [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
             [IKB(f"🔁 Ротация ({rot_ready}/5)", callback_data="trigger_acfg_rotation")],
-            [IKB(reply_lbl, callback_data="trigger_acfg_reply_toggle")],
+            [IKB(f"↩️ Реплай: {_REPLY_LABELS.get(reply_target, '❌')}", callback_data="trigger_acfg_reply_menu")],
             [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle")],
             [IKB(f"🔘 Кнопки-ссылки ({btn_count})", callback_data="trigger_acfg_chat_buttons")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
@@ -1448,7 +1455,17 @@ async def process_triggers(
                         bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
                     else:
                         reply_text = (act_cfg.get('text') or trigger['name']).strip()
-                        reply_id = message.message_id if act_cfg.get('reply_to_user', False) else None
+                        # Определяем reply_to_message_id по настройке reply_target
+                        reply_target = act_cfg.get('reply_target', 'none')
+                        if reply_target == 'none' and act_cfg.get('reply_to_user', False):
+                            reply_target = 'initiator'
+                        if reply_target == 'initiator':
+                            reply_id = message.message_id
+                        elif reply_target == 'quoted':
+                            quoted = getattr(message, 'reply_to_message', None)
+                            reply_id = quoted.message_id if quoted else message.message_id
+                        else:
+                            reply_id = None
                         bot_msg = await _send_action_message(
                             bot=context.bot,
                             chat_id=message.chat.id,
@@ -1486,11 +1503,21 @@ async def process_triggers(
                         logger.warning(f"Pin failed: {e}")
 
                 elif act == 'delete':
-                    try:
-                        await message.delete()
-                        handled = True
-                    except Exception:
-                        pass
+                    what = act_cfg.get('what', ['trigger_word'])
+                    if not what:
+                        what = ['trigger_word']
+                    for del_item in what:
+                        try:
+                            if del_item == 'trigger_word':
+                                await message.delete()
+                                handled = True
+                            elif del_item == 'quoted_message':
+                                quoted = getattr(message, 'reply_to_message', None)
+                                if quoted:
+                                    await quoted.delete()
+                                    handled = True
+                        except Exception:
+                            pass
 
                 elif act == 'mute':
                     dur_key = act_cfg.get('duration', '60m')
@@ -2582,15 +2609,61 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             await _configure_action(query, ctx, act)
 
         elif sub == "reply_toggle":
+            # legacy — оставляем для совместимости, переключает initiator/none
             act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
             cfgs = draft.get('action_configs', {})
             cfg = cfgs.setdefault(act, {})
-            cfg['reply_to_user'] = not cfg.get('reply_to_user', False)
+            cur = cfg.get('reply_target', 'none')
+            if cur == 'none' and cfg.get('reply_to_user', False):
+                cur = 'initiator'
+            cfg['reply_target'] = 'none' if cur != 'none' else 'initiator'
+            cfg['reply_to_user'] = cfg['reply_target'] == 'initiator'
             cfgs[act] = cfg
             draft['action_configs'] = cfgs
             _set_data(ctx, draft)
-            state = '✅ включен' if cfg['reply_to_user'] else '❌ отключен'
-            await query.answer(f"Реплай: {state}")
+            await _configure_action(query, ctx, act)
+
+        elif sub == "reply_menu":
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.get(act, {})
+            cur = cfg.get('reply_target', 'none')
+            if cur == 'none' and cfg.get('reply_to_user', False):
+                cur = 'initiator'
+            text = (
+                "↩️ <b>Реплай сообщения в чат</b>\n\n"
+                "Выберите на чьё сообщение бот ответит реплаем:\n\n"
+                "• <b>Без реплая</b> — сообщение просто в чат\n"
+                "• <b>На инициатора</b> — на того кто написал слово-триггер\n"
+                "• <b>На цитируемое</b> — на сообщение которое инициатор процитировал\n"
+                "  <i>(для ручных триггеров: Админ цитирует нарушителя → пишет ББС)</i>"
+            )
+            kb = [
+                [IKB(f"{'✅ ' if cur == 'none' else ''}❌ Без реплая",
+                     callback_data="trigger_acfg_reply_set_none")],
+                [IKB(f"{'✅ ' if cur == 'initiator' else ''}↩️ На инициатора",
+                     callback_data="trigger_acfg_reply_set_initiator")],
+                [IKB(f"{'✅ ' if cur == 'quoted' else ''}🎯 На цитируемое сообщение",
+                     callback_data="trigger_acfg_reply_set_quoted")],
+                [IKB("◀ Назад", callback_data="trigger_acfg_msg_chat")],
+            ]
+            await _send_step(query, ctx, text, kb)
+
+        elif sub.startswith("reply_set_"):
+            val = sub[len("reply_set_"):]
+            if val not in ('none', 'initiator', 'quoted'):
+                await query.answer("❓")
+                return
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.setdefault(act, {})
+            cfg['reply_target'] = val
+            cfg['reply_to_user'] = (val == 'initiator')  # backward compat
+            cfgs[act] = cfg
+            draft['action_configs'] = cfgs
+            _set_data(ctx, draft)
+            labels = {'none': 'без реплая', 'initiator': 'на инициатора', 'quoted': 'на цитируемое'}
+            await query.answer(f"✅ Реплай: {labels[val]}")
             await _configure_action(query, ctx, act)
 
         elif sub.startswith("del_"):
