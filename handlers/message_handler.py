@@ -820,6 +820,12 @@ class MessageHandler:
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
 
+        # ═══ ПЛЕЙСХОЛДЕРЫ FSM ═══
+        if context.user_data.get('ph_state') and message.text:
+            from handlers.placeholder_handlers import handle_placeholder_text
+            if await handle_placeholder_text(update, context, self.db, self.main_admin_id):
+                return
+
         # ═══ TRIGGER FSM v2 (создание/редактирование триггера) ═══
         if context.user_data.get('trigger_state') or context.user_data.get('owner_awaiting', '').startswith('trigger_'):
             from handlers.triggers_handlers import handle_trigger_text_input, handle_trigger_media_input
