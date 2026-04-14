@@ -677,22 +677,21 @@ class GiftHandler:
     # OWNER: Toggle / History
     # ──────────────────────────────────────
     
-    async def handle_monthly_gift_toggle(self, query, user):
+    async def handle_monthly_gift_toggle(self, query, user, context):
         """Toggle monthly gift feature on/off"""
         if user.id != self.main_admin_id:
             await query.answer("У вас нет доступа к этой функции.", show_alert=True)
             return
-        
+
         current = int(self.db.get_setting('monthly_gift_enabled', '1'))
         new_value = 0 if current == 1 else 1
-        
+
         self.db.set_setting('monthly_gift_enabled', str(new_value))
-        
+
         status = "✅ Включена" if new_value == 1 else "❌ Отключена"
         await query.answer(f"Функция {status}", show_alert=True)
-        
-        # Refresh menu (pass context as third arg)
-        await self.show_monthly_gift_menu(query, user, query)
+
+        await self.show_monthly_gift_menu(query, user, context)
     
     async def show_monthly_gift_history(self, query, user):
         """Show monthly gift history — available to all"""
@@ -894,6 +893,50 @@ class GiftHandler:
         
         await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
     
+    # ══════════════════════════════════════════════
+    # РОУТЕР
+    # ══════════════════════════════════════════════
+
+    async def handle_callback(self, query, data, user, context):
+        """Единая точка входа для всех monthly_gift_* и mgift_* колбэков."""
+        is_owner = (user.id == self.main_admin_id)
+
+        if data == "menu_monthly_gift":
+            if is_owner:
+                await self.show_monthly_gift_menu(query, user, context)
+            else:
+                await self.show_monthly_gift_user(query, user)
+        elif data == "monthly_gift_create":
+            await self.monthly_gift_create_start(query, user, context)
+        elif data.startswith("mgift_set_amount_"):
+            await self.monthly_gift_set_amount(query, data, user, context)
+        elif data.startswith("mgift_set_type_"):
+            await self.monthly_gift_set_type(query, data, user, context)
+        elif data.startswith("mgift_set_cond_"):
+            await self.monthly_gift_set_condition(query, data, user, context)
+        elif data.startswith("mgift_set_minmsg_"):
+            await self.monthly_gift_set_min_messages(query, data, user, context)
+        elif data == "monthly_gift_toggle":
+            await self.handle_monthly_gift_toggle(query, user, context)
+        elif data == "monthly_gift_history":
+            await self.show_monthly_gift_history(query, user)
+        elif data == "monthly_gift_participants":
+            await self.show_monthly_gift_participants(query, user)
+        elif data == "monthly_gift_announce":
+            await self.monthly_gift_announce(query, user, context)
+        elif data == "monthly_gift_confirm_draw":
+            await self.monthly_gift_confirm_draw(query, user, context)
+        elif data == "monthly_gift_draw":
+            await self.handle_monthly_gift_draw(query, user, context)
+        elif data == "monthly_gift_user_view":
+            await self.show_monthly_gift_user(query, user)
+        elif data == "monthly_gift_participate":
+            await self.monthly_gift_participate(query, user)
+        elif data == "monthly_gift_my_progress":
+            await self.monthly_gift_my_progress(query, user)
+        elif data == "monthly_gift_winners":
+            await self.show_monthly_gift_winners(query, user)
+
     async def show_monthly_gift_winners(self, query, user):
         """Show past winners — public view"""
         self.db.cursor.execute('''

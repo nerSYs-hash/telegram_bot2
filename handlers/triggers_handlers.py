@@ -82,8 +82,8 @@ MUTE_OPTIONS = {
 }
 
 DELETE_OPTIONS = {
-    'trigger_word': '💬 Слово-триггер',
-    'user_message': '📝 Сообщение пользователя',
+    'trigger_word':   '💬 Слово-триггер (сообщение инициатора)',
+    'quoted_message': '🎯 Цитируемое сообщение (нарушителя)',
 }
 
 # Эскалация предупреждений (7.4.6.1)
@@ -98,9 +98,10 @@ WARN_ESCALATION = [
 CREATION_STEPS = ['name', 'keywords', 'probability', 'bot_delete', 'menu']
 
 BOT_DEL_OPTIONS = {
-    'no':       '❌ Нет',
-    'period':   '⏱ Период',
-    'previous': '🔄 Предыдущее',
+    'no':              '❌ Нет',
+    'period':          '⏱ Период',
+    'previous':        '🔄 Предыдущее',
+    'previous_period': '🔄⏱ Предыдущ. + период',
 }
 
 
@@ -125,6 +126,11 @@ class TS:
     ACT_EMOJI          = 'tg_act_emoji'
     ACT_WARN_PERIOD    = 'tg_act_warn_period'
     ACT_DELAYED_TIME   = 'tg_act_delayed_time'
+    # Кнопки-ссылки
+    ACT_BTN_TEXT       = 'tg_act_btn_text'
+    ACT_BTN_URL        = 'tg_act_btn_url'
+    # Лимиты
+    ACT_FIRE_LIMIT     = 'tg_act_fire_limit'
     # Редактирование
     EDIT_NAME          = 'tg_edit_name'
     EDIT_KW_ADD        = 'tg_edit_kw_add'
@@ -163,6 +169,8 @@ def _clear_fsm(ctx):
     ctx.user_data.pop('owner_awaiting', None)
     ctx.user_data.pop('trigger_configuring_action', None)
     ctx.user_data.pop('trigger_rotation_slot', None)
+    ctx.user_data.pop('trigger_btn_action', None)
+    ctx.user_data.pop('trigger_btn_text_tmp', None)
 
 def _default_data() -> dict:
     return {
@@ -181,6 +189,8 @@ def _default_data() -> dict:
         'warn_period': None,
         'delayed_enabled': False,
         'delayed_configs': {},
+        'fire_limit': None,
+        'auto_pin': 0,
     }
 
 
@@ -301,6 +311,9 @@ def _migrate_trigger_columns(db):
         ("delayed_configs",      "TEXT DEFAULT '{}'"),
         ("last_bot_msg_id",      "INTEGER"),
         ("last_bot_msg_chat",    "INTEGER"),
+        ("fire_limit",           "INTEGER DEFAULT NULL"),
+        ("fire_count",           "INTEGER DEFAULT 0"),
+        ("auto_pin",             "INTEGER DEFAULT 0"),
     ]
     for col_name, col_def in new_cols:
         try:
@@ -379,8 +392,9 @@ def _save_trigger(db, data: dict, created_by: int) -> int:
          actions, action_configs,
          bot_msg_delete, bot_msg_delete_after,
          warn_period, delayed_configs,
-         action, action_value, is_enabled, created_by)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
+         action, action_value, is_enabled, created_by,
+         fire_limit, fire_count, auto_pin)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?, 0, ?)
     ''', (
         data['name'], data['keywords'],
         data.get('condition', 'contains'), data.get('probability', 100),
@@ -394,6 +408,8 @@ def _save_trigger(db, data: dict, created_by: int) -> int:
         _actions_to_legacy(data.get('actions', [])),
         data.get('action_configs', {}).get('msg_chat', {}).get('text', ''),
         created_by,
+        data.get('fire_limit'),
+        data.get('auto_pin', 0),
     ))
     db.conn.commit()
     return db.cursor.lastrowid
@@ -407,7 +423,8 @@ def _update_trigger(db, trigger_id: int, data: dict):
             actions=?, action_configs=?,
             bot_msg_delete=?, bot_msg_delete_after=?,
             warn_period=?, delayed_configs=?,
-            action=?, action_value=?
+            action=?, action_value=?,
+            fire_limit=?, auto_pin=?
         WHERE id=?
     ''', (
         data['name'], data['keywords'],
@@ -421,6 +438,8 @@ def _update_trigger(db, trigger_id: int, data: dict):
         json.dumps(data.get('delayed_configs', {})),
         _actions_to_legacy(data.get('actions', [])),
         data.get('action_configs', {}).get('msg_chat', {}).get('text', ''),
+        data.get('fire_limit'),
+        data.get('auto_pin', 0),
         trigger_id,
     ))
     db.conn.commit()
@@ -431,6 +450,11 @@ def _trigger_to_data(t) -> dict:
         if not val: return default
         try: return json.loads(val)
         except (json.JSONDecodeError, TypeError): return default
+
+    def _safe_int(val, default=None):
+        if val is None: return default
+        try: return int(val)
+        except (TypeError, ValueError): return default
 
     data = {
         'name': t['name'],
@@ -448,6 +472,8 @@ def _trigger_to_data(t) -> dict:
         'warn_period': t['warn_period'],
         'delayed_enabled': bool(_json(t['delayed_configs'], {})),
         'delayed_configs': _json(t['delayed_configs'], {}),
+        'fire_limit': _safe_int(t['fire_limit'] if 'fire_limit' in t.keys() else None),
+        'auto_pin': _safe_int(t['auto_pin'] if 'auto_pin' in t.keys() else 0, default=0),
     }
     return _normalize_rotation_action(data)
 
@@ -610,12 +636,14 @@ async def _step_bot_delete(src, ctx):
         f"<i>Текущее: {cur}</i>\n\n"
         f"• <b>Нет</b> — сообщение остаётся\n"
         f"• <b>Период</b> — удалить через время\n"
-        f"• <b>Предыдущее</b> — удалить предыдущее сообщ. бота этого триггера"
+        f"• <b>Предыдущее</b> — удалить предыдущее сообщ. бота сразу\n"
+        f"• <b>Предыдущ.+период</b> — удалить предыдущее через время"
     )
     keyboard = [
         [IKB("❌ Нет", callback_data="trigger_botdel_no"),
-         IKB("⏱ Период", callback_data="trigger_botdel_period"),
-         IKB("🔄 Предыдущее", callback_data="trigger_botdel_prev")],
+         IKB("⏱ Период", callback_data="trigger_botdel_period")],
+        [IKB("🔄 Предыдущее", callback_data="trigger_botdel_prev"),
+         IKB("🔄⏱ Предыдущ.+период", callback_data="trigger_botdel_prevperiod")],
         _nav_buttons('bot_delete', show_skip=True),
     ]
     await _send_step(src, ctx, text, keyboard)
@@ -638,13 +666,20 @@ async def _show_settings_menu(src, ctx):
     visible_acts = _visible_actions(acts)
     acts_str = ', '.join(ACTIONS_AVAILABLE.get(a, a) for a in visible_acts) if visible_acts else '<i>не выбрано</i>'
 
+    fire_limit = data.get('fire_limit')
+    fire_lbl = f"{fire_limit}" if fire_limit is not None else "∞"
+    auto_pin = data.get('auto_pin', 0)
+    pin_lbl = "✅ Да" if auto_pin else "❌ Нет"
+
     text = (
         f"⚡ <b>Настройки «{data.get('name', '?')}»</b>\n\n"
         f"🔍 Условие: <b>{cond}</b>\n"
         f"📍 Где: <b>{where}</b>\n"
         f"👤 Инициатор: <b>{init}</b>\n"
         f"🎯 Цель: <b>{tgt}</b>\n"
-        f"⚡ Действия: {acts_str}\n\n"
+        f"⚡ Действия: {acts_str}\n"
+        f"🔢 Лимит срабатываний: <b>{fire_lbl}</b>\n"
+        f"📌 Автозакреп ответа: <b>{pin_lbl}</b>\n\n"
         f"<i>Настройте параметры или 💾 Завершить</i>"
     )
     keyboard = [
@@ -653,6 +688,8 @@ async def _show_settings_menu(src, ctx):
         [IKB(f"👤 Инициатор", callback_data="trigger_set_init")],
         [IKB(f"🎯 Цель", callback_data="trigger_set_target")],
         [IKB(f"⚡ Действия ({len(visible_acts)})", callback_data="trigger_set_actions")],
+        [IKB(f"🔢 Лимит: {fire_lbl}", callback_data="trigger_set_firelimit"),
+         IKB(f"📌 Автозакреп: {pin_lbl}", callback_data="trigger_set_autopin")],
         [IKB("💾 Завершить", callback_data="trigger_finish")],
         [IKB("❌ Сброс", callback_data="trigger_reset")],
     ]
@@ -919,6 +956,42 @@ async def _show_rotation_slot_menu(src, ctx, slot: int):
 
 
 # ═══════════════════════════════════════════════════════════════
+#  КНОПКИ-ССЫЛКИ ДЛЯ СООБЩЕНИЙ ТРИГГЕРА
+# ═══════════════════════════════════════════════════════════════
+
+async def _show_buttons_menu(src, ctx, action_key: str):
+    """Показывает список URL-кнопок для действия msg_chat или msg_dm."""
+    data = _get_data(ctx)
+    cfgs = data.get('action_configs', {})
+    cfg = cfgs.get(action_key, {})
+    buttons = cfg.get('buttons', [])
+
+    ctx.user_data['trigger_btn_action'] = action_key
+
+    action_name = "в чат" if action_key == 'msg_chat' else "в ЛС"
+    text = (
+        f"🔘 <b>Кнопки-ссылки ({action_name})</b>\n\n"
+        f"Добавьте кнопки с URL (до 5 шт).\n"
+        f"Каждая кнопка — отдельная строка.\n\n"
+    )
+    if buttons:
+        for i, btn in enumerate(buttons, 1):
+            text += f"{i}. <b>{btn.get('text', '?')}</b> — <code>{btn.get('url', '?')}</code>\n"
+    else:
+        text += "<i>Кнопок пока нет.</i>"
+
+    kb = []
+    for i, btn in enumerate(buttons):
+        kb.append([IKB(f"🗑 Удалить «{btn.get('text', '?')[:20]}»",
+                       callback_data=f"trigger_acfg_btn_del_{i}")])
+    if len(buttons) < 5:
+        kb.append([IKB("➕ Добавить кнопку", callback_data="trigger_acfg_btn_add")])
+    back_cb = "trigger_acfg_msg_chat" if action_key == 'msg_chat' else "trigger_acfg_msg_dm"
+    kb.append([IKB("◀ Назад", callback_data=back_cb)])
+    await _send_step(src, ctx, text, kb)
+
+
+# ═══════════════════════════════════════════════════════════════
 #  КОНФИГУРАЦИЯ ДЕЙСТВИЙ (7.4)
 # ═══════════════════════════════════════════════════════════════
 
@@ -936,8 +1009,18 @@ async def _configure_action(src, ctx, action: str):
         rot_status = f"🔁 Ротация: {'✅' if rot_ready else '❌'} ({rot_ready}/5)"
         link_prev = cfg.get('link_preview', True)
         link_prev_icon = '✅' if link_prev else '❌'
-        with_reply = cfg.get('reply_to_user', False)
-        reply_icon = '✅' if with_reply else '❌'
+        # reply_target: 'none' | 'initiator' | 'quoted'
+        reply_target = cfg.get('reply_target', 'none')
+        if reply_target == 'none' and cfg.get('reply_to_user', False):
+            reply_target = 'initiator'  # backward compat
+        _REPLY_LABELS = {
+            'none':      '❌ Без реплая',
+            'initiator': '↩️ На инициатора (кто написал слово)',
+            'quoted':    '🎯 На цитируемое сообщение',
+        }
+        reply_lbl = _REPLY_LABELS.get(reply_target, '❌ Без реплая')
+        buttons = cfg.get('buttons', [])
+        btn_count = len(buttons)
         text = (
             f"💬 <b>Сообщение в чат</b>\n\n"
             f"📝 Текст: {cur_text[:200]}\n"
@@ -945,7 +1028,8 @@ async def _configure_action(src, ctx, action: str):
             f"📐 Режим: {pos}\n"
             f"{rot_status}\n"
             f"🔗 Превью ссылок: {link_prev_icon}\n"
-            f"↩️ Реплай на сообщение: {reply_icon}"
+            f"↩️ Реплай: {reply_lbl}\n"
+            f"🔘 Кнопки-ссылки: <b>{btn_count}</b> шт."
         )
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_chat_text")],
@@ -953,8 +1037,9 @@ async def _configure_action(src, ctx, action: str):
             [IKB("🖼+📝 Одним сообщением", callback_data="trigger_acfg_media_above")],
             [IKB("📝 Потом 🖼 отдельным", callback_data="trigger_acfg_media_below")],
             [IKB(f"🔁 Ротация ({rot_ready}/5)", callback_data="trigger_acfg_rotation")],
-            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle"),
-             IKB(f"{reply_icon} Реплай", callback_data="trigger_acfg_reply_toggle")],
+            [IKB(f"↩️ Реплай: {_REPLY_LABELS.get(reply_target, '❌')}", callback_data="trigger_acfg_reply_menu")],
+            [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle")],
+            [IKB(f"🔘 Кнопки-ссылки ({btn_count})", callback_data="trigger_acfg_chat_buttons")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
@@ -963,11 +1048,20 @@ async def _configure_action(src, ctx, action: str):
         has_media = '✅' if cfg.get('media_id') else '❌'
         link_prev = cfg.get('link_preview', True)
         link_prev_icon = '✅' if link_prev else '❌'
-        text = f"✉️ <b>Сообщение в ЛС</b>\n\n📝 Текст: {cur_text[:200]}\n🖼 Медиа: {has_media}\n🔗 Превью ссылок: {link_prev_icon}"
+        dm_buttons = cfg.get('buttons', [])
+        dm_btn_count = len(dm_buttons)
+        text = (
+            f"✉️ <b>Сообщение в ЛС</b>\n\n"
+            f"📝 Текст: {cur_text[:200]}\n"
+            f"🖼 Медиа: {has_media}\n"
+            f"🔗 Превью ссылок: {link_prev_icon}\n"
+            f"🔘 Кнопки-ссылки: <b>{dm_btn_count}</b> шт."
+        )
         kb = [
             [IKB("📝 Задать текст", callback_data="trigger_acfg_dm_text")],
             [IKB("🖼 Прикрепить медиа", callback_data="trigger_acfg_dm_media")],
             [IKB(f"{link_prev_icon} Превью ссылок", callback_data="trigger_acfg_link_preview_toggle")],
+            [IKB(f"🔘 Кнопки-ссылки ({dm_btn_count})", callback_data="trigger_acfg_dm_buttons")],
             [IKB("◀ К действиям", callback_data="trigger_set_actions")],
         ]
 
@@ -1200,6 +1294,10 @@ async def _show_edit_menu(src, ctx, db, trigger_id: int):
     tgt = TARGETS.get(data.get('target', 'nobody'), '?')
     acts = data.get('actions', [])
     bot_del = BOT_DEL_OPTIONS.get(data.get('bot_msg_delete', 'no'), 'Нет')
+    fire_limit = data.get('fire_limit')
+    fire_lbl = str(fire_limit) if fire_limit is not None else "∞"
+    auto_pin = data.get('auto_pin', 0)
+    pin_lbl = "✅" if auto_pin else "❌"
 
     text = (
         f"✏️ <b>Редактирование «{data.get('name', '?')}»</b>\n\n"
@@ -1215,6 +1313,8 @@ async def _show_edit_menu(src, ctx, db, trigger_id: int):
         [IKB(f"👤 Инициатор: {init}", callback_data="trigger_set_init")],
         [IKB(f"🎯 Цель: {tgt}", callback_data="trigger_set_target")],
         [IKB(f"⚡ Действия ({len(acts)})", callback_data="trigger_set_actions")],
+        [IKB(f"🔢 Лимит: {fire_lbl}", callback_data="trigger_set_firelimit"),
+         IKB(f"📌 Автозакреп: {pin_lbl}", callback_data="trigger_set_autopin")],
         [IKB("💾 Сохранить", callback_data="trigger_finish")],
         [IKB("❌ Отмена", callback_data=f"trigger_view_{trigger_id}")],
     ]
@@ -1313,6 +1413,17 @@ async def process_triggers(
         if not matched:
             continue
 
+        # Проверка лимита срабатываний
+        fire_limit = tdata.get('fire_limit')
+        if fire_limit is not None:
+            try:
+                fire_count = int(trigger['fire_count'] if 'fire_count' in trigger.keys() else 0) or 0
+            except (TypeError, ValueError):
+                fire_count = 0
+            if fire_count >= fire_limit:
+                logger.info(f"TRIGGER '{trigger['name']}' fire_limit={fire_limit} reached, skip")
+                continue
+
         # ═══ СОВПАДЕНИЕ ═══
         logger.info(f"TRIGGER '{trigger['name']}' matched user {user.id}")
 
@@ -1321,6 +1432,7 @@ async def process_triggers(
         target_type = tdata.get('target', 'nobody')
         has_rotation = bool(_rotation_items_for_trigger(tdata))
         sent_public_bot_message = False
+        last_bot_msg_for_pin = None
 
         # Журнал
         try:
@@ -1342,8 +1454,30 @@ async def process_triggers(
                     if has_rotation:
                         bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
                     else:
-                        reply_text = (act_cfg.get('text') or trigger['name']).strip()
-                        reply_id = message.message_id if act_cfg.get('reply_to_user', False) else None
+                        raw_text = (act_cfg.get('text') or trigger['name']).strip()
+                        # Применяем плейсхолдеры
+                        try:
+                            from handlers.placeholder_handlers import apply_placeholders
+                            quoted_user = getattr(getattr(message, 'reply_to_message', None), 'from_user', None)
+                            reply_text = apply_placeholders(raw_text, db, {
+                                'user': user,
+                                'quoted_user': quoted_user,
+                                'chat': message.chat,
+                            })
+                        except Exception as _pe:
+                            logger.warning(f"apply_placeholders: {_pe}")
+                            reply_text = raw_text
+                        # Определяем reply_to_message_id по настройке reply_target
+                        reply_target = act_cfg.get('reply_target', 'none')
+                        if reply_target == 'none' and act_cfg.get('reply_to_user', False):
+                            reply_target = 'initiator'
+                        if reply_target == 'initiator':
+                            reply_id = message.message_id
+                        elif reply_target == 'quoted':
+                            quoted = getattr(message, 'reply_to_message', None)
+                            reply_id = quoted.message_id if quoted else message.message_id
+                        else:
+                            reply_id = None
                         bot_msg = await _send_action_message(
                             bot=context.bot,
                             chat_id=message.chat.id,
@@ -1355,6 +1489,7 @@ async def process_triggers(
                         )
                     if bot_msg:
                         sent_public_bot_message = True
+                        last_bot_msg_for_pin = bot_msg
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
 
                 elif act == 'msg_dm':
@@ -1380,11 +1515,21 @@ async def process_triggers(
                         logger.warning(f"Pin failed: {e}")
 
                 elif act == 'delete':
-                    try:
-                        await message.delete()
-                        handled = True
-                    except Exception:
-                        pass
+                    what = act_cfg.get('what', ['trigger_word'])
+                    if not what:
+                        what = ['trigger_word']
+                    for del_item in what:
+                        try:
+                            if del_item == 'trigger_word':
+                                await message.delete()
+                                handled = True
+                            elif del_item == 'quoted_message':
+                                quoted = getattr(message, 'reply_to_message', None)
+                                if quoted:
+                                    await quoted.delete()
+                                    handled = True
+                        except Exception:
+                            pass
 
                 elif act == 'mute':
                     dur_key = act_cfg.get('duration', '60m')
@@ -1445,6 +1590,28 @@ async def process_triggers(
             except Exception as e:
                 logger.error(f"Trigger '{trigger['name']}' action '{act}': {e}")
 
+        # Инкремент счётчика срабатываний
+        try:
+            db.cursor.execute(
+                "UPDATE triggers SET fire_count = COALESCE(fire_count, 0) + 1 WHERE id = ?",
+                (trigger['id'],)
+            )
+            db.conn.commit()
+        except Exception as _fe:
+            logger.warning(f"fire_count increment failed: {_fe}")
+
+        # Автозакреп ответного сообщения
+        auto_pin = tdata.get('auto_pin', 0)
+        if auto_pin and last_bot_msg_for_pin:
+            try:
+                await context.bot.pin_chat_message(
+                    chat_id=last_bot_msg_for_pin.chat.id,
+                    message_id=last_bot_msg_for_pin.message_id,
+                    disable_notification=True,
+                )
+            except Exception as _pe:
+                logger.warning(f"auto_pin failed: {_pe}")
+
         if handled:
             break
 
@@ -1460,15 +1627,33 @@ def _resolve_target(user, target_type: str, tdata: dict) -> Optional[int]:
     return user.id  # fallback
 
 
+def _build_url_markup(act_cfg: dict):
+    """Строит InlineKeyboardMarkup из списка кнопок-ссылок в act_cfg."""
+    buttons = act_cfg.get('buttons', [])
+    if not buttons:
+        return None
+    rows = []
+    for btn in buttons:
+        url = btn.get('url', '').strip()
+        label = btn.get('text', '').strip()
+        if url and label:
+            try:
+                rows.append([IKB(label, url=url)])
+            except Exception:
+                pass
+    return IKM(rows) if rows else None
+
+
 async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text: str,
                                act_cfg: dict, parse_mode: str = 'HTML',
                                reply_to_message_id: Optional[int] = None):
-    """Отправка сообщения действия с опциональным медиа (для чат/ЛС)."""
+    """Отправка сообщения действия с опциональным медиа и URL-кнопками."""
     media_id = act_cfg.get('media_id')
     media_type = act_cfg.get('media_type')
     media_pos = act_cfg.get('media_pos', 'above')
     link_preview = act_cfg.get('link_preview', True)
     text = (text or '').strip()
+    reply_markup = _build_url_markup(act_cfg)
 
     if not media_id or not media_type:
         if not text:
@@ -1481,6 +1666,8 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             kwargs['message_thread_id'] = thread_id
         if reply_to_message_id is not None:
             kwargs['reply_to_message_id'] = reply_to_message_id
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
         return await bot.send_message(**kwargs)
 
     if media_pos == 'above':
@@ -1493,6 +1680,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             caption=text or None,
             parse_mode=parse_mode,
             reply_to_message_id=reply_to_message_id,
+            reply_markup=reply_markup,
         )
 
     sent_text = None
@@ -1505,6 +1693,8 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             kwargs['message_thread_id'] = thread_id
         if reply_to_message_id is not None:
             kwargs['reply_to_message_id'] = reply_to_message_id
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
         sent_text = await bot.send_message(**kwargs)
 
     sent_media = await _send_action_media(
@@ -1514,6 +1704,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         media_id=media_id,
         media_type=media_type,
         reply_to_message_id=sent_text.message_id if sent_text else reply_to_message_id,
+        reply_markup=reply_markup if not sent_text else None,
     )
 
     return sent_text or sent_media
@@ -1523,13 +1714,16 @@ async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
                              media_id: str, media_type: str,
                              caption: Optional[str] = None,
                              parse_mode: str = 'HTML',
-                             reply_to_message_id: Optional[int] = None):
+                             reply_to_message_id: Optional[int] = None,
+                             reply_markup=None):
     """Отправка одного медиа-сообщения в чат/ветку или ЛС."""
     kwargs = {'chat_id': chat_id}
     if thread_id is not None:
         kwargs['message_thread_id'] = thread_id
     if reply_to_message_id is not None:
         kwargs['reply_to_message_id'] = reply_to_message_id
+    if reply_markup is not None:
+        kwargs['reply_markup'] = reply_markup
 
     if media_type == 'photo':
         if caption:
@@ -1567,6 +1761,30 @@ async def _handle_bot_msg_deletion(context, db, trigger, bot_msg):
                     await context.bot.delete_message(chat_id=old_chat, message_id=old_id)
                 except Exception:
                     pass
+        except (KeyError, TypeError):
+            pass
+        try:
+            db.cursor.execute(
+                "UPDATE triggers SET last_bot_msg_id=?, last_bot_msg_chat=? WHERE id=?",
+                (bot_msg.message_id, bot_msg.chat.id, trigger['id']))
+            db.conn.commit()
+        except Exception:
+            pass
+
+    elif bot_del == 'previous_period':
+        # Удалить предыдущее сообщение бота через период (не сразу)
+        try:
+            old_id = trigger['last_bot_msg_id']
+            old_chat = trigger['last_bot_msg_chat']
+            delay = trigger['bot_msg_delete_after'] or 60
+            if old_id and old_chat:
+                try:
+                    context.job_queue.run_once(
+                        _delete_bot_msg_job, when=delay,
+                        data={'chat_id': old_chat, 'message_id': old_id},
+                        name=f"trig_prevdel_{old_id}")
+                except Exception as e:
+                    logger.warning(f"Schedule previous bot msg deletion: {e}")
         except (KeyError, TypeError):
             pass
         try:
@@ -1668,7 +1886,9 @@ async def handle_trigger_text_input(update: Update, context, db) -> bool:
                 "❌ Мин. 30 сек. Примеры: <code>5 мин</code>, <code>2 часа</code>",
                 [[IKB("◀ Назад", callback_data="trigger_back")]], chat_id)
             return True
-        data['bot_msg_delete'] = 'period'
+        # Если уже установлен previous_period — сохраняем его, иначе ставим period
+        if data.get('bot_msg_delete') != 'previous_period':
+            data['bot_msg_delete'] = 'period'
         data['bot_msg_delete_after'] = seconds
         _set_data(context, data)
         _set_state(context, None)
@@ -1820,6 +2040,65 @@ async def handle_trigger_text_input(update: Update, context, db) -> bool:
         edit_id = context.user_data.get('trigger_edit_id')
         if edit_id:
             await _show_edit_menu(message, context, db, edit_id)
+        return True
+
+    # ── Кнопка: текст ──
+    if state == TS.ACT_BTN_TEXT:
+        if not text or len(text) > 64:
+            await _send_step(message, context, "❌ Текст кнопки: 1–64 символа.",
+                             [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]], chat_id)
+            return True
+        context.user_data['trigger_btn_text_tmp'] = text
+        _set_state(context, TS.ACT_BTN_URL)
+        await _send_step(message, context,
+            f"🔗 <b>Введите URL для кнопки «{text}»</b>\n\n"
+            "<i>Например: https://t.me/yourchat</i>",
+            [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]], chat_id)
+        return True
+
+    # ── Кнопка: URL ──
+    if state == TS.ACT_BTN_URL:
+        url = text.strip()
+        if not url.startswith(('http://', 'https://', 't.me/', 'tg://')):
+            await _send_step(message, context,
+                "❌ Некорректный URL. Должен начинаться с <code>https://</code> или <code>t.me/</code>",
+                [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]], chat_id)
+            return True
+        btn_text = context.user_data.pop('trigger_btn_text_tmp', 'Кнопка')
+        action_key = context.user_data.get('trigger_btn_action', 'msg_chat')
+        cfgs = data.get('action_configs', {})
+        cfg = cfgs.get(action_key, {})
+        buttons = cfg.get('buttons', [])
+        buttons.append({'text': btn_text, 'url': url})
+        cfg['buttons'] = buttons
+        cfgs[action_key] = cfg
+        data['action_configs'] = cfgs
+        _set_data(context, data)
+        _set_state(context, None)
+        await _show_buttons_menu(message, context, action_key)
+        return True
+
+    # ── Лимит срабатываний ──
+    if state == TS.ACT_FIRE_LIMIT:
+        if text.lower() in ('0', '∞', 'нет', 'inf', 'бесконечно'):
+            data['fire_limit'] = None
+        else:
+            try:
+                val = int(text)
+                if val < 1: raise ValueError
+                data['fire_limit'] = val
+            except ValueError:
+                await _send_step(message, context,
+                    "❌ Введите число (≥1) или 0/∞ для бесконечного количества.",
+                    [[IKB("❌ Отмена", callback_data="trigger_menu")]], chat_id)
+                return True
+        _set_data(context, data)
+        _set_state(context, None)
+        edit_id = context.user_data.get('trigger_edit_id')
+        if edit_id:
+            await _show_edit_menu(message, context, db, edit_id)
+        else:
+            await _show_settings_menu(message, context)
         return True
 
     return False
@@ -2004,8 +2283,19 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
 
     elif d == "trigger_botdel_prev":
         draft['bot_msg_delete'] = 'previous'
+        draft['bot_msg_delete_after'] = None
         _set_data(ctx, draft)
         await _show_settings_menu(query, ctx)
+
+    elif d == "trigger_botdel_prevperiod":
+        _set_state(ctx, TS.BOT_DEL_PERIOD)
+        draft['bot_msg_delete'] = 'previous_period'
+        _set_data(ctx, draft)
+        await _send_step(query, ctx,
+            "🔄⏱ <b>Предыдущее + период</b>\n\n"
+            "Через какое время удалить предыдущее сообщение бота?\n"
+            "<i>Примеры: <code>5 мин</code>, <code>2 часа</code>, <code>1 день</code></i>",
+            [[IKB("◀ Назад", callback_data="trigger_back")]])
 
     # ═══ ПОДМЕНЮ (7.3) ═══
     elif d == "trigger_set_cond":
@@ -2331,15 +2621,61 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
             await _configure_action(query, ctx, act)
 
         elif sub == "reply_toggle":
+            # legacy — оставляем для совместимости, переключает initiator/none
             act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
             cfgs = draft.get('action_configs', {})
             cfg = cfgs.setdefault(act, {})
-            cfg['reply_to_user'] = not cfg.get('reply_to_user', False)
+            cur = cfg.get('reply_target', 'none')
+            if cur == 'none' and cfg.get('reply_to_user', False):
+                cur = 'initiator'
+            cfg['reply_target'] = 'none' if cur != 'none' else 'initiator'
+            cfg['reply_to_user'] = cfg['reply_target'] == 'initiator'
             cfgs[act] = cfg
             draft['action_configs'] = cfgs
             _set_data(ctx, draft)
-            state = '✅ включен' if cfg['reply_to_user'] else '❌ отключен'
-            await query.answer(f"Реплай: {state}")
+            await _configure_action(query, ctx, act)
+
+        elif sub == "reply_menu":
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.get(act, {})
+            cur = cfg.get('reply_target', 'none')
+            if cur == 'none' and cfg.get('reply_to_user', False):
+                cur = 'initiator'
+            text = (
+                "↩️ <b>Реплай сообщения в чат</b>\n\n"
+                "Выберите на чьё сообщение бот ответит реплаем:\n\n"
+                "• <b>Без реплая</b> — сообщение просто в чат\n"
+                "• <b>На инициатора</b> — на того кто написал слово-триггер\n"
+                "• <b>На цитируемое</b> — на сообщение которое инициатор процитировал\n"
+                "  <i>(для ручных триггеров: Админ цитирует нарушителя → пишет ББС)</i>"
+            )
+            kb = [
+                [IKB(f"{'✅ ' if cur == 'none' else ''}❌ Без реплая",
+                     callback_data="trigger_acfg_reply_set_none")],
+                [IKB(f"{'✅ ' if cur == 'initiator' else ''}↩️ На инициатора",
+                     callback_data="trigger_acfg_reply_set_initiator")],
+                [IKB(f"{'✅ ' if cur == 'quoted' else ''}🎯 На цитируемое сообщение",
+                     callback_data="trigger_acfg_reply_set_quoted")],
+                [IKB("◀ Назад", callback_data="trigger_acfg_msg_chat")],
+            ]
+            await _send_step(query, ctx, text, kb)
+
+        elif sub.startswith("reply_set_"):
+            val = sub[len("reply_set_"):]
+            if val not in ('none', 'initiator', 'quoted'):
+                await query.answer("❓")
+                return
+            act = ctx.user_data.get('trigger_configuring_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.setdefault(act, {})
+            cfg['reply_target'] = val
+            cfg['reply_to_user'] = (val == 'initiator')  # backward compat
+            cfgs[act] = cfg
+            draft['action_configs'] = cfgs
+            _set_data(ctx, draft)
+            labels = {'none': 'без реплая', 'initiator': 'на инициатора', 'quoted': 'на цитируемое'}
+            await query.answer(f"✅ Реплай: {labels[val]}")
             await _configure_action(query, ctx, act)
 
         elif sub.startswith("del_"):
@@ -2376,6 +2712,47 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
                 "📅 <b>Период накопления</b>\n\nУкажите:\n"
                 "<i>Примеры: <code>30 мин</code>, <code>24 часа</code>, <code>7 дней</code></i>",
                 [[IKB("◀ К действиям", callback_data="trigger_set_actions")]])
+
+        elif sub == "chat_buttons":
+            await _show_buttons_menu(query, ctx, 'msg_chat')
+
+        elif sub == "dm_buttons":
+            await _show_buttons_menu(query, ctx, 'msg_dm')
+
+        elif sub == "btn_add":
+            _set_state(ctx, TS.ACT_BTN_TEXT)
+            await _send_step(query, ctx,
+                "🔘 <b>Добавить кнопку-ссылку</b>\n\nВведите <b>текст</b> кнопки:",
+                [[IKB("❌ Отмена", callback_data="trigger_acfg_btn_cancel")]])
+
+        elif sub == "btn_cancel":
+            _set_state(ctx, None)
+            action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
+            ctx.user_data.pop('trigger_btn_text_tmp', None)
+            await _show_buttons_menu(query, ctx, action_key)
+
+        elif sub.startswith("btn_del_"):
+            idx_str = sub[len("btn_del_"):]
+            try:
+                idx = int(idx_str)
+            except ValueError:
+                await query.answer("❌ Ошибка", show_alert=True)
+                return
+            action_key = ctx.user_data.get('trigger_btn_action', 'msg_chat')
+            cfgs = draft.get('action_configs', {})
+            cfg = cfgs.get(action_key, {})
+            buttons = cfg.get('buttons', [])
+            if 0 <= idx < len(buttons):
+                buttons.pop(idx)
+                cfg['buttons'] = buttons
+                cfgs[action_key] = cfg
+                draft['action_configs'] = cfgs
+                _set_data(ctx, draft)
+                await query.answer("✅ Кнопка удалена")
+            await _show_buttons_menu(query, ctx, action_key)
+
+        elif sub == "msg_dm":
+            await _configure_action(query, ctx, 'msg_dm')
 
         elif sub in ACTIONS_AVAILABLE:
             await _configure_action(query, ctx, sub)
@@ -2468,8 +2845,9 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         cur = BOT_DEL_OPTIONS.get(data.get('bot_msg_delete', 'no'), 'Нет')
         await _send_step(query, ctx, f"🤖 <b>Удаление бот-сообщения</b>\n\nТекущее: <b>{cur}</b>", [
             [IKB("❌ Нет", callback_data="trigger_edt_botdel_no"),
-             IKB("⏱ Период", callback_data="trigger_edt_botdel_period"),
-             IKB("🔄 Предыдущее", callback_data="trigger_edt_botdel_prev")],
+             IKB("⏱ Период", callback_data="trigger_edt_botdel_period")],
+            [IKB("🔄 Предыдущее", callback_data="trigger_edt_botdel_prev"),
+             IKB("🔄⏱ Предыдущ.+период", callback_data="trigger_edt_botdel_prevperiod")],
             [IKB("⏩ Пропустить", callback_data="trigger_edt_menu")],
         ])
 
@@ -2495,8 +2873,54 @@ async def handle_trigger_callback(query, data_str: str, context, db, admin_id: i
         if edit_id:
             await _show_edit_menu(query, ctx, db, edit_id)
 
+    elif d == "trigger_edt_botdel_prevperiod":
+        draft['bot_msg_delete'] = 'previous_period'
+        _set_data(ctx, draft)
+        _set_state(ctx, TS.EDIT_BOT_DEL_PERIOD)
+        await _send_step(query, ctx,
+            "🔄⏱ <b>Предыдущее + период</b>\n\n"
+            "Через какое время удалить предыдущее сообщение?\n"
+            "<i>Примеры: <code>5 мин</code>, <code>2 часа</code></i>",
+            [[IKB("⏩ Пропустить", callback_data="trigger_edt_menu")]])
+
     elif d == "trigger_edt_menu":
         _set_state(ctx, None)
+        edit_id = ctx.user_data.get('trigger_edit_id')
+        if edit_id:
+            await _show_edit_menu(query, ctx, db, edit_id)
+        else:
+            await _show_settings_menu(query, ctx)
+
+    # ═══ ЛИМИТ СРАБАТЫВАНИЙ ═══
+    elif d == "trigger_set_firelimit":
+        _set_state(ctx, TS.ACT_FIRE_LIMIT)
+        cur = draft.get('fire_limit')
+        cur_str = str(cur) if cur is not None else "∞"
+        await _send_step(query, ctx,
+            f"🔢 <b>Лимит срабатываний</b>\n\n"
+            f"Текущее: <b>{cur_str}</b>\n\n"
+            f"Введите число (≥1) или <code>0</code> для бесконечного.\n"
+            f"<i>По умолчанию: ∞ (без ограничений)</i>",
+            [[IKB("∞ Без ограничений", callback_data="trigger_firelimit_inf")],
+             [IKB("◀ Назад", callback_data="trigger_menu")]])
+
+    elif d == "trigger_firelimit_inf":
+        draft['fire_limit'] = None
+        _set_data(ctx, draft)
+        _set_state(ctx, None)
+        edit_id = ctx.user_data.get('trigger_edit_id')
+        if edit_id:
+            await _show_edit_menu(query, ctx, db, edit_id)
+        else:
+            await _show_settings_menu(query, ctx)
+
+    # ═══ АВТОЗАКРЕП ═══
+    elif d == "trigger_set_autopin":
+        cur = draft.get('auto_pin', 0)
+        draft['auto_pin'] = 0 if cur else 1
+        _set_data(ctx, draft)
+        state_str = "✅ включён" if draft['auto_pin'] else "❌ выключен"
+        await query.answer(f"Автозакреп {state_str}")
         edit_id = ctx.user_data.get('trigger_edit_id')
         if edit_id:
             await _show_edit_menu(query, ctx, db, edit_id)

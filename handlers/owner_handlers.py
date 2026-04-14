@@ -312,6 +312,7 @@ async def show_system_menu(query, db, admin_id: int) -> None:
     keyboard = [
         [InlineKeyboardButton(btn_label, callback_data="owner_maintenance_toggle")],
         [InlineKeyboardButton("🔧 Управление функциями", callback_data="manage_features")],
+        [InlineKeyboardButton("📝 Плейсхолдеры", callback_data="ph_menu")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
         [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
     ]

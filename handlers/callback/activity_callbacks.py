@@ -10,6 +10,7 @@ from handlers.donate_handlers import (
     donate_bank_confirm, donate_show_history,
 )
 from handlers.bank_handlers import start_bank_transfer, select_transfer_amount, execute_bank_transfer
+from handlers.banner_utils import show_banner, enter_banner
 
 logger = logging.getLogger(__name__)
 
@@ -18,26 +19,41 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
     """Обрабатывает callback-ы активностей. True если обработано."""
     db = handler.db
 
+    # ── Баннеры-онбординг ──
+    if data.startswith("banner_enter_"):
+        await enter_banner(query, context, db, handler)
+        return True
+
     # ── Лотерея ──
     if data == "menu_lottery":
+        if await show_banner(query, context, db, 'lottery'):
+            return True
         await handler.lottery_handler.show_lottery_menu(query, user)
     elif data.startswith("buy_ticket_"):
-        await handler.lottery_handler.buy_ticket(query, user, data)
+        await handler.lottery_handler.handle_buy_ticket(query, data, user, context)
     elif data.startswith("my_tickets_"):
-        await handler.lottery_handler.show_my_tickets(query, user, data)
+        await handler.lottery_handler.handle_my_tickets(query, data, user, context)
     elif data.startswith("lott_"):
-        await handler.lottery_handler.handle_admin_callback(query, data, user, context)
+        await handler.lottery_handler.handle_lott_callback(query, data, user, context)
     elif data.startswith("lottery_"):
-        await handler.lottery_handler.handle_admin_callback(query, data, user, context)
+        await handler.lottery_handler.handle_lottery_callback(query, data, user, context)
 
     # ── Бинго ──
     elif data == "menu_bingo":
-        await handler.bingo_handler.handle_callback(query, data, user, context)
-    elif data.startswith("bingo_") or data.startswith("bcard_") or data.startswith("bbingo_"):
-        await handler.bingo_handler.handle_callback(query, data, user, context)
+        if await show_banner(query, context, db, 'bingo'):
+            return True
+        await handler.bingo_handler.show_bingo_menu(query, user)
+    elif data.startswith("bingo_"):
+        await handler.bingo_handler.handle_bingo_callback(query, data, user, context)
+    elif data.startswith("bcard_"):
+        await handler.bingo_handler.handle_card_callback(query, data, user, context)
+    elif data.startswith("bbingo_"):
+        await handler.bingo_handler.handle_bingo_claim(query, data, user, context)
 
     # ── Донаты ──
     elif data == "donate_menu":
+        if await show_banner(query, context, db, 'donate'):
+            return True
         await show_donate_menu(query, user, db)
     elif data == "donate_to_user_start":
         await donate_to_user_start(query, user, context, db)
@@ -46,7 +62,7 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
     elif data.startswith("donate_user_amount_"):
         await donate_user_amount(query, data, user, context, db)
     elif data.startswith("donate_user_custom_"):
-        await donate_user_custom(query, user, context, db)
+        await donate_user_custom(query, data, user, context, db)
     elif data.startswith("donate_user_confirm_"):
         await donate_user_confirm(query, data, user, context, db)
     elif data == "donate_to_bank_start":
@@ -61,7 +77,11 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
         await donate_show_history(query, user, db)
 
     # ── Подарки месяца ──
-    elif data in ("menu_monthly_gift", "monthly_gift_draw", "monthly_gift_toggle",
+    elif data == "menu_monthly_gift":
+        if await show_banner(query, context, db, 'gift'):
+            return True
+        await handler.gift_handler.handle_callback(query, data, user, context)
+    elif data in ("monthly_gift_draw", "monthly_gift_toggle",
                   "monthly_gift_history", "monthly_gift_create", "monthly_gift_participants",
                   "monthly_gift_announce", "monthly_gift_confirm_draw",
                   "monthly_gift_user_view", "monthly_gift_participate",

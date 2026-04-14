@@ -16,6 +16,10 @@ from handlers.owner_handlers import (
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
 )
+from handlers.placeholder_handlers import (
+    show_placeholder_menu,
+    handle_placeholder_callback,
+)
 from handlers.shipper_handlers import (
     show_shipper_menu,
     toggle_shipper_enabled,
@@ -145,6 +149,10 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await show_system_menu(query, db, admin_id)
     elif data == "owner_maintenance_toggle":
         await toggle_maintenance(query, db, admin_id)
+
+    # ── Плейсхолдеры ──
+    elif data.startswith("ph_"):
+        await handle_placeholder_callback(query, data, context, db, admin_id)
 
     # ── Restrict (модерация в чате) ──
     elif data.startswith("restrict_"):
