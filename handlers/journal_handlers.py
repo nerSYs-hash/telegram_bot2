@@ -233,7 +233,7 @@ async def log_event(
         # Сохраняем запись в БД
         try:
             ensure_journal_tables(db)
-            preview = text[:200] if text else ''
+            preview = text[:2000] if text else ''
             db.cursor.execute(
                 'INSERT INTO journal_messages (message_id, channel_id, event_type, user_id, text_preview) '
                 'VALUES (?, ?, ?, ?, ?)',
