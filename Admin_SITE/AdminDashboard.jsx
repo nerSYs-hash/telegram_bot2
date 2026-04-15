@@ -68,13 +68,13 @@ export default function App() {
   // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState(null);
-  const [triggerStep, setTriggerStep] = useState(1);
   const [triggers, setTriggers] = useState([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
   const [showConditionPicker, setShowConditionPicker] = useState(false);
   const [showActionPicker, setShowActionPicker] = useState(false);
   const [condSignalTab, setCondSignalTab] = useState('message');
+  const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
   const [togglingTrigger, setTogglingTrigger] = useState(null);
@@ -315,6 +315,7 @@ export default function App() {
     }
     setShowConditionPicker(false);
     setShowActionPicker(false);
+    setShowTriggerEditMenu(false);
     setCondSignalTab('message');
     setShowMediaPicker(false);
     setIsTriggerModalOpen(true);
@@ -1136,16 +1137,67 @@ export default function App() {
               {/* drag handle */}
               <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mt-4 mb-3 shrink-0"/>
 
-              {/* Имя */}
-              <div className="px-6 pb-4 shrink-0 border-b border-gray-50">
-                <div className="flex items-center gap-3">
-                  <input type="text" placeholder="Имя триггера *" value={editingTrigger.name}
-                    onChange={e => upd('name', e.target.value)}
-                    className="flex-1 px-5 py-4 bg-gray-50 border-2 border-gray-100 rounded-2xl font-black text-lg outline-none focus:border-blue-200 transition-all"/>
+              {/* Шапка: имя + кнопки */}
+              <div className="px-6 pb-4 shrink-0 border-b border-gray-50 space-y-3">
+
+                {/* Строка кнопок */}
+                <div className="flex items-center justify-between gap-2">
                   <button onClick={() => setIsTriggerModalOpen(false)}
-                    className="p-3 bg-gray-100 rounded-2xl text-gray-400 flex-shrink-0 active:scale-90 transition-all">
+                    className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
                     <X size={20}/>
                   </button>
+                  <div className="flex items-center gap-2 ml-auto">
+                    {/* Сохранить */}
+                    <button onClick={saveTrigger}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-green-500 text-white rounded-xl font-black text-sm shadow-md shadow-green-100 active:scale-95 transition-all">
+                      <CheckCircle2 size={15}/>
+                      <span>Сохранить</span>
+                    </button>
+                    {/* ··· */}
+                    <div className="relative">
+                      <button
+                        onClick={() => setShowTriggerEditMenu(v => !v)}
+                        className="px-3 py-2.5 bg-gray-100 text-gray-500 rounded-xl font-black text-sm active:scale-95 transition-all hover:bg-gray-200">
+                        ···
+                      </button>
+                      {showTriggerEditMenu && (
+                        <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-10 overflow-hidden"
+                          onClick={() => setShowTriggerEditMenu(false)}>
+                          <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed select-none border-b border-gray-50">
+                            <FileText size={14} className="text-gray-200"/>
+                            <span>Сохранить и продолжить</span>
+                            <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                          </button>
+                          <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed select-none">
+                            <Download size={14} className="text-gray-200"/>
+                            <span>Экспортировать триггер</span>
+                            <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                    {/* Удалить (только для существующего) */}
+                    {editingTrigger.id && (
+                      <button onClick={() => { deleteTrigger(editingTrigger.id); setIsTriggerModalOpen(false); }}
+                        className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-xl font-black text-sm shadow-md shadow-red-100 active:scale-95 transition-all">
+                        <Trash2 size={15}/>
+                        <span>Удалить</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                {/* Имя триггера */}
+                <div>
+                  <p className="text-xs font-black text-gray-800 mb-0.5">
+                    Имя триггера <span className="text-red-500">*</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-medium mb-2">
+                    Позволяет быстро найти нужный триггер и включить его
+                  </p>
+                  <input type="text" placeholder="Например: Мут за спам"
+                    value={editingTrigger.name} onChange={e => upd('name', e.target.value)}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl font-black text-base outline-none focus:border-blue-200 transition-all"/>
                 </div>
               </div>
 
@@ -1375,19 +1427,8 @@ export default function App() {
 
               </div>
 
-              {/* Footer */}
-              <div className="px-6 py-5 border-t border-gray-50 bg-white shrink-0 rounded-t-[2.5rem] shadow-xl">
-                <div className="flex gap-3">
-                  <button onClick={() => setIsTriggerModalOpen(false)}
-                    className="flex-1 py-4 bg-gray-100 text-gray-500 rounded-[2rem] font-black active:scale-95 transition-all">
-                    Отмена
-                  </button>
-                  <button onClick={saveTrigger}
-                    className="flex-[2] py-4 bg-blue-600 text-white rounded-[2rem] font-black shadow-lg shadow-blue-100 active:scale-95 transition-all text-base">
-                    {editingTrigger.id ? 'Сохранить' : 'Создать триггер'}
-                  </button>
-                </div>
-              </div>
+              {/* Нижний отступ для скролла */}
+              <div className="h-6 shrink-0"/>
 
             </div>
           </div>
