@@ -32,9 +32,13 @@ const UPDATES = [
       { type: 'new',     tag: 'statistics', text: 'Статистика чата: графики активности, периоды (сегодня / неделя / месяц / год), экспорт в Excel' },
       { type: 'new',     tag: 'journal',    text: 'Журнал событий: все входы, нарушения триггеров, муты и баны в одном месте с фильтрами' },
       { type: 'new',     tag: 'triggers',   text: 'Управление триггерами: создание и редактирование через удобный 4-шаговый мастер' },
+      { type: 'new',     tag: 'site',       text: 'Раздел Обновления — история изменений с тегами разделов и анимацией по клику' },
       { type: 'improve', tag: 'journal',    text: 'Ссылки в журнале кликабельны — переход прямо к сообщению в Telegram' },
       { type: 'improve', tag: 'journal',    text: 'Текст нарушения выделяется рамкой-цитатой для удобства чтения' },
+      { type: 'improve', tag: 'journal',    text: 'Записи журнала хранят до 2000 символов вместо 200 — больше не обрезается' },
+      { type: 'improve', tag: 'site',       text: 'Иконки в меню дёргаются при нажатии — приятная обратная связь' },
       { type: 'fix',     tag: 'site',       text: 'При обновлении страницы остаёшься на той же вкладке' },
+      { type: 'fix',     tag: 'journal',    text: 'Фильтры журнала работают корректно для всех типов событий' },
     ],
   },
 ];
@@ -56,6 +60,7 @@ export default function App() {
   );
   const [jigglingTag, setJigglingTag] = useState(null);
   const triggerJiggle = (key) => { setJigglingTag(key); };
+  const [jigglingNav, setJigglingNav] = useState(null);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
 
@@ -611,14 +616,18 @@ export default function App() {
               {navigation.filter(n => n.group === group).map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); }}
+                  onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
                   className={`w-full flex items-center px-6 py-5 rounded-[2.2rem] transition-all duration-300 ${
                     activeTab === item.id 
                     ? 'bg-gray-900 text-white shadow-2xl font-black scale-[1.03]' 
                     : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100'
                   }`}
                 >
-                  <item.icon size={24} className={`mr-5 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'}`} />
+                  <item.icon
+                    size={24}
+                    onAnimationEnd={() => setJigglingNav(null)}
+                    className={`mr-5 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
+                  />
                   <span className="text-lg flex-1">{item.name}</span>
                   {item.id === 'updates' && hasNewUpdate && (
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-md shadow-red-300" />
