@@ -113,6 +113,44 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name or "Друг"
 
+    # ── Deep link жалобы BBS: показываем меню выбора причины, минуя регистрацию ──
+    if context.args and context.args[0].startswith('report_'):
+        import html as _html
+        try:
+            reported_user_id = int(context.args[0].replace('report_', ''))
+        except (ValueError, TypeError):
+            await update.message.reply_text("❌ Некорректная ссылка для жалобы.")
+            return ConversationHandler.END
+
+        context.user_data['reporting_user_id'] = reported_user_id
+
+        main_db = context.bot_data.get('db')
+        reported_name = str(reported_user_id)
+        if main_db:
+            reported_user = main_db.get_user(reported_user_id)
+            if reported_user:
+                try:
+                    reported_name = _html.escape(
+                        reported_user['username'] or reported_user['first_name'] or str(reported_user_id)
+                    )
+                except (KeyError, IndexError):
+                    pass
+
+        header = f"🚨 <b>Жалоба на пользователя</b>\n\n👤 Нарушитель: @{reported_name}\n\n"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔞 Спам / Реклама",            callback_data="report_reason_spam")],
+            [InlineKeyboardButton("🤡 Фейк / Мошенник",           callback_data="report_reason_fake")],
+            [InlineKeyboardButton("🤬 Оскорбления / Токсичность", callback_data="report_reason_toxic")],
+            [InlineKeyboardButton("🔞 Откровенный контент",       callback_data="report_reason_nsfw")],
+            [InlineKeyboardButton("❌ Отмена",                    callback_data="report_cancel")],
+        ])
+        await update.message.reply_text(
+            header + "Выберите причину жалобы:",
+            parse_mode='HTML',
+            reply_markup=kb,
+        )
+        return ConversationHandler.END
+
     # Удаляем команду /register или /start
     if update.message:
         await _delete_user_msg(update.message)
