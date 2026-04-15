@@ -673,7 +673,14 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center space-x-3">
-             <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-2xl border-4 border-white shadow-xl">В</div>
+            <button
+              onClick={() => { setIsAiModalOpen(true); setAiResult(''); setAiPrompt(''); }}
+              className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-200 active:scale-95 transition-all"
+              title="ИИ-ассистент"
+            >
+              <Sparkles size={22} />
+            </button>
+            <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-2xl border-4 border-white shadow-xl">В</div>
           </div>
         </header>
 
