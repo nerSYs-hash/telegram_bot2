@@ -67,7 +67,7 @@ async def root():
     return {
         "status": "online",
         "message": "API Pulse Pro работает!",
-        "time": datetime.now().strftime("%H:%M:%S"),
+        "time": _now_msk().strftime("%H:%M:%S"),
         "db_connected": db is not None,
         "calculators_loaded": calculate_health is not None
     }
@@ -82,6 +82,17 @@ PERIOD_LABELS = {
     'month':     'Месяц',
     'year':      'Год',
 }
+
+# Московское время (UTC+3) — сервер может работать в UTC
+MSK_OFFSET = timedelta(hours=3)
+
+def _now_msk() -> datetime:
+    """Текущее время по Москве (UTC+3)."""
+    return datetime.utcnow() + MSK_OFFSET
+
+def _today_msk():
+    """Сегодняшняя дата по Москве."""
+    return _now_msk().date()
 
 
 def _clean_journal_html(text: str) -> str:
@@ -133,7 +144,7 @@ def _build_monthly_history(start_date, end_date):
 
 
 def _compute_stats(period: str) -> dict:
-    today = datetime.now().date()
+    today = _today_msk()
 
     if period == 'yesterday':
         start_date = end_date = today - timedelta(days=1)
@@ -161,7 +172,17 @@ def _compute_stats(period: str) -> dict:
     bank         = float(db.get_bank_balance()) if db else 0
     rate         = float(db.get_setting('pulse_rate', '1.42')) if db else 1.42
     difficulty_k = float(db.get_setting('difficulty_k', '5.0')) if db else 5.0
-    active       = db.get_active_core_count(start_date.isoformat()) if db else 0
+
+    # Активные юзеры за ВЕСЬ период (DISTINCT user_id, хотя бы 1 сообщение)
+    active = 0
+    if db:
+        db.cursor.execute(
+            "SELECT COUNT(DISTINCT user_id) as c FROM user_stats "
+            "WHERE date >= ? AND date <= ? AND total_messages > 0",
+            (start_date.isoformat(), end_date.isoformat())
+        )
+        r = db.cursor.fetchone()
+        active = int(r['c']) if r else 0
 
     total_users = messages = pulses = 0
     if db:
@@ -274,7 +295,7 @@ async def export_stats(period: str = Query('week')):
         ws['A1'].alignment = center
 
         ws.merge_cells('A2:B2')
-        ws['A2'] = f"Экспорт: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        ws['A2'] = f"Экспорт: {_now_msk().strftime('%d.%m.%Y %H:%M')}"
         ws['A2'].alignment = center
 
         # ── Метрики ──
@@ -313,7 +334,7 @@ async def export_stats(period: str = Query('week')):
         wb.save(buf)
         buf.seek(0)
 
-        fname = f"pulse_stats_{period}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        fname = f"pulse_stats_{period}_{_now_msk().strftime('%Y%m%d_%H%M')}.xlsx"
         return StreamingResponse(
             buf,
             media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
@@ -328,7 +349,7 @@ async def export_stats(period: str = Query('week')):
 async def get_top():
     """Топы пользователей: баланс, майнеры, активисты"""
     try:
-        today = datetime.now().date().isoformat()
+        today = _today_msk().isoformat()
 
         def fmt(row):
             r = dict(row)
@@ -668,11 +689,26 @@ async def generate_update(event: DeployEvent):
                 f"{GEMINI_URL}?key={GEMINI_KEY}",
                 json={"contents": [{"parts": [{"text": prompt}]}]}
             )
-            data = resp.json()
+            try:
+                data = resp.json()
+            except Exception:
+                logger.error(f"Gemini non-JSON response {resp.status_code}: {resp.text[:500]}")
+                raise HTTPException(status_code=502, detail=f"Gemini вернул не-JSON (HTTP {resp.status_code})")
             if resp.status_code != 200:
-                raise HTTPException(status_code=502, detail=data.get('error', {}).get('message', 'Gemini error'))
+                err_msg = (data.get('error') or {}).get('message') or f"HTTP {resp.status_code}"
+                logger.error(f"Gemini API error: {err_msg} | raw: {str(data)[:300]}")
+                raise HTTPException(status_code=502, detail=f"Gemini: {err_msg}")
 
-        raw = data['candidates'][0]['content']['parts'][0]['text']
+        candidates = data.get('candidates') or []
+        if not candidates:
+            block = (data.get('promptFeedback') or {}).get('blockReason', 'пустой ответ')
+            logger.error(f"Gemini без candidates: {str(data)[:300]}")
+            raise HTTPException(status_code=502, detail=f"Gemini не ответил: {block}")
+        try:
+            raw = candidates[0]['content']['parts'][0]['text']
+        except (KeyError, IndexError, TypeError) as pe:
+            logger.error(f"Gemini parse error {pe}: {str(candidates[0])[:300]}")
+            raise HTTPException(status_code=502, detail=f"Неожиданная структура ответа Gemini")
         # Убираем markdown: **, *, #, _ и т.д.
         raw = re.sub(r'\*{1,2}|_{1,2}|#{1,3}', '', raw)
         lines = [re.sub(r'^[-•\d.]+\s*', '', l).strip() for l in raw.split('\n') if l.strip()]
@@ -693,8 +729,8 @@ async def generate_update(event: DeployEvent):
         clean_title = re.sub(r'^(?:feat|fix|improve|chore|docs|refactor)\([^)]+\):\s*', '', event.commit_message).strip()
 
         entry = {
-            "id":          int(datetime.now().timestamp()),
-            "date":        datetime.now().strftime('%d.%m.%Y'),
+            "id":          int(_now_msk().timestamp()),
+            "date":        _now_msk().strftime('%d.%m.%Y'),
             "version":     version,
             "title":       clean_title[:100],
             "tag":         tag,

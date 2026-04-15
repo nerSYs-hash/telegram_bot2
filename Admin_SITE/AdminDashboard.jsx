@@ -72,23 +72,34 @@ export default function App() {
     fetch('/api/updates').then(r => r.json()).then(data => setAiUpdates(Array.isArray(data) ? data : [])).catch(() => {});
   }, []);
 
+  const [aiUpdateError, setAiUpdateError] = useState('');
+
   const generateAiUpdate = async () => {
     if (!aiUpdateInput.trim()) return;
     setAiUpdateLoading(true);
+    setAiUpdateError('');
     try {
       const r = await fetch('/api/updates/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commit_message: aiUpdateInput, secret: 'pulse-deploy-secret' }),
       });
-      if (!r.ok) { setAiUpdateLoading(false); return; }
-      const entry = await r.json();
-      if (entry && entry.id) {
-        setAiUpdates(prev => [entry, ...prev]);
+      const body = await r.json().catch(() => ({}));
+      if (!r.ok) {
+        setAiUpdateError(body.detail || `Ошибка ${r.status}`);
+        setAiUpdateLoading(false);
+        return;
+      }
+      if (body && body.id) {
+        setAiUpdates(prev => [body, ...prev]);
         setAiUpdateModal(false);
         setAiUpdateInput('');
+      } else {
+        setAiUpdateError('Пустой ответ от сервера');
       }
-    } catch { }
+    } catch (e) {
+      setAiUpdateError('Ошибка сети: ' + (e?.message || 'неизвестная'));
+    }
     setAiUpdateLoading(false);
   };
 
@@ -458,22 +469,14 @@ export default function App() {
               ))}
             </div>
 
-            {/* ── Банк + Курс ── */}
+            {/* ── Банк ── */}
             <div className={`bg-gradient-to-r from-indigo-600 to-blue-600 p-6 rounded-[2rem] text-white shadow-xl transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
-              <div className="flex justify-between items-center">
-                <div>
-                  <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1 flex items-center gap-1">
-                    <Wallet size={10} /> Баланс банка
-                  </span>
-                  <span className="text-3xl font-black tracking-tight">
-                    {(liveStats?.bankBalance ?? 0).toLocaleString()} 💳
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Курс пульса</span>
-                  <span className="text-3xl font-black">{liveStats?.pulseRate ?? '—'}</span>
-                </div>
-              </div>
+              <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1 flex items-center gap-1">
+                <Wallet size={10} /> Баланс банка
+              </span>
+              <span className="text-3xl font-black tracking-tight">
+                {(liveStats?.bankBalance ?? 0).toLocaleString()} 💳
+              </span>
             </div>
 
             {/* ── Кнопка Excel ── */}
@@ -593,7 +596,7 @@ export default function App() {
                    <div>
                       <span className="text-[10px] font-black text-blue-500 uppercase block mb-2">Курс Пульса</span>
                       <div className="flex items-baseline space-x-2">
-                         <span className="text-5xl font-black text-gray-900">{systemStats.pulseRate}</span>
+                         <span className="text-5xl font-black text-gray-900">{liveStats?.pulseRate ?? systemStats.pulseRate}</span>
                          <span className="text-gray-400 font-bold uppercase text-xs"> manual</span>
                       </div>
                    </div>
@@ -1181,6 +1184,12 @@ export default function App() {
             >
               {aiUpdateLoading ? <Loader2 size={16} className="animate-spin"/> : <><Sparkles size={16}/><span>Сгенерировать</span></>}
             </button>
+            {aiUpdateError && (
+              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs font-medium text-red-700">
+                <p className="font-black mb-1">⚠ Не удалось сгенерировать:</p>
+                <p className="opacity-80">{aiUpdateError}</p>
+              </div>
+            )}
           </div>
         </div>
       )}
