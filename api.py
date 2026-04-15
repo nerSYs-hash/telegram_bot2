@@ -628,8 +628,8 @@ async def generate_update(event: DeployEvent):
     if not GEMINI_KEY:
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY не задан")
 
-    # Определяем версию из коммита (feat(V1.11.0) → V1.11.0)
-    ver_match = re.search(r'V[\d]+\.[\d]+\.[\d]+[a-z]?', event.commit_message)
+    # Определяем версию из коммита (feat(V1.11) → V1.11, feat(V1.11.0a) → V1.11.0a)
+    ver_match = re.search(r'V[\d]+\.[\d]+(?:\.[\d]+)?[a-z]?', event.commit_message)
     version = ver_match.group(0) if ver_match else ''
 
     # Определяем тег по ключевым словам
@@ -675,13 +675,28 @@ async def generate_update(event: DeployEvent):
         raw = data['candidates'][0]['content']['parts'][0]['text']
         # Убираем markdown: **, *, #, _ и т.д.
         raw = re.sub(r'\*{1,2}|_{1,2}|#{1,3}', '', raw)
-        items = [re.sub(r'^[-•\d.]+\s*', '', l).strip() for l in raw.split('\n') if l.strip()]
+        lines = [re.sub(r'^[-•\d.]+\s*', '', l).strip() for l in raw.split('\n') if l.strip()]
+
+        # Определяем тип каждой строки по первому слову
+        def _line_type(line: str) -> str:
+            l = line.lower()
+            if l.startswith('исправл'):
+                return 'fix'
+            elif l.startswith('улучш'):
+                return 'improve'
+            else:
+                return 'new'  # «Добавлено», «Теперь» и всё остальное
+
+        items = [{"type": _line_type(l), "text": l, "tag": tag} for l in lines]
+
+        # Очищаем заголовок: убираем «feat(V1.11):» и лишние пробелы
+        clean_title = re.sub(r'^(?:feat|fix|improve|chore|docs|refactor)\([^)]+\):\s*', '', event.commit_message).strip()
 
         entry = {
             "id":          int(datetime.now().timestamp()),
             "date":        datetime.now().strftime('%d.%m.%Y'),
             "version":     version,
-            "title":       event.commit_message[:80],
+            "title":       clean_title[:100],
             "tag":         tag,
             "type":        upd_type,
             "items":       items,
