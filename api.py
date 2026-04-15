@@ -497,7 +497,7 @@ async def get_journal():
 # --- GEMINI AI ---
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent'
 
 GEMINI_SYSTEM = """Ты — умный ИИ-ассистент встроенный в панель управления Telegram-чатом "PULSE 4ever 18+".
 Помогаешь владельцу чата:
@@ -528,8 +528,11 @@ async def ai_chat(req: AiRequest):
                 f"{GEMINI_URL}?key={GEMINI_KEY}",
                 json={"contents": [{"parts": [{"text": full_prompt}]}]}
             )
-            resp.raise_for_status()
             data = resp.json()
+            logger.info(f"Gemini response status: {resp.status_code}, keys: {list(data.keys())}")
+            if resp.status_code != 200:
+                logger.error(f"Gemini error body: {data}")
+                raise HTTPException(status_code=502, detail=data.get('error', {}).get('message', f'HTTP {resp.status_code}'))
 
         if 'candidates' not in data:
             logger.error(f"Gemini unexpected response: {data}")
