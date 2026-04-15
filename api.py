@@ -4,6 +4,7 @@ from pydantic import BaseModel
 import uvicorn
 import os
 import sys
+import json
 from datetime import datetime, timedelta
 import logging
 from decimal import Decimal
@@ -37,8 +38,8 @@ calculate_health = None
 
 try:
     from database.db_manager import Database
-    db = Database()
-    logger.info("✅ База данных подключена успешно")
+    db = Database(db_path='database/bot_database.db')
+    logger.info("✅ База данных подключена: database/bot_database.db")
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения БД: {e}")
 
@@ -191,13 +192,170 @@ async def get_system():
     except Exception as e:
         return {"error": str(e)}
 
+# ── Маппинг условий: wizard → DB ──
+COND_TO_DB  = {'any_word': 'contains', 'exact_match': 'exact', 'regex': 'regex'}
+COND_FROM_DB = {v: k for k, v in COND_TO_DB.items()}
+
+
+class TriggerIn(BaseModel):
+    name: str
+    condition: str = 'any_word'
+    keyword: str = ''
+    probability: int = 100
+    where: str = 'chat'
+    from_who: str = 'all'
+    action: str = 'send_text'
+    duration: str = '0'
+    reply_text: str = ''
+    media_type: str = 'none'
+    bot_msg_delete: str = 'no'
+    bot_msg_delete_after: int = 60
+
+
+def _row_to_trigger(row: dict) -> dict:
+    cfg = {}
+    try:
+        cfg = json.loads(row.get('action_configs') or '{}')
+    except Exception:
+        pass
+    return {
+        'id':                  row['id'],
+        'name':                row['name'],
+        'condition':           COND_FROM_DB.get(row.get('condition', 'contains'), 'any_word'),
+        'keyword':             row.get('keywords', ''),
+        'probability':         row.get('probability', 100),
+        'where':               row.get('where_fires', 'chat'),
+        'from':                row.get('initiator', 'all'),
+        'action':              row.get('action', 'send_text'),
+        'duration':            row.get('action_value') or '0',
+        'reply_text':          cfg.get('reply_text', ''),
+        'media_type':          cfg.get('media_type', 'none'),
+        'bot_msg_delete':      row.get('bot_msg_delete', 'no'),
+        'bot_msg_delete_after':row.get('bot_msg_delete_after') or 60,
+        'is_enabled':          bool(row.get('is_enabled', 1)),
+    }
+
+
 @app.get("/api/triggers")
 async def get_triggers():
-    """Список триггеров"""
-    return [
-        {"id": 1, "name": "Анти-Реклама", "keyword": "t.me", "action": "ban", "where": "chat"},
-        {"id": 2, "name": "Приветствие", "keyword": "ку привет", "action": "text", "where": "global"}
-    ]
+    """Список триггеров из БД"""
+    try:
+        db.cursor.execute("SELECT * FROM triggers ORDER BY id DESC")
+        return [_row_to_trigger(dict(r)) for r in db.cursor.fetchall()]
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/triggers")
+async def create_trigger(t: TriggerIn):
+    """Создать триггер"""
+    try:
+        cfg = json.dumps({'reply_text': t.reply_text, 'media_type': t.media_type})
+        db.cursor.execute('''
+            INSERT INTO triggers
+                (name, keywords, condition, action, action_value, probability,
+                 where_fires, initiator, bot_msg_delete, bot_msg_delete_after,
+                 action_configs, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,1)
+        ''', (t.name, t.keyword, COND_TO_DB.get(t.condition, 'contains'),
+              t.action, t.duration, t.probability,
+              t.where, t.from_who, t.bot_msg_delete, t.bot_msg_delete_after, cfg))
+        db.conn.commit()
+        return {'id': db.cursor.lastrowid, 'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.put("/api/triggers/{trigger_id}")
+async def update_trigger(trigger_id: int, t: TriggerIn):
+    """Обновить триггер"""
+    try:
+        cfg = json.dumps({'reply_text': t.reply_text, 'media_type': t.media_type})
+        db.cursor.execute('''
+            UPDATE triggers SET
+                name=?, keywords=?, condition=?, action=?, action_value=?,
+                probability=?, where_fires=?, initiator=?, bot_msg_delete=?,
+                bot_msg_delete_after=?, action_configs=?
+            WHERE id=?
+        ''', (t.name, t.keyword, COND_TO_DB.get(t.condition, 'contains'),
+              t.action, t.duration, t.probability,
+              t.where, t.from_who, t.bot_msg_delete, t.bot_msg_delete_after,
+              cfg, trigger_id))
+        db.conn.commit()
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/triggers/{trigger_id}")
+async def delete_trigger(trigger_id: int):
+    """Удалить триггер"""
+    try:
+        db.cursor.execute("DELETE FROM triggers WHERE id=?", (trigger_id,))
+        db.conn.commit()
+        return {'success': True}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/journal")
+async def get_journal():
+    """Журнал событий: нарушения триггеров + транзакции модерации"""
+    try:
+        entries = []
+
+        # ── Нарушения триггеров ──
+        db.cursor.execute('''
+            SELECT tv.user_id, tv.trigger_id, tv.count, tv.last_violation_at,
+                   t.name AS trigger_name, t.action,
+                   u.username, u.first_name
+            FROM trigger_violations tv
+            JOIN triggers t ON tv.trigger_id = t.id
+            LEFT JOIN users u ON tv.user_id = u.user_id
+            ORDER BY tv.last_violation_at DESC
+            LIMIT 40
+        ''')
+        for r in (dict(x) for x in db.cursor.fetchall()):
+            uname = r.get('username') or r.get('first_name') or str(r['user_id'])
+            entries.append({
+                'id':      f"tv_{r['trigger_id']}_{r['user_id']}",
+                'time':    (r['last_violation_at'] or '')[:16],
+                'type':    'trigger',
+                'tag':     '#Триггер',
+                'user':    f"@{uname}" if r.get('username') else uname,
+                'user_id': r['user_id'],
+                'text':    f'Триггер «{r["trigger_name"]}» — {r["count"]} раз. Действие: {r["action"]}',
+            })
+
+        # ── Транзакции модерации ──
+        db.cursor.execute('''
+            SELECT t.id, t.from_user_id, t.transaction_type, t.description, t.timestamp,
+                   u.username, u.first_name
+            FROM transactions t
+            LEFT JOIN users u ON t.from_user_id = u.user_id
+            WHERE t.transaction_type IN ('mute','ban','warn','kick','unban','unmute')
+            ORDER BY t.timestamp DESC
+            LIMIT 30
+        ''')
+        TYPE_TAG = {'mute':'#Мут','ban':'#Бан','warn':'#Варн',
+                    'kick':'#Кик','unban':'#Разбан','unmute':'#Размут'}
+        for r in (dict(x) for x in db.cursor.fetchall()):
+            uname = r.get('username') or r.get('first_name') or str(r.get('from_user_id','?'))
+            entries.append({
+                'id':      f"tr_{r['id']}",
+                'time':    (r['timestamp'] or '')[:16],
+                'type':    r['transaction_type'],
+                'tag':     TYPE_TAG.get(r['transaction_type'], f"#{r['transaction_type']}"),
+                'user':    f"@{uname}" if r.get('username') else uname,
+                'user_id': r.get('from_user_id', 0),
+                'text':    r.get('description') or r['transaction_type'],
+            })
+
+        entries.sort(key=lambda x: x['time'], reverse=True)
+        return entries[:60]
+    except Exception as e:
+        logger.error(f"Error in /api/journal: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":

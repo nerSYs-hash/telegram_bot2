@@ -27,14 +27,19 @@ export default function App() {
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState(null);
   const [triggerStep, setTriggerStep] = useState(1);
-  const [triggers, setTriggers] = useState([
-    { 
-      id: 1, name: 'Анти-Реклама', condition: 'regex', keyword: 't.me/|http', 
-      probability: 100, action: 'ban', duration: 'forever', 
-      from: 'users', where: 'chat', target: 'author',
-      bot_msg_delete: 'previous', reply_text: 'Реклама запрещена!' 
-    }
-  ]);
+  const [triggers, setTriggers] = useState([]);
+  const [triggersLoading, setTriggersLoading] = useState(false);
+
+  const fetchTriggers = () => {
+    setTriggersLoading(true);
+    fetch('/api/triggers')
+      .then(r => r.json())
+      .then(data => { setTriggers(Array.isArray(data) ? data : []); setTriggersLoading(false); })
+      .catch(() => setTriggersLoading(false));
+  };
+
+  useEffect(() => { fetchTriggers(); }, []);
+  useEffect(() => { if (activeTab === 'journal') fetchJournal(); }, [activeTab]);
 
   // ================= СОСТОЯНИЯ: ШИППЕР =================
   const [shipperSettings, setShipperSettings] = useState({
@@ -60,11 +65,16 @@ export default function App() {
 
   // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
   const [logFilter, setLogFilter] = useState('all');
-  const [logs] = useState([
-    { id: 1, time: '19:45', tag: '#Триггер', user: '@vitya_owner', userId: 1, text: 'Сработал триггер "Анти-Реклама".', type: 'trigger' },
-    { id: 2, time: '19:30', tag: '#Шиппер', user: 'Система', userId: 0, text: 'Запущена рулетка пар. Категория: 18+.', type: 'shipper' },
-    { id: 3, time: '19:15', tag: '#Мут', user: '@spammer', userId: 12345, text: 'Выдан мут на 24ч: Оскорбления.', type: 'mute' },
-  ]);
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+
+  const fetchJournal = () => {
+    setLogsLoading(true);
+    fetch('/api/journal')
+      .then(r => r.json())
+      .then(data => { setLogs(Array.isArray(data) ? data : []); setLogsLoading(false); })
+      .catch(() => setLogsLoading(false));
+  };
   
   // ================= СОСТОЯНИЯ: СТАТИСТИКА =================
   const historyData = [
@@ -93,12 +103,32 @@ export default function App() {
   };
 
   const saveTrigger = () => {
-    if (editingTrigger.id) {
-      setTriggers(triggers.map(t => t.id === editingTrigger.id ? editingTrigger : t));
-    } else {
-      setTriggers([...triggers, { ...editingTrigger, id: Date.now() }]);
-    }
-    setIsTriggerModalOpen(false);
+    const body = {
+      name:                 editingTrigger.name,
+      condition:            editingTrigger.condition,
+      keyword:              editingTrigger.keyword,
+      probability:          editingTrigger.probability,
+      where:                editingTrigger.where,
+      from_who:             editingTrigger.from,
+      action:               editingTrigger.action,
+      duration:             editingTrigger.duration,
+      reply_text:           editingTrigger.reply_text,
+      media_type:           editingTrigger.media_type,
+      bot_msg_delete:       editingTrigger.bot_msg_delete,
+      bot_msg_delete_after: editingTrigger.bot_msg_delete_after,
+    };
+    const isEdit = !!editingTrigger.id;
+    const url    = isEdit ? `/api/triggers/${editingTrigger.id}` : '/api/triggers';
+    const method = isEdit ? 'PUT' : 'POST';
+    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => r.json())
+      .then(() => { fetchTriggers(); setIsTriggerModalOpen(false); })
+      .catch(() => setIsTriggerModalOpen(false));
+  };
+
+  const deleteTrigger = (id) => {
+    fetch(`/api/triggers/${id}`, { method: 'DELETE' })
+      .then(() => fetchTriggers());
   };
 
   const TrendChart = ({ data }) => {
@@ -227,6 +257,16 @@ export default function App() {
                 <button key={tag.id} onClick={() => setLogFilter(tag.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-[10px] uppercase border transition-all ${logFilter === tag.id ? 'bg-gray-900 text-white border-gray-900 scale-105 shadow-md' : 'bg-white text-gray-400 border-gray-100'}`}>{tag.label}</button>
               ))}
             </div>
+            {logsLoading && (
+              <div className="text-center py-8 text-gray-400 font-black text-sm">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" /> Загрузка журнала...
+              </div>
+            )}
+            {!logsLoading && logs.length === 0 && (
+              <div className="text-center py-12 text-gray-300 font-black text-sm uppercase tracking-widest">
+                Событий пока нет
+              </div>
+            )}
             {logs.filter(l => logFilter === 'all' || l.tag === logFilter).map(log => (
               <div key={log.id} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4 animate-in slide-in-from-bottom-2">
                 <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
@@ -235,7 +275,7 @@ export default function App() {
                 </div>
                 <div className="text-sm font-bold text-gray-700 leading-relaxed"><span className="text-blue-600 font-black">{log.user}:</span> {log.text}</div>
                 <div className="grid grid-cols-1 gap-2 pt-2">
-                  <a href={`tg://user?id=${log.userId}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-4 rounded-3xl font-black text-[10px] uppercase shadow-lg shadow-blue-200 active:scale-[0.98] transition-all"><MessageCircle size={16}/><span>ЛС</span></a>
+                  <a href={`tg://user?id=${log.user_id || log.userId}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-4 rounded-3xl font-black text-[10px] uppercase shadow-lg shadow-blue-200 active:scale-[0.98] transition-all"><MessageCircle size={16}/><span>ЛС</span></a>
                   <div className="grid grid-cols-2 gap-2">
                      {log.type === 'mute' && <button className="flex items-center justify-center space-x-2 bg-green-50 text-green-700 py-3 rounded-2xl font-black text-[9px] uppercase border border-green-200"><UserCheck size={14}/><span>Размутить</span></button>}
                      {log.type === 'trigger' && <button className="flex items-center justify-center space-x-2 bg-orange-50 text-orange-700 py-3 rounded-2xl font-black text-[9px] uppercase border border-orange-200"><Zap size={14}/><span>Амнистия</span></button>}
@@ -334,13 +374,23 @@ export default function App() {
             <button onClick={() => openTriggerModal()} className="w-full bg-gray-900 text-white p-6 rounded-[2rem] font-black flex items-center justify-center space-x-2">
               <PlusCircle size={20} /> <span>СОЗДАТЬ ТРИГГЕР</span>
             </button>
+            {triggersLoading && (
+              <div className="text-center py-8 text-gray-400 font-black text-sm">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" /> Загрузка...
+              </div>
+            )}
+            {!triggersLoading && triggers.length === 0 && (
+              <div className="text-center py-12 text-gray-300 font-black text-sm uppercase tracking-widest">
+                Триггеров пока нет
+              </div>
+            )}
             {triggers.map(t => (
               <div key={t.id} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
                 <div className="flex justify-between items-start">
                   <h4 className="font-black text-2xl tracking-tighter text-gray-900">{t.name}</h4>
                   <div className="flex space-x-2">
                      <button onClick={() => openTriggerModal(t)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Edit size={20} /></button>
-                     <button className="p-3 bg-red-50 text-red-600 rounded-2xl"><Trash2 size={20} /></button>
+                     <button onClick={() => deleteTrigger(t.id)} className="p-3 bg-red-50 text-red-600 rounded-2xl"><Trash2 size={20} /></button>
                   </div>
                 </div>
                 <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 font-mono text-xs font-bold text-pink-600">
