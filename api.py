@@ -549,6 +549,79 @@ async def ai_chat(req: AiRequest):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# --- АВТООБНОВЛЕНИЯ ---
+
+AI_UPDATES_FILE = 'ai_updates.json'
+DEPLOY_SECRET   = os.environ.get('DEPLOY_SECRET', 'pulse-deploy-secret')
+
+def _load_ai_updates() -> list:
+    try:
+        if os.path.exists(AI_UPDATES_FILE):
+            with open(AI_UPDATES_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+    except Exception:
+        pass
+    return []
+
+def _save_ai_updates(data: list):
+    with open(AI_UPDATES_FILE, 'w', encoding='utf-8') as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+
+@app.get("/api/updates")
+async def get_updates():
+    """Список AI-сгенерированных заметок об обновлениях"""
+    return _load_ai_updates()
+
+class DeployEvent(BaseModel):
+    commit_message: str
+    secret: str
+
+@app.post("/api/updates/generate")
+async def generate_update(event: DeployEvent):
+    """Вызывается после деплоя — генерирует user-friendly заметку через Gemini"""
+    if event.secret != DEPLOY_SECRET:
+        raise HTTPException(status_code=403, detail="Forbidden")
+    if not GEMINI_KEY:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY не задан")
+
+    prompt = f"""Ты пишешь краткие заметки об обновлениях для Telegram-бота и веб-панели управления чатом "PULSE 4ever 18+".
+
+Техническое описание коммита: "{event.commit_message}"
+
+Напиши 2-4 коротких пункта на русском языке, понятных обычному пользователю (без технических терминов).
+Каждый пункт начинай с действия: «Добавлено», «Исправлено», «Улучшено» или «Теперь».
+Верни ТОЛЬКО список пунктов, без заголовков и лишних пояснений."""
+
+    try:
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{GEMINI_URL}?key={GEMINI_KEY}",
+                json={"contents": [{"parts": [{"text": prompt}]}]}
+            )
+            data = resp.json()
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=data.get('error', {}).get('message', 'Gemini error'))
+
+        text = data['candidates'][0]['content']['parts'][0]['text']
+        items = [re.sub(r'^[-•*\d.]+\s*', '', l).strip() for l in text.split('\n') if l.strip()]
+
+        entry = {
+            "id":          int(datetime.now().timestamp()),
+            "date":        datetime.now().strftime('%d.%m.%Y'),
+            "title":       event.commit_message[:80],
+            "items":       items,
+            "aiGenerated": True,
+        }
+        updates = [entry] + _load_ai_updates()
+        _save_ai_updates(updates[:50])  # храним последние 50
+        return entry
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"generate_update error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     # Запуск uvicorn напрямую. reload=True включен для удобства разработки.

@@ -62,43 +62,28 @@ export default function App() {
   const triggerJiggle = (key) => { setJigglingTag(key); };
   const [jigglingNav, setJigglingNav] = useState(null);
 
-  // ── ИИ-обновления (хранятся в localStorage) ──
-  const [aiUpdates, setAiUpdates] = useState(() => {
-    try { return JSON.parse(localStorage.getItem('ai_updates') || '[]'); } catch { return []; }
-  });
+  // ── ИИ-обновления (с сервера) ──
+  const [aiUpdates, setAiUpdates] = useState([]);
   const [aiUpdateModal, setAiUpdateModal] = useState(false);
   const [aiUpdateInput, setAiUpdateInput] = useState('');
   const [aiUpdateLoading, setAiUpdateLoading] = useState(false);
+
+  useEffect(() => {
+    fetch('/api/updates').then(r => r.json()).then(data => setAiUpdates(Array.isArray(data) ? data : [])).catch(() => {});
+  }, []);
 
   const generateAiUpdate = async () => {
     if (!aiUpdateInput.trim()) return;
     setAiUpdateLoading(true);
     try {
-      const r = await fetch('/api/ai', {
+      const r = await fetch('/api/updates/generate', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: `Ты пишешь краткие заметки об обновлениях для Telegram-бота и веб-панели управления чатом "PULSE 4ever".
-Разработчик описал что сделано: "${aiUpdateInput}"
-
-Напиши 3-5 коротких пунктов на русском языке, понятных обычному пользователю (без технических терминов).
-Каждый пункт начинай с глагола (Добавлено / Исправлено / Улучшено / Теперь).
-Верни ТОЛЬКО список пунктов, без заголовков и пояснений.`
-        }),
+        body: JSON.stringify({ commit_message: aiUpdateInput, secret: 'pulse-deploy-secret' }),
       });
       const data = await r.json();
-      const text = data.result || '';
-      const items = text.split('\n').filter(l => l.trim()).map(l => l.replace(/^[-•*\d.]+\s*/, '').trim()).filter(Boolean);
-      const entry = {
-        id: Date.now(),
-        date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
-        title: aiUpdateInput.slice(0, 60) + (aiUpdateInput.length > 60 ? '…' : ''),
-        items,
-        aiGenerated: true,
-      };
-      const updated = [entry, ...aiUpdates];
-      setAiUpdates(updated);
-      localStorage.setItem('ai_updates', JSON.stringify(updated));
+      const entry = await r.json();
+      setAiUpdates(prev => [entry, ...prev]);
       setAiUpdateModal(false);
       setAiUpdateInput('');
     } catch { }
@@ -616,7 +601,7 @@ export default function App() {
                   </span>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
-                    <button onClick={() => { const u = aiUpdates.filter(x=>x.id!==upd.id); setAiUpdates(u); localStorage.setItem('ai_updates', JSON.stringify(u)); }} className="text-gray-300 hover:text-red-400 transition-colors"><X size={14}/></button>
+                    <button onClick={() => setAiUpdates(prev => prev.filter(x=>x.id!==upd.id))} className="text-gray-300 hover:text-red-400 transition-colors"><X size={14}/></button>
                   </div>
                 </div>
                 <p className="text-xs font-bold text-gray-500">{upd.title}</p>

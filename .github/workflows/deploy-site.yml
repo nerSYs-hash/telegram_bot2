@@ -24,12 +24,15 @@ jobs:
             cd /root/PulsBot
             git fetch origin main
             git reset --hard origin/main
-            # ─── СБОРКА React ───
-            cd /root/PulsBot/Admin_SITE
-            npm install --silent
-            npm run build
-            cd /root/PulsBot
+            # ─── dist собирается локально, просто даём права ───
+            chmod -R o+rX /root/PulsBot/Admin_SITE/dist
             # ─── РЕСТАРТ API + NGINX ───
             systemctl restart pulsapi
             systemctl reload nginx
+            sleep 3
+            # ─── ГЕНЕРАЦИЯ ЗАМЕТКИ ОБ ОБНОВЛЕНИИ ───
+            COMMIT_MSG=$(git log -1 --pretty=%s)
+            curl -s -X POST http://localhost:8000/api/updates/generate \
+              -H "Content-Type: application/json" \
+              -d "{\"commit_message\": \"$COMMIT_MSG\", \"secret\": \"pulse-deploy-secret\"}" || true
             echo "✅ Admin Site deployed!"
