@@ -91,6 +91,12 @@ class CallbackHandler:
             await handle_anketa_edit_callback(query, context, self.db, data)
             return
 
+        # ═══ НАСТРОЙКИ АНКЕТЫ (%_form%) ═══
+        if data.startswith('form_toggle_') or data == 'form_done':
+            from handlers.placeholder_handlers import handle_form_settings_callback
+            await handle_form_settings_callback(query, data, self.db, user.id)
+            return
+
         # ═══ BBS CALLBACKS (ранний возврат) ═══
         if data.startswith('report_reason_') or data == 'report_cancel':
             from handlers.callback.user_callbacks import handle_report_callback

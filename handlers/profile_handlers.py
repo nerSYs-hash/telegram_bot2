@@ -237,8 +237,9 @@ async def show_profile_settings(query, user, db):
     if has_bbs:
         keyboard.append([InlineKeyboardButton(btn_age, callback_data=f"prof_age_{int(not hide_age)}")])
         
+    keyboard.append([InlineKeyboardButton("📝 Настройки анкеты (видимость в триггерах)", callback_data="form_settings_menu")])
     keyboard.append([InlineKeyboardButton("🔙 Назад в Паспорт", callback_data="menu_profile")])
-    
+
     await query.edit_message_text(text, reply_markup=InlineKeyboardMarkup(keyboard), parse_mode='HTML')
 
 

@@ -12,7 +12,9 @@
 """
 
 import logging
-from datetime import datetime
+import json
+import re
+from datetime import datetime, timedelta, date
 from typing import Optional
 
 from telegram import (
@@ -29,6 +31,7 @@ logger = logging.getLogger(__name__)
 # ═══════════════════════════════════════════════════════════════
 
 SYSTEM_PLACEHOLDERS = {
+    # Старый формат (совместимость)
     'user_name':       'Имя инициатора (кто написал слово-триггер)',
     'user_username':   '@username инициатора',
     'user_id':         'ID инициатора',
@@ -41,6 +44,27 @@ SYSTEM_PLACEHOLDERS = {
     'date':            'Текущая дата (дд.мм.гггг)',
     'time':            'Текущее время (чч:мм)',
     'warn_count':      'Количество предупреждений пользователя',
+    # Новый формат %act_X% и %rpl_X%
+    'act_tgun':  '%act_X% — инициатор: имя в Telegram',
+    'act_nn':    '%act_X% — инициатор: @nickname',
+    'act_blns':  '%act_X% — инициатор: баланс пульсов',
+    'act_msg':   '%act_X% — инициатор: сообщений всего',
+    'act_msg_t': '%act_X% — инициатор: сообщений сегодня',
+    'act_msg_w': '%act_X% — инициатор: сообщений за неделю',
+    'act_msg_m': '%act_X% — инициатор: сообщений за месяц',
+    'act_msg_y': '%act_X% — инициатор: сообщений за год',
+    'act_d':     '%act_X% — инициатор: дней в чате',
+    'act_w':     '%act_X% — инициатор: предупреждения',
+    'act_plc':   '%act_X% — инициатор: место в рейтинге',
+    'act_jt':    '%act_X% — инициатор: дата вступления',
+    'act_rnk':   '%act_X% — инициатор: ранг',
+    'act_rfrl_c':'%act_X% — инициатор: количество рефералов',
+    'act_form':  '%act_X% — инициатор: полная анкета',
+    'act_un':    '%act_X% — инициатор: имя из анкеты',
+    'act_city':  '%act_X% — инициатор: город',
+    'act_yo':    '%act_X% — инициатор: возраст',
+    'act_sr':    '%act_X% — инициатор: роль',
+    # rpl_ — те же суффиксы, но для цитируемого пользователя
 }
 
 
@@ -123,6 +147,258 @@ def _delete_custom(db, ph_id: int) -> bool:
 #  ЦЕНТРАЛЬНАЯ ФУНКЦИЯ ЗАМЕНЫ
 # ═══════════════════════════════════════════════════════════════
 
+# ═══════════════════════════════════════════════════════════════
+#  ТАБЛИЦА НАСТРОЕК АНКЕТЫ ПОЛЬЗОВАТЕЛЯ
+# ═══════════════════════════════════════════════════════════════
+
+def ensure_form_settings_table(db) -> None:
+    try:
+        db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS user_form_settings (
+                user_id   INTEGER PRIMARY KEY,
+                show_un   INTEGER DEFAULT 1,
+                show_city INTEGER DEFAULT 1,
+                show_yo   INTEGER DEFAULT 1,
+                show_sr   INTEGER DEFAULT 1
+            )
+        ''')
+        db.conn.commit()
+    except Exception as e:
+        logger.error(f"ensure_form_settings_table: {e}")
+
+
+def _get_form_prefs(db, user_id: int) -> dict:
+    """Возвращает настройки анкеты пользователя (по умолчанию всё вкл)."""
+    try:
+        ensure_form_settings_table(db)
+        db.cursor.execute('SELECT * FROM user_form_settings WHERE user_id = ?', (user_id,))
+        row = db.cursor.fetchone()
+        if row:
+            return {'show_un': bool(row['show_un']), 'show_city': bool(row['show_city']),
+                    'show_yo': bool(row['show_yo']), 'show_sr': bool(row['show_sr'])}
+    except Exception:
+        pass
+    return {'show_un': True, 'show_city': True, 'show_yo': True, 'show_sr': True}
+
+
+def _set_form_pref(db, user_id: int, field: str, value: bool) -> None:
+    try:
+        ensure_form_settings_table(db)
+        db.cursor.execute(
+            f'INSERT INTO user_form_settings (user_id, {field}) VALUES (?, ?) '
+            f'ON CONFLICT(user_id) DO UPDATE SET {field} = excluded.{field}',
+            (user_id, int(value))
+        )
+        db.conn.commit()
+    except Exception as e:
+        logger.error(f"_set_form_pref: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  РАЗРЕШЕНИЕ ДАННЫХ ПОЛЬЗОВАТЕЛЯ
+# ═══════════════════════════════════════════════════════════════
+
+def _resolve_user_stats(db, user_id: int) -> dict:
+    """Собирает все данные о пользователе для плейсхолдеров %act_X% / %rpl_X%."""
+    result: dict = {}
+    if not db or not user_id:
+        return result
+
+    today_str = date.today().isoformat()
+    week_ago  = (date.today() - timedelta(days=7)).isoformat()
+    month_ago = (date.today() - timedelta(days=30)).isoformat()
+    year_ago  = (date.today() - timedelta(days=365)).isoformat()
+
+    def _stat(field, date_from=None):
+        try:
+            if date_from:
+                db.cursor.execute(
+                    f'SELECT COALESCE(SUM({field}),0) FROM user_stats WHERE user_id=? AND date>=?',
+                    (user_id, date_from))
+            else:
+                db.cursor.execute(
+                    f'SELECT COALESCE(SUM({field}),0) FROM user_stats WHERE user_id=?',
+                    (user_id,))
+            r = db.cursor.fetchone()
+            return str(int(r[0])) if r else '0'
+        except Exception:
+            return '0'
+
+    # ── Базовые данные из users ──
+    try:
+        row = db.get_user(user_id)
+        if row:
+            result['blns']  = str(int(float(row.get('balance', 0) or 0)))
+            result['tgun']  = row.get('first_name', '') or ''
+            nn = row.get('username', '')
+            result['nn']    = f'@{nn}' if nn else result['tgun']
+            joined = str(row.get('joined_at', '') or '')
+            if joined:
+                try:
+                    jdt = datetime.fromisoformat(joined.split('.')[0])
+                    result['d']  = str((datetime.now() - jdt).days)
+                    result['jt'] = jdt.strftime('%d.%m.%Y')
+                except Exception:
+                    result['d']  = '?'
+                    result['jt'] = '?'
+    except Exception as e:
+        logger.debug(f"_resolve_user_stats users: {e}")
+
+    # ── Статистика сообщений ──
+    result['msg']     = _stat('total_messages')
+    result['msg_t']   = _stat('total_messages', today_str)
+    result['msg_w']   = _stat('total_messages', week_ago)
+    result['msg_m']   = _stat('total_messages', month_ago)
+    result['msg_y']   = _stat('total_messages', year_ago)
+    result['media_t'] = _stat('media_sent')
+    result['media_w'] = _stat('media_sent', week_ago)
+    result['media_m'] = _stat('media_sent', month_ago)
+    result['media_y'] = _stat('media_sent', year_ago)
+    result['w']       = _stat('warnings')
+
+    # ── Место в рейтинге ──
+    try:
+        db.cursor.execute(
+            'SELECT COUNT(*)+1 FROM users WHERE balance > '
+            '(SELECT balance FROM users WHERE user_id=?) AND is_left=0 AND is_admin=0 AND is_owner=0',
+            (user_id,))
+        r = db.cursor.fetchone()
+        result['plc'] = f'#{r[0]}' if r else '?'
+    except Exception:
+        result['plc'] = '?'
+
+    # ── Количество рефералов ──
+    try:
+        db.cursor.execute('SELECT COUNT(*) FROM users WHERE referrer_id=?', (user_id,))
+        r = db.cursor.fetchone()
+        result['rfrl_c'] = str(r[0]) if r else '0'
+    except Exception:
+        result['rfrl_c'] = '0'
+
+    # ── Данные из BBS-анкеты ──
+    try:
+        from handlers.BBS.database_bbs import get_profile
+        profile = get_profile(db, user_id)
+        if profile:
+            result['un']  = profile.get('name', '') or ''
+            result['yo']  = str(profile.get('age', '') or '')
+            city_raw = profile.get('city', '')
+            if isinstance(city_raw, str):
+                try:
+                    city_list = json.loads(city_raw)
+                    result['city'] = ', '.join(city_list) if isinstance(city_list, list) else str(city_list)
+                except Exception:
+                    result['city'] = city_raw
+            else:
+                result['city'] = str(city_raw)
+            roles_raw = profile.get('roles', '[]')
+            if isinstance(roles_raw, str):
+                try:
+                    roles = json.loads(roles_raw)
+                    result['sr'] = ', '.join(roles) if isinstance(roles, list) else str(roles)
+                except Exception:
+                    result['sr'] = roles_raw
+            else:
+                result['sr'] = str(roles_raw)
+    except Exception as e:
+        logger.debug(f"_resolve_user_stats bbs: {e}")
+
+    return result
+
+
+def _build_form(db, user_id: int, stats: dict) -> str:
+    """Строит анкету пользователя для %act_form% / %rpl_form%."""
+    prefs = _get_form_prefs(db, user_id)
+    lines = []
+
+    # Конфигурируемые (пользователь может скрыть)
+    if prefs.get('show_un') and stats.get('un'):
+        lines.append(f"📛 {stats['un']}")
+    if prefs.get('show_city') and stats.get('city'):
+        lines.append(f"📍 {stats['city']}")
+    if prefs.get('show_yo') and stats.get('yo'):
+        lines.append(f"🎂 {stats['yo']} лет")
+    if prefs.get('show_sr') and stats.get('sr'):
+        lines.append(f"🎭 {stats['sr']}")
+
+    # Разделитель если есть конфигурируемые данные
+    if lines:
+        lines.append('—' * 12)
+
+    # Всегда показываются
+    if stats.get('d'):    lines.append(f"📅 В чате: {stats['d']} дн.")
+    if stats.get('rnk'):  lines.append(f"🏅 Ранг: {stats['rnk']}")
+    if stats.get('blns'): lines.append(f"💎 Баланс: {stats['blns']}")
+    if stats.get('msg'):  lines.append(f"💬 Сообщений: {stats['msg']}")
+    if stats.get('plc'):  lines.append(f"🏆 Место: {stats['plc']}")
+    if stats.get('lvl'):  lines.append(f"⭐ Уровень: {stats['lvl']}")
+
+    return '\n'.join(lines) if lines else '—'
+
+
+# ═══════════════════════════════════════════════════════════════
+#  МЕНЮ НАСТРОЕК АНКЕТЫ (для пользователя в ЛС бота)
+# ═══════════════════════════════════════════════════════════════
+
+FORM_FIELD_LABELS = {
+    'show_un':   ('📛', 'Имя из анкеты'),
+    'show_city': ('📍', 'Город'),
+    'show_yo':   ('🎂', 'Возраст'),
+    'show_sr':   ('🎭', 'Роль'),
+}
+
+
+async def show_form_settings(update_or_query, db, user_id: int, edit: bool = False) -> None:
+    """Показывает меню настройки видимости полей анкеты в %_form%."""
+    ensure_form_settings_table(db)
+    prefs = _get_form_prefs(db, user_id)
+
+    text = (
+        "⚙️ <b>Настройка анкеты</b>\n\n"
+        "Эти поля будут видны другим пользователям когда бот показывает твой профиль.\n\n"
+        "<i>Всегда видны:</i> дней в чате, баланс, место в рейтинге, сообщения.\n\n"
+        "Выбери что показывать:"
+    )
+    kb = []
+    for field, (icon, label) in FORM_FIELD_LABELS.items():
+        is_on = prefs.get(field, True)
+        status = "🟢 Показывать" if is_on else "🔴 Скрыть"
+        kb.append([IKB(f"{icon} {label}  —  {status}", callback_data=f"form_toggle_{field}")])
+    kb.append([IKB("✅ Готово", callback_data="form_done")])
+
+    markup = IKM(kb)
+    try:
+        if edit:
+            await update_or_query.edit_message_text(text, parse_mode='HTML', reply_markup=markup)
+        else:
+            await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=markup)
+    except Exception as e:
+        logger.error(f"show_form_settings: {e}")
+
+
+async def handle_form_settings_callback(query, data: str, db, user_id: int) -> None:
+    """Обрабатывает нажатия кнопок настройки анкеты."""
+    if data == 'form_done':
+        try:
+            await query.edit_message_text(
+                "✅ <b>Настройки анкеты сохранены!</b>\n\n"
+                "Теперь когда бот выводит твой профиль, он будет учитывать эти настройки.",
+                parse_mode='HTML',
+            )
+        except Exception:
+            pass
+        return
+
+    if data.startswith('form_toggle_'):
+        field = data[len('form_toggle_'):]
+        if field not in FORM_FIELD_LABELS:
+            return
+        prefs = _get_form_prefs(db, user_id)
+        new_val = not prefs.get(field, True)
+        _set_form_pref(db, user_id, field, new_val)
+        await show_form_settings(query, db, user_id, edit=True)
+
+
 def apply_placeholders(text: str, db, context_data: dict = None) -> str:
     """
     Заменяет все %placeholder% в тексте.
@@ -174,6 +450,28 @@ def apply_placeholders(text: str, db, context_data: dict = None) -> str:
 
     for key, val in system_values.items():
         text = text.replace(f'%{key}%', val)
+
+    # ── Новый формат: %act_X% и %rpl_X% ──
+    if db and ('%act_' in text or '%rpl_' in text):
+        act_id = user.id   if user   else None
+        rpl_id = quoted.id if quoted else act_id
+
+        act_stats = _resolve_user_stats(db, act_id) if act_id else {}
+        rpl_stats = _resolve_user_stats(db, rpl_id) if rpl_id else {}
+
+        # act_form / rpl_form — собираем отдельно
+        if '%act_form%' in text:
+            act_stats['form'] = _build_form(db, act_id, act_stats) if act_id else '—'
+        if '%rpl_form%' in text:
+            rpl_stats['form'] = _build_form(db, rpl_id, rpl_stats) if rpl_id else '—'
+
+        for suffix, val in act_stats.items():
+            text = text.replace(f'%act_{suffix}%', str(val))
+        for suffix, val in rpl_stats.items():
+            text = text.replace(f'%rpl_{suffix}%', str(val))
+
+        # Убираем незаполненные %act_X% / %rpl_X% если данных нет
+        text = re.sub(r'%(?:act|rpl)_[a-z_]+%', '', text)
 
     # ── Кастомные из БД ──
     try:

@@ -42,6 +42,9 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         await show_profile(query, context, db, user.id)
     elif data == "profile_settings":
         await show_profile_settings(query, user, db)
+    elif data == "form_settings_menu":
+        from handlers.placeholder_handlers import show_form_settings
+        await show_form_settings(query, db, user.id, edit=True)
     elif data.startswith("prof_notif_") or data.startswith("prof_age_"):
         await toggle_profile_setting(query, user, data, db)
     elif data in ("stub_quests", "stub_market", "stub_settings"):
