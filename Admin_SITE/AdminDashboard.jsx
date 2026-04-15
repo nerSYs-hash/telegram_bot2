@@ -11,15 +11,49 @@ import {
   FileText, TrendingUp, TrendingDown, Activity, ChevronRight,
   Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
-  Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent
+  Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
+  Megaphone, PartyPopper, Wrench, Bug
 } from 'lucide-react';
 
 // === НАСТРОЙКИ GEMINI API ===
 const apiKey = ""; 
 
+// ═══════════════════════════════════════════
+//  СПИСОК ОБНОВЛЕНИЙ — добавляй сюда при каждом релизе
+//  type: 'new' | 'fix' | 'improve'
+// ═══════════════════════════════════════════
+const UPDATES = [
+  {
+    version: 'V1.11',
+    date: '15 апреля 2026',
+    title: '🚀 Запуск веб-панели управления',
+    items: [
+      { type: 'new',     tag: 'site',       text: 'Веб-сайт puls-chat.ru — теперь можно управлять ботом прямо из браузера' },
+      { type: 'new',     tag: 'statistics', text: 'Статистика чата: графики активности, периоды (сегодня / неделя / месяц / год), экспорт в Excel' },
+      { type: 'new',     tag: 'journal',    text: 'Журнал событий: все входы, нарушения триггеров, муты и баны в одном месте с фильтрами' },
+      { type: 'new',     tag: 'triggers',   text: 'Управление триггерами: создание и редактирование через удобный 4-шаговый мастер' },
+      { type: 'improve', tag: 'journal',    text: 'Ссылки в журнале кликабельны — переход прямо к сообщению в Telegram' },
+      { type: 'improve', tag: 'journal',    text: 'Текст нарушения выделяется рамкой-цитатой для удобства чтения' },
+      { type: 'fix',     tag: 'site',       text: 'При обновлении страницы остаёшься на той же вкладке' },
+    ],
+  },
+];
+
+const LATEST_VERSION = UPDATES[0].version;
+
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
-  const navigateTo = (id) => { setActiveTab(id); window.location.hash = id; };
+  const navigateTo = (id) => {
+    setActiveTab(id);
+    window.location.hash = id;
+    if (id === 'updates') {
+      localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+      setHasNewUpdate(false);
+    }
+  };
+  const [hasNewUpdate, setHasNewUpdate] = useState(
+    () => localStorage.getItem('lastSeenUpdate') !== LATEST_VERSION
+  );
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
 
@@ -171,6 +205,7 @@ export default function App() {
   };
 
   const navigation = [
+    { id: 'updates',   name: 'Обновления', icon: Megaphone, group: 'top' },
     { id: 'statistics', name: 'Статистика', icon: PieChart, group: 'main' },
     { id: 'journal', name: 'Журнал', icon: ScrollText, group: 'main' },
     { id: 'triggers', name: 'Триггеры', icon: ShieldAlert, group: 'modules' },
@@ -480,6 +515,62 @@ export default function App() {
           </div>
         );
 
+      case 'updates':
+        return (
+          <div className="space-y-4 pb-24 animate-in fade-in duration-300">
+            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm flex items-center space-x-4">
+              <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-lg">
+                <Megaphone size={26} className="text-white" />
+              </div>
+              <div>
+                <h2 className="font-black text-2xl text-gray-900 leading-none">Обновления</h2>
+                <p className="text-xs text-gray-400 font-bold mt-1">История улучшений панели и бота</p>
+              </div>
+            </div>
+
+            {UPDATES.map((upd) => (
+              <div key={upd.version} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{upd.version}</span>
+                  <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
+                </div>
+                <h3 className="font-black text-lg text-gray-900">{upd.title}</h3>
+                <div className="space-y-2">
+                  {upd.items.map((item, i) => {
+                    const typeCfg = {
+                      new:     { icon: PartyPopper, bg: 'bg-green-50',  text: 'text-green-600',  border: 'border-green-100',  label: 'НОВОЕ'      },
+                      improve: { icon: Sparkles,    bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-100',   label: 'УЛУЧШЕНО'   },
+                      fix:     { icon: Wrench,      bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-100', label: 'ИСПРАВЛЕНО' },
+                    }[item.type] || { icon: Info, bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-100', label: '' };
+                    const tagCfg = {
+                      site:       { emoji: '🌐', label: 'Сайт',       color: 'bg-indigo-50 text-indigo-500' },
+                      statistics: { emoji: '📊', label: 'Статистика', color: 'bg-violet-50 text-violet-500' },
+                      journal:    { emoji: '📋', label: 'Журнал',     color: 'bg-sky-50 text-sky-500'       },
+                      triggers:   { emoji: '⚡', label: 'Триггеры',   color: 'bg-yellow-50 text-yellow-600' },
+                      bot:        { emoji: '🤖', label: 'Бот',        color: 'bg-gray-100 text-gray-500'    },
+                    }[item.tag] || null;
+                    const Icon = typeCfg.icon;
+                    return (
+                      <div key={i} className={`flex items-start space-x-3 p-3 rounded-2xl border ${typeCfg.bg} ${typeCfg.border}`}>
+                        <div className={`flex-shrink-0 flex items-center space-x-1 ${typeCfg.text}`}>
+                          <Icon size={14} />
+                          <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
+                        </div>
+                        <p className="text-xs text-gray-700 font-medium leading-relaxed flex-1">{item.text}</p>
+                        {tagCfg && (
+                          <span className={`flex-shrink-0 text-[9px] font-black px-2 py-1 rounded-full ${tagCfg.color}`}>
+                            {tagCfg.emoji} {tagCfg.label}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+
       default: return null;
     }
   };
@@ -501,11 +592,13 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-10 px-6 space-y-10">
-          {['main', 'modules', 'features'].map(group => (
+          {['top', 'main', 'modules', 'features'].map(group => (
             <div key={group} className="space-y-2">
-              <p className="px-5 text-[11px] font-black text-gray-300 uppercase tracking-[0.3em] mb-6">
-                {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
-              </p>
+              {group !== 'top' && (
+                <p className="px-5 text-[11px] font-black text-gray-300 uppercase tracking-[0.3em] mb-6">
+                  {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
+                </p>
+              )}
               {navigation.filter(n => n.group === group).map((item) => (
                 <button
                   key={item.id}
@@ -517,7 +610,10 @@ export default function App() {
                   }`}
                 >
                   <item.icon size={24} className={`mr-5 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'}`} />
-                  <span className="text-lg">{item.name}</span>
+                  <span className="text-lg flex-1">{item.name}</span>
+                  {item.id === 'updates' && hasNewUpdate && (
+                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-md shadow-red-300" />
+                  )}
                 </button>
               ))}
             </div>
