@@ -54,6 +54,8 @@ export default function App() {
   const [hasNewUpdate, setHasNewUpdate] = useState(
     () => localStorage.getItem('lastSeenUpdate') !== LATEST_VERSION
   );
+  const [jigglingTag, setJigglingTag] = useState(null);
+  const triggerJiggle = (key) => { setJigglingTag(key); };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
 
@@ -557,11 +559,18 @@ export default function App() {
                           <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
                         </div>
                         <p className="text-xs text-gray-700 font-medium leading-relaxed flex-1">{item.text}</p>
-                        {tagCfg && (
-                          <span className={`flex-shrink-0 text-[9px] font-black px-2 py-1 rounded-full ${tagCfg.color}`}>
-                            {tagCfg.emoji} {tagCfg.label}
-                          </span>
-                        )}
+                        {tagCfg && (() => {
+                          const key = `${upd.version}-${i}`;
+                          return (
+                            <span
+                              onClick={() => triggerJiggle(key)}
+                              onAnimationEnd={() => setJigglingTag(null)}
+                              className={`flex-shrink-0 text-[9px] font-black px-2 py-1 rounded-full cursor-pointer select-none hover:scale-110 transition-transform ${tagCfg.color} ${jigglingTag === key ? 'tag-jiggle' : ''}`}
+                            >
+                              {tagCfg.emoji} {tagCfg.label}
+                            </span>
+                          );
+                        })()}
                       </div>
                     );
                   })}
