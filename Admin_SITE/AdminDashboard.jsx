@@ -12,7 +12,8 @@ import {
   Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
-  Megaphone, PartyPopper, Wrench, Bug
+  Megaphone, PartyPopper, Wrench, Bug,
+  GripVertical, Play, Square, Copy, Search
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════
@@ -71,6 +72,11 @@ export default function App() {
   const [triggers, setTriggers] = useState([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [triggerSearch, setTriggerSearch] = useState('');
+  const [showTriggerMenu, setShowTriggerMenu] = useState(false);
+  const [togglingTrigger, setTogglingTrigger] = useState(null);
+  const [copyingTrigger, setCopyingTrigger] = useState(null);
+  const [dragId, setDragId] = useState(null);
 
   const fetchTriggers = () => {
     setTriggersLoading(true);
@@ -78,6 +84,43 @@ export default function App() {
       .then(r => r.json())
       .then(data => { setTriggers(Array.isArray(data) ? data : []); setTriggersLoading(false); })
       .catch(() => setTriggersLoading(false));
+  };
+
+  const toggleTrigger = async (id) => {
+    setTogglingTrigger(id);
+    try {
+      const r = await fetch(`/api/triggers/${id}/toggle`, { method: 'PATCH' });
+      const data = await r.json();
+      setTriggers(prev => prev.map(t => t.id === id ? { ...t, is_enabled: data.is_enabled } : t));
+    } catch {}
+    setTogglingTrigger(null);
+  };
+
+  const copyTrigger = async (id) => {
+    setCopyingTrigger(id);
+    try {
+      await fetch(`/api/triggers/${id}/copy`, { method: 'POST' });
+      fetchTriggers();
+    } catch {}
+    setCopyingTrigger(null);
+  };
+
+  // Drag & drop для активных триггеров
+  const handleDragStart = (id) => setDragId(id);
+  const handleDrop = (targetId) => {
+    if (!dragId || dragId === targetId) return;
+    setTriggers(prev => {
+      const active = prev.filter(t => t.is_enabled);
+      const inactive = prev.filter(t => !t.is_enabled);
+      const fromIdx = active.findIndex(t => t.id === dragId);
+      const toIdx   = active.findIndex(t => t.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const reordered = [...active];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+      return [...reordered, ...inactive];
+    });
+    setDragId(null);
   };
 
   useEffect(() => { fetchTriggers(); }, []);
@@ -728,38 +771,163 @@ export default function App() {
           </div>
         );
 
-      case 'triggers':
+      case 'triggers': {
+        const tSearch = triggerSearch.toLowerCase();
+        const activeTriggers   = triggers.filter(t =>  t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
+        const inactiveTriggers = triggers.filter(t => !t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
+
+        const TriggerRow = ({ t, index, active }) => (
+          <div
+            key={t.id}
+            draggable={active}
+            onDragStart={() => active && handleDragStart(t.id)}
+            onDragOver={e => { e.preventDefault(); }}
+            onDrop={() => active && handleDrop(t.id)}
+            className={`flex items-center py-3 px-4 border-b border-gray-50 last:border-b-0 transition-opacity ${dragId === t.id ? 'opacity-40' : 'opacity-100'}`}
+          >
+            {/* drag handle (только активные) */}
+            {active ? (
+              <GripVertical size={16} className="text-gray-300 mr-2 flex-shrink-0 cursor-grab active:cursor-grabbing"/>
+            ) : (
+              <div className="w-[20px] mr-2 flex-shrink-0"/>
+            )}
+
+            {/* номер (только активные) */}
+            {active && (
+              <span className="w-7 h-7 rounded-full bg-blue-500 text-white text-[10px] font-black flex items-center justify-center mr-3 flex-shrink-0">
+                {index + 1}
+              </span>
+            )}
+
+            {/* название */}
+            <button
+              onClick={() => openTriggerModal(t)}
+              className="flex-1 text-left text-sm font-bold text-blue-600 hover:text-blue-800 truncate"
+            >
+              {t.name}
+            </button>
+
+            {/* кнопки */}
+            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+              {/* удалить — только неактивные */}
+              {!active && (
+                <button
+                  onClick={() => deleteTrigger(t.id)}
+                  className="p-2 text-red-400 hover:text-red-600 active:scale-90 transition-all"
+                >
+                  <Trash2 size={16}/>
+                </button>
+              )}
+              {/* копировать */}
+              <button
+                onClick={() => copyTrigger(t.id)}
+                disabled={copyingTrigger === t.id}
+                className="p-2 text-blue-400 hover:text-blue-600 active:scale-90 transition-all disabled:opacity-40"
+              >
+                {copyingTrigger === t.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
+              </button>
+              {/* пауза (активные) / старт (неактивные) */}
+              <button
+                onClick={() => toggleTrigger(t.id)}
+                disabled={togglingTrigger === t.id}
+                className={`p-0.5 rounded-full active:scale-90 transition-all disabled:opacity-40 ${
+                  active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'
+                }`}
+              >
+                {togglingTrigger === t.id
+                  ? <Loader2 size={22} className="animate-spin"/>
+                  : active
+                    ? <span className="w-6 h-6 rounded-full border-2 border-red-500 flex items-center justify-center"><Square size={8} fill="currentColor"/></span>
+                    : <span className="w-6 h-6 rounded-full border-2 border-green-500 flex items-center justify-center"><Play size={9} fill="currentColor"/></span>
+                }
+              </button>
+            </div>
+          </div>
+        );
+
         return (
           <div className="space-y-4 pb-24">
-            <button onClick={() => openTriggerModal()} className="w-full bg-gray-900 text-white p-6 rounded-[2rem] font-black flex items-center justify-center space-x-2">
-              <PlusCircle size={20} /> <span>СОЗДАТЬ ТРИГГЕР</span>
-            </button>
+            {/* ── Поиск ── */}
+            <div className="relative">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"/>
+              <input
+                value={triggerSearch}
+                onChange={e => setTriggerSearch(e.target.value)}
+                placeholder="Поиск по названию или ключевым словам..."
+                className="w-full bg-white border border-gray-100 rounded-2xl pl-10 pr-4 py-3.5 text-sm font-bold focus:outline-none focus:border-blue-300 shadow-sm"
+              />
+            </div>
+
+            {/* ── Панель действий ── */}
+            <div className="flex items-center space-x-2">
+              <button className="flex items-center space-x-2 px-5 py-3 bg-white border border-gray-100 rounded-2xl font-black text-xs text-gray-500 shadow-sm active:scale-95 transition-all">
+                <Activity size={14}/><span>Статистика</span>
+              </button>
+              <button
+                onClick={() => openTriggerModal()}
+                className="flex-1 flex items-center justify-center space-x-2 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-md shadow-blue-100 active:scale-95 transition-all"
+              >
+                <PlusCircle size={14}/><span>Создать триггер</span>
+              </button>
+              {/* меню ··· */}
+              <div className="relative">
+                <button
+                  onClick={() => setShowTriggerMenu(v => !v)}
+                  className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
+                >···</button>
+                {showTriggerMenu && (
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
+                    <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+                      <Download size={14} className="text-gray-400"/> Импортировать триггеры
+                    </button>
+                    <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+                      <Clock size={14} className="text-gray-400"/> Восстановить удалённый
+                    </button>
+                    <button
+                      onClick={() => { triggers.forEach(t => t.is_enabled && toggleTrigger(t.id)); }}
+                      className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                    >
+                      <Power size={14} className="text-gray-400"/> Отключить все триггеры
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
+
             {triggersLoading && (
               <div className="text-center py-8 text-gray-400 font-black text-sm">
-                <Loader2 size={24} className="animate-spin mx-auto mb-2" /> Загрузка...
+                <Loader2 size={24} className="animate-spin mx-auto mb-2"/> Загрузка...
               </div>
             )}
+
+            {/* ── Активные ── */}
+            {!triggersLoading && activeTriggers.length > 0 && (
+              <div>
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Активные триггеры</p>
+                <div className="bg-white rounded-[2rem] border-l-4 border-l-green-500 border border-gray-100 shadow-sm overflow-hidden">
+                  {activeTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={true}/>)}
+                </div>
+              </div>
+            )}
+
+            {/* ── Неактивные ── */}
+            {!triggersLoading && inactiveTriggers.length > 0 && (
+              <div>
+                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Не активные триггеры</p>
+                <div className="bg-white rounded-[2rem] border-l-4 border-l-red-400 border border-gray-100 shadow-sm overflow-hidden">
+                  {inactiveTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={false}/>)}
+                </div>
+              </div>
+            )}
+
             {!triggersLoading && triggers.length === 0 && (
               <div className="text-center py-12 text-gray-300 font-black text-sm uppercase tracking-widest">
                 Триггеров пока нет
               </div>
             )}
-            {triggers.map(t => (
-              <div key={t.id} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4">
-                <div className="flex justify-between items-start">
-                  <h4 className="font-black text-2xl tracking-tighter text-gray-900">{t.name}</h4>
-                  <div className="flex space-x-2">
-                     <button onClick={() => openTriggerModal(t)} className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Edit size={20} /></button>
-                     <button onClick={() => deleteTrigger(t.id)} className="p-3 bg-red-50 text-red-600 rounded-2xl"><Trash2 size={20} /></button>
-                  </div>
-                </div>
-                <div className="bg-gray-50 p-4 rounded-3xl border border-gray-100 font-mono text-xs font-bold text-pink-600">
-                  {t.keyword}
-                </div>
-              </div>
-            ))}
           </div>
         );
+      }
 
       case 'updates':
         return (

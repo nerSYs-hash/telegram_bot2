@@ -505,6 +505,55 @@ async def delete_trigger(trigger_id: int):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.patch("/api/triggers/{trigger_id}/toggle")
+async def toggle_trigger(trigger_id: int):
+    """Переключить активность триггера"""
+    try:
+        db.cursor.execute("SELECT is_enabled FROM triggers WHERE id=?", (trigger_id,))
+        row = db.cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Trigger not found")
+        new_val = 0 if row[0] else 1
+        db.cursor.execute("UPDATE triggers SET is_enabled=? WHERE id=?", (new_val, trigger_id))
+        db.conn.commit()
+        return {'id': trigger_id, 'is_enabled': bool(new_val)}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/triggers/{trigger_id}/copy")
+async def copy_trigger(trigger_id: int):
+    """Копировать триггер (создаёт выключенную копию)"""
+    try:
+        db.cursor.execute("SELECT * FROM triggers WHERE id=?", (trigger_id,))
+        row = db.cursor.fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Trigger not found")
+        r = dict(row)
+        db.cursor.execute('''
+            INSERT INTO triggers
+                (name, keywords, condition, action, action_value, probability,
+                 where_fires, initiator, bot_msg_delete, bot_msg_delete_after,
+                 action_configs, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,0)
+        ''', (
+            r['name'] + ' (копия)',
+            r.get('keywords', ''), r.get('condition', 'contains'),
+            r.get('action', 'send_text'), r.get('action_value', ''),
+            r.get('probability', 100), r.get('where_fires', 'chat'),
+            r.get('initiator', 'all'), r.get('bot_msg_delete', 'no'),
+            r.get('bot_msg_delete_after', 60), r.get('action_configs', '{}'),
+        ))
+        db.conn.commit()
+        return {'id': db.cursor.lastrowid, 'success': True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/journal")
 async def get_journal():
     """Журнал событий из journal_messages"""
