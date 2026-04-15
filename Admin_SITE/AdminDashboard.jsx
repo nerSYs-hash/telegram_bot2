@@ -61,6 +61,49 @@ export default function App() {
   const [jigglingTag, setJigglingTag] = useState(null);
   const triggerJiggle = (key) => { setJigglingTag(key); };
   const [jigglingNav, setJigglingNav] = useState(null);
+
+  // ── ИИ-обновления (хранятся в localStorage) ──
+  const [aiUpdates, setAiUpdates] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('ai_updates') || '[]'); } catch { return []; }
+  });
+  const [aiUpdateModal, setAiUpdateModal] = useState(false);
+  const [aiUpdateInput, setAiUpdateInput] = useState('');
+  const [aiUpdateLoading, setAiUpdateLoading] = useState(false);
+
+  const generateAiUpdate = async () => {
+    if (!aiUpdateInput.trim()) return;
+    setAiUpdateLoading(true);
+    try {
+      const r = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: `Ты пишешь краткие заметки об обновлениях для Telegram-бота и веб-панели управления чатом "PULSE 4ever".
+Разработчик описал что сделано: "${aiUpdateInput}"
+
+Напиши 3-5 коротких пунктов на русском языке, понятных обычному пользователю (без технических терминов).
+Каждый пункт начинай с глагола (Добавлено / Исправлено / Улучшено / Теперь).
+Верни ТОЛЬКО список пунктов, без заголовков и пояснений.`
+        }),
+      });
+      const data = await r.json();
+      const text = data.result || '';
+      const items = text.split('\n').filter(l => l.trim()).map(l => l.replace(/^[-•*\d.]+\s*/, '').trim()).filter(Boolean);
+      const entry = {
+        id: Date.now(),
+        date: new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' }),
+        title: aiUpdateInput.slice(0, 60) + (aiUpdateInput.length > 60 ? '…' : ''),
+        items,
+        aiGenerated: true,
+      };
+      const updated = [entry, ...aiUpdates];
+      setAiUpdates(updated);
+      localStorage.setItem('ai_updates', JSON.stringify(updated));
+      setAiUpdateModal(false);
+      setAiUpdateInput('');
+    } catch { }
+    setAiUpdateLoading(false);
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
 
@@ -552,11 +595,40 @@ export default function App() {
               <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-lg">
                 <Megaphone size={26} className="text-white" />
               </div>
-              <div>
+              <div className="flex-1">
                 <h2 className="font-black text-2xl text-gray-900 leading-none">Обновления</h2>
                 <p className="text-xs text-gray-400 font-bold mt-1">История улучшений панели и бота</p>
               </div>
+              <button
+                onClick={() => { setAiUpdateModal(true); setAiUpdateInput(''); }}
+                className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl font-black text-xs shadow-md shadow-purple-200 active:scale-95 transition-all"
+              >
+                <Sparkles size={14}/><span>Написать с ИИ</span>
+              </button>
             </div>
+
+            {/* ── ИИ-записи ── */}
+            {aiUpdates.map((upd) => (
+              <div key={upd.id} className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="bg-purple-100 text-purple-700 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center space-x-1">
+                    <Sparkles size={10}/><span>Написано ИИ</span>
+                  </span>
+                  <div className="flex items-center space-x-2">
+                    <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
+                    <button onClick={() => { const u = aiUpdates.filter(x=>x.id!==upd.id); setAiUpdates(u); localStorage.setItem('ai_updates', JSON.stringify(u)); }} className="text-gray-300 hover:text-red-400 transition-colors"><X size={14}/></button>
+                  </div>
+                </div>
+                <p className="text-xs font-bold text-gray-500">{upd.title}</p>
+                <ul className="space-y-1.5">
+                  {upd.items.map((item, i) => (
+                    <li key={i} className="flex items-start space-x-2 text-xs text-gray-700">
+                      <span className="text-purple-400 mt-0.5">•</span><span>{item}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
 
             {UPDATES.map((upd) => (
               <div key={upd.version} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm space-y-4">
@@ -960,6 +1032,35 @@ export default function App() {
           </div>
         );
       })()}
+
+      {/* МОДАЛКА ГЕНЕРАЦИИ ИИ-ОБНОВЛЕНИЯ */}
+      {aiUpdateModal && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
+          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+            <div className="flex items-center justify-between">
+              <h3 className="font-black text-lg text-gray-900 flex items-center space-x-2">
+                <Sparkles size={18} className="text-purple-500"/><span>Написать обновление с ИИ</span>
+              </h3>
+              <button onClick={() => setAiUpdateModal(false)} className="p-1.5 bg-gray-100 rounded-lg text-gray-400 hover:bg-gray-200 transition-all"><X size={16}/></button>
+            </div>
+            <p className="text-xs text-gray-400">Опиши технически что было сделано — ИИ переведёт в понятный язык</p>
+            <textarea
+              rows="4"
+              value={aiUpdateInput}
+              onChange={e => setAiUpdateInput(e.target.value)}
+              placeholder="Пример: добавили recharts график в статистику, починили журнал, убрали npm build с сервера..."
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm resize-none outline-none focus:ring-2 focus:ring-purple-200"
+            />
+            <button
+              onClick={generateAiUpdate}
+              disabled={aiUpdateLoading || !aiUpdateInput.trim()}
+              className="w-full py-3 bg-purple-600 text-white font-black rounded-xl text-sm flex items-center justify-center space-x-2 disabled:opacity-50 active:scale-[0.98] transition-all shadow-md shadow-purple-200"
+            >
+              {aiUpdateLoading ? <Loader2 size={16} className="animate-spin"/> : <><Sparkles size={16}/><span>Сгенерировать</span></>}
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ИИ МОДАЛКА */}
       {isAiModalOpen && (
