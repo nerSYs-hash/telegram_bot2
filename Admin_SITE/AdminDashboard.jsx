@@ -7,16 +7,13 @@ import {
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
   ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
   CheckCircle2, Info, Edit, ShieldBan, Clock, MessageSquareX, 
-  Zap, Bot, Sparkles, Wand2, Loader2, Download, FileSpreadsheet, 
+  Zap, Bot, Sparkles, Loader2, Download, FileSpreadsheet,
   FileText, TrendingUp, TrendingDown, Activity, ChevronRight,
   Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug
 } from 'lucide-react';
-
-// === НАСТРОЙКИ GEMINI API ===
-const apiKey = ""; 
 
 // ═══════════════════════════════════════════
 //  СПИСОК ОБНОВЛЕНИЙ — добавляй сюда при каждом релизе
@@ -62,86 +59,11 @@ export default function App() {
   const triggerJiggle = (key) => { setJigglingTag(key); };
   const [jigglingNav, setJigglingNav] = useState(null);
 
-  // ── ИИ-обновления (с сервера) ──
-  const [aiUpdates, setAiUpdates] = useState([]);
-  const [aiUpdateModal, setAiUpdateModal] = useState(false);
-  const [aiUpdateInput, setAiUpdateInput] = useState('');
-  const [aiUpdateLoading, setAiUpdateLoading] = useState(false);
-
-  useEffect(() => {
-    fetch('/api/updates').then(r => r.json()).then(data => setAiUpdates(Array.isArray(data) ? data : [])).catch(() => {});
-  }, []);
-
-  const [aiUpdateError, setAiUpdateError] = useState('');
-
-  const generateAiUpdate = async () => {
-    if (!aiUpdateInput.trim()) return;
-    setAiUpdateLoading(true);
-    setAiUpdateError('');
-    try {
-      const r = await fetch('/api/updates/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ commit_message: aiUpdateInput, secret: 'pulse-deploy-secret' }),
-      });
-      const body = await r.json().catch(() => ({}));
-      if (!r.ok) {
-        setAiUpdateError(body.detail || `Ошибка ${r.status}`);
-        setAiUpdateLoading(false);
-        return;
-      }
-      if (body && body.id) {
-        setAiUpdates(prev => [body, ...prev]);
-        setAiUpdateModal(false);
-        setAiUpdateInput('');
-      } else {
-        setAiUpdateError('Пустой ответ от сервера');
-      }
-    } catch (e) {
-      setAiUpdateError('Ошибка сети: ' + (e?.message || 'неизвестная'));
-    }
-    setAiUpdateLoading(false);
-  };
-
-  const deleteAiUpdate = async (id) => {
-    setAiUpdates(prev => prev.filter(x => x.id !== id));
-    try {
-      await fetch(`/api/updates/${id}`, { method: 'DELETE' });
-    } catch { }
-  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
   const [activeIndexTooltip, setActiveIndexTooltip] = useState(null);
   const [showHealthTooltip, setShowHealthTooltip] = useState(false);
 
-  // ================= СОСТОЯНИЯ: ИИ =================
-  const [isAiModalOpen, setIsAiModalOpen] = useState(false);
-  const [aiPrompt, setAiPrompt] = useState('');
-  const [isAiLoading, setIsAiLoading] = useState(false);
-  const [aiResult, setAiResult] = useState('');
-
-  const handleAiTrigger = async () => {
-    if (!aiPrompt.trim()) return;
-    setIsAiLoading(true);
-    setAiResult('');
-    try {
-      const context = liveStats
-        ? `Статистика чата: сообщений сегодня — ${liveStats.messages_today ?? '?'}, активных — ${liveStats.active_users ?? '?'}, баланс банка — ${liveStats.bank_balance ?? '?'} пульсов.`
-        : '';
-      const r = await fetch('/api/ai', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: aiPrompt, context }),
-      });
-      const data = await r.json();
-      setAiResult(data.result || data.detail || 'Нет ответа');
-    } catch {
-      setAiResult('Ошибка соединения с сервером');
-    } finally {
-      setIsAiLoading(false);
-    }
-  };
-  
   // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState(null);
@@ -718,60 +640,11 @@ export default function App() {
               <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-lg">
                 <Megaphone size={26} className="text-white" />
               </div>
-              <div className="flex-1">
+              <div>
                 <h2 className="font-black text-2xl text-gray-900 leading-none">Обновления</h2>
                 <p className="text-xs text-gray-400 font-bold mt-1">История улучшений панели и бота</p>
               </div>
-              <button
-                onClick={() => { setAiUpdateModal(true); setAiUpdateInput(''); }}
-                className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl font-black text-xs shadow-md shadow-purple-200 active:scale-95 transition-all"
-              >
-                <Sparkles size={14}/><span>Написать с ИИ</span>
-              </button>
             </div>
-
-            {/* ── ИИ-записи ── */}
-            {aiUpdates.map((upd) => (
-              <div key={upd.id} className="bg-white rounded-[2.5rem] p-6 border border-purple-100 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    {upd.version && (
-                      <span className="bg-purple-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{upd.version}</span>
-                    )}
-                    <span className="bg-purple-50 text-purple-600 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center space-x-1">
-                      <Sparkles size={10}/><span>ИИ</span>
-                    </span>
-                  </div>
-                  <div className="flex items-center space-x-2">
-                    <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
-                    <button onClick={() => deleteAiUpdate(upd.id)} className="p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all"><X size={14}/></button>
-                  </div>
-                </div>
-                <h3 className="font-black text-lg text-gray-900">{upd.title}</h3>
-                <div className="space-y-2">
-                  {(upd.items || []).map((item, i) => {
-                    const isObj = item && typeof item === 'object';
-                    const typeCfg = isObj ? ({
-                      new:     { icon: PartyPopper, bg: 'bg-green-50',  text: 'text-green-600',  border: 'border-green-100',  label: 'НОВОЕ'      },
-                      improve: { icon: Sparkles,    bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-100',   label: 'УЛУЧШЕНО'   },
-                      fix:     { icon: Wrench,      bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-100', label: 'ИСПРАВЛЕНО' },
-                    }[item.type] || { icon: Info, bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-100', label: '' })
-                    : { icon: Sparkles, bg: 'bg-purple-50', text: 'text-purple-500', border: 'border-purple-100', label: 'НОВОЕ' };
-                    const Icon = typeCfg.icon;
-                    const text = isObj ? item.text : item;
-                    return (
-                      <div key={i} className={`flex items-start space-x-3 p-3 rounded-2xl border ${typeCfg.bg} ${typeCfg.border}`}>
-                        <div className={`flex-shrink-0 flex items-center space-x-1 ${typeCfg.text}`}>
-                          <Icon size={14} />
-                          <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
-                        </div>
-                        <p className="text-xs text-gray-700 font-medium leading-relaxed flex-1">{text}</p>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
 
             {UPDATES.map((upd) => (
               <div key={upd.version} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm space-y-4">
@@ -888,13 +761,6 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center space-x-3">
-            <button
-              onClick={() => { setIsAiModalOpen(true); setAiResult(''); setAiPrompt(''); }}
-              className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-purple-500 to-indigo-600 flex items-center justify-center text-white shadow-lg shadow-purple-200 active:scale-95 transition-all"
-              title="ИИ-ассистент"
-            >
-              <Sparkles size={22} />
-            </button>
             <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-2xl border-4 border-white shadow-xl">В</div>
           </div>
         </header>
@@ -1203,70 +1069,6 @@ export default function App() {
         );
       })()}
 
-      {/* МОДАЛКА ГЕНЕРАЦИИ ИИ-ОБНОВЛЕНИЯ */}
-      {aiUpdateModal && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[120] flex items-center justify-center p-4">
-          <div className="bg-white w-full max-w-md rounded-2xl shadow-2xl p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between">
-              <h3 className="font-black text-lg text-gray-900 flex items-center space-x-2">
-                <Sparkles size={18} className="text-purple-500"/><span>Написать обновление с ИИ</span>
-              </h3>
-              <button onClick={() => setAiUpdateModal(false)} className="p-1.5 bg-gray-100 rounded-lg text-gray-400 hover:bg-gray-200 transition-all"><X size={16}/></button>
-            </div>
-            <p className="text-xs text-gray-400">Опиши технически что было сделано — ИИ переведёт в понятный язык</p>
-            <textarea
-              rows="4"
-              value={aiUpdateInput}
-              onChange={e => setAiUpdateInput(e.target.value)}
-              placeholder="Пример: добавили recharts график в статистику, починили журнал, убрали npm build с сервера..."
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl p-3 text-sm resize-none outline-none focus:ring-2 focus:ring-purple-200"
-            />
-            <button
-              onClick={generateAiUpdate}
-              disabled={aiUpdateLoading || !aiUpdateInput.trim()}
-              className="w-full py-3 bg-purple-600 text-white font-black rounded-xl text-sm flex items-center justify-center space-x-2 disabled:opacity-50 active:scale-[0.98] transition-all shadow-md shadow-purple-200"
-            >
-              {aiUpdateLoading ? <Loader2 size={16} className="animate-spin"/> : <><Sparkles size={16}/><span>Сгенерировать</span></>}
-            </button>
-            {aiUpdateError && (
-              <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-xs font-medium text-red-700">
-                <p className="font-black mb-1">⚠ Не удалось сгенерировать:</p>
-                <p className="opacity-80">{aiUpdateError}</p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* ИИ МОДАЛКА */}
-      {isAiModalOpen && (
-        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-end lg:items-center justify-center">
-           <div className="bg-white w-full lg:w-[560px] lg:rounded-[2rem] rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-4 duration-300 max-h-[85vh]">
-              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-4 mb-2 shrink-0 lg:hidden"></div>
-              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-                 <h3 className="font-black text-xl text-purple-950 flex items-center">
-                   <Sparkles className="mr-3 text-purple-500" size={22} /> ИИ-Мастер
-                 </h3>
-                 <button onClick={() => setIsAiModalOpen(false)} className="p-2 bg-gray-50 rounded-xl text-gray-400 hover:bg-gray-100 transition-all"><X size={20} /></button>
-              </div>
-              <div className="p-5 space-y-4 overflow-y-auto">
-                 <textarea rows="4" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Опиши задачу..." className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-purple-200 outline-none transition-all resize-none" />
-                 <button onClick={handleAiTrigger} disabled={isAiLoading || !aiPrompt.trim()} className="w-full py-3 bg-gray-950 text-white font-black rounded-2xl text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:bg-gray-300">
-                    {isAiLoading ? <Loader2 size={18} className="animate-spin" /> : <><Zap size={18} className="text-yellow-400 fill-yellow-400" /><span>СПРОСИТЬ</span></>}
-                 </button>
-                 {aiResult && (
-                   <div className="bg-purple-50 border border-purple-100 rounded-[2rem] p-6 space-y-3">
-                     <div className="flex items-center justify-between">
-                       <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest flex items-center"><Sparkles size={12} className="mr-1"/>Ответ ИИ</span>
-                       <button onClick={() => { navigator.clipboard.writeText(aiResult); }} className="text-[10px] font-black text-purple-500 hover:text-purple-700 uppercase tracking-widest">Копировать</button>
-                     </div>
-                     <pre className="text-sm text-gray-800 font-medium leading-relaxed whitespace-pre-wrap">{aiResult}</pre>
-                   </div>
-                 )}
-              </div>
-           </div>
-        </div>
-      )}
     </div>
   );
 }
