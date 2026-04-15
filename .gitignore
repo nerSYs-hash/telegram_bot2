@@ -20,4 +20,4 @@ telegram_bot2/
 
 # Admin_SITE — сборка React
 Admin_SITE/node_modules/
-Admin_SITE/dist/
+# dist собирается локально и коммитится в репо (сервер слабый)
