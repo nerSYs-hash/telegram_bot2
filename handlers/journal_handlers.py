@@ -502,8 +502,7 @@ async def log_ban(
 
         msg_text = trigger_message.text or trigger_message.caption or ''
         if msg_text:
-            lines.append("")
-            lines.append(msg_text)
+            lines.append(f"<blockquote>{msg_text}</blockquote>")
         lines.append("")
 
     # ─ Блок Е: время ─
@@ -586,8 +585,7 @@ async def log_mute(
 
         msg_text = trigger_message.text or trigger_message.caption or ''
         if msg_text:
-            lines.append("")
-            lines.append(msg_text)
+            lines.append(f"<blockquote>{msg_text}</blockquote>")
         lines.append("")
 
     lines.append(f"🕐 {_fmt_time_msk(muted_at)}")
@@ -771,8 +769,7 @@ async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
 
         msg_text = trigger_message.text or trigger_message.caption or ''
         if msg_text:
-            lines.append("")
-            lines.append(msg_text)
+            lines.append(f"<blockquote>{msg_text}</blockquote>")
         lines.append("")
 
     lines.append(f"🕐 {_fmt_time_msk(triggered_at)}")

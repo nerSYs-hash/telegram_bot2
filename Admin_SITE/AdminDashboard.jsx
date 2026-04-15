@@ -345,7 +345,7 @@ export default function App() {
                     <span className="text-[11px] text-gray-300 font-mono">{log.time?.replace('T',' ')}</span>
                   </div>
                   <div
-                    className="text-xs text-gray-700 leading-relaxed break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-900"
+                    className="text-xs text-gray-700 leading-relaxed break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-orange-300 [&_blockquote]:bg-orange-50 [&_blockquote]:px-3 [&_blockquote]:py-2 [&_blockquote]:my-2 [&_blockquote]:rounded-r-xl [&_blockquote]:text-gray-800 [&_blockquote]:font-medium [&_blockquote]:italic"
                     dangerouslySetInnerHTML={{ __html: log.text }}
                   />
                   <div className="pt-1 space-y-2">
