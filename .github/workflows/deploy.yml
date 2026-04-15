@@ -34,5 +34,12 @@ jobs:
             cp -f /root/db_backup/pulse_site.db                    Site/backend/pulse_site.db       2>/dev/null || true
             source venv/bin/activate
             pip install -r requirements.txt -q
+            # ─── СБОРКА Admin_SITE (React) ───
+            cd /root/PulsBot/Admin_SITE
+            npm install --silent
+            npm run build
+            cd /root/PulsBot
+            # ─── РЕСТАРТ СЕРВИСОВ ───
             systemctl restart pulsbot
+            systemctl restart pulsapi
             echo "Deploy done!"

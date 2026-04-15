@@ -1,0 +1,15 @@
+[Unit]
+Description=Pulse Pro API (FastAPI/uvicorn)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/root/PulsBot
+ExecStart=/root/PulsBot/economybot/venv/bin/python api.py
+Restart=always
+RestartSec=5
+Environment=PYTHONUNBUFFERED=1
+
+[Install]
+WantedBy=multi-user.target
