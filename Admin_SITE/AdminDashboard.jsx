@@ -148,6 +148,7 @@ export default function App() {
   const [triggerStep, setTriggerStep] = useState(1);
   const [triggers, setTriggers] = useState([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
 
   const fetchTriggers = () => {
     setTriggersLoading(true);
@@ -269,6 +270,7 @@ export default function App() {
       bot_msg_delete: 'no', bot_msg_delete_after: 60, reply_text: '', media_type: 'none', emoji: ''
     });
     setTriggerStep(1);
+    setShowMediaPicker(false);
     setIsTriggerModalOpen(true);
   };
 
@@ -444,8 +446,23 @@ export default function App() {
                   <Area type="monotone" dataKey="val" stroke="#3b82f6" strokeWidth={3}
                     fill="url(#areaGrad)" dot={false} activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
                     animationDuration={600} animationEasing="ease-out" />
-                  <Brush dataKey="day" height={22} stroke="#e2e8f0" fill="#f8fafc" travellerWidth={8}
-                    tickFormatter={() => ''} />
+                  <Brush
+                    dataKey="day"
+                    height={38}
+                    stroke="#3b82f6"
+                    fill="#dbeafe"
+                    travellerWidth={14}
+                    tickFormatter={() => ''}
+                    startIndex={Math.max(0, (liveStats?.history?.length || 0) - 10)}
+                    traveller={({ x, y, width, height: h }) => (
+                      <g>
+                        <rect x={x} y={y + 4} width={width} height={h - 8}
+                          rx={6} fill="#3b82f6" stroke="#fff" strokeWidth={2} />
+                        <line x1={x + width/2} y1={y + h/2 - 5} x2={x + width/2} y2={y + h/2 + 5}
+                          stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
+                      </g>
+                    )}
+                  />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -1058,12 +1075,39 @@ export default function App() {
 
                     {editingTrigger.action === 'send_text' && (
                       <div>
-                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Тип медиа</p>
-                        <div className="grid grid-cols-4 gap-2">
-                          <TileBtn active={editingTrigger.media_type==='none'}      onClick={()=>upd('media_type','none')}      icon={MessageCircle} label="Нет"  color="gray"/>
-                          <TileBtn active={editingTrigger.media_type==='photo'}     onClick={()=>upd('media_type','photo')}     icon={ImageIcon}     label="Фото" color="gray"/>
-                          <TileBtn active={editingTrigger.media_type==='video'}     onClick={()=>upd('media_type','video')}     icon={Video}         label="Видео" color="gray"/>
-                          <TileBtn active={editingTrigger.media_type==='animation'} onClick={()=>upd('media_type','animation')} icon={Smile}         label="GIF"  color="gray"/>
+                        <div className="flex items-center justify-between mb-2">
+                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Медиафайл</p>
+                          <button
+                            onClick={() => {
+                              if (showMediaPicker) { upd('media_type','none'); }
+                              setShowMediaPicker(v => !v);
+                            }}
+                            className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all duration-200 ${
+                              editingTrigger.media_type !== 'none'
+                                ? 'bg-blue-600 text-white'
+                                : showMediaPicker
+                                ? 'bg-gray-200 text-gray-600'
+                                : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                            }`}
+                          >
+                            {editingTrigger.media_type === 'none' ? (
+                              <><ImageIcon size={11}/><span>{showMediaPicker ? 'Убрать' : '+ Добавить'}</span></>
+                            ) : editingTrigger.media_type === 'photo' ? (
+                              <><ImageIcon size={11}/><span>Фото</span><X size={10} className="ml-1 opacity-60"/></>
+                            ) : editingTrigger.media_type === 'video' ? (
+                              <><Video size={11}/><span>Видео</span><X size={10} className="ml-1 opacity-60"/></>
+                            ) : (
+                              <><Smile size={11}/><span>GIF</span><X size={10} className="ml-1 opacity-60"/></>
+                            )}
+                          </button>
+                        </div>
+                        {/* Плавное раскрытие — 3 варианта медиа */}
+                        <div className={`overflow-hidden transition-all duration-300 ease-in-out ${showMediaPicker ? 'max-h-40 opacity-100' : 'max-h-0 opacity-0'}`}>
+                          <div className="grid grid-cols-3 gap-2 pt-1 pb-2">
+                            <TileBtn active={editingTrigger.media_type==='photo'}     onClick={()=>{ upd('media_type','photo');     setShowMediaPicker(false); }} icon={ImageIcon} label="Фото" color="blue"/>
+                            <TileBtn active={editingTrigger.media_type==='video'}     onClick={()=>{ upd('media_type','video');     setShowMediaPicker(false); }} icon={Video}     label="Видео" color="blue"/>
+                            <TileBtn active={editingTrigger.media_type==='animation'} onClick={()=>{ upd('media_type','animation'); setShowMediaPicker(false); }} icon={Smile}     label="GIF"  color="blue"/>
+                          </div>
                         </div>
                       </div>
                     )}
