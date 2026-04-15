@@ -68,6 +68,29 @@ export default function App() {
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
   const [aiPrompt, setAiPrompt] = useState('');
   const [isAiLoading, setIsAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState('');
+
+  const handleAiTrigger = async () => {
+    if (!aiPrompt.trim()) return;
+    setIsAiLoading(true);
+    setAiResult('');
+    try {
+      const context = liveStats
+        ? `Статистика чата: сообщений сегодня — ${liveStats.messages_today ?? '?'}, активных — ${liveStats.active_users ?? '?'}, баланс банка — ${liveStats.bank_balance ?? '?'} пульсов.`
+        : '';
+      const r = await fetch('/api/ai', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: aiPrompt, context }),
+      });
+      const data = await r.json();
+      setAiResult(data.result || data.detail || 'Нет ответа');
+    } catch {
+      setAiResult('Ошибка соединения с сервером');
+    } finally {
+      setIsAiLoading(false);
+    }
+  };
   
   // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
@@ -945,8 +968,17 @@ export default function App() {
               <div className="p-10 space-y-8 overflow-y-auto pb-20">
                  <textarea rows="5" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Опиши задачу..." className="w-full bg-gray-50 border-4 border-purple-50 rounded-[3rem] p-8 text-xl font-bold focus:ring-8 focus:ring-purple-500/5 outline-none transition-all resize-none shadow-inner" />
                  <button onClick={handleAiTrigger} disabled={isAiLoading || !aiPrompt.trim()} className="w-full py-8 bg-gray-950 text-white font-black rounded-[3rem] text-2xl shadow-2xl active:scale-[0.97] transition-all flex items-center justify-center space-x-4 disabled:bg-gray-400">
-                    {isAiLoading ? <Loader2 size={28} className="animate-spin" /> : <><Zap size={28} className="text-yellow-400 fill-yellow-400" /><span>СОЗДАТЬ</span></>}
+                    {isAiLoading ? <Loader2 size={28} className="animate-spin" /> : <><Zap size={28} className="text-yellow-400 fill-yellow-400" /><span>СПРОСИТЬ</span></>}
                  </button>
+                 {aiResult && (
+                   <div className="bg-purple-50 border border-purple-100 rounded-[2rem] p-6 space-y-3">
+                     <div className="flex items-center justify-between">
+                       <span className="text-[10px] font-black text-purple-400 uppercase tracking-widest flex items-center"><Sparkles size={12} className="mr-1"/>Ответ ИИ</span>
+                       <button onClick={() => { navigator.clipboard.writeText(aiResult); }} className="text-[10px] font-black text-purple-500 hover:text-purple-700 uppercase tracking-widest">Копировать</button>
+                     </div>
+                     <pre className="text-sm text-gray-800 font-medium leading-relaxed whitespace-pre-wrap">{aiResult}</pre>
+                   </div>
+                 )}
               </div>
            </div>
         </div>

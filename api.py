@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 import io
 import re
+import httpx
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.middleware.cors import CORSMiddleware
@@ -492,6 +493,53 @@ async def get_journal():
     except Exception as e:
         logger.error(f"Error in /api/journal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+# --- GEMINI AI ---
+
+GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+
+GEMINI_SYSTEM = """Ты — умный ИИ-ассистент встроенный в панель управления Telegram-чатом "PULSE 4ever 18+".
+Помогаешь владельцу чата:
+- Писать тексты для триггеров (авто-ответы на сообщения)
+- Составлять тексты предупреждений, мутов, банов
+- Готовить рассылки для участников
+- Анализировать ситуации в чате и давать советы по модерации
+- Отвечать на любые вопросы по управлению чатом
+
+Отвечай кратко, по делу, на русском языке. Форматируй ответ — используй списки и абзацы."""
+
+class AiRequest(BaseModel):
+    prompt: str
+    context: str = ''   # опциональный контекст (например, текущая статистика)
+
+@app.post("/api/ai")
+async def ai_chat(req: AiRequest):
+    if not GEMINI_KEY:
+        raise HTTPException(status_code=503, detail="GEMINI_API_KEY не задан на сервере")
+    try:
+        full_prompt = GEMINI_SYSTEM
+        if req.context:
+            full_prompt += f"\n\nТекущий контекст панели:\n{req.context}"
+        full_prompt += f"\n\nЗапрос пользователя:\n{req.prompt}"
+
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(
+                f"{GEMINI_URL}?key={GEMINI_KEY}",
+                json={"contents": [{"parts": [{"text": full_prompt}]}]}
+            )
+            resp.raise_for_status()
+            data = resp.json()
+
+        text = data['candidates'][0]['content']['parts'][0]['text']
+        return {"result": text}
+    except httpx.HTTPStatusError as e:
+        logger.error(f"Gemini API error: {e.response.text}")
+        raise HTTPException(status_code=502, detail="Ошибка Gemini API")
+    except Exception as e:
+        logger.error(f"AI error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
 
 # --- ЗАПУСК ---
 if __name__ == "__main__":
