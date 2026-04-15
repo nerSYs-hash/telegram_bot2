@@ -180,19 +180,9 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
         users_total = 0
         frozen_total = 0
 
-    # Общая масса = банк + на руках (замороженные уже в банке)
+    # Общая масса = банк + на руках
     total_supply = bank + users_total
-    # Дефицит/профицит
-    target = 10_000_000
-    delta = total_supply - target
-    if abs(delta) < 0.01:
-        status_line = "✅ Контур замкнут"
-    else:
-        sign = "+" if delta > 0 else ""
-        status_line = f"⚠️ Δ {sign}{format_number(delta)}"
-
-    # Процент банка
-    bank_pct = (bank / target * 100) if target > 0 else 0
+    bank_pct = (bank / total_supply * 100) if total_supply > 0 else 0
 
     from utils.helpers import get_moscow_time
     now = get_moscow_time()
@@ -205,8 +195,7 @@ async def show_economy_menu(query, db, admin_id: int) -> None:
         f"{f' (вкл. 🧊 {format_number(frozen_total)})' if frozen_total > 0 else ''}\n"
         f"👥 На руках: <b>{format_number(users_total)}</b> 💎\n"
         f"━━━━━━━━━━━━━━━━━\n"
-        f"📊 Всего: <b>{format_number(total_supply)}</b> / {format_number(target)} 💎\n"
-        f"{status_line}"
+        f"📊 В обороте: <b>{format_number(total_supply)}</b> 💎"
     )
     keyboard = [
         [InlineKeyboardButton("🔄 Обновить", callback_data="owner_economy")],

@@ -48,7 +48,7 @@ async def track_profile_changes(bot, db, user, chat=None) -> None:
             old_username = user_data['username']
         except (KeyError, IndexError):
             old_username = None
-        if old_username != user.username:
+        if old_username and old_username != user.username:
             has_changes = True
 
         # ── Имя ──
@@ -56,7 +56,7 @@ async def track_profile_changes(bot, db, user, chat=None) -> None:
             old_first = user_data['first_name']
         except (KeyError, IndexError):
             old_first = None
-        if old_first != user.first_name:
+        if old_first and old_first != user.first_name:
             has_changes = True
 
         # ── Фамилия ──
@@ -64,7 +64,7 @@ async def track_profile_changes(bot, db, user, chat=None) -> None:
             old_last = user_data['last_name']
         except (KeyError, IndexError):
             old_last = None
-        if old_last != user.last_name:
+        if old_last and old_last != user.last_name:
             has_changes = True
 
     if has_changes and user_data:

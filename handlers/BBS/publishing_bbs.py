@@ -208,8 +208,25 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id):
     for mid in (msg_ids or []):
         try:
             await bot.delete_message(chat_id=target_chat_id, message_id=mid)
-        except Exception as e:
-            logging.warning(f"BBS: Could not delete msg {mid}: {e}")
+        except Exception:
+            # Сообщение старше 48ч — редактируем вместо удаления
+            try:
+                await bot.edit_message_text(
+                    chat_id=target_chat_id,
+                    message_id=mid,
+                    text="<i>Анкета удалена ✓</i>",
+                    parse_mode='HTML',
+                )
+            except Exception:
+                try:
+                    await bot.edit_message_caption(
+                        chat_id=target_chat_id,
+                        message_id=mid,
+                        caption="<i>Анкета удалена ✓</i>",
+                        parse_mode='HTML',
+                    )
+                except Exception as e2:
+                    logging.warning(f"BBS: Could not remove msg {mid}: {e2}")
 
 
 async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None):
