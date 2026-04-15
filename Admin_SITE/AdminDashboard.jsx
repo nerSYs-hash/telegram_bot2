@@ -66,7 +66,7 @@ export default function App() {
   const [showHealthTooltip, setShowHealthTooltip] = useState(false);
 
   // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
-  const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
+  // editingTrigger !== null → показываем страницу редактора вместо списка
   const [editingTrigger, setEditingTrigger] = useState(null);
   const [triggers, setTriggers] = useState([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
@@ -318,7 +318,7 @@ export default function App() {
     setShowTriggerEditMenu(false);
     setCondSignalTab('message');
     setShowMediaPicker(false);
-    setIsTriggerModalOpen(true);
+    navigateTo('triggers');
   };
 
   const saveTrigger = () => {
@@ -343,8 +343,8 @@ export default function App() {
     const method = isEdit ? 'PUT' : 'POST';
     fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
       .then(r => r.json())
-      .then(() => { fetchTriggers(); setIsTriggerModalOpen(false); })
-      .catch(() => setIsTriggerModalOpen(false));
+      .then(() => { fetchTriggers(); setEditingTrigger(null); })
+      .catch(() => setEditingTrigger(null));
   };
 
   const deleteTrigger = (id) => {
@@ -801,6 +801,298 @@ export default function App() {
         );
 
       case 'triggers': {
+        // ── Страница редактора триггера (полный экран) ──
+        if (editingTrigger) {
+          const upd = (field, val) => setEditingTrigger(prev => ({...prev, [field]: val}));
+          const updCond = (idx, field, val) => setEditingTrigger(prev => {
+            const arr = [...(prev.conditions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, conditions: arr};
+          });
+          const updAction = (idx, field, val) => setEditingTrigger(prev => {
+            const arr = [...(prev.actions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, actions: arr};
+          });
+          const removeCond   = (idx) => setEditingTrigger(prev => ({...prev, conditions: (prev.conditions||[]).filter((_,i)=>i!==idx)}));
+          const removeAction = (idx) => setEditingTrigger(prev => ({...prev, actions: (prev.actions||[]).filter((_,i)=>i!==idx)}));
+          const addCondition = (signal) => {
+            setEditingTrigger(prev => ({...prev, conditions: [...(prev.conditions||[]), {id: Date.now(), signal, type:'keyword', condition:'contains', keyword:''}]}));
+            setShowConditionPicker(false);
+          };
+          const addAction = (type) => {
+            setEditingTrigger(prev => ({...prev, actions: [...(prev.actions||[]), {id: Date.now(), type, reply_text:'', media_type:'none', reply_target:'none', bot_msg_delete:'no', bot_msg_delete_after:60, duration:'', emoji:''}]}));
+            setShowActionPicker(false);
+          };
+
+          const conditions = editingTrigger.conditions || [];
+          const actions    = editingTrigger.actions    || [];
+
+          const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
+          const ACTION_TYPES = [
+            { type:'send_text', label:'Ответить в чат',    Icon: MessageCircle },
+            { type:'dm',        label:'Ответить в ЛС',     Icon: Send          },
+            { type:'mute',      label:'Мут',               Icon: Clock         },
+            { type:'ban',       label:'Бан',               Icon: ShieldBan     },
+            { type:'warn',      label:'Предупреждение',    Icon: AlertOctagon  },
+            { type:'delete',    label:'Удалить сообщение', Icon: Trash2        },
+            { type:'emoji',     label:'Реакция',           Icon: Smile         },
+          ];
+
+          return (
+            <div className="pb-24 animate-in fade-in duration-300">
+
+              {/* ── Шапка редактора ── */}
+              <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 mb-5 space-y-4">
+
+                {/* Кнопки действий */}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => setEditingTrigger(null)}
+                    className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all mr-auto">
+                    <X size={20}/>
+                  </button>
+                  <button onClick={saveTrigger}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-green-500 text-white rounded-xl font-black text-sm shadow-md shadow-green-100 active:scale-95 transition-all">
+                    <CheckCircle2 size={15}/> Сохранить
+                  </button>
+                  <div className="relative">
+                    <button onClick={() => setShowTriggerEditMenu(v=>!v)}
+                      className="px-3 py-2.5 bg-gray-100 text-gray-500 rounded-xl font-black text-sm active:scale-95 transition-all hover:bg-gray-200">
+                      ···
+                    </button>
+                    {showTriggerEditMenu && (
+                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-10 overflow-hidden"
+                        onClick={() => setShowTriggerEditMenu(false)}>
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed border-b border-gray-50">
+                          <FileText size={14} className="text-gray-200"/>
+                          <span>Сохранить и продолжить</span>
+                          <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                        </button>
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed">
+                          <Download size={14} className="text-gray-200"/>
+                          <span>Экспортировать триггер</span>
+                          <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {editingTrigger.id && (
+                    <button onClick={() => { deleteTrigger(editingTrigger.id); setEditingTrigger(null); }}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-xl font-black text-sm shadow-md shadow-red-100 active:scale-95 transition-all">
+                      <Trash2 size={15}/> Удалить
+                    </button>
+                  )}
+                </div>
+
+                {/* Имя триггера */}
+                <div>
+                  <p className="text-xs font-black text-gray-800 mb-0.5">
+                    Имя триггера <span className="text-red-500">*</span>
+                  </p>
+                  <p className="text-[10px] text-gray-400 font-medium mb-2">
+                    Позволяет быстро найти нужный триггер и включить его
+                  </p>
+                  <input type="text" placeholder="Например: Мут за спам"
+                    value={editingTrigger.name} onChange={e => upd('name', e.target.value)}
+                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl font-black text-base outline-none focus:border-blue-200 transition-all"/>
+                </div>
+              </div>
+
+              {/* ── Вероятность ── */}
+              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-5">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
+                    <Percent size={11}/> Шанс срабатывания
+                  </span>
+                  <span className="text-xl font-black text-amber-800">{editingTrigger.probability}%</span>
+                </div>
+                <input type="range" min="1" max="100" value={editingTrigger.probability}
+                  onChange={e => upd('probability', parseInt(e.target.value))}
+                  className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600"/>
+              </div>
+
+              {/* ── УСЛОВИЯ ── */}
+              <div className="mb-5 space-y-2">
+                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Условия</span>
+                {conditions.map((cond, idx) => (
+                  <div key={cond.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase ${cond.signal==='message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                        {cond.signal==='message' ? '📨 Сообщение' : '↩️ Цитируемое'}
+                      </span>
+                      <button onClick={() => removeCond(idx)} className="p-1.5 text-red-400 hover:text-red-600 active:scale-90 transition-all"><X size={13}/></button>
+                    </div>
+                    <div className="px-4 py-3 space-y-3">
+                      <div className="flex gap-1.5 flex-wrap">
+                        {Object.entries(COND_LABELS).map(([key, lbl]) => (
+                          <button key={key} onClick={() => updCond(idx,'condition',key)}
+                            className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${
+                              cond.condition===key ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'
+                            }`}>{lbl}
+                          </button>
+                        ))}
+                      </div>
+                      <textarea placeholder="Ключевые слова через запятую..."
+                        value={cond.keyword} onChange={e => updCond(idx,'keyword',e.target.value)} rows={2}
+                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm font-bold outline-none focus:border-blue-300 resize-none transition-all"/>
+                    </div>
+                  </div>
+                ))}
+                <button onClick={() => { setShowConditionPicker(v=>!v); setShowActionPicker(false); }}
+                  className="w-full py-3.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[11px] uppercase flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-400 transition-all bg-white">
+                  <PlusCircle size={14}/> Добавить условие
+                </button>
+                {showConditionPicker && (
+                  <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden shadow-lg">
+                    <div className="flex">
+                      {[{v:'message',l:'📨 Сообщение'},{v:'quoted',l:'↩️ Цитируемое'}].map(t => (
+                        <button key={t.v} onClick={() => setCondSignalTab(t.v)}
+                          className={`flex-1 py-3 text-[11px] font-black uppercase transition-all border-b-2 ${condSignalTab===t.v ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-gray-100'}`}>
+                          {t.l}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="px-4 py-2 bg-blue-50 text-[10px] text-blue-700 font-medium">
+                      {condSignalTab==='message' ? 'Триггер сработает на сообщение участника.' : 'Триггер сработает на сообщение, на которое ответили.'}
+                    </div>
+                    <button onClick={() => addCondition(condSignalTab)}
+                      className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-all text-left border-t border-gray-50">
+                      <span className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center text-base flex-shrink-0">🔤</span>
+                      <div>
+                        <p className="font-black text-sm text-gray-900">Слово в сообщении</p>
+                        <p className="text-[10px] text-gray-400 font-medium">Реагирует на ключевые слова</p>
+                      </div>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* ── ДЕЙСТВИЯ ── */}
+              <div className="mb-5 space-y-2">
+                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Действия</span>
+                {actions.map((action, idx) => {
+                  const actCfg = ACTION_TYPES.find(a=>a.type===action.type)||ACTION_TYPES[0];
+                  const ActIcon = actCfg.Icon;
+                  return (
+                    <div key={action.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
+                        <div className="flex items-center gap-2"><ActIcon size={14} className="text-gray-600"/><span className="text-sm font-black text-gray-800">{actCfg.label}</span></div>
+                        <button onClick={() => removeAction(idx)} className="p-1.5 text-red-400 hover:text-red-600 active:scale-90 transition-all"><X size={13}/></button>
+                      </div>
+                      <div className="px-4 py-3 space-y-3">
+                        {(action.type==='send_text'||action.type==='dm') && (<>
+                          {action.type==='send_text' && (
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[{v:'none',l:'Обычный'},{v:'initiator',l:'→ Автор'},{v:'quoted',l:'→ Цитата'}].map(o => (
+                                <button key={o.v} onClick={() => updAction(idx,'reply_target',o.v)}
+                                  className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <textarea placeholder="Текст сообщения..."
+                            value={action.reply_text} onChange={e => updAction(idx,'reply_text',e.target.value)} rows={3}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
+                          {action.type==='send_text' && (<>
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-black text-gray-400 uppercase">Медиафайл</span>
+                                <button onClick={() => { if (showMediaPicker) updAction(idx,'media_type','none'); setShowMediaPicker(v=>!v); }}
+                                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all ${action.media_type!=='none' ? 'bg-blue-600 text-white' : showMediaPicker ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-500'}`}>
+                                  {action.media_type==='none' ? <><ImageIcon size={11}/><span>{showMediaPicker?'Убрать':'+ Добавить'}</span></> :
+                                   action.media_type==='photo' ? <><ImageIcon size={11}/><span>Фото</span><X size={9} className="ml-1 opacity-60"/></> :
+                                   action.media_type==='video' ? <><Video size={11}/><span>Видео</span><X size={9} className="ml-1 opacity-60"/></> :
+                                   <><Smile size={11}/><span>GIF</span><X size={9} className="ml-1 opacity-60"/></>}
+                                </button>
+                              </div>
+                              <div className={`overflow-hidden transition-all duration-300 ${showMediaPicker ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className="grid grid-cols-3 gap-2 pb-1">
+                                  {[{v:'photo',l:'Фото',I:ImageIcon},{v:'video',l:'Видео',I:Video},{v:'animation',l:'GIF',I:Smile}].map(m => (
+                                    <button key={m.v} onClick={() => { updAction(idx,'media_type',m.v); setShowMediaPicker(false); }}
+                                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${action.media_type===m.v ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                      <m.I size={16}/>{m.l}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-black text-gray-400 uppercase block mb-1.5">Удаление ответа бота</span>
+                              <div className="flex gap-2">
+                                {[{v:'no',l:'Нет'},{v:'previous',l:'Пред.'},{v:'period',l:'Таймер'}].map(o => (
+                                  <button key={o.v} onClick={() => updAction(idx,'bot_msg_delete',o.v)}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                                  </button>
+                                ))}
+                              </div>
+                              {action.bot_msg_delete==='period' && (
+                                <input type="number" placeholder="Секунд" value={action.bot_msg_delete_after}
+                                  onChange={e => updAction(idx,'bot_msg_delete_after',parseInt(e.target.value))}
+                                  className="w-full mt-2 p-3 bg-white border border-gray-200 rounded-xl font-black text-center outline-none focus:border-blue-300"/>
+                              )}
+                            </div>
+                          </>)}
+                        </>)}
+                        {(action.type==='mute'||action.type==='ban') && (
+                          <input type="text" placeholder="Длительность: 30m / 2h / forever"
+                            value={action.duration} onChange={e => updAction(idx,'duration',e.target.value)}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
+                        )}
+                        {action.type==='emoji' && (
+                          <input type="text" placeholder="👀 🔥 ❤️"
+                            value={action.emoji} onChange={e => updAction(idx,'emoji',e.target.value)}
+                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                <button onClick={() => { setShowActionPicker(v=>!v); setShowConditionPicker(false); }}
+                  className="w-full py-3.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[11px] uppercase flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-400 transition-all bg-white">
+                  <PlusCircle size={14}/> Добавить действие
+                </button>
+                {showActionPicker && (
+                  <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden shadow-lg">
+                    {ACTION_TYPES.map(at => {
+                      const AtIcon = at.Icon;
+                      return (
+                        <button key={at.type} onClick={() => addAction(at.type)}
+                          className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0 transition-all text-left">
+                          <AtIcon size={16} className="text-gray-500 flex-shrink-0"/>
+                          <span className="font-black text-sm text-gray-800">{at.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
+              {/* ── Дополнительно ── */}
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Дополнительно</span>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Где срабатывает</p>
+                  <div className="flex gap-2">
+                    {[{v:'chat',l:'Чат'},{v:'pv',l:'Личка'},{v:'global',l:'Везде'}].map(o => (
+                      <button key={o.v} onClick={() => upd('where',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">На кого реагирует</p>
+                  <div className="flex gap-2">
+                    {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
+                      <button key={o.v} onClick={() => upd('from',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.from===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          );
+        }
+
+        // ── Список триггеров ──
         const tSearch = triggerSearch.toLowerCase();
         const activeTriggers   = triggers.filter(t =>  t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
         const inactiveTriggers = triggers.filter(t => !t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
@@ -1095,8 +1387,8 @@ export default function App() {
         </div>
       </main>
 
-      {/* ── РЕДАКТОР ТРИГГЕРА (плоская страница) ── */}
-      {isTriggerModalOpen && editingTrigger && (() => {
+      {/* старый modal удалён — редактор теперь внутри case 'triggers' */}
+      {false && (() => {
         const upd = (field, val) => setEditingTrigger(prev => ({...prev, [field]: val}));
         const updCond = (idx, field, val) => setEditingTrigger(prev => {
           const arr = [...(prev.conditions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, conditions: arr};
