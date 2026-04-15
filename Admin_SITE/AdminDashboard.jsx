@@ -76,7 +76,10 @@ export default function App() {
   const [condPickerSearch, setCondPickerSearch] = useState('');
   const [condPickerTab, setCondPickerTab] = useState('message');
   const [condTooltip, setCondTooltip] = useState(null);
-  const [showActionPicker, setShowActionPicker] = useState(false);
+  const [showActPickerModal, setShowActPickerModal] = useState(false);
+  const [actPickerGroupIdx, setActPickerGroupIdx] = useState(0);
+  const [actPickerSearch, setActPickerSearch] = useState('');
+  const [actGroupSettingsIdx, setActGroupSettingsIdx] = useState(null);
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -297,15 +300,18 @@ export default function App() {
           id: 1,
           conditions: t.keyword ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', keyword: t.keyword || '' }] : []
         }],
-        actions: [{
-          id: 1, type: t.action || 'send_text',
-          reply_text: t.reply_text || '',
-          media_type: t.media_type || 'none',
-          reply_target: t.reply_target || 'none',
-          bot_msg_delete: t.bot_msg_delete || 'no',
-          bot_msg_delete_after: t.bot_msg_delete_after || 60,
-          duration: t.duration || '',
-          emoji: t.emoji || ''
+        actionGroups: [{
+          id: 1, probability: 100,
+          actions: t.action ? [{
+            id: 1, type: t.action || 'send_text',
+            reply_text: t.reply_text || '',
+            media_type: t.media_type || 'none',
+            reply_target: t.reply_target || 'none',
+            bot_msg_delete: t.bot_msg_delete || 'no',
+            bot_msg_delete_after: t.bot_msg_delete_after || 60,
+            duration: t.duration || '',
+            emoji: t.emoji || ''
+          }] : []
         }]
       });
     } else {
@@ -313,21 +319,23 @@ export default function App() {
         id: null, name: '', probability: 100,
         where: 'chat', from: 'all',
         conditionGroups: [{ id: 1, conditions: [] }],
-        actions: []
+        actionGroups: [{ id: 1, probability: 100, actions: [] }]
       });
     }
     setShowCondPickerModal(false);
-    setShowActionPicker(false);
+    setShowActPickerModal(false);
     setShowTriggerEditMenu(false);
     setCondTooltip(null);
+    setActGroupSettingsIdx(null);
     setShowMediaPicker(false);
     navigateTo('triggers');
   };
 
   const saveTrigger = () => {
-    const firstGroup  = (editingTrigger.conditionGroups || [])[0] || {};
-    const firstCond   = (firstGroup.conditions || [])[0] || {};
-    const firstAction = (editingTrigger.actions || [])[0] || {};
+    const firstGroup      = (editingTrigger.conditionGroups || [])[0] || {};
+    const firstCond       = (firstGroup.conditions || [])[0] || {};
+    const firstActGroup   = (editingTrigger.actionGroups || [])[0] || {};
+    const firstAction     = (firstActGroup.actions || [])[0] || {};
     const body = {
       name:                 editingTrigger.name,
       condition:            firstCond.condition    || 'contains',
@@ -843,16 +851,45 @@ export default function App() {
             [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
             return {...prev, conditionGroups: groups};
           });
-          const updAction = (idx, field, val) => setEditingTrigger(prev => {
-            const arr = [...(prev.actions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, actions: arr};
-          });
-          const removeAction = (idx) => setEditingTrigger(prev => ({...prev, actions: (prev.actions||[]).filter((_,i)=>i!==idx)}));
-          const addAction = (type) => {
-            setEditingTrigger(prev => ({...prev, actions: [...(prev.actions||[]), {id: Date.now(), type, reply_text:'', media_type:'none', reply_target:'none', bot_msg_delete:'no', bot_msg_delete_after:60, duration:'', emoji:''}]}));
-            setShowActionPicker(false);
+          const actionGroups = editingTrigger.actionGroups || [{ id: 1, probability: 100, actions: [] }];
+          const updActionGroup = (gIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {...g, [field]: val})
+          }));
+          const updAction = (gIdx, aIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, actions: g.actions.map((a, ai) => ai !== aIdx ? a : {...a, [field]: val})
+            })
+          }));
+          const removeAction = (gIdx, aIdx) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, actions: g.actions.filter((_, ai) => ai !== aIdx)
+            })
+          }));
+          const addActionToGroup = (gIdx, type) => {
+            setEditingTrigger(prev => ({
+              ...prev,
+              actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+                ...g, actions: [...g.actions, { id: Date.now(), type, reply_text: '', media_type: 'none', reply_target: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60, duration: '', emoji: '' }]
+              })
+            }));
+            setShowActPickerModal(false);
           };
-
-          const actions = editingTrigger.actions || [];
+          const addActionGroup = () => setEditingTrigger(prev => ({
+            ...prev, actionGroups: [...(prev.actionGroups||[]), { id: Date.now(), probability: 100, actions: [] }]
+          }));
+          const removeActionGroup = (gIdx) => setEditingTrigger(prev => ({
+            ...prev, actionGroups: (prev.actionGroups||[]).filter((_, i) => i !== gIdx)
+          }));
+          const moveActionGroup = (gIdx, dir) => setEditingTrigger(prev => {
+            const groups = [...(prev.actionGroups||[])];
+            const newIdx = gIdx + dir;
+            if (newIdx < 0 || newIdx >= groups.length) return prev;
+            [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
+            return {...prev, actionGroups: groups};
+          });
           const COND_TOOLTIP_TEXT = {
             'msg_keyword': 'Проверяет текст входящего сообщения — содержит ли оно указанное слово или фразу.',
             'msg_any':     'Срабатывает на любое текстовое сообщение, без проверки содержимого.',
@@ -943,8 +980,11 @@ export default function App() {
                   className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600"/>
               </div>
 
-              {/* ── УСЛОВИЯ ── */}
-              <div className="mb-5 space-y-3">
+              {/* ── УСЛОВИЯ + ДЕЙСТВИЯ (2 колонки) ── */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+
+              {/* ─── Левая колонка: УСЛОВИЯ ─── */}
+              <div className="space-y-3">
                 {/* Заголовок блока */}
                 <div className="flex items-center gap-2 px-1">
                   <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Условия</span>
@@ -1045,10 +1085,172 @@ export default function App() {
                 {/* Добавить группу условий */}
                 <button
                   onClick={addCondGroup}
-                  className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
-                  <PlusCircle size={12}/> Добавить группу условий
+                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
+                  <PlusCircle size={11}/> Добавить группу условий
                 </button>
-              </div>
+              </div>{/* конец левой колонки */}
+
+              {/* ─── Правая колонка: ДЕЙСТВИЯ ─── */}
+              <div className="space-y-3">
+                {/* Заголовок */}
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Действия</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCondTooltip(condTooltip === 'actions_block' ? null : 'actions_block')}
+                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 active:scale-90 transition-all flex-shrink-0">
+                      ?
+                    </button>
+                    {condTooltip === 'actions_block' && (
+                      <div className="absolute left-0 top-6 w-64 bg-gray-900 text-white text-[11px] font-medium p-3 rounded-2xl shadow-xl z-50 leading-relaxed">
+                        Действия — это что бот делает при срабатывании триггера. Можно добавить несколько групп: каждая группа имеет свой шанс выполнения.
+                        <div className="absolute -top-1.5 left-2 w-3 h-3 bg-gray-900 rotate-45"/>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Группы действий */}
+                {actionGroups.map((group, gIdx) => (
+                  <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    {/* Шапка группы */}
+                    <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                      {/* Шестерёнка */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setActGroupSettingsIdx(actGroupSettingsIdx === gIdx ? null : gIdx)}
+                          className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          <Settings size={12}/>
+                        </button>
+                        {actGroupSettingsIdx === gIdx && (
+                          <div className="absolute left-0 top-7 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 p-3 space-y-2"
+                            onClick={e => e.stopPropagation()}>
+                            <p className="text-[10px] font-black text-gray-600 uppercase tracking-wide">Настройки группы</p>
+                            <div className="flex items-center gap-2">
+                              <label className="text-[10px] font-bold text-gray-500 flex-1">Шанс выполнения</label>
+                              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
+                                <input
+                                  type="number" min="1" max="100"
+                                  value={group.probability}
+                                  onChange={e => updActionGroup(gIdx, 'probability', Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
+                                  className="w-10 text-center font-black text-sm bg-transparent outline-none"/>
+                                <span className="text-[10px] font-black text-gray-400">%</span>
+                              </div>
+                            </div>
+                            <button onClick={() => setActGroupSettingsIdx(null)}
+                              className="w-full py-1.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
+                              Готово
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                      <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
+                        {actionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Действия'}
+                        {group.probability < 100 && (
+                          <span className="ml-1.5 text-[9px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">{group.probability}%</span>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => moveActionGroup(gIdx, -1)} disabled={gIdx === 0}
+                          className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                        <button onClick={() => moveActionGroup(gIdx, 1)} disabled={gIdx === actionGroups.length - 1}
+                          className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                        {actionGroups.length > 1 && (
+                          <button onClick={() => removeActionGroup(gIdx)}
+                            className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all ml-0.5">
+                            <Trash2 size={12}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Действия внутри группы */}
+                    <div className="p-2.5 space-y-2">
+                      {group.actions.length === 0 && (
+                        <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
+                          Список пуст
+                        </div>
+                      )}
+                      {group.actions.map((action, aIdx) => {
+                        const actCfg = ACTION_TYPES.find(a => a.type === action.type) || ACTION_TYPES[0];
+                        const ActIcon = actCfg.Icon;
+                        return (
+                          <div key={action.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-1.5">
+                                <ActIcon size={12} className="text-gray-500 flex-shrink-0"/>
+                                <span className="text-[10px] font-black text-gray-800">{actCfg.label}</span>
+                              </div>
+                              <button onClick={() => removeAction(gIdx, aIdx)} className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                <X size={12}/>
+                              </button>
+                            </div>
+                            <div className="px-3 py-2.5 space-y-2">
+                              {(action.type === 'send_text' || action.type === 'dm') && (<>
+                                {action.type === 'send_text' && (
+                                  <div className="flex gap-1 flex-wrap">
+                                    {[{v:'none',l:'Обычный'},{v:'initiator',l:'→ Автор'},{v:'quoted',l:'→ Цитата'}].map(o => (
+                                      <button key={o.v} onClick={() => updAction(gIdx, aIdx, 'reply_target', o.v)}
+                                        className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>{o.l}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                                <textarea placeholder="Текст сообщения..."
+                                  value={action.reply_text} onChange={e => updAction(gIdx, aIdx, 'reply_text', e.target.value)} rows={3}
+                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
+                                {action.type === 'send_text' && (
+                                  <div>
+                                    <span className="text-[9px] font-black text-gray-400 uppercase block mb-1">Удаление ответа бота</span>
+                                    <div className="flex gap-1">
+                                      {[{v:'no',l:'Нет'},{v:'previous',l:'Пред.'},{v:'period',l:'Таймер'}].map(o => (
+                                        <button key={o.v} onClick={() => updAction(gIdx, aIdx, 'bot_msg_delete', o.v)}
+                                          className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>{o.l}
+                                        </button>
+                                      ))}
+                                    </div>
+                                    {action.bot_msg_delete === 'period' && (
+                                      <input type="number" placeholder="Секунд" value={action.bot_msg_delete_after}
+                                        onChange={e => updAction(gIdx, aIdx, 'bot_msg_delete_after', parseInt(e.target.value))}
+                                        className="w-full mt-1.5 p-2 bg-white border border-gray-200 rounded-xl font-black text-center text-sm outline-none focus:border-blue-300"/>
+                                    )}
+                                  </div>
+                                )}
+                              </>)}
+                              {(action.type === 'mute' || action.type === 'ban') && (
+                                <input type="text" placeholder="Длительность: 30m / 2h / forever"
+                                  value={action.duration} onChange={e => updAction(gIdx, aIdx, 'duration', e.target.value)}
+                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
+                              )}
+                              {action.type === 'emoji' && (
+                                <input type="text" placeholder="👀 🔥 ❤️"
+                                  value={action.emoji} onChange={e => updAction(gIdx, aIdx, 'emoji', e.target.value)}
+                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Добавить действие в эту группу */}
+                      <button
+                        onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
+                        className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
+                        <PlusCircle size={12}/> Добавить действие
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Добавить группу действий */}
+                <button
+                  onClick={addActionGroup}
+                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
+                  <PlusCircle size={11}/> Добавить группу действий
+                </button>
+              </div>{/* конец правой колонки */}
+
+              </div>{/* конец grid */}
 
               {/* ── МОДАЛ ВЫБОРА УСЛОВИЯ (full-screen overlay) ── */}
               {showCondPickerModal && (
@@ -1177,10 +1379,133 @@ export default function App() {
                 </div>
               )}
 
-              {/* ── ДЕЙСТВИЯ ── */}
-              <div className="mb-5 space-y-2">
+              {/* ── МОДАЛ ВЫБОРА ДЕЙСТВИЯ (full-screen overlay) ── */}
+              {showActPickerModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col">
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowActPickerModal(false)}/>
+                  <div className="relative mt-auto bg-white rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                    <div className="flex justify-center pt-3 pb-1">
+                      <div className="w-10 h-1 bg-gray-200 rounded-full"/>
+                    </div>
+                    <div className="flex items-start justify-between px-6 py-3 border-b border-gray-100">
+                      <div>
+                        <h3 className="font-black text-base text-gray-900">Выберите действия</h3>
+                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">Укажите реакцию бота на выполненное условие</p>
+                      </div>
+                      <button onClick={() => setShowActPickerModal(false)} className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <X size={18}/>
+                      </button>
+                    </div>
+                    <div className="px-4 mt-3">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"/>
+                        <input type="text" placeholder="Поиск действий..." value={actPickerSearch}
+                          onChange={e => setActPickerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5">
+                      {/* Секция 1: Действия с сообщениями */}
+                      <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Действия с сообщениями</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'send_text', icon:'📤', label:'Отправить в чат',   sub:'Ответить сообщением',       active:true  },
+                            { type:'delete',    icon:'🗑',  label:'Удалить сообщение', sub:'Удалить триггер-сообщение', active:true  },
+                            { type:'dm',        icon:'✉️',  label:'Личное сообщение',  sub:'Написать пользователю в ЛС',active:true  },
+                            { type:'pin',       icon:'📌',  label:'Закрепить',          sub:'Закрепить сообщение',      active:false },
+                            { type:'unpin',     icon:'📍',  label:'Открепить',          sub:'Открепить сообщение',      active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                      {/* Секция 2: Действия по пользователям */}
+                      <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Действия по пользователям</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'mute',   icon:'🔇', label:'Запретить писать', sub:'Мут на время',        active:true  },
+                            { type:'ban',    icon:'🚫', label:'Заблокировать',     sub:'Бан из чата',         active:true  },
+                            { type:'kick',   icon:'👢', label:'Удалить из чата',   sub:'Кик с возможностью вернуться', active:false },
+                            { type:'unmute', icon:'🔊', label:'Разрешить писать',  sub:'Снять мут',           active:false },
+                            { type:'unban',  icon:'✅', label:'Разблокировать',    sub:'Снять бан',           active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                      {/* Секция 3: Прочее */}
+                      <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Прочее</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'warn',  icon:'⚠️', label:'Предупреждение',   sub:'Варн с эскалацией',    active:true  },
+                            { type:'emoji', icon:'😀', label:'Реакция эмодзи',    sub:'Поставить реакцию',    active:true  },
+                            { type:'warn_add', icon:'✋', label:'Уровень наказания', sub:'Добавить варн',     active:false },
+                            { type:'trigger_toggle', icon:'🔄', label:'Изменить триггер', sub:'Вкл/выкл другой', active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── ДЕЙСТВИЯ (старый блок — удалён, теперь в правой колонке) ── */}
+              {false && <div className="mb-5 space-y-2">
                 <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Действия</span>
-                {actions.map((action, idx) => {
+                {[].map((action, idx) => {
                   const actCfg = ACTION_TYPES.find(a=>a.type===action.type)||ACTION_TYPES[0];
                   const ActIcon = actCfg.Icon;
                   return (
@@ -1257,25 +1582,7 @@ export default function App() {
                     </div>
                   );
                 })}
-                <button onClick={() => { setShowActionPicker(v=>!v); setShowConditionPicker(false); }}
-                  className="w-full py-3.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[11px] uppercase flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-400 transition-all bg-white">
-                  <PlusCircle size={14}/> Добавить действие
-                </button>
-                {showActionPicker && (
-                  <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden shadow-lg">
-                    {ACTION_TYPES.map(at => {
-                      const AtIcon = at.Icon;
-                      return (
-                        <button key={at.type} onClick={() => addAction(at.type)}
-                          className="w-full flex items-center gap-3 px-4 py-3.5 hover:bg-gray-50 active:bg-gray-100 border-b border-gray-50 last:border-0 transition-all text-left">
-                          <AtIcon size={16} className="text-gray-500 flex-shrink-0"/>
-                          <span className="font-black text-sm text-gray-800">{at.label}</span>
-                        </button>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
+              </div>}
 
               {/* ── Дополнительно ── */}
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
