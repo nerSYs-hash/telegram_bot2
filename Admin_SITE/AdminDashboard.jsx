@@ -241,6 +241,9 @@ export default function App() {
   const handlePeriodChange = (period) => {
     setStatsPeriod(period);
     fetchStats(period);
+    setShowDetailedIndices(false);
+    setActiveIndexTooltip(null);
+    setShowHealthTooltip(false);
   };
 
   const exportExcel = () => {
@@ -331,64 +334,68 @@ export default function App() {
             {/* ── Hero: Health index ── */}
             {(() => {
               const INDEX_META = {
-                oksp:   { label: 'ОКSP',   desc: 'Общая активность — среднее сообщений на активного участника × 10' },
-                sdsp:   { label: 'СДСП',   desc: 'Диалоговость — доля ответов (reply) от всех сообщений, %' },
-                cho:    { label: 'ЧО',     desc: 'Эмоциональность — доля реакций от сообщений, %' },
-                media:  { label: 'МДА',    desc: 'Медиаактивность — доля медиафайлов от всех сообщений, %' },
-                korp:   { label: 'КОРП',   desc: 'Вовлечённость — суммарный отклик (reply + реакции) к сообщениям, %' },
-                kopyup: { label: 'ПРИРОСТ',desc: 'Прирост участников — (вступили − вышли) / всего участников, %' },
+                oksp:   { label: 'Общая активность',      desc: 'Среднее кол-во сообщений на одного активного участника × 10. Показывает насколько активно общается каждый.' },
+                sdsp:   { label: 'Диалоговость',          desc: 'Доля сообщений с ответами (reply) от общего числа сообщений. Высокое значение = живое общение, не монологи.' },
+                cho:    { label: 'Эмоциональность',       desc: 'Доля сообщений, получивших реакции. Чем больше — тем сильнее люди реагируют на контент.' },
+                media:  { label: 'Медиаактивность',       desc: 'Доля медиафайлов (фото, видео, GIF) от всех сообщений. Отражает разнообразие контента.' },
+                korp:   { label: 'Вовлечённость',         desc: 'Суммарный отклик (ответы + реакции) к числу сообщений. Главный показатель живости чата.' },
+                kopyup: { label: 'Прирост участников',    desc: '(Вступили − Вышли) / Всего участников. Положительное значение = чат растёт.' },
               };
               const idxData = liveStats?.indices || {};
               return (
                 <div className={`bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 transition-all duration-500 ${statsLoading ? 'opacity-60' : 'opacity-100'}`}>
                   <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
                   <div className="relative z-10">
-                    <div className="flex items-center justify-between mb-6">
+                    {/* Строка 1: бейдж + период */}
+                    <div className="flex items-center justify-between mb-5">
                       <div className="flex items-center space-x-2 bg-white/20 px-4 py-1.5 rounded-full backdrop-blur-md">
                         <Zap size={14} className="text-yellow-300 fill-yellow-300" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Статус здоровья</span>
+                        <span className="text-[10px] font-black uppercase tracking-widest">Индекс здоровья</span>
                       </div>
-                      <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
-                        {liveStats?.periodLabel || 'Сегодня'}
-                      </span>
-                    </div>
-                    <div className="flex items-end space-x-3">
-                      <div className="text-8xl font-black tracking-tighter leading-none">
-                        {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 0)}
-                        {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
-                      </div>
-                      <div className="relative mb-2">
-                        <button
-                          onClick={() => setShowHealthTooltip(v => !v)}
-                          className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-black hover:bg-white/30 transition-all"
-                        >ℹ</button>
-                        {showHealthTooltip && (
-                          <div className="absolute bottom-10 left-0 w-64 bg-gray-900 text-white text-xs rounded-2xl p-4 z-50 shadow-2xl">
-                            <p className="font-black mb-2">Как считается индекс здоровья:</p>
-                            <p className="opacity-80 leading-relaxed">ОКSP×25% + СДСП×15% + ЧО×15% + МДА×10% + КОРП×20% + ПРИРОСТ×15%</p>
-                            <p className="opacity-60 mt-2">Каждый субиндекс — реальные данные за выбранный период.</p>
-                          </div>
-                        )}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
+                          {liveStats?.periodLabel || 'Сегодня'}
+                        </span>
+                        {/* ℹ кнопка — вверху справа */}
+                        <div className="relative">
+                          <button
+                            onClick={() => setShowHealthTooltip(v => !v)}
+                            className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-black hover:bg-white/30 transition-all"
+                          >ℹ</button>
+                          {showHealthTooltip && (
+                            <div className="absolute top-9 right-0 w-64 bg-gray-900 text-white text-xs rounded-2xl p-4 z-50 shadow-2xl">
+                              <p className="font-black mb-2">Формула индекса здоровья:</p>
+                              <p className="opacity-80 leading-relaxed">Общая акт.×25% + Диалоговость×15% + Эмоц.×15% + Медиа×10% + Вовлечённость×20% + Прирост×15%</p>
+                              <p className="opacity-60 mt-2 text-[10px]">Каждый субиндекс — реальные данные за выбранный период.</p>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
+                    {/* Строка 2: большое число */}
+                    <div className="text-8xl font-black tracking-tighter leading-none mb-6">
+                      {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 0)}
+                      {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
+                    </div>
+                    {/* Кнопка раскрытия субиндексов */}
                     <button onClick={() => setShowDetailedIndices(!showDetailedIndices)}
-                      className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
-                      <span>Детальные индексы</span>
+                      className="w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
+                      <span>Детальные показатели</span>
                       {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
                     </button>
                     {showDetailedIndices && (
-                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 pt-4 animate-in slide-in-from-top-2 duration-300">
+                      <div className="space-y-1 pt-3 animate-in slide-in-from-top-2 duration-300">
                         {Object.entries(INDEX_META).map(([k, meta]) => (
                           <div key={k} className="relative">
                             <button
                               onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
-                              className="w-full flex justify-between items-center border-b border-white/5 pb-1.5 hover:opacity-80 transition-all"
+                              className="w-full flex justify-between items-center py-2.5 px-3 rounded-xl hover:bg-white/10 transition-all"
                             >
-                              <span className="text-[9px] font-bold opacity-60 uppercase">{meta.label}</span>
-                              <span className="text-sm font-black">{idxData[k] ?? '—'}</span>
+                              <span className="text-xs font-bold opacity-75 text-left">{meta.label}</span>
+                              <span className="text-sm font-black ml-3 flex-shrink-0">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
                             </button>
                             {activeIndexTooltip === k && (
-                              <div className="absolute bottom-8 left-0 w-52 bg-gray-900 text-white text-[10px] rounded-xl p-3 z-50 shadow-2xl leading-relaxed">
+                              <div className="mx-3 mb-1 bg-white/15 backdrop-blur-sm text-white text-[10px] rounded-xl p-3 leading-relaxed border border-white/10">
                                 {meta.desc}
                               </div>
                             )}
@@ -593,13 +600,6 @@ export default function App() {
                    <button className="p-5 bg-blue-50 text-blue-600 rounded-3xl"><Edit size={24}/></button>
                 </div>
 
-                <div className="bg-indigo-600 p-8 rounded-[2.5rem] text-white shadow-xl">
-                   <div className="flex justify-between items-start mb-6">
-                      <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><Coins size={24}/></div>
-                      <span className="text-[10px] font-black uppercase opacity-60">Банк</span>
-                   </div>
-                   <div className="text-3xl font-black tracking-tight">{(liveStats?.bankBalance ?? 0).toLocaleString()} 💳</div>
-                </div>
              </div>
 
              <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
