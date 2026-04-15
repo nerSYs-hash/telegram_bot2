@@ -36,6 +36,12 @@ class CommandHandler:
         from config import OWNER_ID
 
         user_id = update.effective_user.id
+
+        # ── Deep link для жалобы BBS: обрабатываем ДО всех проверок регистрации ──
+        if context.args and context.args[0].startswith('report_'):
+            await _start_command(update, context, self.db, self.target_chat_id)
+            return
+
         user = await get_user(user_id) # Проверяем в базе друга
 
         # Если пользователя нет в базе ИЛИ у него не заполнено имя (q_name)
