@@ -1,4 +1,8 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer
+} from 'recharts';
 import { 
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
   ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
@@ -84,19 +88,35 @@ export default function App() {
   };
   
   // ================= СОСТОЯНИЯ: СТАТИСТИКА =================
-  const historyData = [
-    { day: 'Пн', val: 0 }, { day: 'Вт', val: 0 }, { day: 'Ср', val: 0 },
-    { day: 'Чт', val: 0 }, { day: 'Пт', val: 0 }, { day: 'Сб', val: 0 }, { day: 'Вс', val: 0 },
+  const PERIODS = [
+    { id: 'today',     label: 'Сегодня' },
+    { id: 'yesterday', label: 'Вчера'   },
+    { id: 'week',      label: 'Неделя'  },
+    { id: 'month',     label: 'Месяц'   },
+    { id: 'year',      label: 'Год'     },
   ];
-  const [liveStats, setLiveStats] = useState(null);
+  const [statsPeriod, setStatsPeriod] = useState('today');
+  const [liveStats, setLiveStats]     = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
 
-  useEffect(() => {
-    fetch('/api/stats')
+  const fetchStats = useCallback((period) => {
+    setStatsLoading(true);
+    fetch(`/api/stats?period=${period}`)
       .then(r => r.json())
       .then(data => { setLiveStats(data); setStatsLoading(false); })
       .catch(() => setStatsLoading(false));
   }, []);
+
+  useEffect(() => { fetchStats('today'); }, []);
+
+  const handlePeriodChange = (period) => {
+    setStatsPeriod(period);
+    fetchStats(period);
+  };
+
+  const exportExcel = () => {
+    window.open(`/api/stats/export?period=${statsPeriod}`, '_blank');
+  };
 
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
@@ -138,36 +158,13 @@ export default function App() {
       .then(() => fetchTriggers());
   };
 
-  const TrendChart = ({ data }) => {
-    const chartData = (data && data.length > 0) ? data : historyData;
-    const maxVal = Math.max(...chartData.map(d => d.val), 1);
-    const points = chartData.map((d, i) => `${(i * 50) + 20},${140 - (d.val / maxVal * 120)}`).join(' ');
-    const totalMsgs = chartData.reduce((s, d) => s + d.val, 0);
+  const ChartTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
     return (
-      <div className="w-full bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm relative overflow-hidden">
-        <div className="flex items-center justify-between mb-6">
-          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center">
-            <Activity size={14} className="mr-2 text-blue-500" /> Пульс активности чата
-          </h3>
-          <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-full">
-            {totalMsgs.toLocaleString()} сообщ.
-          </span>
-        </div>
-        <div className="relative h-32 w-full">
-          <svg className="w-full h-full" viewBox="0 0 350 150" preserveAspectRatio="none">
-            <path d={`M 20,150 L ${points} L 320,150 Z`} fill="url(#grad)" className="opacity-10" />
-            <polyline fill="none" stroke="#3b82f6" strokeWidth="5" strokeLinecap="round" strokeLinejoin="round" points={points} className="drop-shadow-md" />
-            <defs><linearGradient id="grad" x1="0%" y1="0%" x2="0%" y2="100%"><stop offset="0%" stopColor="#3b82f6" /><stop offset="100%" stopColor="#fff" /></linearGradient></defs>
-          </svg>
-        </div>
-        <div className="flex justify-between px-2 mt-4">
-          {chartData.map((d, i) => (
-            <div key={i} className="flex flex-col items-center gap-1">
-              <span className="text-[9px] font-black text-blue-400">{d.val > 0 ? d.val : ''}</span>
-              <span className="text-[10px] font-black text-gray-300 uppercase">{d.day}</span>
-            </div>
-          ))}
-        </div>
+      <div className="bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700">
+        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">{label}</p>
+        <p className="text-2xl font-black leading-none">{(payload[0].value || 0).toLocaleString()}</p>
+        <p className="text-[9px] text-blue-400 font-bold mt-1">сообщений</p>
       </div>
     );
   };
@@ -185,74 +182,130 @@ export default function App() {
     switch (activeTab) {
       case 'statistics':
         return (
-          <div className="space-y-4 pb-24 animate-in fade-in duration-500">
-            <div className="bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 active:scale-[0.98] transition-all">
-               <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
-               <div className="relative z-10">
-                 <div className="flex items-center space-x-2 mb-6 bg-white/20 w-fit px-4 py-1.5 rounded-full backdrop-blur-md">
-                   <Zap size={14} className="text-yellow-300 fill-yellow-300" />
-                   <span className="text-[10px] font-black uppercase tracking-widest text-white">Статус здоровья</span>
-                 </div>
-                 <div className="text-8xl font-black tracking-tighter leading-none">
-                   {statsLoading ? <span className="text-5xl opacity-50">...</span> : (liveStats?.healthIndex ?? 84.5)}
-                   <span className="text-2xl ml-1 opacity-50">%</span>
-                 </div>
-                 
-                 <button onClick={() => setShowDetailedIndices(!showDetailedIndices)} className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
-                   <span>Детальные индексы</span>
-                   {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                 </button>
-                 {showDetailedIndices && (
-                    <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-4 animate-in slide-in-from-top-2">
-                       {['oksp', 'sdsp', 'cho', 'media', 'korp', 'kopyup'].map(k => (
-                         <div key={k} className="flex justify-between border-b border-white/5 pb-1">
-                           <span className="text-[9px] font-bold opacity-60 uppercase">{k}</span>
-                           <span className="text-sm font-black">12.4</span>
-                         </div>
-                       ))}
-                    </div>
-                 )}
-               </div>
-            </div>
-            
-            <TrendChart data={liveStats?.history} />
+          <div className="space-y-4 pb-24">
 
-            <div className="grid grid-cols-2 gap-4">
-              {[
-                { label: 'Сообщений сегодня', val: statsLoading ? '...' : (liveStats?.messages ?? 0).toLocaleString(), color: 'text-blue-500', icon: MessageSquareX },
-                { label: 'Активных юзеров',   val: statsLoading ? '...' : (liveStats?.activeUsers ?? 0).toString(),     color: 'text-indigo-500', icon: Users },
-                { label: 'Вступили (7д)',      val: statsLoading ? '...' : `+${liveStats?.joined ?? 0}`,                 color: 'text-green-500', icon: TrendingUp },
-                { label: 'Вышли (7д)',         val: statsLoading ? '...' : `-${liveStats?.left ?? 0}`,                   color: 'text-red-500', icon: TrendingDown },
-              ].map((m, i) => (
-                <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm active:scale-95 transition-all">
-                  <div className="flex items-center space-x-2 mb-2">
-                    <m.icon size={16} className={m.color} />
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{m.label}</span>
+            {/* ── Period switcher ── */}
+            <div className="flex space-x-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
+              {PERIODS.map(p => (
+                <button key={p.id} onClick={() => handlePeriodChange(p.id)}
+                  className={`flex-shrink-0 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wide transition-all duration-300 ${
+                    statsPeriod === p.id
+                      ? 'bg-gray-900 text-white shadow-lg scale-105'
+                      : 'bg-white text-gray-400 border border-gray-100'
+                  }`}>
+                  {p.label}
+                </button>
+              ))}
+            </div>
+
+            {/* ── Hero: Health index ── */}
+            <div className={`bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 transition-all duration-500 ${statsLoading ? 'opacity-60' : 'opacity-100'}`}>
+              <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
+              <div className="relative z-10">
+                <div className="flex items-center justify-between mb-6">
+                  <div className="flex items-center space-x-2 bg-white/20 px-4 py-1.5 rounded-full backdrop-blur-md">
+                    <Zap size={14} className="text-yellow-300 fill-yellow-300" />
+                    <span className="text-[10px] font-black uppercase tracking-widest">Статус здоровья</span>
                   </div>
+                  <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
+                    {liveStats?.periodLabel || 'Сегодня'}
+                  </span>
+                </div>
+                <div className="text-8xl font-black tracking-tighter leading-none">
+                  {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 84.5)}
+                  {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
+                </div>
+                <button onClick={() => setShowDetailedIndices(!showDetailedIndices)}
+                  className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
+                  <span>Детальные индексы</span>
+                  {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                </button>
+                {showDetailedIndices && (
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-4 animate-in slide-in-from-top-2 duration-300">
+                    {['oksp','sdsp','cho','media','korp','kopyup'].map(k => (
+                      <div key={k} className="flex justify-between border-b border-white/5 pb-1">
+                        <span className="text-[9px] font-bold opacity-60 uppercase">{k}</span>
+                        <span className="text-sm font-black">12.4</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ── Recharts AreaChart ── */}
+            <div className={`bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center">
+                  <Activity size={14} className="mr-2 text-blue-500" /> Пульс активности
+                </h3>
+                <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-full">
+                  {(liveStats?.history || []).reduce((s, d) => s + d.val, 0).toLocaleString()} сообщ.
+                </span>
+              </div>
+              <ResponsiveContainer width="100%" height={160}>
+                <AreaChart data={liveStats?.history || []} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
+                  <defs>
+                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
+                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}    />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" vertical={false} />
+                  <XAxis dataKey="day" tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
+                  <YAxis tick={{ fontSize: 9, fill: '#d1d5db' }} axisLine={false} tickLine={false} />
+                  <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#e2e8f0', strokeWidth: 2 }} />
+                  <Area type="monotone" dataKey="val" stroke="#3b82f6" strokeWidth={3}
+                    fill="url(#areaGrad)" dot={false} activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
+                    animationDuration={600} animationEasing="ease-out" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </div>
+
+            {/* ── Метрики 2×2 ── */}
+            <div className={`grid grid-cols-2 gap-4 transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
+              {[
+                { label: 'Сообщений',      val: (liveStats?.messages    ?? 0).toLocaleString(), color: 'text-blue-500',   bg: 'bg-blue-50',   icon: MessageSquareX },
+                { label: 'Активных',       val: (liveStats?.activeUsers ?? 0).toString(),        color: 'text-indigo-500', bg: 'bg-indigo-50', icon: Users          },
+                { label: 'Вступили',       val: `+${liveStats?.joined   ?? 0}`,                  color: 'text-green-500',  bg: 'bg-green-50',  icon: TrendingUp     },
+                { label: 'Вышли',          val: `-${liveStats?.left     ?? 0}`,                  color: 'text-red-500',    bg: 'bg-red-50',    icon: TrendingDown   },
+              ].map((m, i) => (
+                <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm active:scale-95 transition-all duration-200"
+                  style={{ animationDelay: `${i * 60}ms` }}>
+                  <div className={`w-9 h-9 ${m.bg} rounded-2xl flex items-center justify-center mb-3`}>
+                    <m.icon size={18} className={m.color} />
+                  </div>
+                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">{m.label}</span>
                   <span className="text-3xl font-black text-gray-900 leading-none">{m.val}</span>
                 </div>
               ))}
             </div>
 
-            {/* Банк + Курс пульса */}
-            <div className="grid grid-cols-2 gap-4">
-              <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-xl col-span-2">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Баланс банка</span>
-                    <span className="text-3xl font-black tracking-tight">
-                      {statsLoading ? '...' : (liveStats?.bankBalance ?? 0).toLocaleString()} 💳
-                    </span>
-                  </div>
-                  <div className="text-right">
-                    <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Курс пульса</span>
-                    <span className="text-3xl font-black">
-                      {statsLoading ? '...' : (liveStats?.pulseRate ?? '—')}
-                    </span>
-                  </div>
+            {/* ── Банк + Курс ── */}
+            <div className={`bg-gradient-to-r from-indigo-600 to-blue-600 p-6 rounded-[2rem] text-white shadow-xl transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
+              <div className="flex justify-between items-center">
+                <div>
+                  <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1 flex items-center gap-1">
+                    <Wallet size={10} /> Баланс банка
+                  </span>
+                  <span className="text-3xl font-black tracking-tight">
+                    {(liveStats?.bankBalance ?? 0).toLocaleString()} 💳
+                  </span>
+                </div>
+                <div className="text-right">
+                  <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Курс пульса</span>
+                  <span className="text-3xl font-black">{liveStats?.pulseRate ?? '—'}</span>
                 </div>
               </div>
             </div>
+
+            {/* ── Кнопка Excel ── */}
+            <button onClick={exportExcel}
+              className="w-full flex items-center justify-center space-x-3 bg-white border-2 border-gray-100 text-gray-700 p-5 rounded-[2rem] font-black active:scale-95 transition-all duration-200 hover:border-green-200 hover:text-green-700 hover:bg-green-50">
+              <FileSpreadsheet size={22} className="text-green-600" />
+              <span>Экспорт в Excel — {PERIODS.find(p=>p.id===statsPeriod)?.label}</span>
+              <Download size={18} className="text-gray-400" />
+            </button>
           </div>
         );
 

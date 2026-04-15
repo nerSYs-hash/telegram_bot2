@@ -1,4 +1,8 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
+from fastapi.responses import StreamingResponse
+import io
+import openpyxl
+from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import uvicorn
@@ -66,72 +70,203 @@ async def root():
         "calculators_loaded": calculate_health is not None
     }
 
-@app.get("/api/stats")
-async def get_stats():
-    """Реальная статистика из БД бота"""
-    try:
-        today = datetime.now().date().isoformat()
-        week_start = (datetime.now() - timedelta(days=6)).date().isoformat()
+RU_MONTHS = {1:'Янв',2:'Фев',3:'Мар',4:'Апр',5:'Май',6:'Июн',
+             7:'Июл',8:'Авг',9:'Сен',10:'Окт',11:'Ноя',12:'Дек'}
 
-        bank         = float(db.get_bank_balance()) if db else 0
-        rate         = float(db.get_setting('pulse_rate', '1.42')) if db else 1.42
-        difficulty_k = float(db.get_setting('difficulty_k', '5.0')) if db else 5.0
-        active_today = db.get_active_core_count(today) if db else 0
+PERIOD_LABELS = {
+    'today':     'Сегодня',
+    'yesterday': 'Вчера',
+    'week':      'Неделя',
+    'month':     'Месяц',
+    'year':      'Год',
+}
 
-        total_users    = 0
-        today_messages = 0
-        today_pulses   = 0.0
 
+def _build_daily_history(start_date, end_date):
+    history = []
+    cur = start_date
+    while cur <= end_date:
+        msgs = 0
         if db:
             db.cursor.execute(
-                "SELECT COUNT(*) as c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0"
+                "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?",
+                (cur.isoformat(),)
             )
             r = db.cursor.fetchone()
-            total_users = r['c'] if r else 0
+            msgs = int(r['s']) if r else 0
+        history.append({"day": cur.strftime("%d.%m"), "val": msgs})
+        cur += timedelta(days=1)
+    return history
 
-            db.cursor.execute(
-                "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?", (today,)
-            )
-            r = db.cursor.fetchone()
-            today_messages = int(r['s']) if r else 0
 
-            db.cursor.execute(
-                "SELECT COALESCE(SUM(pulses_mined),0) as s FROM user_stats WHERE date=?", (today,)
-            )
-            r = db.cursor.fetchone()
-            today_pulses = float(r['s']) if r else 0.0
+def _build_monthly_history(start_date, end_date):
+    if not db:
+        return []
+    db.cursor.execute('''
+        SELECT strftime('%Y-%m', date) as mon, COALESCE(SUM(total_messages),0) as val
+        FROM user_stats WHERE date >= ? AND date <= ?
+        GROUP BY mon ORDER BY mon
+    ''', (start_date.isoformat(), end_date.isoformat()))
+    history = []
+    for r in db.cursor.fetchall():
+        r = dict(r)
+        month_num = int(r['mon'].split('-')[1])
+        history.append({"day": RU_MONTHS.get(month_num, r['mon']), "val": int(r['val'])})
+    return history
 
-        dynamics = db.get_user_dynamics_stats(week_start, today) if db else {}
 
-        # История активности: сообщений в день за 7 дней
-        history = []
-        for i in range(6, -1, -1):
-            d = (datetime.now() - timedelta(days=i)).date()
-            msgs = 0
-            if db:
-                db.cursor.execute(
-                    "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?",
-                    (d.isoformat(),)
-                )
-                r = db.cursor.fetchone()
-                msgs = int(r['s']) if r else 0
-            history.append({"day": d.strftime("%a"), "val": msgs})
+def _compute_stats(period: str) -> dict:
+    today = datetime.now().date()
 
-        return {
-            "bankBalance":  bank,
-            "pulseRate":    rate,
-            "difficultyK":  difficulty_k,
-            "activeUsers":  active_today,
-            "totalUsers":   total_users,
-            "messages":     today_messages,
-            "pulsesMined":  today_pulses,
-            "joined":       dynamics.get('joined', 0),
-            "left":         dynamics.get('left', 0),
-            "history":      history,
-            "healthIndex":  84.5,  # TODO: подключить stats_calculators
-        }
+    if period == 'yesterday':
+        start_date = end_date = today - timedelta(days=1)
+        hist_start = today - timedelta(days=6)
+        hist_end   = today
+        history    = _build_daily_history(hist_start, hist_end)
+    elif period == 'week':
+        start_date = today - timedelta(days=6)
+        end_date   = today
+        history    = _build_daily_history(start_date, end_date)
+    elif period == 'month':
+        start_date = today - timedelta(days=29)
+        end_date   = today
+        history    = _build_daily_history(start_date, end_date)
+    elif period == 'year':
+        start_date = today - timedelta(days=364)
+        end_date   = today
+        history    = _build_monthly_history(start_date, end_date)
+    else:  # today
+        start_date = end_date = today
+        hist_start = today - timedelta(days=6)
+        hist_end   = today
+        history    = _build_daily_history(hist_start, hist_end)
+
+    bank         = float(db.get_bank_balance()) if db else 0
+    rate         = float(db.get_setting('pulse_rate', '1.42')) if db else 1.42
+    difficulty_k = float(db.get_setting('difficulty_k', '5.0')) if db else 5.0
+    active       = db.get_active_core_count(start_date.isoformat()) if db else 0
+
+    total_users = messages = pulses = 0
+    if db:
+        db.cursor.execute(
+            "SELECT COUNT(*) as c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0"
+        )
+        r = db.cursor.fetchone(); total_users = r['c'] if r else 0
+
+        db.cursor.execute(
+            "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date>=? AND date<=?",
+            (start_date.isoformat(), end_date.isoformat())
+        )
+        r = db.cursor.fetchone(); messages = int(r['s']) if r else 0
+
+        db.cursor.execute(
+            "SELECT COALESCE(SUM(pulses_mined),0) as s FROM user_stats WHERE date>=? AND date<=?",
+            (start_date.isoformat(), end_date.isoformat())
+        )
+        r = db.cursor.fetchone(); pulses = float(r['s']) if r else 0.0
+
+    dynamics = db.get_user_dynamics_stats(start_date.isoformat(), end_date.isoformat()) if db else {}
+
+    return {
+        "period":       period,
+        "periodLabel":  PERIOD_LABELS.get(period, period),
+        "bankBalance":  bank,
+        "pulseRate":    rate,
+        "difficultyK":  difficulty_k,
+        "activeUsers":  active,
+        "totalUsers":   total_users,
+        "messages":     messages,
+        "pulsesMined":  pulses,
+        "joined":       dynamics.get('joined', 0),
+        "left":         dynamics.get('left', 0),
+        "history":      history,
+        "healthIndex":  84.5,
+    }
+
+
+@app.get("/api/stats")
+async def get_stats(period: str = Query('today')):
+    """Статистика за период: today / yesterday / week / month / year"""
+    try:
+        return _compute_stats(period)
     except Exception as e:
         logger.error(f"Error in /api/stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/stats/export")
+async def export_stats(period: str = Query('week')):
+    """Экспорт статистики в Excel"""
+    try:
+        data = _compute_stats(period)
+
+        wb = openpyxl.Workbook()
+        ws = wb.active
+        ws.title = "Статистика"
+        ws.column_dimensions['A'].width = 28
+        ws.column_dimensions['B'].width = 18
+
+        header_font  = Font(bold=True, size=13, color="FFFFFF")
+        header_fill  = PatternFill("solid", fgColor="1E293B")
+        bold_font    = Font(bold=True, size=11)
+        label_fill   = PatternFill("solid", fgColor="F1F5F9")
+        center       = Alignment(horizontal='center')
+
+        # ── Заголовок ──
+        ws.merge_cells('A1:B1')
+        ws['A1'] = f"Pulse Pro — Статистика ({data['periodLabel']})"
+        ws['A1'].font = header_font
+        ws['A1'].fill = header_fill
+        ws['A1'].alignment = center
+
+        ws.merge_cells('A2:B2')
+        ws['A2'] = f"Экспорт: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        ws['A2'].alignment = center
+
+        # ── Метрики ──
+        ws['A4'] = "Показатель";  ws['A4'].font = bold_font; ws['A4'].fill = label_fill
+        ws['B4'] = "Значение";    ws['B4'].font = bold_font; ws['B4'].fill = label_fill
+
+        metrics = [
+            ("Сообщений за период", data['messages']),
+            ("Активных пользователей", data['activeUsers']),
+            ("Всего пользователей", data['totalUsers']),
+            ("Вступило за период", data['joined']),
+            ("Вышло за период", data['left']),
+            ("Баланс банка", data['bankBalance']),
+            ("Курс пульса", data['pulseRate']),
+            ("Пульсов намайнено", data['pulsesMined']),
+        ]
+        for i, (label, value) in enumerate(metrics, start=5):
+            ws[f'A{i}'] = label
+            ws[f'B{i}'] = value
+
+        # ── История ──
+        row = 5 + len(metrics) + 2
+        ws[f'A{row}'] = "История активности"
+        ws[f'A{row}'].font = bold_font
+        ws[f'A{row}'].fill = label_fill
+        ws[f'B{row}'] = "Сообщений"
+        ws[f'B{row}'].font = bold_font
+        ws[f'B{row}'].fill = label_fill
+        row += 1
+        for item in data['history']:
+            ws[f'A{row}'] = item['day']
+            ws[f'B{row}'] = item['val']
+            row += 1
+
+        buf = io.BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+
+        fname = f"pulse_stats_{period}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+        return StreamingResponse(
+            buf,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={fname}"}
+        )
+    except Exception as e:
+        logger.error(f"Error in /api/stats/export: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 
