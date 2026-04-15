@@ -26,6 +26,7 @@ export default function App() {
   // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
   const [isTriggerModalOpen, setIsTriggerModalOpen] = useState(false);
   const [editingTrigger, setEditingTrigger] = useState(null);
+  const [triggerStep, setTriggerStep] = useState(1);
   const [triggers, setTriggers] = useState([
     { 
       id: 1, name: 'Анти-Реклама', condition: 'regex', keyword: 't.me/|http', 
@@ -73,11 +74,12 @@ export default function App() {
 
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
-    setEditingTrigger(t || { 
-      id: null, name: '', condition: 'any_word', keyword: '', probability: 100, 
+    setEditingTrigger(t || {
+      id: null, name: '', condition: 'any_word', keyword: '', probability: 100,
       action: 'send_text', duration: '0', from: 'all', where: 'chat', target: 'author',
       bot_msg_delete: 'no', bot_msg_delete_after: 60, reply_text: '', media_type: 'none', emoji: ''
     });
+    setTriggerStep(1);
     setIsTriggerModalOpen(true);
   };
 
@@ -369,94 +371,277 @@ export default function App() {
         </div>
       </main>
 
-      {/* МОДАЛКА ТРИГГЕРА */}
-      {isTriggerModalOpen && editingTrigger && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center">
-          <div className="bg-white w-full sm:max-w-lg rounded-t-[3.5rem] sm:rounded-[3rem] flex flex-col max-h-[92vh] shadow-2xl animate-in slide-in-from-bottom-full duration-500">
-            <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto my-4 shrink-0 shadow-inner"></div>
-            
-            <div className="px-10 py-4 border-b border-gray-50 flex justify-between items-center bg-gray-50/50">
-              <h3 className="font-black text-2xl uppercase tracking-tighter">Параметры триггера</h3>
-              <button onClick={() => setIsTriggerModalOpen(false)} className="p-3 bg-white rounded-full shadow-sm active:scale-90 transition-all"><X size={24} /></button>
-            </div>
-            
-            <div className="p-8 overflow-y-auto space-y-8 custom-scrollbar pb-32">
-              <div className="space-y-4">
-                <input type="text" placeholder="Имя триггера" value={editingTrigger.name} onChange={(e) => setEditingTrigger({...editingTrigger, name: e.target.value})} className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[2rem] font-black outline-none focus:ring-4 focus:ring-blue-500/5 transition-all" />
-                <textarea placeholder="Ключевые слова или RegEx" value={editingTrigger.keyword} onChange={(e) => setEditingTrigger({...editingTrigger, keyword: e.target.value})} className="w-full p-5 bg-gray-50 border border-gray-100 rounded-[2rem] font-mono text-sm font-bold outline-none resize-none" rows="2" />
-                
-                <div className="flex items-center space-x-4 bg-yellow-50 p-5 rounded-[2rem] border border-yellow-100 shadow-inner">
-                   <div className="flex-1">
-                      <p className="text-[10px] font-black text-yellow-700 uppercase mb-2">Вероятность</p>
-                      <input type="range" min="1" max="100" value={editingTrigger.probability} onChange={(e) => setEditingTrigger({...editingTrigger, probability: parseInt(e.target.value)})} className="w-full h-2 bg-yellow-200 rounded-lg appearance-none cursor-pointer accent-yellow-600" />
-                   </div>
-                   <span className="text-xl font-black text-yellow-800 w-12 text-right">{editingTrigger.probability}%</span>
+      {/* WIZARD ТРИГГЕРА — 4 ШАГА */}
+      {isTriggerModalOpen && editingTrigger && (() => {
+        const upd = (field, val) => setEditingTrigger(prev => ({...prev, [field]: val}));
+
+        const STEPS = [
+          { num: 1, title: 'Что ловим?',  sub: 'Условие срабатывания' },
+          { num: 2, title: 'Кто и где?',  sub: 'Фильтр аудитории'     },
+          { num: 3, title: 'Что делать?', sub: 'Действие бота'         },
+          { num: 4, title: 'Итог',        sub: 'Проверь и сохрани'     },
+        ];
+
+        const TileBtn = ({ active, onClick, icon: Icon, label, color = 'gray' }) => {
+          const colors = {
+            gray:   active ? 'bg-gray-900 border-gray-900 text-white' : 'bg-white border-gray-100 text-gray-500',
+            blue:   active ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-100 text-gray-500',
+            red:    active ? 'bg-red-500 border-red-500 text-white'   : 'bg-white border-gray-100 text-gray-500',
+            amber:  active ? 'bg-amber-500 border-amber-500 text-white' : 'bg-white border-gray-100 text-gray-500',
+            orange: active ? 'bg-orange-500 border-orange-500 text-white' : 'bg-white border-gray-100 text-gray-500',
+            green:  active ? 'bg-green-500 border-green-500 text-white' : 'bg-white border-gray-100 text-gray-500',
+          };
+          return (
+            <button onClick={onClick} className={`flex flex-col items-center justify-center gap-2 p-4 rounded-[1.8rem] border-2 transition-all active:scale-95 ${colors[color]}`}>
+              <Icon size={22} />
+              <span className="text-[10px] font-black uppercase tracking-wide leading-none">{label}</span>
+            </button>
+          );
+        };
+
+        const PreviewRow = ({ label, value }) => (
+          <div className="flex justify-between items-center py-3 border-b border-gray-50 last:border-0">
+            <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">{label}</span>
+            <span className="text-sm font-black text-gray-900 max-w-[55%] text-right">{value || '—'}</span>
+          </div>
+        );
+
+        const actionMap = { send_text: '💬 Текст', delete: '🗑 Удалить', mute: '🔇 Мут', ban: '🚫 Бан', warn: '⚠️ Варн' };
+        const condMap   = { any_word: 'Слова', exact_match: 'Точно', regex: 'RegEx' };
+        const whereMap  = { chat: 'Чат', pv: 'Личка', global: 'Везде' };
+        const fromMap   = { all: 'Все', users: 'Юзеры', admins: 'Админы' };
+        const delMap    = { no: 'Нет', previous: 'Предыдущее', period: `Таймер ${editingTrigger.bot_msg_delete_after}с` };
+
+        return (
+          <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[100] flex items-end sm:items-center justify-center">
+            <div className="bg-white w-full sm:max-w-lg rounded-t-[3.5rem] sm:rounded-[3rem] flex flex-col max-h-[92vh] shadow-2xl animate-in slide-in-from-bottom-full duration-500">
+
+              {/* Drag handle */}
+              <div className="w-16 h-1.5 bg-gray-200 rounded-full mx-auto mt-4 mb-2 shrink-0" />
+
+              {/* Header: progress + title */}
+              <div className="px-8 pt-2 pb-5 shrink-0 border-b border-gray-50">
+                {/* Progress */}
+                <div className="flex items-center mb-5">
+                  {STEPS.map((s, i) => (
+                    <React.Fragment key={s.num}>
+                      <button onClick={() => s.num < triggerStep && setTriggerStep(s.num)}
+                        className={`w-8 h-8 rounded-full flex items-center justify-center text-xs font-black shrink-0 transition-all ${
+                          s.num < triggerStep  ? 'bg-green-500 text-white cursor-pointer' :
+                          s.num === triggerStep ? 'bg-gray-900 text-white scale-110 shadow-lg' :
+                                                  'bg-gray-100 text-gray-400'
+                        }`}>
+                        {s.num < triggerStep ? '✓' : s.num}
+                      </button>
+                      {i < STEPS.length - 1 && (
+                        <div className={`flex-1 h-0.5 mx-1.5 rounded-full transition-all ${s.num < triggerStep ? 'bg-green-400' : 'bg-gray-100'}`} />
+                      )}
+                    </React.Fragment>
+                  ))}
+                </div>
+                {/* Title */}
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h3 className="font-black text-2xl tracking-tighter leading-none">{STEPS[triggerStep-1].title}</h3>
+                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mt-1">{STEPS[triggerStep-1].sub}</p>
+                  </div>
+                  <button onClick={() => setIsTriggerModalOpen(false)} className="p-2.5 bg-gray-100 rounded-2xl text-gray-400 active:scale-90 transition-all"><X size={20} /></button>
                 </div>
               </div>
 
-              <div className="bg-blue-50/50 p-6 rounded-[2.5rem] border border-blue-100 space-y-5">
-                <div className="grid grid-cols-1 gap-4">
-                   <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Тип поиска:</span>
-                      <select value={editingTrigger.condition} onChange={(e) => setEditingTrigger({...editingTrigger, condition: e.target.value})} className="bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-black shadow-sm text-blue-900 uppercase">
-                        <option value="any_word">Слова</option><option value="exact_match">Точно</option><option value="regex">RegEx</option>
-                      </select>
-                   </div>
-                   <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Где ловим:</span>
-                      <select value={editingTrigger.where} onChange={(e) => setEditingTrigger({...editingTrigger, where: e.target.value})} className="bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-black shadow-sm text-blue-900 uppercase">
-                        <option value="chat">В чате</option><option value="pv">В личке</option><option value="global">Везде</option>
-                      </select>
-                   </div>
-                   <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Кто:</span>
-                      <select value={editingTrigger.from} onChange={(e) => setEditingTrigger({...editingTrigger, from: e.target.value})} className="bg-white border border-blue-200 rounded-xl px-4 py-2 text-xs font-black shadow-sm text-blue-900 uppercase">
-                        <option value="all">Все</option><option value="users">Юзеры</option><option value="admins">Админы</option>
-                      </select>
-                   </div>
-                </div>
-              </div>
+              {/* Step content */}
+              <div className="flex-1 overflow-y-auto px-8 py-6 space-y-5">
 
-              <div className="space-y-6">
-                 <div className="grid grid-cols-2 gap-3">
-                   <select value={editingTrigger.action} onChange={(e) => setEditingTrigger({...editingTrigger, action: e.target.value})} className="w-full p-5 bg-gray-900 text-white rounded-[2rem] font-black text-xs uppercase appearance-none text-center shadow-lg">
-                      <option value="send_text">Текст</option><option value="delete">Удалить</option><option value="mute">Мут</option><option value="ban">Бан</option><option value="warn">Варн</option>
-                   </select>
-                   {['mute', 'ban'].includes(editingTrigger.action) ? (
-                      <input type="text" placeholder="Напр: 2h" value={editingTrigger.duration} onChange={(e) => setEditingTrigger({...editingTrigger, duration: e.target.value})} className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] font-black text-center text-sm shadow-inner" />
-                   ) : (
-                      <select value={editingTrigger.media_type} onChange={(e) => setEditingTrigger({...editingTrigger, media_type: e.target.value})} className="w-full p-5 bg-white border border-gray-100 rounded-[2rem] font-black text-xs uppercase appearance-none text-center shadow-inner">
-                        <option value="none">Без медиа</option><option value="photo">Фото</option><option value="video">Видео</option><option value="animation">GIF</option>
-                      </select>
-                   )}
-                 </div>
-                 
-                 <div className="relative">
-                    <textarea placeholder="Текст ответа бота..." value={editingTrigger.reply_text} onChange={(e) => setEditingTrigger({...editingTrigger, reply_text: e.target.value})} className="w-full p-6 bg-gray-50 border border-gray-100 rounded-[2.5rem] font-bold text-sm outline-none shadow-inner" rows="3" />
-                 </div>
+                {/* ── ШАГ 1: УСЛОВИЕ ── */}
+                {triggerStep === 1 && (
+                  <>
+                    <input type="text" placeholder="Название триггера..." value={editingTrigger.name}
+                      onChange={e => upd('name', e.target.value)}
+                      className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-[2rem] font-black text-lg outline-none focus:border-gray-300 transition-all" />
 
-                 <div className="bg-gray-100/50 p-6 rounded-[2.5rem] border border-gray-200">
-                    <div className="flex items-center justify-between">
-                       <span className="text-xs font-black text-gray-500 uppercase tracking-widest">Удаление ответа:</span>
-                       <select value={editingTrigger.bot_msg_delete} onChange={(e) => setEditingTrigger({...editingTrigger, bot_msg_delete: e.target.value})} className="bg-white border border-gray-300 rounded-xl px-4 py-2 text-[10px] font-black uppercase shadow-sm">
-                          <option value="no">Нет</option><option value="previous">Пред.</option><option value="period">Таймер</option>
-                       </select>
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Тип поиска</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <TileBtn active={editingTrigger.condition==='any_word'}   onClick={()=>upd('condition','any_word')}   icon={MessageCircle} label="Слова"  color="gray"/>
+                        <TileBtn active={editingTrigger.condition==='exact_match'} onClick={()=>upd('condition','exact_match')} icon={CheckCircle2}   label="Точно"  color="gray"/>
+                        <TileBtn active={editingTrigger.condition==='regex'}       onClick={()=>upd('condition','regex')}       icon={Globe}          label="RegEx"  color="gray"/>
+                      </div>
                     </div>
-                    {editingTrigger.bot_msg_delete === 'period' && (
-                       <input type="number" placeholder="Секунд" value={editingTrigger.bot_msg_delete_after} onChange={(e) => setEditingTrigger({...editingTrigger, bot_msg_delete_after: parseInt(e.target.value)})} className="w-full mt-4 bg-white border border-gray-300 rounded-2xl px-4 py-2 font-black text-xs text-center outline-none" />
-                    )}
-                 </div>
-              </div>
-            </div>
 
-            <div className="p-8 border-t border-gray-50 bg-white sticky bottom-0 rounded-t-[3rem] shadow-xl">
-              <button onClick={saveTrigger} className="w-full py-6 bg-blue-600 text-white rounded-[2.2rem] font-black text-xl shadow-2xl active:scale-[0.97] transition-all">
-                СОХРАНИТЬ ПРАВИЛО
-              </button>
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Ключевые слова / паттерн</p>
+                      <textarea placeholder={editingTrigger.condition === 'regex' ? 'Например: t\\.me\\/|http' : 'Через пробел или запятую...'}
+                        value={editingTrigger.keyword} onChange={e => upd('keyword', e.target.value)}
+                        className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-[2rem] font-mono text-sm font-bold outline-none focus:border-gray-300 resize-none transition-all" rows="2" />
+                    </div>
+
+                    <div className="bg-amber-50 p-5 rounded-[2rem] border-2 border-amber-100">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1"><Percent size={12}/> Вероятность срабатывания</p>
+                        <span className="text-xl font-black text-amber-800">{editingTrigger.probability}%</span>
+                      </div>
+                      <input type="range" min="1" max="100" value={editingTrigger.probability}
+                        onChange={e => upd('probability', parseInt(e.target.value))}
+                        className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600" />
+                      <div className="flex justify-between mt-1">
+                        <span className="text-[9px] text-amber-400 font-black">1%</span>
+                        <span className="text-[9px] text-amber-400 font-black">50%</span>
+                        <span className="text-[9px] text-amber-400 font-black">100%</span>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── ШАГ 2: КТО И ГДЕ ── */}
+                {triggerStep === 2 && (
+                  <>
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Где срабатывает</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <TileBtn active={editingTrigger.where==='chat'}   onClick={()=>upd('where','chat')}   icon={MessageSquareX} label="Чат"   color="blue"/>
+                        <TileBtn active={editingTrigger.where==='pv'}     onClick={()=>upd('where','pv')}     icon={User}           label="Личка" color="blue"/>
+                        <TileBtn active={editingTrigger.where==='global'} onClick={()=>upd('where','global')} icon={Globe}          label="Везде" color="blue"/>
+                      </div>
+                    </div>
+
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">На кого реагирует</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <TileBtn active={editingTrigger.from==='all'}    onClick={()=>upd('from','all')}    icon={Users}      label="Все"    color="green"/>
+                        <TileBtn active={editingTrigger.from==='users'}  onClick={()=>upd('from','users')}  icon={UserCheck}  label="Юзеры" color="green"/>
+                        <TileBtn active={editingTrigger.from==='admins'} onClick={()=>upd('from','admins')} icon={ShieldCheck} label="Админы" color="green"/>
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* ── ШАГ 3: ДЕЙСТВИЕ ── */}
+                {triggerStep === 3 && (
+                  <>
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Действие бота</p>
+                      <div className="grid grid-cols-2 gap-2">
+                        <TileBtn active={editingTrigger.action==='send_text'} onClick={()=>upd('action','send_text')} icon={MessageCircle} label="Текст"    color="blue"/>
+                        <TileBtn active={editingTrigger.action==='delete'}    onClick={()=>upd('action','delete')}    icon={Trash2}        label="Удалить"  color="gray"/>
+                        <TileBtn active={editingTrigger.action==='mute'}      onClick={()=>upd('action','mute')}      icon={Clock}         label="Мут"      color="amber"/>
+                        <TileBtn active={editingTrigger.action==='ban'}       onClick={()=>upd('action','ban')}       icon={ShieldBan}     label="Бан"      color="red"/>
+                      </div>
+                      <div className="mt-2">
+                        <TileBtn active={editingTrigger.action==='warn'} onClick={()=>upd('action','warn')} icon={AlertOctagon} label="Предупреждение (Варн)" color="orange"/>
+                      </div>
+                    </div>
+
+                    {['mute','ban'].includes(editingTrigger.action) && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Длительность</p>
+                        <input type="text" placeholder="Напр: 2h / 30m / forever"
+                          value={editingTrigger.duration} onChange={e => upd('duration', e.target.value)}
+                          className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-[2rem] font-black text-center outline-none focus:border-gray-300 transition-all" />
+                      </div>
+                    )}
+
+                    {editingTrigger.action === 'send_text' && (
+                      <div>
+                        <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Тип медиа</p>
+                        <div className="grid grid-cols-4 gap-2">
+                          <TileBtn active={editingTrigger.media_type==='none'}      onClick={()=>upd('media_type','none')}      icon={MessageCircle} label="Нет"  color="gray"/>
+                          <TileBtn active={editingTrigger.media_type==='photo'}     onClick={()=>upd('media_type','photo')}     icon={ImageIcon}     label="Фото" color="gray"/>
+                          <TileBtn active={editingTrigger.media_type==='video'}     onClick={()=>upd('media_type','video')}     icon={Video}         label="Видео" color="gray"/>
+                          <TileBtn active={editingTrigger.media_type==='animation'} onClick={()=>upd('media_type','animation')} icon={Smile}         label="GIF"  color="gray"/>
+                        </div>
+                      </div>
+                    )}
+
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-2">Текст ответа бота</p>
+                      <textarea placeholder="Что напишет бот в ответ..." value={editingTrigger.reply_text}
+                        onChange={e => upd('reply_text', e.target.value)}
+                        className="w-full p-5 bg-gray-50 border-2 border-gray-100 rounded-[2rem] font-bold text-sm outline-none focus:border-gray-300 resize-none transition-all" rows="3" />
+                    </div>
+
+                    <div className="bg-gray-50 p-5 rounded-[2rem] border-2 border-gray-100">
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">Удаление ответа бота</p>
+                      <div className="grid grid-cols-3 gap-2">
+                        <TileBtn active={editingTrigger.bot_msg_delete==='no'}       onClick={()=>upd('bot_msg_delete','no')}       icon={X}     label="Нет"    color="gray"/>
+                        <TileBtn active={editingTrigger.bot_msg_delete==='previous'} onClick={()=>upd('bot_msg_delete','previous')} icon={Trash2} label="Пред."  color="gray"/>
+                        <TileBtn active={editingTrigger.bot_msg_delete==='period'}   onClick={()=>upd('bot_msg_delete','period')}   icon={Clock}  label="Таймер" color="gray"/>
+                      </div>
+                      {editingTrigger.bot_msg_delete === 'period' && (
+                        <input type="number" placeholder="Секунд до удаления" value={editingTrigger.bot_msg_delete_after}
+                          onChange={e => upd('bot_msg_delete_after', parseInt(e.target.value))}
+                          className="w-full mt-3 p-4 bg-white border-2 border-gray-200 rounded-2xl font-black text-center outline-none" />
+                      )}
+                    </div>
+                  </>
+                )}
+
+                {/* ── ШАГ 4: ИТОГ ── */}
+                {triggerStep === 4 && (
+                  <>
+                    <div className="bg-gradient-to-br from-gray-900 to-gray-800 p-6 rounded-[2.5rem] text-white">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 bg-blue-500 rounded-2xl flex items-center justify-center"><ShieldAlert size={20}/></div>
+                        <div>
+                          <p className="font-black text-xl leading-none">{editingTrigger.name || 'Без названия'}</p>
+                          <p className="text-[10px] text-gray-400 uppercase font-black mt-0.5">{condMap[editingTrigger.condition]}</p>
+                        </div>
+                      </div>
+                      {editingTrigger.keyword && (
+                        <div className="mt-3 bg-white/10 rounded-2xl px-4 py-2 font-mono text-xs text-blue-300 font-bold">{editingTrigger.keyword}</div>
+                      )}
+                    </div>
+
+                    <div className="bg-white rounded-[2.5rem] border-2 border-gray-100 px-6 py-2 divide-y divide-gray-50">
+                      <PreviewRow label="Вероятность"  value={`${editingTrigger.probability}%`} />
+                      <PreviewRow label="Где"          value={whereMap[editingTrigger.where]} />
+                      <PreviewRow label="Кто"          value={fromMap[editingTrigger.from]} />
+                      <PreviewRow label="Действие"     value={actionMap[editingTrigger.action]} />
+                      {['mute','ban'].includes(editingTrigger.action) && (
+                        <PreviewRow label="Длительность" value={editingTrigger.duration} />
+                      )}
+                      <PreviewRow label="Ответ бота"   value={editingTrigger.reply_text} />
+                      <PreviewRow label="Удал. ответа" value={delMap[editingTrigger.bot_msg_delete]} />
+                    </div>
+
+                    <button onClick={() => { setTriggerStep(1); }} className="w-full py-4 bg-gray-50 border-2 border-gray-100 text-gray-500 rounded-[2rem] font-black text-sm active:scale-95 transition-all">
+                      ✏️ Редактировать с шага 1
+                    </button>
+                  </>
+                )}
+              </div>
+
+              {/* Footer navigation */}
+              <div className="px-8 py-6 border-t border-gray-50 bg-white shrink-0 rounded-t-[2.5rem] shadow-xl">
+                <div className="flex gap-3">
+                  {triggerStep > 1 ? (
+                    <button onClick={() => setTriggerStep(s => s - 1)}
+                      className="flex-1 py-5 bg-gray-100 text-gray-700 rounded-[2rem] font-black active:scale-95 transition-all">
+                      ← Назад
+                    </button>
+                  ) : (
+                    <button onClick={() => setIsTriggerModalOpen(false)}
+                      className="flex-1 py-5 bg-gray-100 text-gray-500 rounded-[2rem] font-black active:scale-95 transition-all">
+                      Отмена
+                    </button>
+                  )}
+                  {triggerStep < 4 ? (
+                    <button onClick={() => setTriggerStep(s => s + 1)}
+                      className="flex-2 flex-grow-[2] py-5 bg-gray-900 text-white rounded-[2rem] font-black active:scale-95 transition-all">
+                      Далее →
+                    </button>
+                  ) : (
+                    <button onClick={saveTrigger}
+                      className="flex-2 flex-grow-[2] py-5 bg-blue-600 text-white rounded-[2rem] font-black text-lg shadow-xl shadow-blue-200 active:scale-95 transition-all">
+                      СОХРАНИТЬ
+                    </button>
+                  )}
+                </div>
+              </div>
+
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ИИ МОДАЛКА */}
       {isAiModalOpen && (
