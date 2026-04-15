@@ -83,12 +83,18 @@ PERIOD_LABELS = {
 }
 
 
-def _strip_html(text: str) -> str:
-    """Убирает HTML-теги и декодирует базовые сущности."""
+def _clean_journal_html(text: str) -> str:
+    """
+    Подготавливает HTML из text_preview для отображения в браузере:
+    - убирает незакрытый тег в конце (обрыв по 200 символов)
+    - переносы строк → <br>
+    - ссылки открываются в новой вкладке
+    """
     if not text:
         return ''
-    text = re.sub(r'<[^>]+>', '', text)
-    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+    text = re.sub(r'<[^>]*$', '', text)                                  # незакрытый тег в конце
+    text = re.sub(r'<a\s', '<a target="_blank" rel="noopener" ', text)   # ссылки в новой вкладке
+    text = text.replace('\n', '<br>')                                     # переносы строк
     return text.strip()
 
 
@@ -479,7 +485,7 @@ async def get_journal():
                 'tag':     tag,
                 'user':    f"@{uname}" if r.get('username') else uname,
                 'user_id': r.get('user_id', 0),
-                'text':    _strip_html(r.get('text_preview') or ev),
+                'text':    _clean_journal_html(r.get('text_preview') or ev),
             })
 
         return entries

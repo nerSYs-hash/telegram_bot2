@@ -344,7 +344,10 @@ export default function App() {
                     <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
                     <span className="text-[11px] text-gray-300 font-mono">{log.time?.replace('T',' ')}</span>
                   </div>
-                  <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans break-words">{log.text}</pre>
+                  <div
+                    className="text-xs text-gray-700 leading-relaxed break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-900"
+                    dangerouslySetInnerHTML={{ __html: log.text }}
+                  />
                   <div className="pt-1 space-y-2">
                     <a href={`tg://user?id=${log.user_id}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase shadow-md shadow-blue-100 active:scale-[0.98] transition-all">
                       <MessageCircle size={14}/><span>Написать в ЛС</span>
