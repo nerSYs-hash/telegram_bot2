@@ -1,18 +1,16 @@
-name: Deploy to Server
+name: Deploy Bot
 
 on:
   push:
     branches: [main]
+    paths:
+      - '**/*.py'
+      - 'requirements.txt'
+      - '.github/workflows/deploy.yml'
 
 jobs:
-  # ─────────────────────────────────────────────
-  #  JOB 1: БОТ — срабатывает на изменения Python/бота
-  # ─────────────────────────────────────────────
   deploy-bot:
     runs-on: ubuntu-latest
-    if: |
-      contains(toJson(github.event.commits), '.py') ||
-      contains(toJson(github.event.commits), 'requirements.txt')
 
     steps:
       - name: Deploy Bot via SSH
@@ -42,33 +40,3 @@ jobs:
             pip install -r requirements.txt -q
             systemctl restart pulsbot
             echo "✅ Bot deployed!"
-
-  # ─────────────────────────────────────────────
-  #  JOB 2: САЙТ — срабатывает на изменения Admin_SITE или api.py
-  # ─────────────────────────────────────────────
-  deploy-site:
-    runs-on: ubuntu-latest
-    if: |
-      contains(toJson(github.event.commits), 'Admin_SITE') ||
-      contains(toJson(github.event.commits), 'api.py')
-
-    steps:
-      - name: Deploy Admin Site via SSH
-        uses: appleboy/ssh-action@v1.0.3
-        with:
-          host: ${{ secrets.SERVER_HOST }}
-          username: ${{ secrets.SERVER_USER }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          script: |
-            cd /root/PulsBot
-            git fetch origin main
-            git reset --hard origin/main
-            # ─── СБОРКА React ───
-            cd /root/PulsBot/Admin_SITE
-            npm install --silent
-            npm run build
-            cd /root/PulsBot
-            # ─── РЕСТАРТ API ───
-            systemctl restart pulsapi
-            systemctl reload nginx
-            echo "✅ Admin Site deployed!"
