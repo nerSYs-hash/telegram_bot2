@@ -67,56 +67,97 @@ async def root():
 
 @app.get("/api/stats")
 async def get_stats():
-    """Сбор расширенной статистики (как на твоих скриншотах)"""
+    """Реальная статистика из БД бота"""
     try:
-        # 1. Тянем основные данные из БД
-        bank = db.get_bank_balance() if db else 12500000
-        rate = db.get_setting('pulse_rate', '1.42') if db else "1.42"
-        active = db.get_active_core_count() if db else 485
-        
-        # 2. Пытаемся рассчитать реальный Индекс Здоровья
-        health_score = 84.5 # Дефолт
-        indices = {
-            "oksp": 14.2, "sdsp": 9.5, "cho": 11.2, 
-            "media": 7.8, "korp": 18.7, "kopyup": 22.1
-        }
+        today = datetime.now().date().isoformat()
+        week_start = (datetime.now() - timedelta(days=6)).date().isoformat()
 
-        if calculate_health and db:
-            try:
-                # В реальности тут должны быть данные из твоих таблиц статистики
-                # Пока используем структуру твоего вызова из stats_calculators.py
-                raw_data = {'chars': 1000, 'avg_len': 50, 'words': 200, 'media': 10}
-                det_data = {'korp': 100, 'kprp': 50, 'kopyup': 30, 'kopyap': 20, 'kupp': 10, 'pivdvp': 5}
-                divisor = Decimal(str(active)) if active > 0 else Decimal('1')
-                
-                # Вызываем твой калькулятор
-                calc_result = calculate_health(raw_data, det_data, divisor)
-                if isinstance(calc_result, dict):
-                    indices = {k: float(v) for k, v in calc_result.items()}
-                    # Примерный расчет общего процента (среднее или как у тебя в логике)
-                    health_score = sum(indices.values()) / len(indices) * 10 
-            except Exception as calc_err:
-                logger.error(f"Ошибка в расчетах калькулятора: {calc_err}")
+        bank         = float(db.get_bank_balance()) if db else 0
+        rate         = float(db.get_setting('pulse_rate', '1.42')) if db else 1.42
+        difficulty_k = float(db.get_setting('difficulty_k', '5.0')) if db else 5.0
+        active_today = db.get_active_core_count(today) if db else 0
 
-        # История для кривой (7 дней)
-        history = [
-            {"day": (datetime.now() - timedelta(days=i)).strftime("%a"), "val": 70 + (i * 2)} 
-            for i in range(7)
-        ][::-1]
+        total_users    = 0
+        today_messages = 0
+        today_pulses   = 0.0
+
+        if db:
+            db.cursor.execute(
+                "SELECT COUNT(*) as c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0"
+            )
+            r = db.cursor.fetchone()
+            total_users = r['c'] if r else 0
+
+            db.cursor.execute(
+                "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?", (today,)
+            )
+            r = db.cursor.fetchone()
+            today_messages = int(r['s']) if r else 0
+
+            db.cursor.execute(
+                "SELECT COALESCE(SUM(pulses_mined),0) as s FROM user_stats WHERE date=?", (today,)
+            )
+            r = db.cursor.fetchone()
+            today_pulses = float(r['s']) if r else 0.0
+
+        dynamics = db.get_user_dynamics_stats(week_start, today) if db else {}
+
+        # История активности: сообщений в день за 7 дней
+        history = []
+        for i in range(6, -1, -1):
+            d = (datetime.now() - timedelta(days=i)).date()
+            msgs = 0
+            if db:
+                db.cursor.execute(
+                    "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?",
+                    (d.isoformat(),)
+                )
+                r = db.cursor.fetchone()
+                msgs = int(r['s']) if r else 0
+            history.append({"day": d.strftime("%a"), "val": msgs})
 
         return {
-            "healthIndex": round(health_score, 1),
-            "bankBalance": bank,
-            "pulseRate": float(rate),
-            "messages": 3120,
-            "activeUsers": active,
-            "indices": indices,
-            "history": history,
-            "pulsesMined": 54200 
+            "bankBalance":  bank,
+            "pulseRate":    rate,
+            "difficultyK":  difficulty_k,
+            "activeUsers":  active_today,
+            "totalUsers":   total_users,
+            "messages":     today_messages,
+            "pulsesMined":  today_pulses,
+            "joined":       dynamics.get('joined', 0),
+            "left":         dynamics.get('left', 0),
+            "history":      history,
+            "healthIndex":  84.5,  # TODO: подключить stats_calculators
         }
     except Exception as e:
-        logger.error(f"Error in stats: {e}")
-        return {"error": str(e)}
+        logger.error(f"Error in /api/stats: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/top")
+async def get_top():
+    """Топы пользователей: баланс, майнеры, активисты"""
+    try:
+        today = datetime.now().date().isoformat()
+
+        def fmt(row):
+            r = dict(row)
+            uname = r.get('username') or r.get('first_name') or str(r.get('user_id', '?'))
+            r['display_name'] = f"@{uname}" if r.get('username') else uname
+            return r
+
+        top_balance   = [fmt(r) for r in db.get_top_users_by_balance(5)]   if db else []
+        top_miners    = [fmt(r) for r in db.get_top_daily_earners(today, 5)] if db else []
+        top_activists = [fmt(r) for r in db.get_top_activists(today, 5)]    if db else []
+
+        return {
+            "topBalance":   top_balance,
+            "topMiners":    top_miners,
+            "topActivists": top_activists,
+        }
+    except Exception as e:
+        logger.error(f"Error in /api/top: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.get("/api/shipper")
 async def get_shipper():

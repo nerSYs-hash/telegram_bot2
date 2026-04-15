@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { 
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
   ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
@@ -68,9 +68,18 @@ export default function App() {
   
   // ================= СОСТОЯНИЯ: СТАТИСТИКА =================
   const historyData = [
-    { day: 'Пн', val: 65 }, { day: 'Вт', val: 72 }, { day: 'Ср', val: 68 },
-    { day: 'Чт', val: 85 }, { day: 'Пт', val: 78 }, { day: 'Сб', val: 92 }, { day: 'Вс', val: 84 },
+    { day: 'Пн', val: 0 }, { day: 'Вт', val: 0 }, { day: 'Ср', val: 0 },
+    { day: 'Чт', val: 0 }, { day: 'Пт', val: 0 }, { day: 'Сб', val: 0 }, { day: 'Вс', val: 0 },
   ];
+  const [liveStats, setLiveStats] = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  useEffect(() => {
+    fetch('/api/stats')
+      .then(r => r.json())
+      .then(data => { setLiveStats(data); setStatsLoading(false); })
+      .catch(() => setStatsLoading(false));
+  }, []);
 
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
@@ -92,13 +101,21 @@ export default function App() {
     setIsTriggerModalOpen(false);
   };
 
-  const TrendChart = () => {
-    const points = historyData.map((d, i) => `${(i * 50) + 20},${150 - (d.val * 1.2)}`).join(' ');
+  const TrendChart = ({ data }) => {
+    const chartData = (data && data.length > 0) ? data : historyData;
+    const maxVal = Math.max(...chartData.map(d => d.val), 1);
+    const points = chartData.map((d, i) => `${(i * 50) + 20},${140 - (d.val / maxVal * 120)}`).join(' ');
+    const totalMsgs = chartData.reduce((s, d) => s + d.val, 0);
     return (
       <div className="w-full bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm relative overflow-hidden">
-        <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-6 flex items-center">
-          <Activity size={14} className="mr-2 text-blue-500" /> Пульс активности чата
-        </h3>
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center">
+            <Activity size={14} className="mr-2 text-blue-500" /> Пульс активности чата
+          </h3>
+          <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-full">
+            {totalMsgs.toLocaleString()} сообщ.
+          </span>
+        </div>
         <div className="relative h-32 w-full">
           <svg className="w-full h-full" viewBox="0 0 350 150" preserveAspectRatio="none">
             <path d={`M 20,150 L ${points} L 320,150 Z`} fill="url(#grad)" className="opacity-10" />
@@ -107,7 +124,12 @@ export default function App() {
           </svg>
         </div>
         <div className="flex justify-between px-2 mt-4">
-          {historyData.map((d, i) => <span key={i} className="text-[10px] font-black text-gray-300 uppercase">{d.day}</span>)}
+          {chartData.map((d, i) => (
+            <div key={i} className="flex flex-col items-center gap-1">
+              <span className="text-[9px] font-black text-blue-400">{d.val > 0 ? d.val : ''}</span>
+              <span className="text-[10px] font-black text-gray-300 uppercase">{d.day}</span>
+            </div>
+          ))}
         </div>
       </div>
     );
@@ -134,7 +156,10 @@ export default function App() {
                    <Zap size={14} className="text-yellow-300 fill-yellow-300" />
                    <span className="text-[10px] font-black uppercase tracking-widest text-white">Статус здоровья</span>
                  </div>
-                 <div className="text-8xl font-black tracking-tighter leading-none">84.5<span className="text-2xl ml-1 opacity-50">%</span></div>
+                 <div className="text-8xl font-black tracking-tighter leading-none">
+                   {statsLoading ? <span className="text-5xl opacity-50">...</span> : (liveStats?.healthIndex ?? 84.5)}
+                   <span className="text-2xl ml-1 opacity-50">%</span>
+                 </div>
                  
                  <button onClick={() => setShowDetailedIndices(!showDetailedIndices)} className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
                    <span>Детальные индексы</span>
@@ -153,14 +178,14 @@ export default function App() {
                </div>
             </div>
             
-            <TrendChart />
+            <TrendChart data={liveStats?.history} />
 
             <div className="grid grid-cols-2 gap-4">
               {[
-                { label: 'Сообщения', val: '3,120', color: 'text-blue-500', icon: MessageSquareX },
-                { label: 'Юзеры', val: '485', color: 'text-indigo-500', icon: Users },
-                { label: 'Входы', val: '+32', color: 'text-green-500', icon: TrendingUp },
-                { label: 'Выходы', val: '-8', color: 'text-red-500', icon: TrendingDown },
+                { label: 'Сообщений сегодня', val: statsLoading ? '...' : (liveStats?.messages ?? 0).toLocaleString(), color: 'text-blue-500', icon: MessageSquareX },
+                { label: 'Активных юзеров',   val: statsLoading ? '...' : (liveStats?.activeUsers ?? 0).toString(),     color: 'text-indigo-500', icon: Users },
+                { label: 'Вступили (7д)',      val: statsLoading ? '...' : `+${liveStats?.joined ?? 0}`,                 color: 'text-green-500', icon: TrendingUp },
+                { label: 'Вышли (7д)',         val: statsLoading ? '...' : `-${liveStats?.left ?? 0}`,                   color: 'text-red-500', icon: TrendingDown },
               ].map((m, i) => (
                 <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm active:scale-95 transition-all">
                   <div className="flex items-center space-x-2 mb-2">
@@ -170,6 +195,26 @@ export default function App() {
                   <span className="text-3xl font-black text-gray-900 leading-none">{m.val}</span>
                 </div>
               ))}
+            </div>
+
+            {/* Банк + Курс пульса */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="bg-indigo-600 p-6 rounded-[2rem] text-white shadow-xl col-span-2">
+                <div className="flex justify-between items-center">
+                  <div>
+                    <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Баланс банка</span>
+                    <span className="text-3xl font-black tracking-tight">
+                      {statsLoading ? '...' : (liveStats?.bankBalance ?? 0).toLocaleString()} 💳
+                    </span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1">Курс пульса</span>
+                    <span className="text-3xl font-black">
+                      {statsLoading ? '...' : (liveStats?.pulseRate ?? '—')}
+                    </span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         );
