@@ -180,6 +180,31 @@ export default function App() {
       .catch(() => setLogsLoading(false));
   };
   
+  // ================= СОСТОЯНИЯ: ФУНКЦИИ БОТА =================
+  const [botFeatures, setBotFeatures] = useState([]);
+  const [featuresLoading, setFeaturesLoading] = useState(false);
+  const [togglingFeature, setTogglingFeature] = useState(null);
+
+  const fetchFeatures = () => {
+    setFeaturesLoading(true);
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(data => { setBotFeatures(Array.isArray(data) ? data : []); setFeaturesLoading(false); })
+      .catch(() => setFeaturesLoading(false));
+  };
+
+  const toggleFeature = async (featureId) => {
+    setTogglingFeature(featureId);
+    try {
+      const r = await fetch(`/api/features/${featureId}/toggle`, { method: 'POST' });
+      const data = await r.json();
+      setBotFeatures(prev => prev.map(f => f.id === featureId ? { ...f, enabled: data.enabled } : f));
+    } catch { }
+    setTogglingFeature(null);
+  };
+
+  useEffect(() => { fetchFeatures(); }, []);
+
   // ================= СОСТОЯНИЯ: СТАТИСТИКА =================
   const PERIODS = [
     { id: 'today',     label: 'Сегодня' },
@@ -536,6 +561,48 @@ export default function App() {
                      </div>
                    ))}
                 </div>
+             </div>
+
+             {/* ─── УПРАВЛЕНИЕ ФУНКЦИЯМИ ─── */}
+             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
+               <div className="flex items-center justify-between mb-5">
+                 <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                   <Wrench className="mr-3 text-purple-500" size={16}/> Функции бота
+                 </h3>
+                 <button
+                   onClick={fetchFeatures}
+                   className="text-xs text-gray-400 font-bold px-3 py-1.5 bg-gray-50 rounded-xl active:scale-95 transition-all"
+                 >
+                   Обновить
+                 </button>
+               </div>
+
+               {featuresLoading && (
+                 <div className="flex items-center justify-center py-8 text-gray-400">
+                   <Loader2 size={20} className="animate-spin mr-2"/> Загрузка...
+                 </div>
+               )}
+
+               {!featuresLoading && (
+                 <div className="space-y-2">
+                   {botFeatures.map(f => (
+                     <div key={f.id} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl">
+                       <span className="font-bold text-sm text-gray-800">{f.name}</span>
+                       <button
+                         onClick={() => toggleFeature(f.id)}
+                         disabled={togglingFeature === f.id}
+                         className={`relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
+                           f.enabled ? 'bg-green-500' : 'bg-gray-300'
+                         } ${togglingFeature === f.id ? 'opacity-50' : 'active:scale-95'}`}
+                       >
+                         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-200 ${
+                           f.enabled ? 'left-[calc(100%-1.375rem)]' : 'left-0.5'
+                         }`}/>
+                       </button>
+                     </div>
+                   ))}
+                 </div>
+               )}
              </div>
           </div>
         );

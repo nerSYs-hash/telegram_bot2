@@ -622,6 +622,65 @@ async def generate_update(event: DeployEvent):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# ─── УПРАВЛЕНИЕ ФУНКЦИЯМИ ───────────────────────────────────────────────────
+
+FEATURES_LIST = [
+    {'id': 'shipper',       'name': '💘 Шиппер (Рулетка пар)'},
+    {'id': 'profile',       'name': '👤 Личный кабинет (Профиль)'},
+    {'id': 'statistics',    'name': '📊 Статистика'},
+    {'id': 'top',           'name': '🏆 ТОП-5 и команды'},
+    {'id': 'bank',          'name': '🏦 Центробанк'},
+    {'id': 'activities',    'name': '🎯 Активности'},
+    {'id': 'detalization',  'name': '📋 Детализация'},
+    {'id': 'lottery',       'name': '🎰 Лотерея'},
+    {'id': 'bingo',         'name': '🎱 Бинго'},
+    {'id': 'referral',      'name': '👥 Рефералы'},
+    {'id': 'donate',        'name': '🎁 Донаты'},
+    {'id': 'monthly_gift',  'name': '🎁 Подарок Месяца'},
+    {'id': 'horoscope',     'name': '🔮 Гороскоп'},
+    {'id': 'bbs',           'name': '❣️ Pulse BBS'},
+    {'id': 'bbs_other',     'name': '📦 BBS: Другое'},
+    {'id': 'bbs_edit',      'name': '✏️ Редактирование анкет BBS'},
+    {'id': 'registration',  'name': '📝 Регистрация новых участников'},
+]
+
+def _get_feature_enabled(feature_id: str) -> bool:
+    if not db:
+        return False
+    if feature_id == 'shipper':
+        return db.get_setting('shipper_enabled', '0') == '1'
+    return db.is_feature_enabled(feature_id)
+
+def _set_feature_enabled(feature_id: str, enabled: bool):
+    val = '1' if enabled else '0'
+    db.set_setting(f'feature_{feature_id}', val)
+    if feature_id == 'top':
+        db.set_setting('feature_top_commands', val)
+    if feature_id == 'shipper':
+        db.set_setting('shipper_enabled', val)
+
+@app.get("/api/features")
+async def get_features():
+    """Список функций бота с их состоянием вкл/выкл"""
+    if not db:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    result = []
+    for f in FEATURES_LIST:
+        result.append({**f, 'enabled': _get_feature_enabled(f['id'])})
+    return result
+
+@app.post("/api/features/{feature_id}/toggle")
+async def toggle_feature_api(feature_id: str):
+    """Переключить функцию вкл/выкл"""
+    if not db:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    if not any(f['id'] == feature_id for f in FEATURES_LIST):
+        raise HTTPException(status_code=404, detail="Unknown feature")
+    current = _get_feature_enabled(feature_id)
+    _set_feature_enabled(feature_id, not current)
+    return {'id': feature_id, 'enabled': not current}
+
+
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     # Запуск uvicorn напрямую. reload=True включен для удобства разработки.
