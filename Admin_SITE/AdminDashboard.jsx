@@ -18,7 +18,8 @@ import {
 const apiKey = ""; 
 
 export default function App() {
-  const [activeTab, setActiveTab] = useState('statistics'); 
+  const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
+  const navigateTo = (id) => { setActiveTab(id); window.location.hash = id; };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
 
@@ -508,7 +509,7 @@ export default function App() {
               {navigation.filter(n => n.group === group).map((item) => (
                 <button
                   key={item.id}
-                  onClick={() => { setActiveTab(item.id); setIsSidebarOpen(false); }}
+                  onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); }}
                   className={`w-full flex items-center px-6 py-5 rounded-[2.2rem] transition-all duration-300 ${
                     activeTab === item.id 
                     ? 'bg-gray-900 text-white shadow-2xl font-black scale-[1.03]' 
