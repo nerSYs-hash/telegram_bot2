@@ -101,17 +101,72 @@ export default function App() {
     pulseRate: 1.42,
     bankBalance: 12500450.20,
     difficultyK: 5.0,
-    admins: ['@vitya_owner', '@alex_admin', '@pulse_mod'],
-    blacklist: ['@spammer_1', '@bot_attacker']
   });
+
+  // ── Стафф (администраторы) ──
+  const [staffList, setStaffList] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [newAdminId, setNewAdminId] = useState('');
+  const [staffError, setStaffError] = useState('');
+  const [staffAdding, setStaffAdding] = useState(false);
+  const [staffRemoving, setStaffRemoving] = useState(null);
+
+  const fetchStaff = () => {
+    setStaffLoading(true);
+    fetch('/api/staff')
+      .then(r => r.json())
+      .then(data => { setStaffList(Array.isArray(data) ? data : []); setStaffLoading(false); })
+      .catch(() => setStaffLoading(false));
+  };
+
+  const addAdmin = async () => {
+    const uid = newAdminId.trim().replace('@', '');
+    if (!uid) return;
+    setStaffAdding(true); setStaffError('');
+    try {
+      const r = await fetch('/api/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setStaffError(data.detail || 'Ошибка'); }
+      else { setNewAdminId(''); fetchStaff(); }
+    } catch { setStaffError('Сетевая ошибка'); }
+    setStaffAdding(false);
+  };
+
+  const removeAdmin = async (userId) => {
+    setStaffRemoving(userId);
+    try {
+      const r = await fetch(`/api/staff/${userId}`, { method: 'DELETE' });
+      const data = await r.json();
+      if (!r.ok) { setStaffError(data.detail || 'Ошибка'); }
+      else { fetchStaff(); }
+    } catch { setStaffError('Сетевая ошибка'); }
+    setStaffRemoving(null);
+  };
+
+  useEffect(() => { if (activeTab === 'system') fetchStaff(); }, [activeTab]);
 
   // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
   const logTags = [
-    { id: 'all',     label: 'Все' },
-    { id: 'trigger', label: 'Триггеры' },
-    { id: 'mute',    label: 'Муты' },
-    { id: 'ban',     label: 'Баны' },
-    { id: 'warn',    label: 'Варны' },
+    { id: 'all',          label: 'Все' },
+    { id: 'trigger',      label: '#Триггер' },
+    { id: 'mute',         label: '#Мут' },
+    { id: 'unmute',       label: '#Размут' },
+    { id: 'ban',          label: '#Бан' },
+    { id: 'unban',        label: '#Разбан' },
+    { id: 'kick',         label: '#Исключен' },
+    { id: 'warn',         label: '#Варн' },
+    { id: 'join',         label: '#Вход' },
+    { id: 'leave',        label: '#Выход' },
+    { id: 'blacklist',    label: '#Блокировка' },
+    { id: 'admin',        label: '#Админ' },
+    { id: 'survey',       label: '#Опрос' },
+    { id: 'profile',      label: '#Профиль' },
+    { id: 'activity',     label: '#Активность' },
+    { id: 'photo',        label: '#Фото' },
   ];
   const [logFilter, setLogFilter] = useState('all');
   const [logs, setLogs] = useState([]);
@@ -321,16 +376,19 @@ export default function App() {
                     {showDetailedIndices && (
                       <div className="space-y-1 pt-3 animate-in slide-in-from-top-2 duration-300">
                         {Object.entries(INDEX_META).map(([k, meta]) => (
-                          <div key={k} className="relative">
-                            <button
-                              onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
-                              className="w-full flex justify-between items-center py-2.5 px-3 rounded-xl hover:bg-white/10 transition-all"
-                            >
-                              <span className="text-xs font-bold opacity-75 text-left">{meta.label}</span>
-                              <span className="text-sm font-black ml-3 flex-shrink-0">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
-                            </button>
+                          <div key={k}>
+                            <div className="flex items-center justify-between py-2 px-3 rounded-xl">
+                              <span className="text-xs font-bold opacity-75">{meta.label}</span>
+                              <div className="flex items-center space-x-2 flex-shrink-0">
+                                <span className="text-sm font-black">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
+                                <button
+                                  onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
+                                  className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black hover:bg-white/30 transition-all flex-shrink-0"
+                                >ℹ</button>
+                              </div>
+                            </div>
                             {activeIndexTooltip === k && (
-                              <div className="mx-3 mb-1 bg-white/15 backdrop-blur-sm text-white text-[10px] rounded-xl p-3 leading-relaxed border border-white/10">
+                              <div className="mx-3 mb-2 bg-white/15 backdrop-blur-sm text-white text-[10px] rounded-xl p-3 leading-relaxed border border-white/10 animate-in slide-in-from-top-1 duration-200">
                                 {meta.desc}
                               </div>
                             )}
@@ -448,13 +506,21 @@ export default function App() {
             )}
             {logs.filter(l => logFilter === 'all' || l.type === logFilter).map(log => {
               const TAG_STYLE = {
-                trigger: 'bg-orange-50 text-orange-600 border border-orange-200',
-                mute:    'bg-yellow-50 text-yellow-700 border border-yellow-200',
-                ban:     'bg-red-50 text-red-600 border border-red-200',
-                warn:    'bg-amber-50 text-amber-600 border border-amber-200',
-                join:    'bg-green-50 text-green-600 border border-green-200',
-                leave:   'bg-gray-100 text-gray-500 border border-gray-200',
-                unban:   'bg-blue-50 text-blue-600 border border-blue-200',
+                trigger:      'bg-orange-50 text-orange-600 border border-orange-200',
+                mute:         'bg-yellow-50 text-yellow-700 border border-yellow-200',
+                unmute:       'bg-lime-50 text-lime-700 border border-lime-200',
+                ban:          'bg-red-50 text-red-600 border border-red-200',
+                unban:        'bg-blue-50 text-blue-600 border border-blue-200',
+                kick:         'bg-rose-50 text-rose-600 border border-rose-200',
+                warn:         'bg-amber-50 text-amber-600 border border-amber-200',
+                join:         'bg-green-50 text-green-600 border border-green-200',
+                leave:        'bg-gray-100 text-gray-500 border border-gray-200',
+                blacklist:    'bg-slate-100 text-slate-600 border border-slate-300',
+                admin:        'bg-indigo-50 text-indigo-600 border border-indigo-200',
+                survey:       'bg-purple-50 text-purple-600 border border-purple-200',
+                profile:      'bg-teal-50 text-teal-600 border border-teal-200',
+                activity:     'bg-cyan-50 text-cyan-600 border border-cyan-200',
+                photo:        'bg-pink-50 text-pink-600 border border-pink-200',
               };
               const tagStyle = TAG_STYLE[log.type] || 'bg-blue-50 text-blue-600 border border-blue-200';
               return (
@@ -544,16 +610,78 @@ export default function App() {
 
              </div>
 
-             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
-                <h3 className="font-black text-gray-900 text-sm uppercase flex items-center mb-6"><ShieldCheck className="mr-3 text-green-500"/> Админы</h3>
-                <div className="space-y-2">
-                   {systemStats.admins.map(adm => (
-                     <div key={adm} className="flex justify-between items-center p-4 bg-gray-50 rounded-2xl font-bold text-sm">
-                        <span>{adm}</span>
-                        <button className="text-red-400 p-2"><UserMinus size={16}/></button>
+             {/* ─── АДМИНИСТРАТОРЫ ─── */}
+             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
+               <div className="flex items-center justify-between">
+                 <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                   <ShieldCheck className="mr-3 text-green-500" size={16}/> Администраторы
+                 </h3>
+                 <button onClick={fetchStaff} className="text-xs text-gray-400 font-bold px-3 py-1.5 bg-gray-50 rounded-xl active:scale-95 transition-all">
+                   Обновить
+                 </button>
+               </div>
+
+               {/* Добавить */}
+               <div className="flex space-x-2">
+                 <input
+                   value={newAdminId}
+                   onChange={e => { setNewAdminId(e.target.value); setStaffError(''); }}
+                   onKeyDown={e => e.key === 'Enter' && addAdmin()}
+                   placeholder="ID или @username"
+                   className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-blue-300"
+                 />
+                 <button
+                   onClick={addAdmin}
+                   disabled={staffAdding || !newAdminId.trim()}
+                   className="px-5 py-3 bg-gray-900 text-white rounded-2xl font-black text-xs disabled:opacity-40 active:scale-95 transition-all flex items-center space-x-1"
+                 >
+                   {staffAdding ? <Loader2 size={14} className="animate-spin"/> : <PlusCircle size={14}/>}
+                   <span>Добавить</span>
+                 </button>
+               </div>
+               {staffError && <p className="text-xs text-red-500 font-bold px-1">{staffError}</p>}
+
+               {/* Список */}
+               {staffLoading ? (
+                 <div className="flex items-center justify-center py-6 text-gray-400">
+                   <Loader2 size={18} className="animate-spin mr-2"/> Загрузка...
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   {staffList.length === 0 && (
+                     <p className="text-center text-gray-300 font-black text-xs uppercase tracking-widest py-4">
+                       Нет данных
+                     </p>
+                   )}
+                   {staffList.map(m => (
+                     <div key={m.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                       <div>
+                         <div className="font-black text-sm text-gray-900">
+                           {m.username ? `@${m.username}` : `ID ${m.user_id}`}
+                           {m.first_name ? ` · ${m.first_name}` : ''}
+                         </div>
+                         <div className="flex items-center gap-2 mt-1">
+                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${m.is_owner ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                             {m.is_owner ? '👑 Владелец' : '🛡 Админ'}
+                           </span>
+                           <span className="text-[9px] text-gray-400 font-mono">{m.user_id}</span>
+                         </div>
+                       </div>
+                       {!m.is_owner && (
+                         <button
+                           onClick={() => removeAdmin(m.user_id)}
+                           disabled={staffRemoving === m.user_id}
+                           className="p-2.5 bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all disabled:opacity-40"
+                         >
+                           {staffRemoving === m.user_id
+                             ? <Loader2 size={15} className="animate-spin"/>
+                             : <UserMinus size={15}/>}
+                         </button>
+                       )}
                      </div>
                    ))}
-                </div>
+                 </div>
+               )}
              </div>
 
              {/* ─── УПРАВЛЕНИЕ ФУНКЦИЯМИ ─── */}

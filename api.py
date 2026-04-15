@@ -807,6 +807,96 @@ async def toggle_feature_api(feature_id: str):
     return {'id': feature_id, 'enabled': not current}
 
 
+# ─────────────── STAFF (администраторы) ────────────────
+
+class StaffAddRequest(BaseModel):
+    user_id: str  # принимаем строку — может быть числом или @username
+
+
+@app.get("/api/staff")
+async def get_staff():
+    """Список владельца и всех администраторов"""
+    if not db:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        conn = db.get_connection()
+        rows = conn.execute(
+            "SELECT user_id, username, first_name, is_owner, is_admin "
+            "FROM users WHERE is_admin = 1 OR is_owner = 1 "
+            "ORDER BY is_owner DESC, first_name"
+        ).fetchall()
+        result = []
+        for r in rows:
+            result.append({
+                "user_id":    r["user_id"],
+                "username":   r["username"] or "",
+                "first_name": r["first_name"] or "",
+                "is_owner":   bool(r["is_owner"]),
+                "is_admin":   bool(r["is_admin"]),
+            })
+        return result
+    except Exception as e:
+        logger.error(f"get_staff error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/api/staff")
+async def add_staff(req: StaffAddRequest):
+    """Назначить пользователя администратором по user_id или @username"""
+    if not db:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        conn = db.get_connection()
+        uid_str = req.user_id.strip().lstrip('@')
+        # Пробуем найти по числовому ID или по username
+        if uid_str.isdigit():
+            row = conn.execute(
+                "SELECT user_id, username, first_name, is_owner FROM users WHERE user_id = ?",
+                (int(uid_str),)
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT user_id, username, first_name, is_owner FROM users "
+                "WHERE lower(username) = lower(?)", (uid_str,)
+            ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Пользователь не найден в базе")
+        if row["is_owner"]:
+            raise HTTPException(status_code=400, detail="Нельзя изменить права Владельца")
+        conn.execute("UPDATE users SET is_admin = 1 WHERE user_id = ?", (row["user_id"],))
+        conn.commit()
+        return {"ok": True, "user_id": row["user_id"]}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"add_staff error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/staff/{user_id}")
+async def remove_staff(user_id: int):
+    """Снять права администратора"""
+    if not db:
+        raise HTTPException(status_code=503, detail="DB unavailable")
+    try:
+        conn = db.get_connection()
+        row = conn.execute(
+            "SELECT is_owner FROM users WHERE user_id = ?", (user_id,)
+        ).fetchone()
+        if not row:
+            raise HTTPException(status_code=404, detail="Пользователь не найден")
+        if row["is_owner"]:
+            raise HTTPException(status_code=400, detail="Нельзя снять права Владельца")
+        conn.execute("UPDATE users SET is_admin = 0 WHERE user_id = ?", (user_id,))
+        conn.commit()
+        return {"ok": True}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"remove_staff error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # --- ЗАПУСК ---
 if __name__ == "__main__":
     # Запуск uvicorn напрямую. reload=True включен для удобства разработки.
