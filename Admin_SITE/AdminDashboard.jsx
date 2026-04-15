@@ -64,6 +64,13 @@ export default function App() {
   });
 
   // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
+  const logTags = [
+    { id: 'all',     label: 'Все' },
+    { id: 'trigger', label: 'Триггеры' },
+    { id: 'mute',    label: 'Муты' },
+    { id: 'ban',     label: 'Баны' },
+    { id: 'warn',    label: 'Варны' },
+  ];
   const [logFilter, setLogFilter] = useState('all');
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
