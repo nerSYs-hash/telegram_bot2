@@ -435,59 +435,44 @@ async def delete_trigger(trigger_id: int):
 
 @app.get("/api/journal")
 async def get_journal():
-    """Журнал событий: нарушения триггеров + транзакции модерации"""
+    """Журнал событий из journal_messages"""
     try:
+        EVENT_TAG = {
+            'join':    ('#Вход',    'join'),
+            'leave':   ('#Выход',   'leave'),
+            'mute':    ('#Мут',     'mute'),
+            'ban':     ('#Бан',     'ban'),
+            'warn':    ('#Варн',    'warn'),
+            'kick':    ('#Кик',     'ban'),
+            'unban':   ('#Разбан',  'unban'),
+            'unmute':  ('#Размут',  'unban'),
+            'trigger': ('#Триггер', 'trigger'),
+        }
+
+        db.cursor.execute('''
+            SELECT jm.id, jm.event_type, jm.user_id, jm.text_preview, jm.created_at,
+                   u.username, u.first_name
+            FROM journal_messages jm
+            LEFT JOIN users u ON jm.user_id = u.user_id
+            ORDER BY jm.id DESC
+            LIMIT 100
+        ''')
         entries = []
-
-        # ── Нарушения триггеров ──
-        db.cursor.execute('''
-            SELECT tv.user_id, tv.trigger_id, tv.count, tv.last_violation_at,
-                   t.name AS trigger_name, t.action,
-                   u.username, u.first_name
-            FROM trigger_violations tv
-            JOIN triggers t ON tv.trigger_id = t.id
-            LEFT JOIN users u ON tv.user_id = u.user_id
-            ORDER BY tv.last_violation_at DESC
-            LIMIT 40
-        ''')
         for r in (dict(x) for x in db.cursor.fetchall()):
-            uname = r.get('username') or r.get('first_name') or str(r['user_id'])
+            ev = r.get('event_type') or 'other'
+            tag, typ = EVENT_TAG.get(ev, (f'#{ev}', ev))
+            uname = r.get('username') or r.get('first_name') or (str(r['user_id']) if r['user_id'] else '—')
             entries.append({
-                'id':      f"tv_{r['trigger_id']}_{r['user_id']}",
-                'time':    (r['last_violation_at'] or '')[:16],
-                'type':    'trigger',
-                'tag':     '#Триггер',
+                'id':      r['id'],
+                'time':    (r['created_at'] or '')[:16],
+                'type':    typ,
+                'tag':     tag,
                 'user':    f"@{uname}" if r.get('username') else uname,
-                'user_id': r['user_id'],
-                'text':    f'Триггер «{r["trigger_name"]}» — {r["count"]} раз. Действие: {r["action"]}',
+                'user_id': r.get('user_id', 0),
+                'text':    r.get('text_preview') or ev,
             })
 
-        # ── Транзакции модерации ──
-        db.cursor.execute('''
-            SELECT t.id, t.from_user_id, t.transaction_type, t.description, t.timestamp,
-                   u.username, u.first_name
-            FROM transactions t
-            LEFT JOIN users u ON t.from_user_id = u.user_id
-            WHERE t.transaction_type IN ('mute','ban','warn','kick','unban','unmute')
-            ORDER BY t.timestamp DESC
-            LIMIT 30
-        ''')
-        TYPE_TAG = {'mute':'#Мут','ban':'#Бан','warn':'#Варн',
-                    'kick':'#Кик','unban':'#Разбан','unmute':'#Размут'}
-        for r in (dict(x) for x in db.cursor.fetchall()):
-            uname = r.get('username') or r.get('first_name') or str(r.get('from_user_id','?'))
-            entries.append({
-                'id':      f"tr_{r['id']}",
-                'time':    (r['timestamp'] or '')[:16],
-                'type':    r['transaction_type'],
-                'tag':     TYPE_TAG.get(r['transaction_type'], f"#{r['transaction_type']}"),
-                'user':    f"@{uname}" if r.get('username') else uname,
-                'user_id': r.get('from_user_id', 0),
-                'text':    r.get('description') or r['transaction_type'],
-            })
-
-        entries.sort(key=lambda x: x['time'], reverse=True)
-        return entries[:60]
+        return entries
     except Exception as e:
         logger.error(f"Error in /api/journal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
