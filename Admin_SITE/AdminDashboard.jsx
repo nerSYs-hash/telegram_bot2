@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
-  GripVertical, Play, Square, Copy, Search
+  GripVertical, Play, Square, Copy, Search, Check, RotateCcw
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════
@@ -80,6 +80,9 @@ export default function App() {
   const [actPickerGroupIdx, setActPickerGroupIdx] = useState(0);
   const [actPickerSearch, setActPickerSearch] = useState('');
   const [actGroupSettingsIdx, setActGroupSettingsIdx] = useState(null);
+  const [condChipInput, setCondChipInput] = useState('');
+  const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
+  const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -327,6 +330,9 @@ export default function App() {
     setShowTriggerEditMenu(false);
     setCondTooltip(null);
     setActGroupSettingsIdx(null);
+    setCondSettingsModal(null);
+    setCondOpenDropdown(null);
+    setCondChipInput('');
     setShowMediaPicker(false);
     navigateTo('triggers');
   };
@@ -833,11 +839,35 @@ export default function App() {
             setEditingTrigger(prev => ({
               ...prev,
               conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
-                ...g, conditions: [...g.conditions, { id: Date.now(), signal, type: 'keyword', condition: 'contains', keyword: '' }]
+                ...g, conditions: [...g.conditions, { id: Date.now(), signal, type: 'keyword', condition: 'contains', keyword: '', chips: [], keywordMode: 'chips', inverted: false, modifier: 'nocase', placeholder_key: '' }]
               })
             }));
             setShowCondPickerModal(false);
           };
+          const addChip = (gIdx, cIdx, text) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            const chips = [...(conditionGroups[gIdx]?.conditions[cIdx]?.chips || []), trimmed];
+            updCond(gIdx, cIdx, 'chips', chips);
+            updCond(gIdx, cIdx, 'keyword', chips.join(', '));
+            setCondChipInput('');
+          };
+          const removeChip = (gIdx, cIdx, chipIdx) => {
+            const chips = (conditionGroups[gIdx]?.conditions[cIdx]?.chips || []).filter((_, i) => i !== chipIdx);
+            updCond(gIdx, cIdx, 'chips', chips);
+            updCond(gIdx, cIdx, 'keyword', chips.join(', '));
+          };
+          const moveCondInGroup = (gIdx, cIdx, dir) => setEditingTrigger(prev => {
+            const groups = (prev.conditionGroups||[]).map((g, gi) => {
+              if (gi !== gIdx) return g;
+              const conds = [...g.conditions];
+              const newIdx = cIdx + dir;
+              if (newIdx < 0 || newIdx >= conds.length) return g;
+              [conds[cIdx], conds[newIdx]] = [conds[newIdx], conds[cIdx]];
+              return {...g, conditions: conds};
+            });
+            return {...prev, conditionGroups: groups};
+          });
           const addCondGroup = () => setEditingTrigger(prev => ({
             ...prev, conditionGroups: [...(prev.conditionGroups||[]), { id: Date.now(), conditions: [] }]
           }));
@@ -1041,35 +1071,210 @@ export default function App() {
                             Список пуст
                           </div>
                         )}
-                        {group.conditions.map((cond, cIdx) => (
-                          <div key={cond.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                              <div className="flex items-center gap-2">
-                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${cond.signal==='message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                                  {cond.signal==='message' ? '📨 Сообщение' : '↩️ Цитируемое'}
-                                </span>
-                                <span className="text-[10px] font-bold text-gray-500">Слово в сообщении</span>
-                              </div>
-                              <button onClick={() => removeCond(gIdx, cIdx)} className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
-                                <X size={12}/>
+                        {group.conditions.map((cond, cIdx) => {
+                          const COND_TYPE_LABELS = { exact:'Полное совпадение', ends_with:'Сообщение заканчивается на', starts_with:'Сообщение начинается с', contains:'Сообщение содержит', whole_word:'Целое слово' };
+                          const typeKey = `type_${gIdx}_${cIdx}`;
+                          const modKey  = `mod_${gIdx}_${cIdx}`;
+                          return (
+                          <div key={cond.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                              <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
+                                className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all flex-shrink-0">
+                                <Settings size={12}/>
                               </button>
-                            </div>
-                            <div className="px-3 py-2.5 space-y-2">
-                              <div className="flex gap-1 flex-wrap">
-                                {Object.entries(COND_LABELS).map(([key, lbl]) => (
-                                  <button key={key} onClick={() => updCond(gIdx, cIdx, 'condition', key)}
-                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${
-                                      cond.condition===key ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-300'
-                                    }`}>{lbl}
-                                  </button>
-                                ))}
+                              <span className="text-[11px] font-black text-gray-700 flex-1">Условие {cIdx + 1}</span>
+                              {cond.placeholder_key && (
+                                <span className="text-[9px] font-bold text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded-full">%{cond.placeholder_key}%</span>
+                              )}
+                              <div className="flex items-center gap-0">
+                                <button onClick={() => moveCondInGroup(gIdx, cIdx, -1)} disabled={cIdx === 0}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                                <button onClick={() => moveCondInGroup(gIdx, cIdx, 1)} disabled={cIdx === group.conditions.length - 1}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                                <button onClick={() => removeCond(gIdx, cIdx)}
+                                  className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                  <Trash2 size={11}/>
+                                </button>
                               </div>
-                              <textarea placeholder="Ключевые слова через запятую..."
-                                value={cond.keyword} onChange={e => updCond(gIdx, cIdx, 'keyword', e.target.value)} rows={2}
-                                className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-sm font-bold outline-none focus:border-blue-300 resize-none transition-all"/>
+                            </div>
+
+                            {/* Тело карточки */}
+                            <div className="px-3 py-3 space-y-3" onClick={() => setCondOpenDropdown(null)}>
+
+                              {/* Сигнал */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-gray-800">
+                                  {cond.signal === 'message' ? 'Сообщение' : 'Цитируемое'}
+                                </span>
+                                <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `sig_${gIdx}_${cIdx}` ? null : `sig_${gIdx}_${cIdx}`); }}
+                                  className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                {condTooltip === `sig_${gIdx}_${cIdx}` && (
+                                  <div className="absolute z-50 mt-1 w-52 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl leading-relaxed">
+                                    {cond.signal === 'message' ? 'Условие проверяет текст входящего сообщения.' : 'Условие проверяет текст цитируемого (reply) сообщения.'}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Тип условия */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <p className="text-[9px] font-black text-gray-500 uppercase mb-1.5">
+                                  Выберите тип условия <span className="text-red-400">*</span>
+                                </p>
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setCondOpenDropdown(condOpenDropdown === typeKey ? null : typeKey)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
+                                    <span>{COND_TYPE_LABELS[cond.condition] || cond.condition}</span>
+                                    <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${condOpenDropdown === typeKey ? 'rotate-180' : ''}`}/>
+                                  </button>
+                                  {condOpenDropdown === typeKey && (
+                                    <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                      {Object.entries(COND_TYPE_LABELS).map(([key, lbl]) => (
+                                        <button key={key}
+                                          onClick={() => { updCond(gIdx, cIdx, 'condition', key); setCondOpenDropdown(null); }}
+                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.condition === key ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                          {lbl}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Сигнал для вызова */}
+                              <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                                Сигнал для вызова триггера: {cond.signal === 'message' ? '📋 Сообщение' : '↩️ Цитируемое'}
+                              </p>
+
+                              {/* Значения условия (Chips / Text) */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <p className="text-[9px] font-black text-gray-500 uppercase">
+                                    Значения условия <span className="text-red-400">*</span>
+                                  </p>
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setCondOpenDropdown(condOpenDropdown === `kw_${gIdx}_${cIdx}` ? null : `kw_${gIdx}_${cIdx}`)}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">
+                                      ⚙
+                                    </button>
+                                    {condOpenDropdown === `kw_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-30 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+                                        <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); updCond(gIdx, cIdx, 'keyword', ''); setCondOpenDropdown(null); setCondChipInput(''); }}
+                                          className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
+                                          <RotateCcw size={11}/> Отменить изменения
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Табы */}
+                                <div className="flex border-b border-gray-200 mb-2">
+                                  <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'chips')}
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'chips' ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                                    🏷 Chips ({(cond.chips||[]).length})
+                                  </button>
+                                  <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'text')}
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'text' ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                                    📄 Text
+                                  </button>
+                                </div>
+                                {(cond.keywordMode||'chips') === 'chips' ? (
+                                  <div>
+                                    {(cond.chips||[]).length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mb-2">
+                                        {(cond.chips||[]).map((chip, ci) => (
+                                          <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold">
+                                            {chip}
+                                            <button onClick={() => removeChip(gIdx, cIdx, ci)} className="text-blue-400 hover:text-blue-700 leading-none ml-0.5">×</button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="flex gap-1">
+                                      <input type="text"
+                                        value={condChipInput}
+                                        onChange={e => setCondChipInput(e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip(gIdx, cIdx, condChipInput); }}}
+                                        placeholder=""
+                                        className="flex-1 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
+                                      <button onClick={() => addChip(gIdx, cIdx, condChipInput)}
+                                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 active:scale-95 transition-all">
+                                        <Check size={13}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-gray-400 mt-1">* Введите значения по одному с помощью «Enter»</p>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-0.5">Обязательное поле</p>}
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <textarea
+                                      value={(cond.chips||[]).join(', ')}
+                                      onChange={e => { const chips = e.target.value.split(',').map(s=>s.trim()).filter(Boolean); updCond(gIdx, cIdx, 'chips', chips); updCond(gIdx, cIdx, 'keyword', e.target.value); }}
+                                      rows={2}
+                                      className="w-full p-2.5 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
+                                    <p className="text-[9px] text-gray-400 mt-1">* Перечислите значения через запятую</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Модификаторы */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-1 mb-1.5">
+                                  <p className="text-[9px] font-black text-gray-500 uppercase">Модификаторы</p>
+                                  <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `modtip_${gIdx}_${cIdx}` ? null : `modtip_${gIdx}_${cIdx}`); }}
+                                    className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                  {condTooltip === `modtip_${gIdx}_${cIdx}` && (
+                                    <div className="absolute z-50 mt-1 w-52 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl leading-relaxed">
+                                      Модификаторы изменяют поведение проверки. «Не учитывать регистр» позволяет реагировать на «Привет» и «привет» одинаково.
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <button onClick={() => setCondOpenDropdown(condOpenDropdown === modKey ? null : modKey)}
+                                    className="w-full flex items-center justify-between px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm hover:border-gray-300 transition-all">
+                                    <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                                      {cond.modifier === 'nocase' ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded-lg text-[10px] font-bold text-gray-600">
+                                          Не учитывать регистр
+                                          <button onClick={e => { e.stopPropagation(); updCond(gIdx, cIdx, 'modifier', ''); }} className="ml-0.5 text-gray-400 hover:text-gray-700 leading-none">×</button>
+                                        </span>
+                                      ) : <span className="text-gray-400 text-sm font-medium">—</span>}
+                                    </div>
+                                    <ChevronDown size={13} className={`text-gray-400 flex-shrink-0 transition-transform ${condOpenDropdown === modKey ? 'rotate-180' : ''}`}/>
+                                  </button>
+                                  {condOpenDropdown === modKey && (
+                                    <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                      <button onClick={() => { updCond(gIdx, cIdx, 'modifier', 'nocase'); setCondOpenDropdown(null); }}
+                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.modifier === 'nocase' ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                        Не учитывать регистр
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Инвертировать */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `inv_${gIdx}_${cIdx}` ? null : `inv_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                  </div>
+                                  <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                  </button>
+                                </div>
+                                <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                              </div>
+
                             </div>
                           </div>
-                        ))}
+                          );
+                        })}
 
                         {/* Добавить условие в эту группу */}
                         <button
@@ -1378,6 +1583,56 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* ── МОДАЛ НАСТРОЕК УСЛОВИЯ (ключ плейсхолдера) ── */}
+              {condSettingsModal && (() => {
+                const { gIdx, cIdx } = condSettingsModal;
+                const cond = conditionGroups[gIdx]?.conditions[cIdx];
+                if (!cond) return null;
+                return (
+                  <div className="fixed inset-0 z-[300] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondSettingsModal(null)}/>
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-black text-base text-gray-900">Дополнительные настройки условия</h3>
+                        <button onClick={() => setCondSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-black text-gray-700">Ключ плейсхолдера</p>
+                          <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
+                        </div>
+                        <p className="text-red-400 text-[10px] font-bold">*</p>
+                        <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                          Укажите ключ, который станет плейсхолдером и будет выводить в тексте условие сработки триггера.<br/>
+                          <span className="text-gray-400">Пример: <span className="font-mono font-bold">words_list</span></span>
+                        </p>
+                        <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                          Поместите этот ключ между <span className="font-mono font-bold text-purple-600">%%</span> и добавьте его в текст действия «Отправить сообщение в чат».<br/>
+                          <span className="text-gray-400">Пример: <span className="font-mono text-purple-600">%words_list%</span></span>
+                        </p>
+                        <input type="text"
+                          value={cond.placeholder_key || ''}
+                          onChange={e => updCond(gIdx, cIdx, 'placeholder_key', e.target.value)}
+                          placeholder="words_list"
+                          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl font-mono font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button onClick={() => setCondSettingsModal(null)}
+                          className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                          Отмена
+                        </button>
+                        <button onClick={() => setCondSettingsModal(null)}
+                          className="px-5 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all">
+                          Сохранить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ── МОДАЛ ВЫБОРА ДЕЙСТВИЯ (full-screen overlay) ── */}
               {showActPickerModal && (
