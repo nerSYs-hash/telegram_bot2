@@ -497,7 +497,7 @@ async def get_journal():
 # --- GEMINI AI ---
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')
-GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent'
+GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent'
 
 GEMINI_SYSTEM = """Ты — умный ИИ-ассистент встроенный в панель управления Telegram-чатом "PULSE 4ever 18+".
 Помогаешь владельцу чата:
@@ -531,11 +531,16 @@ async def ai_chat(req: AiRequest):
             resp.raise_for_status()
             data = resp.json()
 
+        if 'candidates' not in data:
+            logger.error(f"Gemini unexpected response: {data}")
+            raise HTTPException(status_code=502, detail=f"Gemini: {data.get('error', {}).get('message', 'нет candidates')}")
         text = data['candidates'][0]['content']['parts'][0]['text']
         return {"result": text}
+    except HTTPException:
+        raise
     except httpx.HTTPStatusError as e:
-        logger.error(f"Gemini API error: {e.response.text}")
-        raise HTTPException(status_code=502, detail="Ошибка Gemini API")
+        logger.error(f"Gemini API HTTP error {e.response.status_code}: {e.response.text}")
+        raise HTTPException(status_code=502, detail=f"Gemini HTTP {e.response.status_code}")
     except Exception as e:
         logger.error(f"AI error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
