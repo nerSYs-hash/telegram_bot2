@@ -71,9 +71,12 @@ export default function App() {
   const [triggers, setTriggers] = useState([]);
   const [triggersLoading, setTriggersLoading] = useState(false);
   const [showMediaPicker, setShowMediaPicker] = useState(false);
-  const [showConditionPicker, setShowConditionPicker] = useState(false);
+  const [showCondPickerModal, setShowCondPickerModal] = useState(false);
+  const [condPickerGroupIdx, setCondPickerGroupIdx] = useState(0);
+  const [condPickerSearch, setCondPickerSearch] = useState('');
+  const [condPickerTab, setCondPickerTab] = useState('message');
+  const [condTooltip, setCondTooltip] = useState(null);
   const [showActionPicker, setShowActionPicker] = useState(false);
-  const [condSignalTab, setCondSignalTab] = useState('message');
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -288,13 +291,12 @@ export default function App() {
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
     if (t) {
-      // конвертируем старый формат → новый (conditions/actions arrays)
       setEditingTrigger({
         ...t,
-        conditions: t.keyword ? [{
-          id: 1, signal: 'message', type: 'keyword',
-          condition: t.condition || 'contains', keyword: t.keyword || ''
-        }] : [],
+        conditionGroups: [{
+          id: 1,
+          conditions: t.keyword ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', keyword: t.keyword || '' }] : []
+        }],
         actions: [{
           id: 1, type: t.action || 'send_text',
           reply_text: t.reply_text || '',
@@ -310,20 +312,22 @@ export default function App() {
       setEditingTrigger({
         id: null, name: '', probability: 100,
         where: 'chat', from: 'all',
-        conditions: [], actions: []
+        conditionGroups: [{ id: 1, conditions: [] }],
+        actions: []
       });
     }
-    setShowConditionPicker(false);
+    setShowCondPickerModal(false);
     setShowActionPicker(false);
     setShowTriggerEditMenu(false);
-    setCondSignalTab('message');
+    setCondTooltip(null);
     setShowMediaPicker(false);
     navigateTo('triggers');
   };
 
   const saveTrigger = () => {
-    const firstCond   = (editingTrigger.conditions || [])[0] || {};
-    const firstAction = (editingTrigger.actions    || [])[0] || {};
+    const firstGroup  = (editingTrigger.conditionGroups || [])[0] || {};
+    const firstCond   = (firstGroup.conditions || [])[0] || {};
+    const firstAction = (editingTrigger.actions || [])[0] || {};
     const body = {
       name:                 editingTrigger.name,
       condition:            firstCond.condition    || 'contains',
@@ -804,25 +808,57 @@ export default function App() {
         // ── Страница редактора триггера (полный экран) ──
         if (editingTrigger) {
           const upd = (field, val) => setEditingTrigger(prev => ({...prev, [field]: val}));
-          const updCond = (idx, field, val) => setEditingTrigger(prev => {
-            const arr = [...(prev.conditions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, conditions: arr};
+          const conditionGroups = editingTrigger.conditionGroups || [{ id: 1, conditions: [] }];
+          const updCond = (gIdx, cIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, conditions: g.conditions.map((c, ci) => ci !== cIdx ? c : {...c, [field]: val})
+            })
+          }));
+          const removeCond = (gIdx, cIdx) => setEditingTrigger(prev => ({
+            ...prev,
+            conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, conditions: g.conditions.filter((_, ci) => ci !== cIdx)
+            })
+          }));
+          const addConditionToGroup = (gIdx, signal) => {
+            setEditingTrigger(prev => ({
+              ...prev,
+              conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+                ...g, conditions: [...g.conditions, { id: Date.now(), signal, type: 'keyword', condition: 'contains', keyword: '' }]
+              })
+            }));
+            setShowCondPickerModal(false);
+          };
+          const addCondGroup = () => setEditingTrigger(prev => ({
+            ...prev, conditionGroups: [...(prev.conditionGroups||[]), { id: Date.now(), conditions: [] }]
+          }));
+          const removeCondGroup = (gIdx) => setEditingTrigger(prev => ({
+            ...prev, conditionGroups: (prev.conditionGroups||[]).filter((_, i) => i !== gIdx)
+          }));
+          const moveCondGroup = (gIdx, dir) => setEditingTrigger(prev => {
+            const groups = [...(prev.conditionGroups||[])];
+            const newIdx = gIdx + dir;
+            if (newIdx < 0 || newIdx >= groups.length) return prev;
+            [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
+            return {...prev, conditionGroups: groups};
           });
           const updAction = (idx, field, val) => setEditingTrigger(prev => {
             const arr = [...(prev.actions||[])]; arr[idx] = {...arr[idx], [field]: val}; return {...prev, actions: arr};
           });
-          const removeCond   = (idx) => setEditingTrigger(prev => ({...prev, conditions: (prev.conditions||[]).filter((_,i)=>i!==idx)}));
           const removeAction = (idx) => setEditingTrigger(prev => ({...prev, actions: (prev.actions||[]).filter((_,i)=>i!==idx)}));
-          const addCondition = (signal) => {
-            setEditingTrigger(prev => ({...prev, conditions: [...(prev.conditions||[]), {id: Date.now(), signal, type:'keyword', condition:'contains', keyword:''}]}));
-            setShowConditionPicker(false);
-          };
           const addAction = (type) => {
             setEditingTrigger(prev => ({...prev, actions: [...(prev.actions||[]), {id: Date.now(), type, reply_text:'', media_type:'none', reply_target:'none', bot_msg_delete:'no', bot_msg_delete_after:60, duration:'', emoji:''}]}));
             setShowActionPicker(false);
           };
 
-          const conditions = editingTrigger.conditions || [];
-          const actions    = editingTrigger.actions    || [];
+          const actions = editingTrigger.actions || [];
+          const COND_TOOLTIP_TEXT = {
+            'msg_keyword': 'Проверяет текст входящего сообщения — содержит ли оно указанное слово или фразу.',
+            'msg_any':     'Срабатывает на любое текстовое сообщение, без проверки содержимого.',
+            'qmsg_keyword': 'Проверяет текст сообщения, на которое ответили (цитируемое).',
+            'qmsg_any':    'Срабатывает, когда пользователь отвечает на любое сообщение цитированием.',
+          };
 
           const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
           const ACTION_TYPES = [
@@ -908,60 +944,238 @@ export default function App() {
               </div>
 
               {/* ── УСЛОВИЯ ── */}
-              <div className="mb-5 space-y-2">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Условия</span>
-                {conditions.map((cond, idx) => (
-                  <div key={cond.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-                      <span className={`text-[10px] font-black px-2.5 py-1 rounded-full uppercase ${cond.signal==='message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
-                        {cond.signal==='message' ? '📨 Сообщение' : '↩️ Цитируемое'}
-                      </span>
-                      <button onClick={() => removeCond(idx)} className="p-1.5 text-red-400 hover:text-red-600 active:scale-90 transition-all"><X size={13}/></button>
-                    </div>
-                    <div className="px-4 py-3 space-y-3">
-                      <div className="flex gap-1.5 flex-wrap">
-                        {Object.entries(COND_LABELS).map(([key, lbl]) => (
-                          <button key={key} onClick={() => updCond(idx,'condition',key)}
-                            className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${
-                              cond.condition===key ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'
-                            }`}>{lbl}
-                          </button>
-                        ))}
+              <div className="mb-5 space-y-3">
+                {/* Заголовок блока */}
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Условия</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCondTooltip(condTooltip === 'block' ? null : 'block')}
+                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 active:scale-90 transition-all flex-shrink-0">
+                      ?
+                    </button>
+                    {condTooltip === 'block' && (
+                      <div className="absolute left-0 top-6 w-64 bg-gray-900 text-white text-[11px] font-medium p-3 rounded-2xl shadow-xl z-50 leading-relaxed">
+                        Условия определяют, на что реагирует триггер. Несколько условий в одной группе работают как «И» (все должны совпасть). Несколько групп работают как «ИЛИ» (достаточно одной).
+                        <div className="absolute -top-1.5 left-2 w-3 h-3 bg-gray-900 rotate-45"/>
                       </div>
-                      <textarea placeholder="Ключевые слова через запятую..."
-                        value={cond.keyword} onChange={e => updCond(idx,'keyword',e.target.value)} rows={2}
-                        className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-mono text-sm font-bold outline-none focus:border-blue-300 resize-none transition-all"/>
-                    </div>
+                    )}
                   </div>
-                ))}
-                <button onClick={() => { setShowConditionPicker(v=>!v); setShowActionPicker(false); }}
-                  className="w-full py-3.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[11px] uppercase flex items-center justify-center gap-2 hover:border-blue-300 hover:text-blue-400 transition-all bg-white">
-                  <PlusCircle size={14}/> Добавить условие
+                  {conditionGroups.length > 1 && (
+                    <span className="ml-auto text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full uppercase">
+                      {conditionGroups.length} группы
+                    </span>
+                  )}
+                </div>
+
+                {/* Группы условий */}
+                {conditionGroups.map((group, gIdx) => {
+                  return (
+                    <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                      {/* Шапка группы */}
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
+                          {conditionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Условия'}
+                          {conditionGroups.length > 1 && gIdx < conditionGroups.length - 1 && (
+                            <span className="ml-2 text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">ИЛИ ↓</span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <button onClick={() => moveCondGroup(gIdx, -1)} disabled={gIdx === 0}
+                            className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                          <button onClick={() => moveCondGroup(gIdx, 1)} disabled={gIdx === conditionGroups.length - 1}
+                            className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                          {conditionGroups.length > 1 && (
+                            <button onClick={() => removeCondGroup(gIdx)}
+                              className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all ml-0.5">
+                              <Trash2 size={12}/>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Условия внутри группы */}
+                      <div className="p-3 space-y-2">
+                        {group.conditions.length === 0 && (
+                          <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
+                            Список пуст
+                          </div>
+                        )}
+                        {group.conditions.map((cond, cIdx) => (
+                          <div key={cond.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
+                            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+                              <div className="flex items-center gap-2">
+                                <span className={`text-[9px] font-black px-2 py-0.5 rounded-full uppercase ${cond.signal==='message' ? 'bg-blue-100 text-blue-700' : 'bg-purple-100 text-purple-700'}`}>
+                                  {cond.signal==='message' ? '📨 Сообщение' : '↩️ Цитируемое'}
+                                </span>
+                                <span className="text-[10px] font-bold text-gray-500">Слово в сообщении</span>
+                              </div>
+                              <button onClick={() => removeCond(gIdx, cIdx)} className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                <X size={12}/>
+                              </button>
+                            </div>
+                            <div className="px-3 py-2.5 space-y-2">
+                              <div className="flex gap-1 flex-wrap">
+                                {Object.entries(COND_LABELS).map(([key, lbl]) => (
+                                  <button key={key} onClick={() => updCond(gIdx, cIdx, 'condition', key)}
+                                    className={`px-2.5 py-1 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${
+                                      cond.condition===key ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400 hover:border-gray-300'
+                                    }`}>{lbl}
+                                  </button>
+                                ))}
+                              </div>
+                              <textarea placeholder="Ключевые слова через запятую..."
+                                value={cond.keyword} onChange={e => updCond(gIdx, cIdx, 'keyword', e.target.value)} rows={2}
+                                className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-mono text-sm font-bold outline-none focus:border-blue-300 resize-none transition-all"/>
+                            </div>
+                          </div>
+                        ))}
+
+                        {/* Добавить условие в эту группу */}
+                        <button
+                          onClick={() => { setCondPickerGroupIdx(gIdx); setCondPickerTab('message'); setCondPickerSearch(''); setShowCondPickerModal(true); }}
+                          className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
+                          <PlusCircle size={12}/> Добавить условие
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Добавить группу условий */}
+                <button
+                  onClick={addCondGroup}
+                  className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
+                  <PlusCircle size={12}/> Добавить группу условий
                 </button>
-                {showConditionPicker && (
-                  <div className="bg-white border-2 border-gray-100 rounded-2xl overflow-hidden shadow-lg">
-                    <div className="flex">
-                      {[{v:'message',l:'📨 Сообщение'},{v:'quoted',l:'↩️ Цитируемое'}].map(t => (
-                        <button key={t.v} onClick={() => setCondSignalTab(t.v)}
-                          className={`flex-1 py-3 text-[11px] font-black uppercase transition-all border-b-2 ${condSignalTab===t.v ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-gray-100'}`}>
-                          {t.l}
+              </div>
+
+              {/* ── МОДАЛ ВЫБОРА УСЛОВИЯ (full-screen overlay) ── */}
+              {showCondPickerModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col" onClick={e => { if (e.target === e.currentTarget) setShowCondPickerModal(false); }}>
+                  {/* Backdrop */}
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCondPickerModal(false)}/>
+                  {/* Panel */}
+                  <div className="relative mt-auto bg-white rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                    {/* Drag handle */}
+                    <div className="flex justify-center pt-3 pb-1">
+                      <div className="w-10 h-1 bg-gray-200 rounded-full"/>
+                    </div>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
+                      <h3 className="font-black text-base text-gray-900">Выберите условие</h3>
+                      <button onClick={() => setShowCondPickerModal(false)} className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <X size={18}/>
+                      </button>
+                    </div>
+                    {/* Signal tabs */}
+                    <div className="flex border-b border-gray-100">
+                      {[{v:'message',l:'Сообщение'},{v:'quoted',l:'Цитируемое'}].map(tab => (
+                        <button key={tab.v} onClick={() => setCondPickerTab(tab.v)}
+                          className={`flex-1 py-3 text-[11px] font-black uppercase tracking-wide transition-all border-b-2 ${condPickerTab===tab.v ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                          {tab.l}
                         </button>
                       ))}
                     </div>
-                    <div className="px-4 py-2 bg-blue-50 text-[10px] text-blue-700 font-medium">
-                      {condSignalTab==='message' ? 'Триггер сработает на сообщение участника.' : 'Триггер сработает на сообщение, на которое ответили.'}
+                    {/* Info box */}
+                    <div className="mx-4 mt-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-[11px] text-blue-700 font-medium leading-relaxed">
+                      {condPickerTab === 'message'
+                        ? '📨 Триггер проверит входящее сообщение участника чата по выбранному условию.'
+                        : '↩️ Триггер проверит сообщение, на которое ответил пользователь (цитируемое).'}
                     </div>
-                    <button onClick={() => addCondition(condSignalTab)}
-                      className="w-full flex items-center gap-3 px-4 py-4 hover:bg-gray-50 active:bg-gray-100 transition-all text-left border-t border-gray-50">
-                      <span className="w-9 h-9 bg-blue-50 rounded-xl flex items-center justify-center text-base flex-shrink-0">🔤</span>
-                      <div>
-                        <p className="font-black text-sm text-gray-900">Слово в сообщении</p>
-                        <p className="text-[10px] text-gray-400 font-medium">Реагирует на ключевые слова</p>
+                    {/* Search */}
+                    <div className="px-4 mt-3">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"/>
+                        <input
+                          type="text"
+                          placeholder="Поиск условий..."
+                          value={condPickerSearch}
+                          onChange={e => setCondPickerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
                       </div>
-                    </button>
+                    </div>
+                    {/* Conditions list */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+                      {/* Секция: Условия по тексту */}
+                      <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                          Условия по {condPickerTab === 'message' ? 'сообщению' : 'цитируемому сообщению'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Сообщение (any) */}
+                          {(condPickerSearch === '' || 'сообщение любое'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">📩</span>
+                              <span className="text-[11px] font-black text-gray-800 leading-tight">
+                                {condPickerTab === 'message' ? 'Сообщение' : 'Цитируемое'}
+                              </span>
+                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Любое входящее сообщение</span>
+                              {/* ⓘ tooltip */}
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_any_${condPickerTab}` ? null : `picker_any_${condPickerTab}`); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === `picker_any_${condPickerTab}` && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {condPickerTab === 'message' ? COND_TOOLTIP_TEXT['msg_any'] : COND_TOOLTIP_TEXT['qmsg_any']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Слово в сообщении */}
+                          {(condPickerSearch === '' || 'слово ключевое keyword'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">🔤</span>
+                              <span className="text-[11px] font-black text-gray-800 leading-tight">Слово в сообщении</span>
+                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Реагирует на ключевые слова</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_kw_${condPickerTab}` ? null : `picker_kw_${condPickerTab}`); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === `picker_kw_${condPickerTab}` && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {condPickerTab === 'message' ? COND_TOOLTIP_TEXT['msg_keyword'] : COND_TOOLTIP_TEXT['qmsg_keyword']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Секция: Условия по параметрам */}
+                      <div>
+                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                          Условия по параметрам сообщения
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { icon: '📎', label: 'Тип медиа', sub: 'Фото, видео, файл...' },
+                            { icon: '👤', label: 'Автор', sub: 'ID или username' },
+                            { icon: '💬', label: 'Длина текста', sub: 'Больше/меньше N символов' },
+                            { icon: '🕐', label: 'Время отправки', sub: 'В заданный промежуток' },
+                          ].map(item => (
+                            <div key={item.label}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                              <span className="text-xl">{item.icon}</span>
+                              <span className="text-[11px] font-black text-gray-500 leading-tight">{item.label}</span>
+                              <span className="text-[9px] text-gray-400 font-medium leading-tight">{item.sub}</span>
+                              <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                              <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                )}
-              </div>
+                </div>
+              )}
 
               {/* ── ДЕЙСТВИЯ ── */}
               <div className="mb-5 space-y-2">
