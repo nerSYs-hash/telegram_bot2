@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
-  Tooltip, ResponsiveContainer
+  Tooltip, ResponsiveContainer, Brush
 } from 'recharts';
 import { 
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
@@ -81,16 +81,27 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ commit_message: aiUpdateInput, secret: 'pulse-deploy-secret' }),
       });
-      const data = await r.json();
+      if (!r.ok) { setAiUpdateLoading(false); return; }
       const entry = await r.json();
-      setAiUpdates(prev => [entry, ...prev]);
-      setAiUpdateModal(false);
-      setAiUpdateInput('');
+      if (entry && entry.id) {
+        setAiUpdates(prev => [entry, ...prev]);
+        setAiUpdateModal(false);
+        setAiUpdateInput('');
+      }
     } catch { }
     setAiUpdateLoading(false);
   };
+
+  const deleteAiUpdate = async (id) => {
+    setAiUpdates(prev => prev.filter(x => x.id !== id));
+    try {
+      await fetch(`/api/updates/${id}`, { method: 'DELETE' });
+    } catch { }
+  };
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
+  const [activeIndexTooltip, setActiveIndexTooltip] = useState(null);
+  const [showHealthTooltip, setShowHealthTooltip] = useState(false);
 
   // ================= СОСТОЯНИЯ: ИИ =================
   const [isAiModalOpen, setIsAiModalOpen] = useState(false);
@@ -318,39 +329,77 @@ export default function App() {
             </div>
 
             {/* ── Hero: Health index ── */}
-            <div className={`bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 transition-all duration-500 ${statsLoading ? 'opacity-60' : 'opacity-100'}`}>
-              <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
-              <div className="relative z-10">
-                <div className="flex items-center justify-between mb-6">
-                  <div className="flex items-center space-x-2 bg-white/20 px-4 py-1.5 rounded-full backdrop-blur-md">
-                    <Zap size={14} className="text-yellow-300 fill-yellow-300" />
-                    <span className="text-[10px] font-black uppercase tracking-widest">Статус здоровья</span>
-                  </div>
-                  <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
-                    {liveStats?.periodLabel || 'Сегодня'}
-                  </span>
-                </div>
-                <div className="text-8xl font-black tracking-tighter leading-none">
-                  {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 84.5)}
-                  {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
-                </div>
-                <button onClick={() => setShowDetailedIndices(!showDetailedIndices)}
-                  className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
-                  <span>Детальные индексы</span>
-                  {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                </button>
-                {showDetailedIndices && (
-                  <div className="grid grid-cols-2 gap-x-8 gap-y-3 pt-4 animate-in slide-in-from-top-2 duration-300">
-                    {['oksp','sdsp','cho','media','korp','kopyup'].map(k => (
-                      <div key={k} className="flex justify-between border-b border-white/5 pb-1">
-                        <span className="text-[9px] font-bold opacity-60 uppercase">{k}</span>
-                        <span className="text-sm font-black">12.4</span>
+            {(() => {
+              const INDEX_META = {
+                oksp:   { label: 'ОКSP',   desc: 'Общая активность — среднее сообщений на активного участника × 10' },
+                sdsp:   { label: 'СДСП',   desc: 'Диалоговость — доля ответов (reply) от всех сообщений, %' },
+                cho:    { label: 'ЧО',     desc: 'Эмоциональность — доля реакций от сообщений, %' },
+                media:  { label: 'МДА',    desc: 'Медиаактивность — доля медиафайлов от всех сообщений, %' },
+                korp:   { label: 'КОРП',   desc: 'Вовлечённость — суммарный отклик (reply + реакции) к сообщениям, %' },
+                kopyup: { label: 'ПРИРОСТ',desc: 'Прирост участников — (вступили − вышли) / всего участников, %' },
+              };
+              const idxData = liveStats?.indices || {};
+              return (
+                <div className={`bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 transition-all duration-500 ${statsLoading ? 'opacity-60' : 'opacity-100'}`}>
+                  <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
+                  <div className="relative z-10">
+                    <div className="flex items-center justify-between mb-6">
+                      <div className="flex items-center space-x-2 bg-white/20 px-4 py-1.5 rounded-full backdrop-blur-md">
+                        <Zap size={14} className="text-yellow-300 fill-yellow-300" />
+                        <span className="text-[10px] font-black uppercase tracking-widest">Статус здоровья</span>
                       </div>
-                    ))}
+                      <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
+                        {liveStats?.periodLabel || 'Сегодня'}
+                      </span>
+                    </div>
+                    <div className="flex items-end space-x-3">
+                      <div className="text-8xl font-black tracking-tighter leading-none">
+                        {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 0)}
+                        {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
+                      </div>
+                      <div className="relative mb-2">
+                        <button
+                          onClick={() => setShowHealthTooltip(v => !v)}
+                          className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-black hover:bg-white/30 transition-all"
+                        >ℹ</button>
+                        {showHealthTooltip && (
+                          <div className="absolute bottom-10 left-0 w-64 bg-gray-900 text-white text-xs rounded-2xl p-4 z-50 shadow-2xl">
+                            <p className="font-black mb-2">Как считается индекс здоровья:</p>
+                            <p className="opacity-80 leading-relaxed">ОКSP×25% + СДСП×15% + ЧО×15% + МДА×10% + КОРП×20% + ПРИРОСТ×15%</p>
+                            <p className="opacity-60 mt-2">Каждый субиндекс — реальные данные за выбранный период.</p>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    <button onClick={() => setShowDetailedIndices(!showDetailedIndices)}
+                      className="mt-8 w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
+                      <span>Детальные индексы</span>
+                      {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+                    </button>
+                    {showDetailedIndices && (
+                      <div className="grid grid-cols-2 gap-x-6 gap-y-2 pt-4 animate-in slide-in-from-top-2 duration-300">
+                        {Object.entries(INDEX_META).map(([k, meta]) => (
+                          <div key={k} className="relative">
+                            <button
+                              onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
+                              className="w-full flex justify-between items-center border-b border-white/5 pb-1.5 hover:opacity-80 transition-all"
+                            >
+                              <span className="text-[9px] font-bold opacity-60 uppercase">{meta.label}</span>
+                              <span className="text-sm font-black">{idxData[k] ?? '—'}</span>
+                            </button>
+                            {activeIndexTooltip === k && (
+                              <div className="absolute bottom-8 left-0 w-52 bg-gray-900 text-white text-[10px] rounded-xl p-3 z-50 shadow-2xl leading-relaxed">
+                                {meta.desc}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
+              );
+            })()}
 
             {/* ── Recharts AreaChart ── */}
             <div className={`bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
@@ -362,7 +411,7 @@ export default function App() {
                   {(liveStats?.history || []).reduce((s, d) => s + d.val, 0).toLocaleString()} сообщ.
                 </span>
               </div>
-              <ResponsiveContainer width="100%" height={160}>
+              <ResponsiveContainer width="100%" height={200}>
                 <AreaChart data={liveStats?.history || []} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
                   <defs>
                     <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
@@ -377,6 +426,8 @@ export default function App() {
                   <Area type="monotone" dataKey="val" stroke="#3b82f6" strokeWidth={3}
                     fill="url(#areaGrad)" dot={false} activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
                     animationDuration={600} animationEasing="ease-out" />
+                  <Brush dataKey="day" height={22} stroke="#e2e8f0" fill="#f8fafc" travellerWidth={8}
+                    tickFormatter={() => ''} />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
@@ -547,7 +598,7 @@ export default function App() {
                       <div className="w-12 h-12 bg-white/20 rounded-2xl flex items-center justify-center"><Coins size={24}/></div>
                       <span className="text-[10px] font-black uppercase opacity-60">Банк</span>
                    </div>
-                   <div className="text-3xl font-black tracking-tight">{systemStats.bankBalance.toLocaleString()} 💳</div>
+                   <div className="text-3xl font-black tracking-tight">{(liveStats?.bankBalance ?? 0).toLocaleString()} 💳</div>
                 </div>
              </div>
 
@@ -661,24 +712,44 @@ export default function App() {
 
             {/* ── ИИ-записи ── */}
             {aiUpdates.map((upd) => (
-              <div key={upd.id} className="bg-white rounded-2xl p-5 border border-purple-100 shadow-sm space-y-3">
+              <div key={upd.id} className="bg-white rounded-[2.5rem] p-6 border border-purple-100 shadow-sm space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="bg-purple-100 text-purple-700 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center space-x-1">
-                    <Sparkles size={10}/><span>Написано ИИ</span>
-                  </span>
+                  <div className="flex items-center space-x-2">
+                    {upd.version && (
+                      <span className="bg-purple-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{upd.version}</span>
+                    )}
+                    <span className="bg-purple-50 text-purple-600 text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full flex items-center space-x-1">
+                      <Sparkles size={10}/><span>ИИ</span>
+                    </span>
+                  </div>
                   <div className="flex items-center space-x-2">
                     <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
-                    <button onClick={() => setAiUpdates(prev => prev.filter(x=>x.id!==upd.id))} className="text-gray-300 hover:text-red-400 transition-colors"><X size={14}/></button>
+                    <button onClick={() => deleteAiUpdate(upd.id)} className="p-1.5 text-gray-300 hover:text-red-400 hover:bg-red-50 rounded-xl transition-all"><X size={14}/></button>
                   </div>
                 </div>
-                <p className="text-xs font-bold text-gray-500">{upd.title}</p>
-                <ul className="space-y-1.5">
-                  {upd.items.map((item, i) => (
-                    <li key={i} className="flex items-start space-x-2 text-xs text-gray-700">
-                      <span className="text-purple-400 mt-0.5">•</span><span>{item}</span>
-                    </li>
-                  ))}
-                </ul>
+                <h3 className="font-black text-lg text-gray-900">{upd.title}</h3>
+                <div className="space-y-2">
+                  {(upd.items || []).map((item, i) => {
+                    const isObj = item && typeof item === 'object';
+                    const typeCfg = isObj ? ({
+                      new:     { icon: PartyPopper, bg: 'bg-green-50',  text: 'text-green-600',  border: 'border-green-100',  label: 'НОВОЕ'      },
+                      improve: { icon: Sparkles,    bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-100',   label: 'УЛУЧШЕНО'   },
+                      fix:     { icon: Wrench,      bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-100', label: 'ИСПРАВЛЕНО' },
+                    }[item.type] || { icon: Info, bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-100', label: '' })
+                    : { icon: Sparkles, bg: 'bg-purple-50', text: 'text-purple-500', border: 'border-purple-100', label: 'НОВОЕ' };
+                    const Icon = typeCfg.icon;
+                    const text = isObj ? item.text : item;
+                    return (
+                      <div key={i} className={`flex items-start space-x-3 p-3 rounded-2xl border ${typeCfg.bg} ${typeCfg.border}`}>
+                        <div className={`flex-shrink-0 flex items-center space-x-1 ${typeCfg.text}`}>
+                          <Icon size={14} />
+                          <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
+                        </div>
+                        <p className="text-xs text-gray-700 font-medium leading-relaxed flex-1">{text}</p>
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             ))}
 
@@ -849,7 +920,7 @@ export default function App() {
         );
 
         const actionMap = { send_text: '💬 Текст', delete: '🗑 Удалить', mute: '🔇 Мут', ban: '🚫 Бан', warn: '⚠️ Варн' };
-        const condMap   = { any_word: 'Слова', exact_match: 'Точно', regex: 'RegEx' };
+        const condMap   = { any_word: 'Слова', exact_match: 'Точно', regex: 'Регулярное выражение' };
         const whereMap  = { chat: 'Чат', pv: 'Личка', global: 'Везде' };
         const fromMap   = { all: 'Все', users: 'Юзеры', admins: 'Админы' };
         const delMap    = { no: 'Нет', previous: 'Предыдущее', period: `Таймер ${editingTrigger.bot_msg_delete_after}с` };
@@ -906,7 +977,7 @@ export default function App() {
                       <div className="grid grid-cols-3 gap-2">
                         <TileBtn active={editingTrigger.condition==='any_word'}   onClick={()=>upd('condition','any_word')}   icon={MessageCircle} label="Слова"  color="gray"/>
                         <TileBtn active={editingTrigger.condition==='exact_match'} onClick={()=>upd('condition','exact_match')} icon={CheckCircle2}   label="Точно"  color="gray"/>
-                        <TileBtn active={editingTrigger.condition==='regex'}       onClick={()=>upd('condition','regex')}       icon={Globe}          label="RegEx"  color="gray"/>
+                        <TileBtn active={editingTrigger.condition==='regex'}       onClick={()=>upd('condition','regex')}       icon={Globe}          label="Регулярное"  color="gray"/>
                       </div>
                     </div>
 

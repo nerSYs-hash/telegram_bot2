@@ -184,6 +184,42 @@ def _compute_stats(period: str) -> dict:
 
     dynamics = db.get_user_dynamics_stats(start_date.isoformat(), end_date.isoformat()) if db else {}
 
+    # ── Субиндексы здоровья чата ──
+    indices = {"oksp": 0.0, "sdsp": 0.0, "cho": 0.0, "media": 0.0, "korp": 0.0, "kopyup": 0.0}
+    health = 0.0
+    if db and messages > 0:
+        try:
+            db.cursor.execute(
+                "SELECT COALESCE(SUM(replies_sent),0) as rpl, "
+                "COALESCE(SUM(reactions_given),0) as rea, "
+                "COALESCE(SUM(media_sent),0) as med "
+                "FROM user_stats WHERE date>=? AND date<=?",
+                (start_date.isoformat(), end_date.isoformat())
+            )
+            sr = db.cursor.fetchone()
+            replies   = int(sr['rpl'])  if sr else 0
+            reactions = int(sr['rea'])  if sr else 0
+            media_cnt = int(sr['med'])  if sr else 0
+            joined    = dynamics.get('joined', 0)
+            left      = dynamics.get('left',   0)
+
+            oksp       = round(min((messages / max(active, 1)) * 10, 100.0), 1)
+            sdsp       = round(replies   / messages * 100, 1)
+            cho        = round(reactions / messages * 100, 1)
+            media_idx  = round(media_cnt / messages * 100, 1)
+            korp       = round((replies + reactions) / messages * 100, 1)
+            kopyup     = round((joined - left) / max(total_users, 1) * 100, 1)
+
+            indices = {"oksp": oksp, "sdsp": sdsp, "cho": cho,
+                       "media": media_idx, "korp": korp, "kopyup": kopyup}
+            health = round(min(
+                oksp * 0.25 + sdsp * 0.15 + cho * 0.15 +
+                media_idx * 0.10 + korp * 0.20 + max(0, kopyup) * 0.15,
+                100.0
+            ), 1)
+        except Exception as _he:
+            logger.warning(f"health indices: {_he}")
+
     return {
         "period":       period,
         "periodLabel":  PERIOD_LABELS.get(period, period),
@@ -197,7 +233,8 @@ def _compute_stats(period: str) -> dict:
         "joined":       dynamics.get('joined', 0),
         "left":         dynamics.get('left', 0),
         "history":      history,
-        "healthIndex":  84.5,
+        "healthIndex":  health,
+        "indices":      indices,
     }
 
 
@@ -331,15 +368,12 @@ async def get_shipper():
 async def get_system():
     """Системные настройки"""
     try:
-        bank = db.get_bank_balance() if db else 12500450.20
         pulse_rate = db.get_setting('pulse_rate', '1.42') if db else "1.42"
-        
         return {
-            "pulseRate": float(pulse_rate),
-            "bankBalance": bank,
+            "pulseRate":   float(pulse_rate),
             "difficultyK": 5.0,
-            "admins": ["@vitya_owner", "@alex_admin"],
-            "blacklist": []
+            "admins":      ["@vitya_owner", "@alex_admin"],
+            "blacklist":   []
         }
     except Exception as e:
         return {"error": str(e)}
@@ -572,6 +606,16 @@ async def get_updates():
     """Список AI-сгенерированных заметок об обновлениях"""
     return _load_ai_updates()
 
+@app.delete("/api/updates/{update_id}")
+async def delete_update(update_id: int):
+    """Удалить запись об обновлении"""
+    updates = _load_ai_updates()
+    new_list = [u for u in updates if u.get('id') != update_id]
+    if len(new_list) == len(updates):
+        raise HTTPException(status_code=404, detail="Not found")
+    _save_ai_updates(new_list)
+    return {"ok": True}
+
 class DeployEvent(BaseModel):
     commit_message: str
     secret: str
@@ -584,13 +628,39 @@ async def generate_update(event: DeployEvent):
     if not GEMINI_KEY:
         raise HTTPException(status_code=503, detail="GEMINI_API_KEY не задан")
 
+    # Определяем версию из коммита (feat(V1.11.0) → V1.11.0)
+    ver_match = re.search(r'V[\d]+\.[\d]+\.[\d]+[a-z]?', event.commit_message)
+    version = ver_match.group(0) if ver_match else ''
+
+    # Определяем тег по ключевым словам
+    msg_lower = event.commit_message.lower()
+    if any(w in msg_lower for w in ['сайт', 'site', 'панел', 'dashboard', 'ui']):
+        tag = 'site'
+    elif any(w in msg_lower for w in ['триггер', 'trigger']):
+        tag = 'triggers'
+    elif any(w in msg_lower for w in ['журнал', 'journal']):
+        tag = 'journal'
+    elif any(w in msg_lower for w in ['статист', 'stat']):
+        tag = 'statistics'
+    else:
+        tag = 'bot'
+
+    # Определяем тип (fix/feat/improve)
+    if event.commit_message.startswith('fix'):
+        upd_type = 'fix'
+    elif event.commit_message.startswith('feat'):
+        upd_type = 'new'
+    else:
+        upd_type = 'improve'
+
     prompt = f"""Ты пишешь краткие заметки об обновлениях для Telegram-бота и веб-панели управления чатом "PULSE 4ever 18+".
 
 Техническое описание коммита: "{event.commit_message}"
 
 Напиши 2-4 коротких пункта на русском языке, понятных обычному пользователю (без технических терминов).
-Каждый пункт начинай с действия: «Добавлено», «Исправлено», «Улучшено» или «Теперь».
-Верни ТОЛЬКО список пунктов, без заголовков и лишних пояснений."""
+Каждый пункт начинай с одного из слов: «Добавлено», «Исправлено», «Улучшено» или «Теперь».
+ВАЖНО: не используй markdown-разметку, звёздочки **, решётки # и другие спецсимволы.
+Верни ТОЛЬКО список пунктов, каждый на новой строке, без заголовков и нумерации."""
 
     try:
         async with httpx.AsyncClient(timeout=30) as client:
@@ -602,18 +672,23 @@ async def generate_update(event: DeployEvent):
             if resp.status_code != 200:
                 raise HTTPException(status_code=502, detail=data.get('error', {}).get('message', 'Gemini error'))
 
-        text = data['candidates'][0]['content']['parts'][0]['text']
-        items = [re.sub(r'^[-•*\d.]+\s*', '', l).strip() for l in text.split('\n') if l.strip()]
+        raw = data['candidates'][0]['content']['parts'][0]['text']
+        # Убираем markdown: **, *, #, _ и т.д.
+        raw = re.sub(r'\*{1,2}|_{1,2}|#{1,3}', '', raw)
+        items = [re.sub(r'^[-•\d.]+\s*', '', l).strip() for l in raw.split('\n') if l.strip()]
 
         entry = {
             "id":          int(datetime.now().timestamp()),
             "date":        datetime.now().strftime('%d.%m.%Y'),
+            "version":     version,
             "title":       event.commit_message[:80],
+            "tag":         tag,
+            "type":        upd_type,
             "items":       items,
             "aiGenerated": True,
         }
         updates = [entry] + _load_ai_updates()
-        _save_ai_updates(updates[:50])  # храним последние 50
+        _save_ai_updates(updates[:50])
         return entry
     except HTTPException:
         raise
