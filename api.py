@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.responses import StreamingResponse
 import io
+import re
 import openpyxl
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 from fastapi.middleware.cors import CORSMiddleware
@@ -80,6 +81,15 @@ PERIOD_LABELS = {
     'month':     'Месяц',
     'year':      'Год',
 }
+
+
+def _strip_html(text: str) -> str:
+    """Убирает HTML-теги и декодирует базовые сущности."""
+    if not text:
+        return ''
+    text = re.sub(r'<[^>]+>', '', text)
+    text = text.replace('&amp;', '&').replace('&lt;', '<').replace('&gt;', '>').replace('&quot;', '"')
+    return text.strip()
 
 
 def _build_daily_history(start_date, end_date):
@@ -469,7 +479,7 @@ async def get_journal():
                 'tag':     tag,
                 'user':    f"@{uname}" if r.get('username') else uname,
                 'user_id': r.get('user_id', 0),
-                'text':    r.get('text_preview') or ev,
+                'text':    _strip_html(r.get('text_preview') or ev),
             })
 
         return entries

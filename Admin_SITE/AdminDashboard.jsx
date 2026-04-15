@@ -327,23 +327,38 @@ export default function App() {
                 Событий пока нет
               </div>
             )}
-            {logs.filter(l => logFilter === 'all' || l.tag === logFilter).map(log => (
-              <div key={log.id} className="bg-white p-6 rounded-[2.5rem] border border-gray-100 shadow-sm space-y-4 animate-in slide-in-from-bottom-2">
-                <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-widest">
-                  <span className="bg-blue-50 text-blue-600 px-3 py-1 rounded-full">{log.tag}</span>
-                  <span className="text-gray-300 font-mono">{log.time}</span>
-                </div>
-                <div className="text-sm font-bold text-gray-700 leading-relaxed"><span className="text-blue-600 font-black">{log.user}:</span> {log.text}</div>
-                <div className="grid grid-cols-1 gap-2 pt-2">
-                  <a href={`tg://user?id=${log.user_id || log.userId}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-4 rounded-3xl font-black text-[10px] uppercase shadow-lg shadow-blue-200 active:scale-[0.98] transition-all"><MessageCircle size={16}/><span>ЛС</span></a>
-                  <div className="grid grid-cols-2 gap-2">
-                     {log.type === 'mute' && <button className="flex items-center justify-center space-x-2 bg-green-50 text-green-700 py-3 rounded-2xl font-black text-[9px] uppercase border border-green-200"><UserCheck size={14}/><span>Размутить</span></button>}
-                     {log.type === 'trigger' && <button className="flex items-center justify-center space-x-2 bg-orange-50 text-orange-700 py-3 rounded-2xl font-black text-[9px] uppercase border border-orange-200"><Zap size={14}/><span>Амнистия</span></button>}
-                     {log.type === 'join' && <button className="flex items-center justify-center space-x-2 bg-indigo-50 text-indigo-700 py-3 rounded-2xl font-black text-[9px] uppercase border border-indigo-200"><UserSearch size={14}/><span>Досье</span></button>}
+            {logs.filter(l => logFilter === 'all' || l.type === logFilter).map(log => {
+              const TAG_STYLE = {
+                trigger: 'bg-orange-50 text-orange-600 border border-orange-200',
+                mute:    'bg-yellow-50 text-yellow-700 border border-yellow-200',
+                ban:     'bg-red-50 text-red-600 border border-red-200',
+                warn:    'bg-amber-50 text-amber-600 border border-amber-200',
+                join:    'bg-green-50 text-green-600 border border-green-200',
+                leave:   'bg-gray-100 text-gray-500 border border-gray-200',
+                unban:   'bg-blue-50 text-blue-600 border border-blue-200',
+              };
+              const tagStyle = TAG_STYLE[log.type] || 'bg-blue-50 text-blue-600 border border-blue-200';
+              return (
+                <div key={log.id} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm space-y-3 animate-in slide-in-from-bottom-2">
+                  <div className="flex justify-between items-center">
+                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
+                    <span className="text-[11px] text-gray-300 font-mono">{log.time?.replace('T',' ')}</span>
+                  </div>
+                  <pre className="text-xs text-gray-700 leading-relaxed whitespace-pre-wrap font-sans break-words">{log.text}</pre>
+                  <div className="pt-1 space-y-2">
+                    <a href={`tg://user?id=${log.user_id}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase shadow-md shadow-blue-100 active:scale-[0.98] transition-all">
+                      <MessageCircle size={14}/><span>Написать в ЛС</span>
+                    </a>
+                    <div className="grid grid-cols-2 gap-2">
+                      {log.type === 'mute'    && <button className="flex items-center justify-center space-x-1 bg-green-50 text-green-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-green-200"><UserCheck size={13}/><span>Размутить</span></button>}
+                      {log.type === 'ban'     && <button className="flex items-center justify-center space-x-1 bg-blue-50 text-blue-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-blue-200"><UserCheck size={13}/><span>Разбанить</span></button>}
+                      {log.type === 'trigger' && <button className="flex items-center justify-center space-x-1 bg-orange-50 text-orange-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-orange-200"><Zap size={13}/><span>Амнистия</span></button>}
+                      {log.type === 'join'    && <button className="flex items-center justify-center space-x-1 bg-indigo-50 text-indigo-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-indigo-200"><UserSearch size={13}/><span>Досье</span></button>}
+                    </div>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         );
 
