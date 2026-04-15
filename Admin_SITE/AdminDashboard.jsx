@@ -614,21 +614,21 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-gray-900 selection:bg-blue-100 overflow-hidden">
-      <aside className={`fixed inset-y-0 left-0 z-50 w-[300px] bg-white border-r border-gray-100 flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
-        <div className="h-28 flex items-center justify-between px-8 border-b border-gray-50 bg-gray-50/20">
-          <div className="flex items-center space-x-4">
-            <div className="w-12 h-12 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-2xl border-2 border-white">
-              <Bot size={28} className="text-white" />
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-gray-100 flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <div className="h-16 flex items-center justify-between px-5 border-b border-gray-100">
+          <div className="flex items-center space-x-3">
+            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
+              <Bot size={18} className="text-white" />
             </div>
             <div>
-              <span className="block font-black text-2xl text-gray-900 leading-none tracking-tighter">Pulse Admin</span>
-              <span className="text-[10px] font-bold text-blue-500 uppercase tracking-[0.3em] mt-1 block">Owner Console</span>
+              <span className="block font-black text-base text-gray-900 leading-none">Pulse Admin</span>
+              <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mt-0.5 block">Owner Console</span>
             </div>
           </div>
           <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-3 bg-white rounded-2xl text-gray-400 border border-gray-50 active:scale-90 transition-all"><X size={24} /></button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto py-10 px-6 space-y-10">
+        <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
           {['top', 'main', 'modules', 'features'].map(group => (
             <div key={group} className="space-y-2">
               {group !== 'top' && (
@@ -640,18 +640,18 @@ export default function App() {
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
-                  className={`w-full flex items-center px-6 py-5 rounded-[2.2rem] transition-all duration-300 ${
-                    activeTab === item.id 
-                    ? 'bg-gray-900 text-white shadow-2xl font-black scale-[1.03]' 
+                  className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                    activeTab === item.id
+                    ? 'bg-gray-900 text-white shadow-md font-black'
                     : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100'
                   }`}
                 >
                   <item.icon
-                    size={24}
+                    size={18}
                     onAnimationEnd={() => setJigglingNav(null)}
-                    className={`mr-5 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
+                    className={`mr-3 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
                   />
-                  <span className="text-lg flex-1">{item.name}</span>
+                  <span className="text-sm flex-1">{item.name}</span>
                   {item.id === 'updates' && hasNewUpdate && (
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-md shadow-red-300" />
                   )}
@@ -663,7 +663,7 @@ export default function App() {
       </aside>
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#F8FAFC]">
-        <header className="h-24 bg-white border-b border-gray-100 flex items-center justify-between px-6 sm:px-10 z-10 shrink-0">
+        <header className="h-16 lg:h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
           <div className="flex items-center">
             <button className="lg:hidden p-4 bg-gray-50 rounded-[1.5rem] mr-5 border border-gray-100 shadow-sm" onClick={() => setIsSidebarOpen(true)}>
               <Menu size={26} />
@@ -684,8 +684,8 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-10 bg-gray-50/10 custom-scrollbar">
-          <div className="max-w-xl mx-auto">{renderContent()}</div>
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
+          <div className="max-w-3xl mx-auto">{renderContent()}</div>
         </div>
       </main>
 
@@ -963,19 +963,19 @@ export default function App() {
 
       {/* ИИ МОДАЛКА */}
       {isAiModalOpen && (
-        <div className="fixed inset-0 bg-black/70 backdrop-blur-md z-[110] flex items-end justify-center">
-           <div className="bg-white w-full rounded-t-[4rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-full duration-500 max-h-[85vh]">
-              <div className="w-12 h-1.5 bg-gray-200 rounded-full mx-auto my-6 shrink-0 shadow-inner"></div>
-              <div className="px-10 py-6 border-b border-gray-50 flex justify-between items-center bg-purple-50/50">
-                 <h3 className="font-black text-3xl text-purple-950 flex items-center leading-none tracking-tighter">
-                   <Sparkles className="mr-4 text-purple-600" size={36} /> ИИ-Мастер
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[110] flex items-end lg:items-center justify-center">
+           <div className="bg-white w-full lg:w-[560px] lg:rounded-[2rem] rounded-t-[2.5rem] shadow-2xl flex flex-col animate-in slide-in-from-bottom-4 duration-300 max-h-[85vh]">
+              <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mt-4 mb-2 shrink-0 lg:hidden"></div>
+              <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+                 <h3 className="font-black text-xl text-purple-950 flex items-center">
+                   <Sparkles className="mr-3 text-purple-500" size={22} /> ИИ-Мастер
                  </h3>
-                 <button onClick={() => setIsAiModalOpen(false)} className="p-4 bg-white rounded-full text-gray-400 border border-gray-50 active:scale-90 transition-all"><X size={28} /></button>
+                 <button onClick={() => setIsAiModalOpen(false)} className="p-2 bg-gray-50 rounded-xl text-gray-400 hover:bg-gray-100 transition-all"><X size={20} /></button>
               </div>
-              <div className="p-10 space-y-8 overflow-y-auto pb-20">
-                 <textarea rows="5" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Опиши задачу..." className="w-full bg-gray-50 border-4 border-purple-50 rounded-[3rem] p-8 text-xl font-bold focus:ring-8 focus:ring-purple-500/5 outline-none transition-all resize-none shadow-inner" />
-                 <button onClick={handleAiTrigger} disabled={isAiLoading || !aiPrompt.trim()} className="w-full py-8 bg-gray-950 text-white font-black rounded-[3rem] text-2xl shadow-2xl active:scale-[0.97] transition-all flex items-center justify-center space-x-4 disabled:bg-gray-400">
-                    {isAiLoading ? <Loader2 size={28} className="animate-spin" /> : <><Zap size={28} className="text-yellow-400 fill-yellow-400" /><span>СПРОСИТЬ</span></>}
+              <div className="p-5 space-y-4 overflow-y-auto">
+                 <textarea rows="4" value={aiPrompt} onChange={(e) => setAiPrompt(e.target.value)} placeholder="Опиши задачу..." className="w-full bg-gray-50 border border-gray-200 rounded-2xl p-4 text-sm font-medium focus:ring-2 focus:ring-purple-200 outline-none transition-all resize-none" />
+                 <button onClick={handleAiTrigger} disabled={isAiLoading || !aiPrompt.trim()} className="w-full py-3 bg-gray-950 text-white font-black rounded-2xl text-sm shadow-lg active:scale-[0.98] transition-all flex items-center justify-center space-x-2 disabled:bg-gray-300">
+                    {isAiLoading ? <Loader2 size={18} className="animate-spin" /> : <><Zap size={18} className="text-yellow-400 fill-yellow-400" /><span>СПРОСИТЬ</span></>}
                  </button>
                  {aiResult && (
                    <div className="bg-purple-50 border border-purple-100 rounded-[2rem] p-6 space-y-3">
