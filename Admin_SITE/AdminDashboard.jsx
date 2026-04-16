@@ -1543,43 +1543,87 @@ export default function App() {
                                       </div>
 
                                       {/* Редактор */}
-                                      {msgTab === 'editor' && (
-                                        <div>
-                                          <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
-                                            {[
-                                              {l:'B',  cls:'font-black'},
-                                              {l:'I',  cls:'italic'},
-                                              {l:'S',  cls:'line-through'},
-                                              {l:'U',  cls:'underline'},
-                                              {l:'<>', cls:'font-mono text-[9px]'},
-                                              {l:'»',  cls:''},
-                                              {l:'🔗', cls:''},
-                                              {l:'✒',  cls:''},
-                                              {l:'🖼',  cls:''},
-                                              {l:'Tx', cls:'text-[9px]'},
-                                              {l:'😊', cls:''},
-                                            ].map(f => (
-                                              <button key={f.l} className={`w-7 h-7 text-[11px] text-gray-600 hover:bg-gray-100 rounded flex items-center justify-center transition-all active:scale-90 ${f.cls}`}>{f.l}</button>
-                                            ))}
-                                            <button className="ml-auto px-2 py-1 text-[10px] font-bold text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all whitespace-nowrap">
-                                              %плейсхолдеры%
-                                            </button>
-                                            <div className="flex items-center gap-0.5 ml-1">
-                                              <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 font-black rounded hover:bg-gray-100 flex items-center justify-center">?</button>
-                                              <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 flex items-center justify-center">↗</button>
+                                      {msgTab === 'editor' && (() => {
+                                        const taId = `ta_${gIdx}_${aIdx}_${curVarIdx}`;
+                                        const wrapTag = (open, close) => {
+                                          const ta = document.getElementById(taId);
+                                          if (!ta) return;
+                                          const start = ta.selectionStart;
+                                          const end   = ta.selectionEnd;
+                                          const val   = ta.value;
+                                          const selected = val.slice(start, end);
+                                          const newVal = val.slice(0, start) + open + selected + close + val.slice(end);
+                                          updVar('text', newVal);
+                                          // Восстанавливаем курсор после React re-render
+                                          requestAnimationFrame(() => {
+                                            ta.focus();
+                                            ta.setSelectionRange(start + open.length, end + open.length);
+                                          });
+                                        };
+                                        const clearTags = () => {
+                                          const ta = document.getElementById(taId);
+                                          if (!ta) return;
+                                          const start = ta.selectionStart;
+                                          const end   = ta.selectionEnd;
+                                          const val   = ta.value;
+                                          const selected = val.slice(start, end);
+                                          const clean = selected.replace(/<[^>]+>/g, '');
+                                          const newVal = val.slice(0, start) + clean + val.slice(end);
+                                          updVar('text', newVal);
+                                        };
+                                        const insertLink = () => {
+                                          const ta = document.getElementById(taId);
+                                          if (!ta) return;
+                                          const url = window.prompt('Введите URL:');
+                                          if (!url) return;
+                                          const start = ta.selectionStart;
+                                          const end   = ta.selectionEnd;
+                                          const val   = ta.value;
+                                          const selected = val.slice(start, end) || 'ссылка';
+                                          const newVal = val.slice(0, start) + `<a href="${url}">${selected}</a>` + val.slice(end);
+                                          updVar('text', newVal);
+                                        };
+                                        const TOOLBAR = [
+                                          { l:'B',  cls:'font-black',              onClick: () => wrapTag('<b>','</b>') },
+                                          { l:'I',  cls:'italic',                  onClick: () => wrapTag('<i>','</i>') },
+                                          { l:'S',  cls:'line-through',            onClick: () => wrapTag('<s>','</s>') },
+                                          { l:'U',  cls:'underline',               onClick: () => wrapTag('<u>','</u>') },
+                                          { l:'<>', cls:'font-mono text-[9px]',    onClick: () => wrapTag('<code>','</code>') },
+                                          { l:'»',  cls:'',                        onClick: () => wrapTag('<blockquote>','</blockquote>') },
+                                          { l:'🔗', cls:'',                        onClick: insertLink },
+                                          { l:'✒',  cls:'',                        onClick: () => wrapTag('<tg-spoiler>','</tg-spoiler>') },
+                                          { l:'Tx', cls:'text-[9px]',              onClick: clearTags },
+                                        ];
+                                        return (
+                                          <div>
+                                            <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
+                                              {TOOLBAR.map(f => (
+                                                <button key={f.l} onClick={f.onClick}
+                                                  className={`w-7 h-7 text-[11px] text-gray-600 hover:bg-gray-100 rounded flex items-center justify-center transition-all active:scale-90 ${f.cls}`}>
+                                                  {f.l}
+                                                </button>
+                                              ))}
+                                              <button className="ml-auto px-2 py-1 text-[10px] font-bold text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all whitespace-nowrap">
+                                                %плейсхолдеры%
+                                              </button>
+                                              <div className="flex items-center gap-0.5 ml-1">
+                                                <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 font-black rounded hover:bg-gray-100 flex items-center justify-center">?</button>
+                                                <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 flex items-center justify-center">↗</button>
+                                              </div>
+                                            </div>
+                                            <div className="relative">
+                                              <textarea
+                                                id={taId}
+                                                value={curVar.text || ''}
+                                                onChange={e => updVar('text', e.target.value)}
+                                                placeholder="Insert text here ..."
+                                                rows={6}
+                                                className="w-full px-4 py-3 text-sm font-medium text-gray-700 italic outline-none resize-none bg-white placeholder:text-gray-300 placeholder:not-italic"/>
+                                              <span className="absolute bottom-2 right-3 text-[10px] text-blue-500 font-black bg-white px-1">{(curVar.text||'').length}/4096</span>
                                             </div>
                                           </div>
-                                          <div className="relative">
-                                            <textarea
-                                              value={curVar.text || ''}
-                                              onChange={e => updVar('text', e.target.value)}
-                                              placeholder="Insert text here ..."
-                                              rows={6}
-                                              className="w-full px-4 py-3 text-sm font-medium text-gray-700 italic outline-none resize-none bg-white placeholder:text-gray-300 placeholder:not-italic"/>
-                                            <span className="absolute bottom-2 right-3 text-[10px] text-blue-500 font-black bg-white px-1">{(curVar.text||'').length}/4096</span>
-                                          </div>
-                                        </div>
-                                      )}
+                                        );
+                                      })()}
 
                                       {/* Код */}
                                       {msgTab === 'code' && (

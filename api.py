@@ -422,6 +422,33 @@ _SITE_TO_BOT = {'send_text': 'msg_chat', 'dm': 'msg_dm'}
 _BOT_TO_SITE = {v: k for k, v in _SITE_TO_BOT.items()}
 
 
+def _keyboard_to_buttons(keyboard: list) -> list:
+    """Конвертирует кнопки из формата сайта в формат бота (только URL-кнопки)."""
+    buttons = []
+    for btn in keyboard:
+        btn_type = btn.get('type', '')
+        text = (btn.get('text') or '').strip()
+        if not text:
+            continue
+        if btn_type == 'link':
+            url = (btn.get('url') or '').strip()
+            if url:
+                buttons.append({'text': text, 'url': url})
+        # trigger, share, reaction — пока не поддерживаются ботом, пропускаем
+    return buttons
+
+
+def _buttons_to_keyboard(buttons: list) -> list:
+    """Конвертирует кнопки из формата бота обратно в формат сайта."""
+    keyboard = []
+    for btn in buttons:
+        text = btn.get('text', '')
+        url = btn.get('url', '')
+        if text and url:
+            keyboard.append({'id': hash(text + url) & 0xFFFFFF, 'type': 'link', 'text': text, 'url': url})
+    return keyboard
+
+
 def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
     """Переводит типы и формат из сайта в формат бота перед записью в БД."""
     bot_actions = []
@@ -432,20 +459,33 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
         cfg = site_configs.get(site_type, {})
 
         if site_type in ('send_text', 'dm'):
-            # Извлекаем текст из первого варианта
             variants = cfg.get('variants') or [{}]
             first = variants[0] if variants else {}
+            settings = cfg.get('settings', {})
             bot_configs[bot_type] = {
                 'text':         first.get('text', ''),
                 'media_type':   first.get('media_type', 'none'),
                 'media_id':     first.get('media_id'),
                 'reply_target': cfg.get('reply_target', 'none'),
-                'buttons':      cfg.get('keyboard', []),
-                'link_preview': cfg.get('settings', {}).get('disable_preview', False) is False,
-                # Сохраняем все варианты для ротации и для восстановления на сайте
+                'buttons':      _keyboard_to_buttons(cfg.get('keyboard', [])),
+                'link_preview': not settings.get('disable_preview', False),
+                # Сохраняем все варианты для восстановления на сайте
                 '_variants':    variants,
-                '_settings':    cfg.get('settings', {}),
+                '_settings':    settings,
             }
+            # Ротация: если вариантов > 1 — кладём в action_configs['rotation']
+            if len(variants) > 1 and site_type == 'send_text':
+                bot_configs['rotation'] = {
+                    'items': [
+                        {
+                            'text':       v.get('text', ''),
+                            'media_id':   v.get('media_id'),
+                            'media_type': v.get('media_type', 'none'),
+                        }
+                        for v in variants
+                    ],
+                    'next_idx': 0,
+                }
         else:
             bot_configs[bot_type] = cfg
 
@@ -462,19 +502,23 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
         cfg = bot_configs.get(bot_type, {})
 
         if bot_type in ('msg_chat', 'msg_dm'):
-            # Восстанавливаем варианты — если были сохранены _variants, используем их
-            variants = cfg.get('_variants') or [{
-                'id': 1,
-                'text':       cfg.get('text', ''),
-                'media_type': cfg.get('media_type', 'none'),
-                'media_id':   cfg.get('media_id'),
-            }]
+            # Восстанавливаем варианты: сначала _variants (если есть), иначе из rotation.items
+            rot_items = (bot_configs.get('rotation') or {}).get('items', [])
+            if cfg.get('_variants'):
+                variants = cfg['_variants']
+            elif rot_items:
+                variants = [
+                    {'id': i+1, 'text': it.get('text',''), 'media_type': it.get('media_type','none'), 'media_id': it.get('media_id')}
+                    for i, it in enumerate(rot_items)
+                ]
+            else:
+                variants = [{'id': 1, 'text': cfg.get('text', ''), 'media_type': cfg.get('media_type', 'none'), 'media_id': cfg.get('media_id')}]
             site_configs[site_type] = {
                 'variants':       variants,
                 'currentVariant': 0,
                 'msgTab':         'editor',
                 'reply_target':   cfg.get('reply_target', 'none'),
-                'keyboard':       cfg.get('buttons', []),
+                'keyboard':       _buttons_to_keyboard(cfg.get('buttons', [])),
                 'settings':       cfg.get('_settings', {}),
             }
         else:
