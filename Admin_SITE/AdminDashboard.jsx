@@ -1574,9 +1574,11 @@ export default function App() {
                                             const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
                                             if (!res.ok) throw new Error(await res.text());
                                             const data = await res.json();
-                                            updVar('media_type', data.media_type);
-                                            updVar('media_url', data.url);
-                                            updVar('media_server_path', data.server_path);
+                                            // Обновляем все поля за один вызов, иначе замыкание затирает
+                                            updAction(gIdx, aIdx, 'variants',
+                                              variants.map((v, vi) => vi === curVarIdx
+                                                ? {...v, media_type: data.media_type, media_url: data.url, media_server_path: data.server_path}
+                                                : v));
                                           } catch(err) {
                                             alert('Ошибка загрузки: ' + err.message);
                                           } finally {
@@ -1599,7 +1601,7 @@ export default function App() {
                                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
                                                 <button onClick={e=>{e.stopPropagation();pickMedia();}}
                                                   className="px-3 py-1.5 bg-white text-gray-800 rounded-lg text-xs font-bold shadow">Заменить</button>
-                                                <button onClick={e=>{e.stopPropagation();updVar('media_type','none');updVar('media_url','');updVar('media_server_path','');}}
+                                                <button onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_type:'none',media_url:'',media_server_path:''}:v));}}
                                                   className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
                                               </div>
                                               <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded uppercase">
