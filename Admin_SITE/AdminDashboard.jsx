@@ -1677,11 +1677,190 @@ export default function App() {
                                 </div>
                               )}
 
-                              {/* ── mute / ban ── */}
-                              {(action.type === 'mute' || action.type === 'ban') && (
-                                <input type="text" placeholder="Длительность: 30m / 2h / forever"
-                                  value={action.duration || ''} onChange={e => updAction(gIdx, aIdx, 'duration', e.target.value)}
-                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
+                              {/* ── mute ── */}
+                              {action.type === 'mute' && (() => {
+                                const MUTE_TARGETS = [
+                                  { v:'initiator', l:'Инициатор триггера' },
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'replied',   l:'Кому ответили' },
+                                  { v:'command',   l:'Режим команды' },
+                                ];
+                                const MUTE_UNITS = [
+                                  { v:'seconds', l:'секунда' },
+                                  { v:'minutes', l:'минута'  },
+                                  { v:'hours',   l:'час'     },
+                                  { v:'days',    l:'день'    },
+                                  { v:'weeks',   l:'неделя'  },
+                                  { v:'months',  l:'месяц'   },
+                                ];
+                                const MUTE_TYPES = [
+                                  { v:'all',     l:'Все сообщения'          },
+                                  { v:'media',   l:'Медиа файлы'            },
+                                  { v:'inline',  l:'Inline сообщения'       },
+                                  { v:'invite',  l:'Возможность приглашать' },
+                                  { v:'polls',   l:'Опросы'                 },
+                                ];
+                                const muteTarget    = action.mute_target     || 'initiator';
+                                const muteTimeOn    = action.mute_time_enabled || false;
+                                const muteTimeVal   = action.mute_time_value  ?? 1;
+                                const muteTimeUnit  = action.mute_time_unit   || 'days';
+                                const muteType      = action.mute_type        || 'all';
+
+                                const muteTgtKey    = `muteTgt_${gIdx}_${aIdx}`;
+                                const muteUnitKey   = `muteUnit_${gIdx}_${aIdx}`;
+                                const muteTypeKey   = `muteType_${gIdx}_${aIdx}`;
+                                const muteTgtGear   = `muteTgtGear_${gIdx}_${aIdx}`;
+                                const muteTimeGear  = `muteTimeGear_${gIdx}_${aIdx}`;
+
+                                const curTgt  = MUTE_TARGETS.find(o => o.v === muteTarget) || MUTE_TARGETS[0];
+                                const curUnit = MUTE_UNITS.find(o => o.v === muteTimeUnit) || MUTE_UNITS[3];
+                                const curType = MUTE_TYPES.find(o => o.v === muteType)     || MUTE_TYPES[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-gray-800">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {muteTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtGear ? null : muteTgtGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === muteTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtKey ? null : muteTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === muteTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === muteTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {MUTE_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Кол-во времени */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-black text-gray-800">
+                                            Кол-во времени <span className="text-red-400">*</span>
+                                          </p>
+                                          {muteTimeOn && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTimeGear ? null : muteTimeGear)}
+                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === muteTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_value', 1); updAction(gIdx, aIdx, 'mute_time_unit', 'days'); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                  </button>
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_enabled', false); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {muteTimeOn ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', false)}
+                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            <Ban size={14}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {muteTimeOn && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={muteTimeVal}
+                                            onChange={e => updAction(gIdx, aIdx, 'mute_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === muteUnitKey ? null : muteUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === muteUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === muteUnitKey && (
+                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                                {MUTE_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Тип ограничения */}
+                                    <div>
+                                      <p className="text-sm font-black text-gray-800 mb-1.5">Тип ограничения</p>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTypeKey ? null : muteTypeKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === muteTypeKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curType.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteTypeKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === muteTypeKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {MUTE_TYPES.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_type', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteType === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── ban ── */}
+                              {action.type === 'ban' && (
+                                <p className="text-xs text-gray-400 font-medium italic">Карточка бана — в разработке.</p>
                               )}
 
                               {/* ── emoji ── */}
