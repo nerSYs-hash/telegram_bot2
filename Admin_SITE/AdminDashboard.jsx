@@ -83,6 +83,12 @@ export default function App() {
   const [condChipInput, setCondChipInput] = useState('');
   const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
   const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
+  const [actOpenDropdown, setActOpenDropdown] = useState(null);     // 'reply_g_a'
+  const [showKeyboardModal, setShowKeyboardModal] = useState(false);
+  const [kbModalTarget, setKbModalTarget] = useState(null);         // {gIdx, aIdx}
+  const [kbButtonType, setKbButtonType] = useState(null);           // null|'link'|'trigger'|'share'|'reaction'
+  const [kbNewButton, setKbNewButton] = useState({});
+  const [kbReactionEmoji, setKbReactionEmoji] = useState('🌐');
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -899,10 +905,18 @@ export default function App() {
             })
           }));
           const addActionToGroup = (gIdx, type) => {
+            const base = { id: Date.now(), type, duration: '', emoji_reaction: '' };
+            const sendTextExtra = type === 'send_text' || type === 'dm' ? {
+              variants: [{ id: Date.now(), text: '', media_type: 'none' }],
+              currentVariant: 0, msgTab: 'editor', reply_target: 'none',
+              settings: { delete_after: false, delete_after_sec: 60, send_delayed: false, pin: false, disable_preview: false, disable_notify: false, delete_previous: false, content_protection: false },
+              keyboard: [],
+              reply_text: '', media_type: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60,
+            } : { reply_text: '', media_type: 'none', reply_target: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60 };
             setEditingTrigger(prev => ({
               ...prev,
               actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
-                ...g, actions: [...g.actions, { id: Date.now(), type, reply_text: '', media_type: 'none', reply_target: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60, duration: '', emoji: '' }]
+                ...g, actions: [...g.actions, { ...base, ...sendTextExtra }]
               })
             }));
             setShowActPickerModal(false);
@@ -929,7 +943,7 @@ export default function App() {
 
           const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
           const ACTION_TYPES = [
-            { type:'send_text', label:'Ответить в чат',    Icon: MessageCircle },
+            { type:'send_text', label:'Отправить сообщение в чат', Icon: MessageCircle },
             { type:'dm',        label:'Ответить в ЛС',     Icon: Send          },
             { type:'mute',      label:'Мут',               Icon: Clock         },
             { type:'ban',       label:'Бан',               Icon: ShieldBan     },
@@ -1378,60 +1392,261 @@ export default function App() {
                       )}
                       {group.actions.map((action, aIdx) => {
                         const actCfg = ACTION_TYPES.find(a => a.type === action.type) || ACTION_TYPES[0];
-                        const ActIcon = actCfg.Icon;
+                        const variants = action.variants || [{ id: 1, text: '', media_type: 'none' }];
+                        const curVarIdx = action.currentVariant || 0;
+                        const curVar = variants[curVarIdx] || variants[0] || { text: '', media_type: 'none' };
+                        const msgTab = action.msgTab || 'editor';
+                        const settings = action.settings || {};
+                        const keyboard = action.keyboard || [];
+                        const replyDropKey = `reply_${gIdx}_${aIdx}`;
+
+                        const updVar = (field, val) => updAction(gIdx, aIdx, 'variants',
+                          variants.map((v, vi) => vi === curVarIdx ? {...v, [field]: val} : v));
+                        const addVariant = () => {
+                          updAction(gIdx, aIdx, 'variants', [...variants, { id: Date.now(), text: '', media_type: 'none' }]);
+                          updAction(gIdx, aIdx, 'currentVariant', variants.length);
+                        };
+                        const deleteVariant = () => {
+                          if (variants.length <= 1) return;
+                          const newVars = variants.filter((_, vi) => vi !== curVarIdx);
+                          updAction(gIdx, aIdx, 'variants', newVars);
+                          updAction(gIdx, aIdx, 'currentVariant', Math.max(0, curVarIdx - 1));
+                        };
+                        const updSetting = (key, val) => updAction(gIdx, aIdx, 'settings', {...settings, [key]: val});
+
                         return (
-                          <div key={action.id} className="bg-gray-50 rounded-xl border border-gray-100 overflow-hidden">
-                            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
-                              <div className="flex items-center gap-1.5">
-                                <ActIcon size={12} className="text-gray-500 flex-shrink-0"/>
-                                <span className="text-[10px] font-black text-gray-800">{actCfg.label}</span>
-                              </div>
-                              <button onClick={() => removeAction(gIdx, aIdx)} className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
-                                <X size={12}/>
+                          <div key={action.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                            {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                              <button className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all flex-shrink-0">
+                                <Settings size={12}/>
                               </button>
+                              <span className="text-[11px] font-black text-gray-700 flex-1">Действие {aIdx + 1}</span>
+                              <div className="flex items-center gap-0">
+                                <button onClick={() => { /* moveActionInGroup */ }} disabled={aIdx === 0}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                                <button onClick={() => { /* moveActionInGroup */ }} disabled={aIdx === group.actions.length - 1}
+                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                                <button onClick={() => removeAction(gIdx, aIdx)}
+                                  className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                  <Trash2 size={11}/>
+                                </button>
+                              </div>
                             </div>
-                            <div className="px-3 py-2.5 space-y-2">
-                              {(action.type === 'send_text' || action.type === 'dm') && (<>
-                                {action.type === 'send_text' && (
-                                  <div className="flex gap-1 flex-wrap">
-                                    {[{v:'none',l:'Обычный'},{v:'initiator',l:'→ Автор'},{v:'quoted',l:'→ Цитата'}].map(o => (
-                                      <button key={o.v} onClick={() => updAction(gIdx, aIdx, 'reply_target', o.v)}
-                                        className={`px-2 py-0.5 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>{o.l}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                                <textarea placeholder="Текст сообщения..."
-                                  value={action.reply_text} onChange={e => updAction(gIdx, aIdx, 'reply_text', e.target.value)} rows={3}
-                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
-                                {action.type === 'send_text' && (
+
+                            {/* Тело карточки */}
+                            <div className="px-3 py-3 space-y-3">
+
+                              {/* Тип действия — заголовок */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-gray-800">{actCfg.label}</span>
+                                <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
+                              </div>
+
+                              {/* ── send_text / dm ── */}
+                              {(action.type === 'send_text' || action.type === 'dm') && (
+                                <div className="space-y-2">
+                                  {/* Сообщение * */}
                                   <div>
-                                    <span className="text-[9px] font-black text-gray-400 uppercase block mb-1">Удаление ответа бота</span>
-                                    <div className="flex gap-1">
-                                      {[{v:'no',l:'Нет'},{v:'previous',l:'Пред.'},{v:'period',l:'Таймер'}].map(o => (
-                                        <button key={o.v} onClick={() => updAction(gIdx, aIdx, 'bot_msg_delete', o.v)}
-                                          className={`flex-1 py-1.5 rounded-lg text-[9px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-white border border-gray-200 text-gray-400'}`}>{o.l}
-                                        </button>
-                                      ))}
+                                    <div className="flex items-center justify-between mb-1.5">
+                                      <span className="text-[9px] font-black text-gray-500 uppercase">Сообщение <span className="text-red-400">*</span></span>
+                                      {action.type === 'send_text' && variants.length > 1 && (
+                                        <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">⚙</div>
+                                      )}
                                     </div>
-                                    {action.bot_msg_delete === 'period' && (
-                                      <input type="number" placeholder="Секунд" value={action.bot_msg_delete_after}
-                                        onChange={e => updAction(gIdx, aIdx, 'bot_msg_delete_after', parseInt(e.target.value))}
-                                        className="w-full mt-1.5 p-2 bg-white border border-gray-200 rounded-xl font-black text-center text-sm outline-none focus:border-blue-300"/>
-                                    )}
+                                    {/* Варианты навигация */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-1">
+                                        <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.max(0, curVarIdx - 1))}
+                                          disabled={curVarIdx === 0}
+                                          className="px-1.5 py-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 text-xs">‹</button>
+                                        <span className="text-[10px] font-black text-gray-600 px-1">{curVarIdx + 1} из {variants.length}</span>
+                                        <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.min(variants.length - 1, curVarIdx + 1))}
+                                          disabled={curVarIdx === variants.length - 1}
+                                          className="px-1.5 py-1 text-gray-400 hover:text-gray-600 disabled:opacity-30 text-xs">›</button>
+                                      </div>
+                                      <button onClick={addVariant}
+                                        className="flex items-center gap-1 px-2 py-1 bg-blue-50 border border-blue-200 text-blue-600 rounded-lg text-[9px] font-black hover:bg-blue-100 transition-all active:scale-95">
+                                        <PlusCircle size={10}/> Добавить вариант
+                                      </button>
+                                      {variants.length > 1 && (
+                                        <button onClick={deleteVariant}
+                                          className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                          <Trash2 size={12}/>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Медиа область */}
+                                    <div
+                                      onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*'; inp.onchange=e=>{ if(e.target.files[0]) updVar('media_type', e.target.files[0].type.startsWith('video') ? 'video' : 'photo'); }; inp.click(); }}
+                                      className="w-full h-20 border-2 border-dashed border-blue-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all mb-2">
+                                      {curVar.media_type === 'none' || !curVar.media_type ? (
+                                        <>
+                                          <span className="text-lg mb-0.5">👆</span>
+                                          <span className="text-[10px] text-blue-500 font-semibold">Нажмите, чтобы загрузить медиа</span>
+                                        </>
+                                      ) : (
+                                        <div className="flex items-center gap-2">
+                                          <span className="text-sm">{curVar.media_type === 'photo' ? '🖼' : curVar.media_type === 'video' ? '🎬' : '🎞'}</span>
+                                          <span className="text-[10px] font-black text-gray-600">{curVar.media_type}</span>
+                                          <button onClick={e => { e.stopPropagation(); updVar('media_type', 'none'); }}
+                                            className="text-red-400 hover:text-red-600 ml-1">×</button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Топики + вкладки редактора */}
+                                    <div className="border-2 border-gray-200 rounded-xl overflow-hidden">
+                                      {/* Строка вкладок */}
+                                      <div className="flex items-center justify-between px-2 py-1.5 bg-gray-50 border-b border-gray-200">
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[9px] font-black text-gray-500 bg-white border border-gray-200 px-2 py-0.5 rounded">📋 Топики</span>
+                                          <span className="text-[8px] font-black text-white bg-orange-400 px-1.5 py-0.5 rounded">Starter</span>
+                                        </div>
+                                        <div className="flex gap-0.5">
+                                          {['editor','code','settings'].map(t => (
+                                            <button key={t} onClick={() => updAction(gIdx, aIdx, 'msgTab', t)}
+                                              className={`px-2 py-1 text-[9px] font-black rounded transition-all ${msgTab === t ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                              {t === 'editor' ? '✏️ Редактор' : t === 'code' ? '<> Код' : '⚙ Настройки'}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {msgTab === 'editor' && (
+                                        <div>
+                                          {/* Панель форматирования */}
+                                          <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
+                                            {['B','I','S','U','<>','»','🔗','✒️','📷','Tx','😊'].map(f => (
+                                              <button key={f} className="w-6 h-6 text-[10px] font-black text-gray-500 hover:bg-gray-100 rounded flex items-center justify-center transition-all active:scale-90">{f}</button>
+                                            ))}
+                                            <button className="ml-auto px-2 py-0.5 text-[9px] font-bold text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all whitespace-nowrap">%плейсхолдеры%</button>
+                                            <div className="flex items-center gap-0.5 ml-1">
+                                              <button className="w-5 h-5 text-[9px] text-gray-400 hover:text-gray-600 font-black">?</button>
+                                              <button className="w-5 h-5 text-[9px] text-gray-400 hover:text-gray-600">↗</button>
+                                            </div>
+                                          </div>
+                                          <div className="relative">
+                                            <textarea
+                                              value={curVar.text || ''}
+                                              onChange={e => updVar('text', e.target.value)}
+                                              placeholder="Insert text here ..."
+                                              rows={5}
+                                              className="w-full p-3 text-sm font-medium text-gray-700 italic outline-none resize-none bg-white placeholder:text-gray-300 placeholder:not-italic"/>
+                                            <span className="absolute bottom-2 right-2 text-[9px] text-blue-500 font-black">{(curVar.text||'').length}/4096</span>
+                                          </div>
+                                        </div>
+                                      )}
+
+                                      {msgTab === 'code' && (
+                                        <textarea
+                                          value={curVar.text || ''}
+                                          onChange={e => updVar('text', e.target.value)}
+                                          placeholder="HTML код сообщения..."
+                                          rows={5}
+                                          className="w-full p-3 font-mono text-sm text-gray-700 outline-none resize-none bg-white"/>
+                                      )}
+
+                                      {msgTab === 'settings' && (
+                                        <div className="p-3 grid grid-cols-2 gap-x-4 gap-y-3">
+                                          {[
+                                            { key:'delete_after',     label:'Удалить сообщение через', tip:'?' },
+                                            { key:'send_delayed',     label:'Отправить с задержкой',   tip:'?' },
+                                            { key:'pin',              label:'Закрепить сообщение',     tip:'?' },
+                                            { key:'disable_preview',  label:'Отключить предпросмотр ссылок', tip:'?' },
+                                            { key:'disable_notify',   label:'Отключить уведомления',   tip:'?' },
+                                            { key:'delete_previous',  label:'Удалять предыдущее',      tip:'?' },
+                                            { key:'content_protection',label:'Защита контента',        tip:'?' },
+                                          ].map(s => (
+                                            <div key={s.key} className="flex items-center justify-between gap-2">
+                                              <div className="flex items-center gap-1 min-w-0">
+                                                <span className="text-[10px] font-medium text-gray-700 leading-tight">{s.label}</span>
+                                                <div className="w-3.5 h-3.5 rounded-full bg-blue-400 text-white text-[8px] font-black flex items-center justify-center flex-shrink-0">?</div>
+                                              </div>
+                                              <button onClick={() => updSetting(s.key, !settings[s.key])}
+                                                className={`relative w-9 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                              </button>
+                                            </div>
+                                          ))}
+                                        </div>
+                                      )}
+
+                                      {/* Создать клавиатуру */}
+                                      <div className="border-t border-gray-100">
+                                        {keyboard.length === 0 ? (
+                                          <button
+                                            onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
+                                            className="w-full py-2.5 text-[11px] font-bold text-gray-500 hover:bg-gray-50 flex items-center justify-center gap-1.5 transition-all active:scale-[0.99]">
+                                            ✏️ Создать клавиатуру
+                                          </button>
+                                        ) : (
+                                          <div>
+                                            <div className="p-2 space-y-1">
+                                              {keyboard.map((btn, bi) => (
+                                                <div key={btn.id} className="flex items-center gap-2 px-2 py-1.5 bg-gray-50 rounded-lg border border-gray-100">
+                                                  <GripVertical size={12} className="text-gray-300"/>
+                                                  <span className="text-[10px] font-bold text-gray-700 flex-1 truncate">{btn.emoji || ''} {btn.text || 'Текст кнопки'}</span>
+                                                  <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_, i) => i !== bi))}
+                                                    className="text-red-300 hover:text-red-500 text-xs leading-none">×</button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                            <button
+                                              onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
+                                              className="w-full py-2 text-[10px] font-bold text-blue-500 hover:bg-blue-50 flex items-center justify-center gap-1.5 transition-all border-t border-gray-100">
+                                              ✏️ Редактировать клавиатуру
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Отправить ответом */}
+                                    <div className="mt-2">
+                                      <p className="text-[9px] font-black text-gray-500 uppercase mb-1.5">Отправить ответом <span className="text-red-400">*</span></p>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
+                                          className="w-full flex items-center justify-between px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
+                                          <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Отправить сообщение реплаем'}</span>
+                                          <ChevronDown size={13} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === replyDropKey && (
+                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {[{v:'none',l:'Отправить сообщение реплаем'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
                                   </div>
-                                )}
-                              </>)}
+                                </div>
+                              )}
+
+                              {/* ── mute / ban ── */}
                               {(action.type === 'mute' || action.type === 'ban') && (
                                 <input type="text" placeholder="Длительность: 30m / 2h / forever"
-                                  value={action.duration} onChange={e => updAction(gIdx, aIdx, 'duration', e.target.value)}
+                                  value={action.duration || ''} onChange={e => updAction(gIdx, aIdx, 'duration', e.target.value)}
                                   className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
                               )}
+
+                              {/* ── emoji ── */}
                               {action.type === 'emoji' && (
                                 <input type="text" placeholder="👀 🔥 ❤️"
-                                  value={action.emoji} onChange={e => updAction(gIdx, aIdx, 'emoji', e.target.value)}
+                                  value={action.emoji_reaction || ''} onChange={e => updAction(gIdx, aIdx, 'emoji_reaction', e.target.value)}
                                   className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
                               )}
+
+                              {/* ── warn / delete ── */}
+                              {(action.type === 'warn' || action.type === 'delete') && (
+                                <p className="text-[10px] text-gray-400 font-medium italic">Действие выполнится автоматически без дополнительных настроек.</p>
+                              )}
+
                             </div>
                           </div>
                         );
@@ -1665,7 +1880,7 @@ export default function App() {
                         <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Действия с сообщениями</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
-                            { type:'send_text', icon:'📤', label:'Отправить в чат',   sub:'Ответить сообщением',       active:true  },
+                            { type:'send_text', icon:'📤', label:'Отправить сообщение в чат', sub:'Ответить сообщением', active:true  },
                             { type:'delete',    icon:'🗑',  label:'Удалить сообщение', sub:'Удалить триггер-сообщение', active:true  },
                             { type:'dm',        icon:'✉️',  label:'Личное сообщение',  sub:'Написать пользователю в ЛС',active:true  },
                             { type:'pin',       icon:'📌',  label:'Закрепить',          sub:'Закрепить сообщение',      active:false },
@@ -1756,6 +1971,240 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* ── МОДАЛ КЛАВИАТУРЫ ── */}
+              {showKeyboardModal && kbModalTarget && (() => {
+                const { gIdx, aIdx } = kbModalTarget;
+                const tgt = (editingTrigger.actionGroups||[])[gIdx]?.actions[aIdx];
+                if (!tgt) return null;
+                const keyboard = tgt.keyboard || [];
+                const addKbButton = (btn) => {
+                  updAction(gIdx, aIdx, 'keyboard', [...keyboard, { id: Date.now(), ...btn }]);
+                  setKbButtonType(null);
+                  setKbNewButton({});
+                };
+                const REACTION_PRESETS = [
+                  { emoji: '🌍' }, { emoji: '👋' }, { emoji: '🔥' }, { emoji: '💡' },
+                ];
+                return (
+                  <div className="fixed inset-0 z-[300] flex flex-col bg-white">
+
+                    {/* ── Шапка ── */}
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                      <span className="text-[10px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded uppercase tracking-wide">Beta</span>
+                      <button onClick={() => { setShowKeyboardModal(false); setKbButtonType(null); setKbNewButton({}); }}
+                        className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <X size={20}/>
+                      </button>
+                    </div>
+
+                    {/* ── Список добавленных кнопок ── */}
+                    <div className="px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                      {keyboard.length === 0 ? (
+                        <p className="text-sm font-bold text-gray-400 text-center py-1">Кнопки не выбраны</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {keyboard.map((btn, bi) => (
+                            <div key={btn.id} className="flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100">
+                              <span className="text-gray-300 font-black text-lg select-none leading-none">+</span>
+                              <span className="text-base w-5 text-center leading-none">{btn.emoji || '○'}</span>
+                              <span className="text-sm font-bold text-gray-500 flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
+                              <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_,i)=>i!==bi))}
+                                className="text-red-300 hover:text-red-500 text-xl leading-none flex-shrink-0">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Контент ── */}
+                    <div className="flex-1 overflow-y-auto">
+                      {kbButtonType === null ? (
+
+                        /* Выбор типа кнопки */
+                        <div className="px-5 py-5">
+                          <p className="text-sm font-black text-gray-800 mb-4">Выберите тип кнопки</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              onClick={() => { setKbButtonType('trigger'); setKbNewButton({}); }}
+                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
+                              Вызов триггера
+                            </button>
+                            <button
+                              onClick={() => { setKbButtonType('share'); setKbNewButton({}); }}
+                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
+                              Поделиться
+                            </button>
+                            {REACTION_PRESETS.map((r, ri) => (
+                              <button key={ri}
+                                onClick={() => {
+                                  setKbButtonType('reaction');
+                                  setKbReactionEmoji(r.emoji);
+                                  setKbNewButton({ text: r.emoji, noMultiple: true, uniqueOnly: true });
+                                }}
+                                className="flex items-center gap-2 px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
+                                <span className="text-lg">{r.emoji}</span>
+                                <span>Реакция</span>
+                              </button>
+                            ))}
+                            <button
+                              onClick={() => { setKbButtonType('link'); setKbNewButton({}); }}
+                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
+                              Ссылка
+                            </button>
+                          </div>
+                        </div>
+
+                      ) : (
+
+                        /* Подформа */
+                        <div className="px-5 py-5 space-y-4">
+                          {/* Назад + заголовок */}
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => { setKbButtonType(null); setKbNewButton({}); }}
+                              className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all text-lg font-bold leading-none">←</button>
+                            {kbButtonType === 'reaction' && <span className="text-xl">{kbReactionEmoji}</span>}
+                            <h3 className="text-base font-black text-gray-900">
+                              {kbButtonType === 'trigger' ? 'Вызов триггера' :
+                               kbButtonType === 'share'   ? 'Поделиться'    :
+                               kbButtonType === 'reaction'? 'Реакция'       : 'Ссылка'}
+                            </h3>
+                          </div>
+
+                          {/* Info box */}
+                          <div className="px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-[12px] text-blue-700 font-medium leading-relaxed">
+                            {kbButtonType === 'trigger' && <>
+                              Кнопка при нажатии на которую запустится выбранный триггер.<br/><br/>
+                              <span className="underline cursor-pointer">Пример</span>: сделайте триггер без условий с развёрнутыми правилами чата и поместите его в кнопку "Вызов триггера".
+                            </>}
+                            {kbButtonType === 'share' && <>
+                              Здесь можно создать кнопку, при нажатии на которую у пользователя сразу откроется список его контактов и чатов для пересылки этого сообщения (поста).
+                            </>}
+                            {kbButtonType === 'reaction' && <>
+                              Если вы отключили реакции на посты в канале, но мнение пользователей об определённой публикации или теме важно — помогут кнопки с реакциями. Можно вставить любые эмодзи вместо предложенных в поле "Текст кнопки".<br/><br/>
+                              Задать уведомление, которое увидит пользователь после нажатия на кнопку, можно в поле "Сообщение пользователю".<br/><br/>
+                              После того, как читатели нажмут на кнопку, рядом с эмодзи появится количество нажатий. Вот как это будет выглядеть с использованием текущего эмодзи: {kbReactionEmoji} - 3.
+                            </>}
+                            {kbButtonType === 'link' && <>
+                              Кнопка-ссылка — при нажатии открывает указанный URL в браузере пользователя.
+                            </>}
+                          </div>
+
+                          {/* Текст кнопки */}
+                          <div>
+                            <p className="text-sm font-black text-gray-700 mb-1.5">Текст кнопки <span className="text-red-400">*</span></p>
+                            <input type="text" placeholder="Текст кнопки"
+                              value={kbNewButton.text || ''}
+                              onChange={e => setKbNewButton(p => ({...p, text: e.target.value}))}
+                              className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                          </div>
+
+                          {/* Триггер dropdown */}
+                          {kbButtonType === 'trigger' && (
+                            <div>
+                              <p className="text-sm font-black text-gray-700 mb-0.5">Триггер <span className="text-red-400">*</span></p>
+                              <p className="text-[11px] text-gray-400 font-medium mb-2">* Выбранный триггер будет вызван после нажатия на кнопку</p>
+                              <div className="relative">
+                                <button
+                                  onClick={() => setKbNewButton(p => ({...p, _open: !p._open}))}
+                                  className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:border-blue-300 transition-all">
+                                  <span className={kbNewButton.trigger_id ? 'text-gray-800' : 'text-gray-400'}>
+                                    {triggers.find(t => t.id === kbNewButton.trigger_id)?.name || ''}
+                                  </span>
+                                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${kbNewButton._open ? 'rotate-180' : ''}`}/>
+                                </button>
+                                {kbNewButton._open && (
+                                  <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
+                                    {triggers.map(t => (
+                                      <button key={t.id}
+                                        onClick={() => setKbNewButton(p => ({...p, trigger_id: t.id, _open: false}))}
+                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${kbNewButton.trigger_id === t.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
+                                        {t.name}
+                                      </button>
+                                    ))}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* URL */}
+                          {kbButtonType === 'link' && (
+                            <div>
+                              <p className="text-sm font-black text-gray-700 mb-1.5">URL <span className="text-red-400">*</span></p>
+                              <input type="url" placeholder="https://..."
+                                value={kbNewButton.url || ''}
+                                onChange={e => setKbNewButton(p => ({...p, url: e.target.value}))}
+                                className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                            </div>
+                          )}
+
+                          {/* Реакция: сообщение + чекбоксы */}
+                          {kbButtonType === 'reaction' && (<>
+                            <div>
+                              <p className="text-sm font-black text-gray-700 mb-1.5">Сообщение пользователю</p>
+                              <div className="relative">
+                                <textarea
+                                  value={kbNewButton.user_msg || ''}
+                                  onChange={e => setKbNewButton(p => ({...p, user_msg: e.target.value.slice(0,200)}))}
+                                  rows={4}
+                                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all resize-none"/>
+                                <span className="absolute bottom-2 right-3 text-[10px] text-gray-400 font-bold">
+                                  {(kbNewButton.user_msg||'').length} / 200
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-4">
+                              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setKbNewButton(p => ({...p, noMultiple: !p.noMultiple}))}>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${kbNewButton.noMultiple ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
+                                  {kbNewButton.noMultiple && <Check size={12} className="text-white"/>}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-gray-700">Запрет на выбор нескольких вариантов</p>
+                                  <p className="text-[11px] text-gray-400 font-medium mt-0.5">* Активируйте данный параметр, чтобы запретить пользователю выбирать несколько вариантов реакции</p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setKbNewButton(p => ({...p, uniqueOnly: !p.uniqueOnly}))}>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${kbNewButton.uniqueOnly ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
+                                  {kbNewButton.uniqueOnly && <Check size={12} className="text-white"/>}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-gray-700">Учитывать только уникальные нажатия</p>
+                                  <p className="text-[11px] text-gray-400 font-medium mt-0.5">* При активации данного параметра будет зачтено только первое нажатие на кнопку от уникального пользователя. Если параметр выключен, то учитываться в счётчике будут все нажатия от одного и того же человека</p>
+                                </div>
+                              </div>
+                            </div>
+                          </>)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Добавить кнопку ── */}
+                    {kbButtonType !== null && (
+                      <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            if (!kbNewButton.text) return;
+                            addKbButton({
+                              type: kbButtonType,
+                              text: kbNewButton.text,
+                              emoji: kbButtonType === 'reaction' ? kbReactionEmoji : undefined,
+                              trigger_id: kbNewButton.trigger_id,
+                              url: kbNewButton.url,
+                              user_msg: kbNewButton.user_msg,
+                              noMultiple: kbNewButton.noMultiple,
+                              uniqueOnly: kbNewButton.uniqueOnly,
+                            });
+                          }}
+                          className="w-full py-4 bg-blue-500 text-white font-black text-sm rounded-2xl shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-[0.98] transition-all">
+                          Добавить кнопку
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })()}
 
               {/* ── ДЕЙСТВИЯ (старый блок — удалён, теперь в правой колонке) ── */}
               {false && <div className="mb-5 space-y-2">
