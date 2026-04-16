@@ -617,7 +617,8 @@ async def get_topics():
 
 
 # ── Медиа-загрузка ──────────────────────────────────────────────
-MEDIA_DIR = os.path.join(current_dir, 'Admin_SITE', 'media_uploads')
+MEDIA_DIR = os.path.join(current_dir, '..', 'Admin_SITE', 'media_uploads')
+MEDIA_DIR = os.path.normpath(MEDIA_DIR)
 try:
     os.makedirs(MEDIA_DIR, exist_ok=True)
     from fastapi.staticfiles import StaticFiles
