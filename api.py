@@ -1,6 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File
 from fastapi.responses import StreamingResponse, FileResponse
-from fastapi.staticfiles import StaticFiles
 import io
 import re
 import httpx
@@ -619,10 +618,13 @@ async def get_topics():
 
 # ── Медиа-загрузка ──────────────────────────────────────────────
 MEDIA_DIR = os.path.join(current_dir, 'Admin_SITE', 'media_uploads')
-os.makedirs(MEDIA_DIR, exist_ok=True)
-
-# Служим статику из media_uploads (для превью на сайте)
-app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+try:
+    os.makedirs(MEDIA_DIR, exist_ok=True)
+    from fastapi.staticfiles import StaticFiles
+    app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+    logger.info(f"✅ Медиа-хранилище: {MEDIA_DIR}")
+except Exception as _me:
+    logger.warning(f"⚠️ Медиа-хранилище недоступно: {_me}")
 
 
 @app.post("/api/media/upload")
