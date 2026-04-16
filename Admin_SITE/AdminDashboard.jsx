@@ -109,6 +109,7 @@ export default function App() {
   const [phDropdown, setPhDropdown] = useState(null); // ключ 'gIdx_aIdx_varIdx' | null
   const [settingHint, setSettingHint] = useState(null);      // 'key' | null
   const [settingHintPos, setSettingHintPos] = useState({x:0,y:0});
+  const [customPlaceholders, setCustomPlaceholders] = useState([]);
   const [showEditorHelp, setShowEditorHelp] = useState(false);
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
@@ -1749,6 +1750,13 @@ export default function App() {
                                                     window._savedPhRange = sel.getRangeAt(0).cloneRange();
                                                   } else {
                                                     window._savedPhRange = null;
+                                                  }
+                                                  if (!phOpen) {
+                                                    // Загружаем кастомные плейсхолдеры при открытии
+                                                    fetch('/api/placeholders')
+                                                      .then(r => r.json())
+                                                      .then(data => setCustomPlaceholders(Array.isArray(data) ? data : []))
+                                                      .catch(() => setCustomPlaceholders([]));
                                                   }
                                                   setPhDropdown(phOpen ? null : phKey);
                                                 };
@@ -3738,6 +3746,30 @@ export default function App() {
                     </div>
                   </div>
                 ))}
+
+                {/* Кастомные плейсхолдеры из БД */}
+                {customPlaceholders.length > 0 && (
+                  <div>
+                    <div className="mb-2">
+                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider">Кастомные</p>
+                      <p className="text-[10px] text-gray-400">Созданы вручную через бота</p>
+                    </div>
+                    <div className="space-y-1">
+                      {customPlaceholders.map(ph => (
+                        <button key={ph.name}
+                          onClick={() => insertPh(ph.name)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left bg-gray-50 text-gray-700 border border-gray-100 hover:bg-gray-100">
+                          <div className="min-w-0">
+                            <p className="text-xs font-black leading-tight">{ph.name}</p>
+                            {ph.description && <p className="text-[10px] opacity-60 mt-0.5 leading-tight">{ph.description}</p>}
+                            {ph.value && <p className="text-[10px] text-blue-500 mt-0.5 leading-tight truncate max-w-[180px]">{ph.value}</p>}
+                          </div>
+                          <span className="ml-3 font-mono text-[10px] opacity-50 shrink-0">%{ph.name}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
 
                 <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3">
                   <p className="text-[10px] font-black text-gray-500 mb-1">💡 Для цитируемого</p>

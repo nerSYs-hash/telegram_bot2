@@ -580,6 +580,19 @@ def _row_to_trigger(row: dict) -> dict:
     }
 
 
+@app.get("/api/placeholders")
+async def get_custom_placeholders():
+    """Кастомные плейсхолдеры из БД (созданные вручную через бота)"""
+    try:
+        db.cursor.execute(
+            "SELECT name, value, description FROM custom_placeholders ORDER BY name"
+        )
+        rows = db.cursor.fetchall()
+        return [{'name': r['name'], 'value': r['value'], 'description': r['description'] or ''} for r in rows]
+    except Exception as e:
+        return []  # Таблица может не существовать — возвращаем пустой список
+
+
 @app.get("/api/triggers")
 async def get_triggers():
     """Список триггеров из БД"""
