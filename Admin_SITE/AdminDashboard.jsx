@@ -106,6 +106,7 @@ export default function App() {
   const [fmtState, setFmtState] = useState({bold:false,italic:false,underline:false,strikeThrough:false});
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState(null);
+  const [phDropdown, setPhDropdown] = useState(null); // ключ 'gIdx_aIdx_varIdx' | null
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -319,6 +320,14 @@ export default function App() {
     window.addEventListener('beforeunload', h);
     return () => window.removeEventListener('beforeunload', h);
   }, [editingTrigger]);
+
+  // Закрываем dropdown плейсхолдеров при клике вне
+  useEffect(() => {
+    if (!phDropdown) return;
+    const h = () => setPhDropdown(null);
+    document.addEventListener('mousedown', h);
+    return () => document.removeEventListener('mousedown', h);
+  }, [phDropdown]);
 
   // Отслеживаем активное форматирование для подсветки кнопок тулбара
   useEffect(() => {
@@ -1681,9 +1690,126 @@ export default function App() {
                                                   </button>
                                                 );
                                               })}
-                                              <button className="ml-auto px-2 py-1 text-[10px] font-bold text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all whitespace-nowrap">
-                                                %плейсхолдеры%
-                                              </button>
+                                              {/* ── Кнопка %плейсхолдеры% с выпадающим списком ── */}
+                                              {(() => {
+                                                const phKey = `${gIdx}_${aIdx}_${curVarIdx}`;
+                                                const phOpen = phDropdown === phKey;
+
+                                                const PH_GROUPS = [
+                                                  { label:'Инициатор', color:'blue', items:[
+                                                    { key:'user_name',     label:'Имя' },
+                                                    { key:'user_username', label:'@username' },
+                                                    { key:'user_id',       label:'ID' },
+                                                    { key:'act_tgun',      label:'Имя TG' },
+                                                    { key:'act_nn',        label:'@nick (новый)' },
+                                                  ]},
+                                                  { label:'Цель', color:'purple', items:[
+                                                    { key:'target_name',     label:'Имя цели' },
+                                                    { key:'target_username', label:'@username цели' },
+                                                    { key:'target_id',       label:'ID цели' },
+                                                  ]},
+                                                  { label:'Чат', color:'green', items:[
+                                                    { key:'chat_name', label:'Название чата' },
+                                                    { key:'date',      label:'Дата' },
+                                                    { key:'time',      label:'Время' },
+                                                  ]},
+                                                  { label:'Статистика', color:'amber', items:[
+                                                    { key:'act_msg',   label:'Сообщений всего' },
+                                                    { key:'act_msg_t', label:'Сегодня' },
+                                                    { key:'act_msg_w', label:'За неделю' },
+                                                    { key:'act_msg_m', label:'За месяц' },
+                                                    { key:'act_blns',  label:'Пульсы' },
+                                                    { key:'act_d',     label:'Дней в чате' },
+                                                    { key:'act_plc',   label:'Место в топе' },
+                                                    { key:'act_rnk',   label:'Ранг' },
+                                                  ]},
+                                                  { label:'Санкции', color:'red', items:[
+                                                    { key:'warn_count', label:'Предупреждений' },
+                                                    { key:'act_w',      label:'Предупр. (новый)' },
+                                                  ]},
+                                                  { label:'Анкета', color:'pink', items:[
+                                                    { key:'act_form', label:'Полная анкета' },
+                                                    { key:'act_un',   label:'Имя из анкеты' },
+                                                    { key:'act_city', label:'Город' },
+                                                    { key:'act_yo',   label:'Возраст' },
+                                                    { key:'act_sr',   label:'Роль' },
+                                                  ]},
+                                                ];
+
+                                                const COLOR_MAP = {
+                                                  blue:   'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100',
+                                                  purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-100',
+                                                  green:  'bg-green-50 text-green-700 hover:bg-green-100 border-green-100',
+                                                  amber:  'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-100',
+                                                  red:    'bg-red-50 text-red-600 hover:bg-red-100 border-red-100',
+                                                  pink:   'bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-100',
+                                                };
+
+                                                const openPh = () => {
+                                                  // Сохраняем позицию курсора в редакторе
+                                                  const sel = window.getSelection();
+                                                  if (sel && sel.rangeCount) {
+                                                    window._savedPhRange = sel.getRangeAt(0).cloneRange();
+                                                  } else {
+                                                    window._savedPhRange = null;
+                                                  }
+                                                  setPhDropdown(phOpen ? null : phKey);
+                                                };
+
+                                                const insertPh = (key) => {
+                                                  const el = document.getElementById(ceId);
+                                                  if (!el) return;
+                                                  el.focus();
+                                                  // Восстанавливаем сохранённую позицию
+                                                  if (window._savedPhRange) {
+                                                    const sel = window.getSelection();
+                                                    sel.removeAllRanges();
+                                                    sel.addRange(window._savedPhRange);
+                                                    window._savedPhRange = null;
+                                                  }
+                                                  document.execCommand('insertText', false, `%${key}%`);
+                                                  updVar('text', el.innerHTML);
+                                                  setPhDropdown(null);
+                                                };
+
+                                                return (
+                                                  <div className="relative ml-auto">
+                                                    <button
+                                                      onMouseDown={e => { e.preventDefault(); openPh(); }}
+                                                      className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-blue-500 border-blue-200 hover:bg-blue-50'}`}>
+                                                      %плейсхолдеры%
+                                                    </button>
+                                                    {phOpen && (
+                                                      <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden">
+                                                        <div className="px-3 py-2 border-b border-gray-50">
+                                                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Плейсхолдеры</p>
+                                                          <p className="text-[9px] text-gray-300 mt-0.5">Кликни — вставится в курсор</p>
+                                                        </div>
+                                                        <div className="max-h-72 overflow-y-auto p-2 space-y-2">
+                                                          {PH_GROUPS.map(g => (
+                                                            <div key={g.label}>
+                                                              <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider px-1 mb-1">{g.label}</p>
+                                                              <div className="flex flex-wrap gap-1">
+                                                                {g.items.map(it => (
+                                                                  <button key={it.key}
+                                                                    onMouseDown={e => { e.preventDefault(); insertPh(it.key); }}
+                                                                    className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border transition-all ${COLOR_MAP[g.color]}`}
+                                                                    title={`%${it.key}%`}>
+                                                                    {it.label}
+                                                                  </button>
+                                                                ))}
+                                                              </div>
+                                                            </div>
+                                                          ))}
+                                                        </div>
+                                                        <div className="border-t border-gray-50 px-3 py-2">
+                                                          <p className="text-[9px] text-gray-300">Для цитируемого: замени <b className="text-gray-400">act_</b> на <b className="text-gray-400">rpl_</b></p>
+                                                        </div>
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
                                               <div className="flex items-center gap-0.5 ml-1">
                                                 <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 font-black rounded hover:bg-gray-100 flex items-center justify-center">?</button>
                                                 <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 flex items-center justify-center">↗</button>
