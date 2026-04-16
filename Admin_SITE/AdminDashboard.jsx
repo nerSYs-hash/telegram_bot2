@@ -964,7 +964,7 @@ export default function App() {
           const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
           const ACTION_TYPES = [
             { type:'send_text', label:'Отправить сообщение в чат', Icon: MessageCircle },
-            { type:'dm',        label:'Ответить в ЛС',     Icon: Send          },
+            { type:'dm',        label:'Личное сообщение',   Icon: Send          },
             { type:'mute',      label:'Мут',               Icon: Clock         },
             { type:'ban',       label:'Бан',               Icon: ShieldBan     },
             { type:'warn',      label:'Предупреждение',    Icon: AlertOctagon  },
@@ -1473,7 +1473,7 @@ export default function App() {
                                   {/* ── Сообщение * ── */}
                                   <div>
                                     <p className="text-sm font-black text-gray-800 mb-2">
-                                      Сообщение <span className="text-red-400">*</span>
+                                      {action.type === 'dm' ? 'Текст сообщения' : 'Сообщение'} <span className="text-red-400">*</span>
                                     </p>
 
                                     {/* Навигация вариантов */}
@@ -1648,29 +1648,31 @@ export default function App() {
                                       </div>
                                     </div>
 
-                                    {/* Отправить ответом */}
-                                    <div className="mt-3">
-                                      <p className="text-sm font-black text-gray-800 mb-1.5">
-                                        Отправить ответом <span className="text-red-400">*</span>
-                                      </p>
-                                      <div className="relative">
-                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
-                                          className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
-                                          <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Отправить сообщение реплаем'}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
-                                        </button>
-                                        {actOpenDropdown === replyDropKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
-                                            {[{v:'none',l:'Отправить сообщение реплаем'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
-                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-gray-50 last:border-0 ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
-                                                {o.l}
-                                              </button>
-                                            ))}
-                                          </div>
-                                        )}
+                                    {/* Отправить ответом — только для send_text */}
+                                    {action.type === 'send_text' && (
+                                      <div className="mt-3">
+                                        <p className="text-sm font-black text-gray-800 mb-1.5">
+                                          Отправить ответом <span className="text-red-400">*</span>
+                                        </p>
+                                        <div className="relative">
+                                          <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
+                                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
+                                            <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Отправить сообщение реплаем'}</span>
+                                            <ChevronDown size={14} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
+                                          </button>
+                                          {actOpenDropdown === replyDropKey && (
+                                            <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                              {[{v:'none',l:'Отправить сообщение реплаем'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
+                                                <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
+                                                  className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-gray-50 last:border-0 ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                  {o.l}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
+                                    )}
                                   </div>
                                 </div>
                               )}
