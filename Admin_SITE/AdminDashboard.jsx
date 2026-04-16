@@ -95,6 +95,8 @@ export default function App() {
   const [togglingTrigger, setTogglingTrigger] = useState(null);
   const [copyingTrigger, setCopyingTrigger] = useState(null);
   const [dragId, setDragId] = useState(null);
+  const [actionSettingsModal, setActionSettingsModal] = useState(null); // {gIdx, aIdx}
+  const [actionSettingsPct, setActionSettingsPct] = useState(100);      // temp % в модале
 
   const fetchTriggers = () => {
     setTriggersLoading(true);
@@ -950,6 +952,7 @@ export default function App() {
             { type:'warn',      label:'Предупреждение',    Icon: AlertOctagon  },
             { type:'delete',    label:'Удалить сообщение', Icon: Trash2        },
             { type:'emoji',     label:'Реакция',           Icon: Smile         },
+            { type:'pin',       label:'Закрепить сообщение',Icon: CheckCircle2   },
           ];
 
           return (
@@ -1418,7 +1421,9 @@ export default function App() {
                           <div key={action.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
                             {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
-                              <button className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all flex-shrink-0">
+                              <button
+                                onClick={() => { setActionSettingsPct(action.action_probability ?? 100); setActionSettingsModal({gIdx, aIdx}); }}
+                                className="p-1 text-gray-400 hover:text-blue-500 active:scale-90 transition-all flex-shrink-0">
                                 <Settings size={12}/>
                               </button>
                               <span className="text-[11px] font-black text-gray-700 flex-1">Действие {aIdx + 1}</span>
@@ -1666,22 +1671,300 @@ export default function App() {
                                   className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
                               )}
 
-                              {/* ── warn / delete ── */}
-                              {(action.type === 'warn' || action.type === 'delete') && (
-                                <p className="text-[10px] text-gray-400 font-medium italic">Действие выполнится автоматически без дополнительных настроек.</p>
+                              {/* ── warn ── */}
+                              {action.type === 'warn' && (
+                                <p className="text-xs text-gray-400 font-medium italic">Действие выполнится автоматически без дополнительных настроек.</p>
                               )}
 
+                              {/* ── delete ── */}
+                              {action.type === 'delete' && (() => {
+                                const delTarget    = action.delete_target    || 'initiator';
+                                const delDelay     = action.delete_delay     ?? 0;
+                                const delDelayUnit = action.delete_delay_unit|| 'seconds';
+                                const delTgtKey    = `delTgt_${gIdx}_${aIdx}`;
+                                const delUnitKey   = `delUnit_${gIdx}_${aIdx}`;
+                                const delGearKey   = `delGear_${gIdx}_${aIdx}`;
+                                const isModified   = delTarget !== 'initiator';
+
+                                const TARGET_OPTIONS = [
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'initiator', l:'Инициатор триггера'                 },
+                                  { v:'replied',   l:'Кому ответили'                      },
+                                ];
+                                const UNIT_OPTIONS = [
+                                  { v:'seconds', l:'секунд' },
+                                  { v:'minutes', l:'минут'  },
+                                  { v:'hours',   l:'часов'  },
+                                  { v:'days',    l:'дней'   },
+                                ];
+                                const curTarget = TARGET_OPTIONS.find(o => o.v === delTarget) || TARGET_OPTIONS[1];
+                                const curUnit   = UNIT_OPTIONS.find(o => o.v === delDelayUnit) || UNIT_OPTIONS[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-gray-800">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {isModified && (
+                                          <div className="relative">
+                                            <button
+                                              onClick={() => setActOpenDropdown(actOpenDropdown === delGearKey ? null : delGearKey)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === delGearKey && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 overflow-hidden whitespace-nowrap">
+                                                <button
+                                                  onClick={() => { updAction(gIdx, aIdx, 'delete_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button
+                                          onClick={() => setActOpenDropdown(actOpenDropdown === delTgtKey ? null : delTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === delTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curTarget.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === delTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {TARGET_OPTIONS.map(o => (
+                                              <button key={o.v}
+                                                onClick={() => { updAction(gIdx, aIdx, 'delete_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-3 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Задержка */}
+                                    <div>
+                                      <p className="text-sm font-black text-gray-800 mb-1.5">
+                                        Задержка <span className="text-red-400">*</span>
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="number" min="0"
+                                          value={delDelay}
+                                          onChange={e => updAction(gIdx, aIdx, 'delete_delay', Math.max(0, parseInt(e.target.value)||0))}
+                                          className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                        <div className="relative">
+                                          <button
+                                            onClick={() => setActOpenDropdown(actOpenDropdown === delUnitKey ? null : delUnitKey)}
+                                            className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all min-w-[110px] ${actOpenDropdown === delUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                            <span className="flex-1">{curUnit.l}</span>
+                                            <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delUnitKey ? 'rotate-180' : ''}`}/>
+                                          </button>
+                                          {actOpenDropdown === delUnitKey && (
+                                            <div className="absolute top-full right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                              {UNIT_OPTIONS.map(o => (
+                                                <button key={o.v}
+                                                  onClick={() => { updAction(gIdx, aIdx, 'delete_delay_unit', o.v); setActOpenDropdown(null); }}
+                                                  className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delDelayUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                  {o.l}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── pin ── */}
+                              {action.type === 'pin' && (() => {
+                                const pinTimeEnabled = action.pin_time_enabled || false;
+                                const pinTimeValue   = action.pin_time_value   ?? 10;
+                                const pinTimeUnit    = action.pin_time_unit    || 'seconds';
+                                const pinNotify      = action.pin_notify       || false;
+                                const pinTarget      = action.pin_target       || '';
+                                const pinUnitKey     = `pinUnit_${gIdx}_${aIdx}`;
+                                const pinTgtKey      = `pinTgt_${gIdx}_${aIdx}`;
+                                const pinNotifyGear  = `pinNotifyGear_${gIdx}_${aIdx}`;
+                                const pinTgtGear     = `pinTgtGear_${gIdx}_${aIdx}`;
+                                const pinTimeGear    = `pinTimeGear_${gIdx}_${aIdx}`;
+
+                                const PIN_UNITS = [
+                                  { v:'seconds', l:'секунд'  },
+                                  { v:'minutes', l:'минут'   },
+                                  { v:'hours',   l:'часов'   },
+                                  { v:'days',    l:'дней'    },
+                                  { v:'weeks',   l:'недель'  },
+                                  { v:'months',  l:'месяцев' },
+                                ];
+                                const PIN_TARGETS = [
+                                  { v:'initiator', l:'инициатора триггера' },
+                                  { v:'replied',   l:'на которое ответили' },
+                                ];
+                                const curUnit   = PIN_UNITS.find(o => o.v === pinTimeUnit)   || PIN_UNITS[0];
+                                const curTarget = PIN_TARGETS.find(o => o.v === pinTarget);
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Через какое время открепить */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-medium text-gray-700">Через какое время открепить</p>
+                                          {pinTimeEnabled && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTimeGear ? null : pinTimeGear)}
+                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === pinTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'pin_time_enabled', false); updAction(gIdx, aIdx, 'pin_time_value', 10); updAction(gIdx, aIdx, 'pin_time_unit', 'seconds'); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {pinTimeEnabled ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', false)}
+                                            className="p-1.5 text-gray-400 hover:text-red-500 active:scale-90 transition-all">
+                                            <Ghost size={16}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {pinTimeEnabled && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={pinTimeValue}
+                                            onChange={e => updAction(gIdx, aIdx, 'pin_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinUnitKey ? null : pinUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === pinUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === pinUnitKey && (
+                                              <div className="absolute top-full right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[120px]">
+                                                {PIN_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Уведомить участников чата */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-gray-700">Уведомить участников чата</p>
+                                        {pinNotify && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinNotifyGear ? null : pinNotifyGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === pinNotifyGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'pin_notify', false); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'pin_notify', !pinNotify)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${pinNotify ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${pinNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                    {/* Закрепить сообщение */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-medium text-gray-700">Закрепить сообщение</p>
+                                        {pinTarget && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtGear ? null : pinTgtGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === pinTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'pin_target', ''); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtKey ? null : pinTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-600 hover:border-blue-300 transition-all ${actOpenDropdown === pinTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span className={curTarget ? 'text-gray-800' : 'text-gray-400'}>
+                                            {curTarget ? curTarget.l : '-'}
+                                          </span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === pinTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {PIN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-3 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
                             </div>
+
+                            {/* Кнопка Добавить действие — футер карточки */}
+                            <div className="border-t border-gray-100">
+                              <button
+                                onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
+                                className="w-full py-3 bg-blue-500 text-white font-black text-sm flex items-center justify-center gap-2 hover:bg-blue-600 active:scale-[0.99] transition-all">
+                                Добавить действие
+                              </button>
+                            </div>
+
                           </div>
                         );
                       })}
-
-                      {/* Добавить действие в эту группу */}
-                      <button
-                        onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
-                        className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
-                        <PlusCircle size={12}/> Добавить действие
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -1907,7 +2190,7 @@ export default function App() {
                             { type:'send_text', icon:'📤', label:'Отправить сообщение в чат', sub:'Ответить сообщением', active:true  },
                             { type:'delete',    icon:'🗑',  label:'Удалить сообщение', sub:'Удалить триггер-сообщение', active:true  },
                             { type:'dm',        icon:'✉️',  label:'Личное сообщение',  sub:'Написать пользователю в ЛС',active:true  },
-                            { type:'pin',       icon:'📌',  label:'Закрепить',          sub:'Закрепить сообщение',      active:false },
+                            { type:'pin',       icon:'📌',  label:'Закрепить',          sub:'Закрепить сообщение',      active:true  },
                             { type:'unpin',     icon:'📍',  label:'Открепить',          sub:'Открепить сообщение',      active:false },
                           ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
                             a.active ? (
@@ -2226,6 +2509,45 @@ export default function App() {
                       </div>
                     )}
 
+                  </div>
+                );
+              })()}
+
+              {/* ── МОДАЛ ДОПОЛНИТЕЛЬНЫХ НАСТРОЕК ДЕЙСТВИЯ ── */}
+              {actionSettingsModal && (() => {
+                const { gIdx, aIdx } = actionSettingsModal;
+                return (
+                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-black text-base text-gray-900">Дополнительные настройки действия</h3>
+                        <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <p className="text-sm font-black text-gray-800">Шанс выполнения действия <span className="text-red-400">*</span></p>
+                        </div>
+                        <input
+                          type="number" min="1" max="100"
+                          value={actionSettingsPct}
+                          onChange={e => setActionSettingsPct(Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
+                          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl font-black text-sm text-right outline-none focus:border-blue-300 transition-all"
+                          style={{appearance:'textfield'}}/>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button onClick={() => setActionSettingsModal(null)}
+                          className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                          Отмена
+                        </button>
+                        <button onClick={() => { updAction(gIdx, aIdx, 'action_probability', actionSettingsPct); setActionSettingsModal(null); }}
+                          className="px-5 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all">
+                          Сохранить
+                        </button>
+                      </div>
+                    </div>
                   </div>
                 );
               })()}
