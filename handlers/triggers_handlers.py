@@ -16,6 +16,7 @@
   - Движок (process_triggers): проверка сообщений + выполнение действий
 """
 
+import asyncio
 import json
 import logging
 import random
@@ -1491,6 +1492,7 @@ async def process_triggers(
                         sent_public_bot_message = True
                         last_bot_msg_for_pin = bot_msg
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
+                        await _handle_action_settings(context, db, trigger, bot_msg, act_cfg)
 
                 elif act == 'msg_dm':
                     dm_text = (act_cfg.get('text') or trigger['name']).strip()
@@ -1655,6 +1657,14 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
     text = (text or '').strip()
     reply_markup = _build_url_markup(act_cfg)
 
+    # Задержка отправки (send_delayed)
+    delay_sec = act_cfg.get('send_delay_seconds')
+    if delay_sec:
+        try:
+            await asyncio.sleep(int(delay_sec))
+        except Exception:
+            pass
+
     if not media_id or not media_type:
         if not text:
             return None
@@ -1668,6 +1678,10 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             kwargs['reply_to_message_id'] = reply_to_message_id
         if reply_markup:
             kwargs['reply_markup'] = reply_markup
+        if act_cfg.get('disable_notification'):
+            kwargs['disable_notification'] = True
+        if act_cfg.get('protect_content'):
+            kwargs['protect_content'] = True
         return await bot.send_message(**kwargs)
 
     if media_pos == 'above':
@@ -1807,6 +1821,54 @@ async def _handle_bot_msg_deletion(context, db, trigger, bot_msg):
                 name=f"trig_del_{bot_msg.message_id}")
         except Exception as e:
             logger.warning(f"Schedule bot msg deletion: {e}")
+
+
+async def _handle_action_settings(context, db, trigger, bot_msg, act_cfg: dict):
+    """
+    Обрабатывает тумблеры настроек из action_configs (сайт → бот):
+      - pin:               закрепить отправленное сообщение
+      - delete_after_seconds: удалить через N секунд
+      - delete_previous:   удалить предыдущее сообщение бота этого триггера
+    """
+    # ── Закрепить сообщение ──
+    if act_cfg.get('pin'):
+        try:
+            await context.bot.pin_chat_message(
+                chat_id=bot_msg.chat.id,
+                message_id=bot_msg.message_id,
+                disable_notification=True,
+            )
+        except Exception as e:
+            logger.warning(f"pin msg failed: {e}")
+
+    # ── Удалить через N секунд ──
+    del_after = act_cfg.get('delete_after_seconds')
+    if del_after:
+        try:
+            context.job_queue.run_once(
+                _delete_bot_msg_job, when=int(del_after),
+                data={'chat_id': bot_msg.chat.id, 'message_id': bot_msg.message_id},
+                name=f"act_del_{bot_msg.message_id}")
+        except Exception as e:
+            logger.warning(f"delete_after schedule failed: {e}")
+
+    # ── Удалить предыдущее сообщение бота ──
+    if act_cfg.get('delete_previous'):
+        try:
+            old_id   = trigger.get('last_bot_msg_id')
+            old_chat = trigger.get('last_bot_msg_chat')
+            if old_id and old_chat:
+                try:
+                    await context.bot.delete_message(chat_id=old_chat, message_id=old_id)
+                except Exception:
+                    pass
+            # Сохраняем новый
+            db.cursor.execute(
+                "UPDATE triggers SET last_bot_msg_id=?, last_bot_msg_chat=? WHERE id=?",
+                (bot_msg.message_id, bot_msg.chat.id, trigger['id']))
+            db.conn.commit()
+        except Exception as e:
+            logger.warning(f"delete_previous failed: {e}")
 
 
 async def _delete_bot_msg_job(context):

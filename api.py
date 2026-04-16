@@ -462,13 +462,28 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
             variants = cfg.get('variants') or [{}]
             first = variants[0] if variants else {}
             settings = cfg.get('settings', {})
+            # Перевод единиц времени → секунды
+            _unit_sec = {'секунда':1,'минута':60,'час':3600,'день':86400,'неделя':604800,'месяц':2592000}
+            def _to_sec(val_key, unit_key):
+                try:
+                    val = int(settings.get(val_key) or 1)
+                    unit = settings.get(unit_key) or 'секунда'
+                    return val * _unit_sec.get(unit, 1)
+                except Exception:
+                    return None
             bot_configs[bot_type] = {
-                'text':         first.get('text', ''),
-                'media_type':   first.get('media_type', 'none'),
-                'media_id':     first.get('media_id'),
-                'reply_target': cfg.get('reply_target', 'none'),
-                'buttons':      _keyboard_to_buttons(cfg.get('keyboard', [])),
-                'link_preview': not settings.get('disable_preview', False),
+                'text':                 first.get('text', ''),
+                'media_type':           first.get('media_type', 'none'),
+                'media_id':             first.get('media_id'),
+                'reply_target':         cfg.get('reply_target', 'none'),
+                'buttons':              _keyboard_to_buttons(cfg.get('keyboard', [])),
+                'link_preview':         not settings.get('disable_preview', False),
+                'disable_notification': bool(settings.get('disable_notify', False)),
+                'protect_content':      bool(settings.get('content_protection', False)),
+                'pin':                  bool(settings.get('pin', False)),
+                'delete_previous':      bool(settings.get('delete_previous', False)),
+                'delete_after_seconds': _to_sec('delete_after_val','delete_after_unit') if settings.get('delete_after') else None,
+                'send_delay_seconds':   _to_sec('send_delayed_val','send_delayed_unit') if settings.get('send_delayed') else None,
                 # Сохраняем все варианты для восстановления на сайте
                 '_variants':    variants,
                 '_settings':    settings,

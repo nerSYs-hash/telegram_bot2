@@ -1853,30 +1853,79 @@ export default function App() {
                                       )}
 
                                       {/* Настройки */}
-                                      {msgTab === 'settings' && (
-                                        <div className="p-4 grid grid-cols-2 gap-x-6 gap-y-4">
-                                          {[
-                                            { key:'delete_after',      label:'Удалить сообщение через'       },
-                                            { key:'send_delayed',      label:'Отправить сообщение с задержкой'},
-                                            { key:'pin',               label:'Закрепить сообщение'           },
-                                            { key:'disable_preview',   label:'Отключить предпросмотр ссылок' },
-                                            { key:'disable_notify',    label:'Отключить уведомления'         },
-                                            { key:'delete_previous',   label:'Удалять предыдущее сообщение'  },
-                                            { key:'content_protection',label:'Защита контента'               },
-                                          ].map(s => (
-                                            <div key={s.key} className="flex items-center justify-between gap-2">
-                                              <div className="flex items-center gap-1 min-w-0">
-                                                <span className="text-xs font-medium text-gray-700 leading-tight">{s.label}</span>
-                                                <div className="w-4 h-4 rounded-full bg-blue-100 text-blue-500 text-[9px] font-black flex items-center justify-center flex-shrink-0 cursor-pointer">?</div>
+                                      {msgTab === 'settings' && (() => {
+                                        const SETTING_HINTS = {
+                                          delete_after:      'Сообщение бота будет удалено через указанное время. Оставьте "0", чтобы не удалять.',
+                                          send_delayed:      'Сообщение будет отправлено через указанное время. Оставьте "0", чтобы отправлять без задержки.',
+                                          pin:               'Если включить, отправленное сообщение автоматически закрепится в шапке чата.',
+                                          disable_preview:   'В Telegram при добавлении ссылки прикрепляется превью. Включи — превью показано не будет.',
+                                          disable_notify:    'Сообщение придёт без звука. Удобно в ночное время суток.',
+                                          delete_previous:   'Предыдущее сообщение бота, связанное с этим триггером, будет удалено.',
+                                          content_protection:'Защищает содержимое сообщения от пересылки и сохранения.',
+                                        };
+                                        const TIME_UNITS_SHORT = ['секунда','минута','час','день'];
+                                        const TIME_UNITS_LONG  = ['секунда','минута','час','день','неделя','месяц'];
+                                        const [hintKey, setHintKey] = React.useState(null);
+
+                                        const SETTINGS_CFG = [
+                                          { key:'delete_after',      label:'Удалить сообщение через',        hasTime:true,  units:TIME_UNITS_SHORT, valKey:'delete_after_val',   unitKey:'delete_after_unit'  },
+                                          { key:'send_delayed',      label:'Отправить с задержкой',          hasTime:true,  units:TIME_UNITS_LONG,  valKey:'send_delayed_val',   unitKey:'send_delayed_unit'  },
+                                          { key:'pin',               label:'Закрепить сообщение',            hasTime:false },
+                                          { key:'disable_preview',   label:'Откл. предпросмотр ссылок',      hasTime:false },
+                                          { key:'disable_notify',    label:'Отключить уведомления',          hasTime:false },
+                                          { key:'delete_previous',   label:'Удалять предыдущее сообщение',   hasTime:false },
+                                          { key:'content_protection',label:'Защита контента',                hasTime:false },
+                                        ];
+
+                                        return (
+                                          <div className="p-4 space-y-3">
+                                            {SETTINGS_CFG.map(s => (
+                                              <div key={s.key}>
+                                                <div className="flex items-center justify-between gap-2">
+                                                  <div className="flex items-center gap-1 min-w-0">
+                                                    <span className="text-xs font-medium text-gray-700 leading-tight">{s.label}</span>
+                                                    <button
+                                                      onMouseDown={e => { e.preventDefault(); setHintKey(hintKey === s.key ? null : s.key); }}
+                                                      className="w-4 h-4 rounded-full bg-blue-100 text-blue-500 text-[9px] font-black flex items-center justify-center flex-shrink-0 hover:bg-blue-200 transition-all">?</button>
+                                                  </div>
+                                                  <button onClick={() => updSetting(s.key, !settings[s.key])}
+                                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                                  </button>
+                                                </div>
+
+                                                {/* Подсказка */}
+                                                {hintKey === s.key && (
+                                                  <div className="mt-1.5 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl text-[10px] text-blue-700 leading-relaxed">
+                                                    {SETTING_HINTS[s.key]}
+                                                  </div>
+                                                )}
+
+                                                {/* Инпут времени (для delete_after и send_delayed) */}
+                                                {s.hasTime && settings[s.key] && (
+                                                  <div className="flex gap-2 mt-2">
+                                                    <input
+                                                      type="number" min="0" max="9999"
+                                                      value={settings[s.valKey] ?? 1}
+                                                      onChange={e => updSetting(s.valKey, Math.max(0, parseInt(e.target.value)||0))}
+                                                      className="w-20 px-2 py-1.5 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 transition-all text-center"
+                                                    />
+                                                    <div className="relative flex-1">
+                                                      <select
+                                                        value={settings[s.unitKey] ?? s.units[0]}
+                                                        onChange={e => updSetting(s.unitKey, e.target.value)}
+                                                        className="w-full px-3 py-1.5 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 appearance-none transition-all cursor-pointer">
+                                                        {s.units.map(u => <option key={u} value={u}>{u}</option>)}
+                                                      </select>
+                                                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                                                    </div>
+                                                  </div>
+                                                )}
                                               </div>
-                                              <button onClick={() => updSetting(s.key, !settings[s.key])}
-                                                className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
-                                              </button>
-                                            </div>
-                                          ))}
-                                        </div>
-                                      )}
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
 
                                       {/* Создать / Редактировать клавиатуру */}
                                       <div className="border-t border-gray-100">
