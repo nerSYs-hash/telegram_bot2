@@ -1814,7 +1814,9 @@ export default function App() {
                                                 );
                                               })()}
                                               <div className="flex items-center gap-0.5 ml-1">
-                                                <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 font-black rounded hover:bg-gray-100 flex items-center justify-center">?</button>
+                                                <button
+                                                  onMouseDown={e => { e.preventDefault(); setShowEditorHelp(true); }}
+                                                  className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 font-black rounded hover:bg-blue-50 flex items-center justify-center transition-all">?</button>
                                                 <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 flex items-center justify-center">↗</button>
                                               </div>
                                             </div>
@@ -3657,6 +3659,59 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* ── Модал: справка по кнопкам форматирования ── */}
+      {showEditorHelp && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setShowEditorHelp(false)}>
+          <div className="bg-white rounded-3xl shadow-2xl w-[420px] max-w-[95vw] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Шапка */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+              <p className="font-black text-gray-900 text-base">Подсказка по форматированию</p>
+              <button onClick={() => setShowEditorHelp(false)}
+                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all active:scale-90">
+                <X size={14}/>
+              </button>
+            </div>
+
+            {/* Контент */}
+            <div className="overflow-y-auto p-5 space-y-5 max-h-[70vh]">
+              {[
+                { btn:'B',  label:'Жирный',        tag:'<b>',           preview:<><b>Привет, как дела?</b></> },
+                { btn:'I',  label:'Курсив',         tag:'<i>',           preview:<><i>Привет, как дела?</i></> },
+                { btn:'S',  label:'Зачеркнутый',    tag:'<s>',           preview:<><s>Привет, как дела?</s></> },
+                { btn:'U',  label:'Подчеркнутый',   tag:'<u>',           preview:<><u>Привет, как дела?</u></> },
+                { btn:'<>',  label:'Моноширинный (code)', tag:'<code>',  preview:<><code className="bg-gray-100 px-1 rounded text-sm">Привет, как дела?</code></> },
+                { btn:'»',  label:'Цитата (blockquote)', tag:'<blockquote>', preview:<div className="border-l-4 border-gray-300 pl-3 text-gray-500 italic text-sm">Привет, как дела?</div> },
+                { btn:'🔗', label:'Ссылка',         tag:'<a href="...">',preview:<><a className="text-blue-500 underline" href="#">Привет, как дела?</a></> },
+                { btn:'✒',  label:'Скрытый текст (spoiler)', tag:'<tg-spoiler>', preview:<span className="bg-gray-800 text-gray-800 rounded px-1 select-none text-sm">Привет, как дела?</span> },
+                { btn:'Tx', label:'Очистить форматирование', tag:'—',    preview:<>Привет, как дела?</> },
+              ].map(row => (
+                <div key={row.btn}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 bg-blue-100 text-blue-600 text-[11px] font-black rounded flex items-center justify-center flex-shrink-0">{row.btn}</span>
+                    <span className="text-sm font-black text-gray-800">{row.label}</span>
+                    <span className="ml-auto text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded">{row.tag}</span>
+                  </div>
+                  <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 min-h-[42px]">
+                    <span className="text-sm text-gray-700">{row.preview}</span>
+                  </div>
+                </div>
+              ))}
+
+              <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
+                <p className="text-[11px] font-black text-amber-700 mb-1">💡 Совет</p>
+                <p className="text-[11px] text-amber-600 leading-relaxed">
+                  Выдели текст, затем нажми кнопку — форматирование применится к выделенному фрагменту.
+                  Для цитируемого пользователя в плейсхолдерах замени <b>act_</b> на <b>rpl_</b>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Модал: подтверждение выхода из редактора триггера ── */}
       {showLeaveConfirm && (
