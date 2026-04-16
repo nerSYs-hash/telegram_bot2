@@ -107,6 +107,8 @@ export default function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState(null);
   const [phDropdown, setPhDropdown] = useState(null); // ключ 'gIdx_aIdx_varIdx' | null
+  const [settingHint, setSettingHint] = useState(null); // 'key' | null
+  const [showEditorHelp, setShowEditorHelp] = useState(false);
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -1773,9 +1775,10 @@ export default function App() {
                                                 };
 
                                                 return (
-                                                  <div className="relative ml-auto">
+                                                  <div className="relative ml-auto"
+                                                    onMouseDown={e => e.stopPropagation()}>
                                                     <button
-                                                      onMouseDown={e => { e.preventDefault(); openPh(); }}
+                                                      onMouseDown={e => { e.preventDefault(); e.stopPropagation(); openPh(); }}
                                                       className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-blue-500 border-blue-200 hover:bg-blue-50'}`}>
                                                       %плейсхолдеры%
                                                     </button>
@@ -1792,7 +1795,7 @@ export default function App() {
                                                               <div className="flex flex-wrap gap-1">
                                                                 {g.items.map(it => (
                                                                   <button key={it.key}
-                                                                    onMouseDown={e => { e.preventDefault(); insertPh(it.key); }}
+                                                                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertPh(it.key); }}
                                                                     className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border transition-all ${COLOR_MAP[g.color]}`}
                                                                     title={`%${it.key}%`}>
                                                                     {it.label}
@@ -1865,7 +1868,6 @@ export default function App() {
                                         };
                                         const TIME_UNITS_SHORT = ['секунда','минута','час','день'];
                                         const TIME_UNITS_LONG  = ['секунда','минута','час','день','неделя','месяц'];
-                                        const [hintKey, setHintKey] = React.useState(null);
 
                                         const SETTINGS_CFG = [
                                           { key:'delete_after',      label:'Удалить сообщение через',        hasTime:true,  units:TIME_UNITS_SHORT, valKey:'delete_after_val',   unitKey:'delete_after_unit'  },
@@ -1885,7 +1887,7 @@ export default function App() {
                                                   <div className="flex items-center gap-1 min-w-0">
                                                     <span className="text-xs font-medium text-gray-700 leading-tight">{s.label}</span>
                                                     <button
-                                                      onMouseDown={e => { e.preventDefault(); setHintKey(hintKey === s.key ? null : s.key); }}
+                                                      onMouseDown={e => { e.preventDefault(); setSettingHint(settingHint === s.key ? null : s.key); }}
                                                       className="w-4 h-4 rounded-full bg-blue-100 text-blue-500 text-[9px] font-black flex items-center justify-center flex-shrink-0 hover:bg-blue-200 transition-all">?</button>
                                                   </div>
                                                   <button onClick={() => updSetting(s.key, !settings[s.key])}
@@ -1895,7 +1897,7 @@ export default function App() {
                                                 </div>
 
                                                 {/* Подсказка */}
-                                                {hintKey === s.key && (
+                                                {settingHint === s.key && (
                                                   <div className="mt-1.5 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl text-[10px] text-blue-700 leading-relaxed">
                                                     {SETTING_HINTS[s.key]}
                                                   </div>
