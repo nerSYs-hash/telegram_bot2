@@ -1418,9 +1418,9 @@ export default function App() {
                         const updSetting = (key, val) => updAction(gIdx, aIdx, 'settings', {...settings, [key]: val});
 
                         return (
-                          <div key={action.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                          <div key={action.id} className="bg-white rounded-2xl border border-gray-200">
                             {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                               <button
                                 onClick={() => { setActionSettingsPct(action.action_probability ?? 100); setActionSettingsModal({gIdx, aIdx}); }}
                                 className="p-1 text-gray-400 hover:text-blue-500 active:scale-90 transition-all flex-shrink-0">
