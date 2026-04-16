@@ -1111,9 +1111,9 @@ export default function App() {
                           const typeKey = `type_${gIdx}_${cIdx}`;
                           const modKey  = `mod_${gIdx}_${cIdx}`;
                           return (
-                          <div key={cond.id} className="bg-white rounded-2xl border border-gray-200 overflow-hidden">
+                          <div key={cond.id} className="bg-white rounded-2xl border border-gray-200">
                             {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                               <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
                                 className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all flex-shrink-0">
                                 <Settings size={12}/>
@@ -1352,9 +1352,9 @@ export default function App() {
 
                 {/* Группы действий */}
                 {actionGroups.map((group, gIdx) => (
-                  <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                  <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                     {/* Шапка группы */}
-                    <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100">
+                    <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                       {/* Шестерёнка */}
                       <div className="relative">
                         <button
