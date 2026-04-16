@@ -305,30 +305,28 @@ export default function App() {
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
     if (t) {
+      // ── Условия: восстанавливаем из keywords строки ──
+      const chips = t.keywords ? t.keywords.split(',').map(s => s.trim()).filter(Boolean) : [];
+      const conditions = chips.length > 0
+        ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', chips, keyword: chips[0] || '' }]
+        : [];
+
+      // ── Действия: восстанавливаем из actions[] + action_configs{} ──
+      const actionList = (t.actions || []).map((type, i) => ({
+        id: i + 1,
+        type,
+        settings: (t.action_configs || {})[type] || {},
+      }));
+
       setEditingTrigger({
         ...t,
-        conditionGroups: [{
-          id: 1,
-          conditions: t.keyword ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', keyword: t.keyword || '' }] : []
-        }],
-        actionGroups: [{
-          id: 1, probability: 100,
-          actions: t.action ? [{
-            id: 1, type: t.action || 'send_text',
-            reply_text: t.reply_text || '',
-            media_type: t.media_type || 'none',
-            reply_target: t.reply_target || 'none',
-            bot_msg_delete: t.bot_msg_delete || 'no',
-            bot_msg_delete_after: t.bot_msg_delete_after || 60,
-            duration: t.duration || '',
-            emoji: t.emoji || ''
-          }] : []
-        }]
+        conditionGroups: [{ id: 1, conditions }],
+        actionGroups: [{ id: 1, probability: t.probability ?? 100, actions: actionList }],
       });
     } else {
       setEditingTrigger({
         id: null, name: '', probability: 100,
-        where: 'chat', from: 'all',
+        where_fires: 'all', initiator: 'all',
         conditionGroups: [{ id: 1, conditions: [] }],
         actionGroups: [{ id: 1, probability: 100, actions: [] }]
       });
@@ -346,23 +344,41 @@ export default function App() {
   };
 
   const saveTrigger = () => {
-    const firstGroup      = (editingTrigger.conditionGroups || [])[0] || {};
-    const firstCond       = (firstGroup.conditions || [])[0] || {};
-    const firstActGroup   = (editingTrigger.actionGroups || [])[0] || {};
-    const firstAction     = (firstActGroup.actions || [])[0] || {};
+    // ── Условия: берём из первой группы ──
+    const firstGroup = (editingTrigger.conditionGroups || [])[0] || {};
+    const conditions = firstGroup.conditions || [];
+    const firstCond  = conditions[0] || {};
+    // keywords: объединяем chips всех keyword-условий через запятую
+    const keywords = conditions
+      .filter(c => c.type === 'keyword')
+      .flatMap(c => c.chips && c.chips.length ? c.chips : (c.keyword ? [c.keyword] : []))
+      .join(',');
+    const condition = firstCond.condition || 'contains';
+
+    // ── Действия: собираем из всех групп ──
+    const allActions = (editingTrigger.actionGroups || []).flatMap(g => g.actions || []);
+    const actionTypes = allActions.map(a => a.type);
+    const actionConfigs = {};
+    allActions.forEach(a => {
+      if (a.type) actionConfigs[a.type] = a.settings || {};
+    });
+
     const body = {
       name:                 editingTrigger.name,
-      condition:            firstCond.condition    || 'contains',
-      keyword:              firstCond.keyword      || '',
-      probability:          editingTrigger.probability,
-      where:                editingTrigger.where   || 'chat',
-      from_who:             editingTrigger.from    || 'all',
-      action:               firstAction.type       || 'send_text',
-      duration:             firstAction.duration   || '',
-      reply_text:           firstAction.reply_text || '',
-      media_type:           firstAction.media_type || 'none',
-      bot_msg_delete:       firstAction.bot_msg_delete       || 'no',
-      bot_msg_delete_after: firstAction.bot_msg_delete_after || 60,
+      condition,
+      keywords,
+      probability:          editingTrigger.probability ?? 100,
+      where_fires:          editingTrigger.where_fires  || 'all',
+      initiator:            editingTrigger.initiator    || 'all',
+      target:               editingTrigger.target       || 'nobody',
+      target_user:          editingTrigger.target_user  || '',
+      actions:              actionTypes,
+      action_configs:       actionConfigs,
+      bot_msg_delete:       editingTrigger.bot_msg_delete       || 'no',
+      bot_msg_delete_after: editingTrigger.bot_msg_delete_after || 60,
+      fire_limit:           editingTrigger.fire_limit   || 0,
+      auto_pin:             editingTrigger.auto_pin     || 0,
+      is_enabled:           editingTrigger.is_enabled   ?? true,
     };
     const isEdit = !!editingTrigger.id;
     const url    = isEdit ? `/api/triggers/${editingTrigger.id}` : '/api/triggers';

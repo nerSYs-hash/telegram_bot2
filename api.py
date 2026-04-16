@@ -399,46 +399,56 @@ async def get_system():
     except Exception as e:
         return {"error": str(e)}
 
-# ── Маппинг условий: wizard → DB ──
-COND_TO_DB  = {'any_word': 'contains', 'exact_match': 'exact', 'regex': 'regex'}
-COND_FROM_DB = {v: k for k, v in COND_TO_DB.items()}
-
-
 class TriggerIn(BaseModel):
     name: str
-    condition: str = 'any_word'
-    keyword: str = ''
+    condition: str = 'contains'
+    keywords: str = ''
     probability: int = 100
-    where: str = 'chat'
-    from_who: str = 'all'
-    action: str = 'send_text'
-    duration: str = '0'
-    reply_text: str = ''
-    media_type: str = 'none'
+    where_fires: str = 'all'
+    initiator: str = 'all'
+    target: str = 'nobody'
+    target_user: str = ''
+    actions: list = []                 # ["msg_chat", "pin", "delete"]
+    action_configs: dict = {}          # {"msg_chat": {...}, "pin": {...}}
     bot_msg_delete: str = 'no'
     bot_msg_delete_after: int = 60
+    fire_limit: int = 0
+    auto_pin: int = 0
+    is_enabled: bool = True
 
 
 def _row_to_trigger(row: dict) -> dict:
-    cfg = {}
+    actions = []
     try:
-        cfg = json.loads(row.get('action_configs') or '{}')
+        actions = json.loads(row.get('actions') or '[]')
+    except Exception:
+        # backward compat: старый формат с одним action
+        old_action = row.get('action')
+        if old_action:
+            actions = [old_action]
+
+    action_configs = {}
+    try:
+        action_configs = json.loads(row.get('action_configs') or '{}')
     except Exception:
         pass
+
     return {
         'id':                  row['id'],
         'name':                row['name'],
-        'condition':           COND_FROM_DB.get(row.get('condition', 'contains'), 'any_word'),
-        'keyword':             row.get('keywords', ''),
+        'condition':           row.get('condition', 'contains'),
+        'keywords':            row.get('keywords', ''),
         'probability':         row.get('probability', 100),
-        'where':               row.get('where_fires', 'chat'),
-        'from':                row.get('initiator', 'all'),
-        'action':              row.get('action', 'send_text'),
-        'duration':            row.get('action_value') or '0',
-        'reply_text':          cfg.get('reply_text', ''),
-        'media_type':          cfg.get('media_type', 'none'),
+        'where_fires':         row.get('where_fires', 'all'),
+        'initiator':           row.get('initiator', 'all'),
+        'target':              row.get('target', 'nobody'),
+        'target_user':         row.get('target_user', '') or '',
+        'actions':             actions,
+        'action_configs':      action_configs,
         'bot_msg_delete':      row.get('bot_msg_delete', 'no'),
         'bot_msg_delete_after':row.get('bot_msg_delete_after') or 60,
+        'fire_limit':          row.get('fire_limit') or 0,
+        'auto_pin':            bool(row.get('auto_pin', 0)),
         'is_enabled':          bool(row.get('is_enabled', 1)),
     }
 
@@ -457,16 +467,21 @@ async def get_triggers():
 async def create_trigger(t: TriggerIn):
     """Создать триггер"""
     try:
-        cfg = json.dumps({'reply_text': t.reply_text, 'media_type': t.media_type})
         db.cursor.execute('''
             INSERT INTO triggers
-                (name, keywords, condition, action, action_value, probability,
-                 where_fires, initiator, bot_msg_delete, bot_msg_delete_after,
-                 action_configs, is_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,1)
-        ''', (t.name, t.keyword, COND_TO_DB.get(t.condition, 'contains'),
-              t.action, t.duration, t.probability,
-              t.where, t.from_who, t.bot_msg_delete, t.bot_msg_delete_after, cfg))
+                (name, keywords, condition, probability,
+                 where_fires, initiator, target, target_user,
+                 actions, action_configs,
+                 bot_msg_delete, bot_msg_delete_after,
+                 fire_limit, auto_pin, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+        ''', (
+            t.name, t.keywords, t.condition, t.probability,
+            t.where_fires, t.initiator, t.target, t.target_user,
+            json.dumps(t.actions), json.dumps(t.action_configs),
+            t.bot_msg_delete, t.bot_msg_delete_after,
+            t.fire_limit, int(t.auto_pin), int(t.is_enabled),
+        ))
         db.conn.commit()
         return {'id': db.cursor.lastrowid, 'success': True}
     except Exception as e:
@@ -477,17 +492,22 @@ async def create_trigger(t: TriggerIn):
 async def update_trigger(trigger_id: int, t: TriggerIn):
     """Обновить триггер"""
     try:
-        cfg = json.dumps({'reply_text': t.reply_text, 'media_type': t.media_type})
         db.cursor.execute('''
             UPDATE triggers SET
-                name=?, keywords=?, condition=?, action=?, action_value=?,
-                probability=?, where_fires=?, initiator=?, bot_msg_delete=?,
-                bot_msg_delete_after=?, action_configs=?
+                name=?, keywords=?, condition=?, probability=?,
+                where_fires=?, initiator=?, target=?, target_user=?,
+                actions=?, action_configs=?,
+                bot_msg_delete=?, bot_msg_delete_after=?,
+                fire_limit=?, auto_pin=?, is_enabled=?
             WHERE id=?
-        ''', (t.name, t.keyword, COND_TO_DB.get(t.condition, 'contains'),
-              t.action, t.duration, t.probability,
-              t.where, t.from_who, t.bot_msg_delete, t.bot_msg_delete_after,
-              cfg, trigger_id))
+        ''', (
+            t.name, t.keywords, t.condition, t.probability,
+            t.where_fires, t.initiator, t.target, t.target_user,
+            json.dumps(t.actions), json.dumps(t.action_configs),
+            t.bot_msg_delete, t.bot_msg_delete_after,
+            t.fire_limit, int(t.auto_pin), int(t.is_enabled),
+            trigger_id,
+        ))
         db.conn.commit()
         return {'success': True}
     except Exception as e:
@@ -534,17 +554,21 @@ async def copy_trigger(trigger_id: int):
         r = dict(row)
         db.cursor.execute('''
             INSERT INTO triggers
-                (name, keywords, condition, action, action_value, probability,
-                 where_fires, initiator, bot_msg_delete, bot_msg_delete_after,
-                 action_configs, is_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,0)
+                (name, keywords, condition, probability,
+                 where_fires, initiator, target, target_user,
+                 actions, action_configs,
+                 bot_msg_delete, bot_msg_delete_after,
+                 fire_limit, auto_pin, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
         ''', (
             r['name'] + ' (копия)',
             r.get('keywords', ''), r.get('condition', 'contains'),
-            r.get('action', 'send_text'), r.get('action_value', ''),
-            r.get('probability', 100), r.get('where_fires', 'chat'),
-            r.get('initiator', 'all'), r.get('bot_msg_delete', 'no'),
-            r.get('bot_msg_delete_after', 60), r.get('action_configs', '{}'),
+            r.get('probability', 100),
+            r.get('where_fires', 'all'), r.get('initiator', 'all'),
+            r.get('target', 'nobody'), r.get('target_user', '') or '',
+            r.get('actions', '[]'), r.get('action_configs', '{}'),
+            r.get('bot_msg_delete', 'no'), r.get('bot_msg_delete_after', 60),
+            r.get('fire_limit', 0), r.get('auto_pin', 0),
         ))
         db.conn.commit()
         return {'id': db.cursor.lastrowid, 'success': True}
