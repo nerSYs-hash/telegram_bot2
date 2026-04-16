@@ -315,7 +315,7 @@ export default function App() {
       const actionList = (t.actions || []).map((type, i) => ({
         id: i + 1,
         type,
-        settings: (t.action_configs || {})[type] || {},
+        ...(t.action_configs || {})[type] || {},
       }));
 
       setEditingTrigger({
@@ -360,7 +360,9 @@ export default function App() {
     const actionTypes = allActions.map(a => a.type);
     const actionConfigs = {};
     allActions.forEach(a => {
-      if (a.type) actionConfigs[a.type] = a.settings || {};
+      if (!a.type) return;
+      const {id, type, ...cfg} = a;
+      actionConfigs[a.type] = cfg;
     });
 
     const body = {
@@ -2654,9 +2656,9 @@ export default function App() {
                 <div>
                   <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Где срабатывает</p>
                   <div className="flex gap-2">
-                    {[{v:'chat',l:'Чат'},{v:'pv',l:'Личка'},{v:'global',l:'Везде'}].map(o => (
-                      <button key={o.v} onClick={() => upd('where',o.v)}
-                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                    {[{v:'all',l:'Везде'},{v:'chat',l:'Чат'},{v:'pv',l:'Личка'}].map(o => (
+                      <button key={o.v} onClick={() => upd('where_fires',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
                       </button>
                     ))}
                   </div>
@@ -2665,8 +2667,8 @@ export default function App() {
                   <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">На кого реагирует</p>
                   <div className="flex gap-2">
                     {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
-                      <button key={o.v} onClick={() => upd('from',o.v)}
-                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.from===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      <button key={o.v} onClick={() => upd('initiator',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
                       </button>
                     ))}
                   </div>
