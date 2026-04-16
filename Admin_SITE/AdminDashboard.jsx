@@ -119,6 +119,10 @@ export default function App() {
   const [dragId, setDragId] = useState(null);
   const [actionSettingsModal, setActionSettingsModal] = useState(null); // {gIdx, aIdx}
   const [actionSettingsPct, setActionSettingsPct] = useState(100);      // temp % в модале
+  const [topics, setTopics] = useState([]);
+  const [topicsLoaded, setTopicsLoaded] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false); // {gIdx,aIdx,varIdx} | false
+  const [showPreview, setShowPreview] = useState(null); // {text, mediaUrl, mediaType, keyboard} | null
 
   const fetchTriggers = () => {
     setTriggersLoading(true);
@@ -1553,33 +1557,137 @@ export default function App() {
                                     </div>
 
                                     {/* Медиа область */}
-                                    <div
-                                      onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*,video/*,image/gif'; inp.onchange=e=>{ if(e.target.files[0]) { const f=e.target.files[0]; updVar('media_type', f.type.startsWith('video') ? 'video' : f.type==='image/gif' ? 'animation' : 'photo'); }}; inp.click(); }}
-                                      className="w-full h-28 border-2 border-dashed border-blue-200 rounded-xl flex flex-col items-center justify-center cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-all mb-2 select-none">
-                                      {curVar.media_type === 'none' || !curVar.media_type ? (
-                                        <>
-                                          <span className="text-2xl mb-1">👆</span>
-                                          <span className="text-xs text-blue-500 font-semibold">Нажмите, чтобы загрузить медиа</span>
-                                        </>
-                                      ) : (
-                                        <div className="flex items-center gap-2">
-                                          <span className="text-xl">{curVar.media_type==='photo'?'🖼':curVar.media_type==='video'?'🎬':'🎞'}</span>
-                                          <span className="text-sm font-black text-gray-700 capitalize">{curVar.media_type}</span>
-                                          <button onClick={e=>{e.stopPropagation();updVar('media_type','none');}}
-                                            className="text-red-400 hover:text-red-600 text-lg ml-1">×</button>
+                                    {(() => {
+                                      const isUploading = mediaUploading && mediaUploading.gIdx===gIdx && mediaUploading.aIdx===aIdx && mediaUploading.varIdx===curVarIdx;
+                                      const hasMedia = curVar.media_type && curVar.media_type !== 'none';
+                                      const pickMedia = () => {
+                                        const inp = document.createElement('input');
+                                        inp.type = 'file';
+                                        inp.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime';
+                                        inp.onchange = async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          setMediaUploading({gIdx, aIdx, varIdx: curVarIdx});
+                                          try {
+                                            const fd = new FormData();
+                                            fd.append('file', file);
+                                            const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
+                                            if (!res.ok) throw new Error(await res.text());
+                                            const data = await res.json();
+                                            updVar('media_type', data.media_type);
+                                            updVar('media_url', data.url);
+                                            updVar('media_server_path', data.server_path);
+                                          } catch(err) {
+                                            alert('Ошибка загрузки: ' + err.message);
+                                          } finally {
+                                            setMediaUploading(false);
+                                          }
+                                        };
+                                        inp.click();
+                                      };
+                                      return (
+                                        <div className="relative mb-2">
+                                          {hasMedia ? (
+                                            <div className="w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative group">
+                                              {curVar.media_type === 'photo' ? (
+                                                <img src={curVar.media_url} alt="preview" className="w-full max-h-48 object-contain"/>
+                                              ) : curVar.media_type === 'video' ? (
+                                                <video src={curVar.media_url} className="w-full max-h-48 object-contain" controls={false} muted/>
+                                              ) : (
+                                                <img src={curVar.media_url} alt="gif" className="w-full max-h-48 object-contain"/>
+                                              )}
+                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                                                <button onClick={e=>{e.stopPropagation();pickMedia();}}
+                                                  className="px-3 py-1.5 bg-white text-gray-800 rounded-lg text-xs font-bold shadow">Заменить</button>
+                                                <button onClick={e=>{e.stopPropagation();updVar('media_type','none');updVar('media_url','');updVar('media_server_path','');}}
+                                                  className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
+                                              </div>
+                                              <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded uppercase">
+                                                {curVar.media_type}
+                                              </span>
+                                            </div>
+                                          ) : (
+                                            <div onClick={isUploading ? undefined : pickMedia}
+                                              className={`w-full h-28 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all select-none ${isUploading ? 'border-blue-300 bg-blue-50/30 cursor-wait' : 'border-blue-200 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30'}`}>
+                                              {isUploading ? (
+                                                <>
+                                                  <span className="text-xl mb-1 animate-spin">⏳</span>
+                                                  <span className="text-xs text-blue-500 font-semibold">Загрузка...</span>
+                                                </>
+                                              ) : (
+                                                <>
+                                                  <span className="text-2xl mb-1">👆</span>
+                                                  <span className="text-xs text-blue-500 font-semibold">Нажмите, чтобы загрузить медиа</span>
+                                                  <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, GIF, MP4</span>
+                                                </>
+                                              )}
+                                            </div>
+                                          )}
                                         </div>
-                                      )}
-                                    </div>
+                                      );
+                                    })()}
 
                                     {/* Топики + вкладки + редактор */}
                                     <div className="border border-gray-200 rounded-xl overflow-hidden">
                                       {/* Строка вкладок */}
                                       <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
                                         <div className="flex items-center gap-1.5">
-                                          <span className="text-xs font-black text-gray-600 flex items-center gap-1">
-                                            <span>📋</span> Топики
-                                          </span>
-                                          <span className="text-[10px] font-black text-white bg-orange-400 px-1.5 py-0.5 rounded-md">Starter</span>
+                                          {/* Топик-пикер */}
+                                          {(() => {
+                                            const topicDropKey = `topic_${gIdx}_${aIdx}`;
+                                            const isOpen = actOpenDropdown === topicDropKey;
+                                            const selectedTopic = action.target_thread_id
+                                              ? topics.find(t => t.thread_id === action.target_thread_id)
+                                              : null;
+                                            const openTopicDrop = () => {
+                                              if (!topicsLoaded) {
+                                                fetch('/api/topics').then(r=>r.json()).then(data=>{
+                                                  setTopics(Array.isArray(data)?data:[]);
+                                                  setTopicsLoaded(true);
+                                                }).catch(()=>setTopicsLoaded(true));
+                                              }
+                                              setActOpenDropdown(isOpen ? null : topicDropKey);
+                                            };
+                                            return (
+                                              <div className="relative">
+                                                <button onClick={openTopicDrop}
+                                                  className={`flex items-center gap-1 text-xs font-black rounded-lg px-2 py-1 transition-all ${action.target_thread_id ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                                  <span>📋</span>
+                                                  <span className="max-w-[80px] truncate">{selectedTopic ? selectedTopic.name : 'Топик'}</span>
+                                                  {action.target_thread_id && (
+                                                    <span onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'target_thread_id',null);}}
+                                                      className="ml-0.5 text-blue-400 hover:text-red-500">×</span>
+                                                  )}
+                                                </button>
+                                                {isOpen && (
+                                                  <div className="absolute top-full left-0 z-[600] bg-white border border-gray-200 rounded-xl shadow-xl mt-1 min-w-[200px] max-h-60 overflow-y-auto">
+                                                    <div className="px-3 py-2 border-b border-gray-100">
+                                                      <span className="text-[10px] font-black text-gray-400 uppercase">Ветки группы</span>
+                                                    </div>
+                                                    {!topicsLoaded ? (
+                                                      <div className="px-4 py-3 text-xs text-gray-400">Загрузка...</div>
+                                                    ) : topics.length === 0 ? (
+                                                      <div className="px-4 py-3 text-xs text-gray-400">Ветки не найдены</div>
+                                                    ) : (
+                                                      <>
+                                                        <button onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',null);setActOpenDropdown(null);}}
+                                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 transition-all ${!action.target_thread_id?'text-blue-600 bg-blue-50':'text-gray-600 hover:bg-gray-50'}`}>
+                                                          Автоматически
+                                                        </button>
+                                                        {topics.map(t => (
+                                                          <button key={t.thread_id}
+                                                            onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',t.thread_id);setActOpenDropdown(null);}}
+                                                            className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${action.target_thread_id===t.thread_id?'text-blue-600 bg-blue-50':'text-gray-600 hover:bg-gray-50'}`}>
+                                                            {t.is_main ? '🏠 ' : '📌 '}{t.name}
+                                                          </button>
+                                                        ))}
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
                                         </div>
                                         <div className="flex gap-0.5">
                                           {[
@@ -1791,7 +1899,18 @@ export default function App() {
                                                 <button
                                                   onMouseDown={e => { e.preventDefault(); setShowEditorHelp(true); }}
                                                   className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 font-black rounded hover:bg-blue-50 flex items-center justify-center transition-all">?</button>
-                                                <button className="w-6 h-6 text-[10px] text-gray-400 hover:text-gray-600 rounded hover:bg-gray-100 flex items-center justify-center">↗</button>
+                                                <button
+                                                  onMouseDown={e => {
+                                                    e.preventDefault();
+                                                    setShowPreview({
+                                                      text: curVar.text || '',
+                                                      mediaUrl: curVar.media_url || '',
+                                                      mediaType: curVar.media_type || 'none',
+                                                      keyboard: keyboard,
+                                                    });
+                                                  }}
+                                                  title="Предпросмотр"
+                                                  className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 rounded hover:bg-blue-50 flex items-center justify-center transition-all">↗</button>
                                               </div>
                                             </div>
                                             <div className="relative">
@@ -3859,6 +3978,73 @@ export default function App() {
                   Для цитируемого пользователя в плейсхолдерах замени <b>act_</b> на <b>rpl_</b>.
                 </p>
               </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал: предпросмотр сообщения ── */}
+      {showPreview && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowPreview(null)}>
+          <div className="w-[380px] max-w-[95vw] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Шапка */}
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-xs font-black text-white/70 uppercase tracking-widest">Предпросмотр</span>
+              <button onClick={() => setShowPreview(null)}
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all">
+                <X size={14}/>
+              </button>
+            </div>
+
+            {/* TG-style bubble */}
+            <div className="bg-[#212121] rounded-2xl p-4 shadow-2xl">
+              {/* Sender */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-black flex-shrink-0">🤖</div>
+                <div>
+                  <p className="text-sm font-black text-[#6ab3f3]">Bot</p>
+                </div>
+              </div>
+
+              {/* Медиа */}
+              {showPreview.mediaUrl && showPreview.mediaType !== 'none' && (
+                <div className="mb-2 rounded-xl overflow-hidden">
+                  {showPreview.mediaType === 'photo' || showPreview.mediaType === 'animation' ? (
+                    <img src={showPreview.mediaUrl} alt="media" className="w-full max-h-64 object-contain bg-black/20"/>
+                  ) : (
+                    <video src={showPreview.mediaUrl} className="w-full max-h-64 object-contain bg-black/20" controls muted/>
+                  )}
+                </div>
+              )}
+
+              {/* Текст (HTML) */}
+              {showPreview.text && (
+                <div
+                  className="text-[14px] leading-relaxed text-white mb-2 break-words"
+                  style={{fontFamily:'system-ui,sans-serif'}}
+                  dangerouslySetInnerHTML={{__html: showPreview.text}}
+                />
+              )}
+              {!showPreview.text && !showPreview.mediaUrl && (
+                <p className="text-sm text-white/40 italic mb-2">Текст не задан</p>
+              )}
+
+              {/* Время */}
+              <div className="flex justify-end">
+                <span className="text-[11px] text-white/40">{new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</span>
+              </div>
+
+              {/* Клавиатура */}
+              {showPreview.keyboard && showPreview.keyboard.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {showPreview.keyboard.map((btn, bi) => (
+                    <div key={bi} className="w-full py-2 rounded-xl bg-[#2b5278] text-center text-sm font-bold text-[#6ab3f3] select-none">
+                      {btn.emoji ? `${btn.emoji} ` : ''}{btn.text || 'Кнопка'}
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>

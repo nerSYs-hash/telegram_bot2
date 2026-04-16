@@ -1665,7 +1665,14 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         except Exception:
             pass
 
-    if not media_id or not media_type:
+    server_path = act_cfg.get('media_server_path')
+    # Если указан топик в конфиге — переопределяем thread_id
+    if act_cfg.get('target_thread_id'):
+        thread_id = int(act_cfg['target_thread_id'])
+
+    has_media = (media_id or server_path) and media_type and media_type != 'none'
+
+    if not has_media:
         if not text:
             return None
         kwargs = {
@@ -1695,6 +1702,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             parse_mode=parse_mode,
             reply_to_message_id=reply_to_message_id,
             reply_markup=reply_markup,
+            server_path=server_path,
         )
 
     sent_text = None
@@ -1719,18 +1727,21 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         media_type=media_type,
         reply_to_message_id=sent_text.message_id if sent_text else reply_to_message_id,
         reply_markup=reply_markup if not sent_text else None,
+        server_path=server_path,
     )
 
     return sent_text or sent_media
 
 
 async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
-                             media_id: str, media_type: str,
+                             media_id: Optional[str], media_type: str,
                              caption: Optional[str] = None,
                              parse_mode: str = 'HTML',
                              reply_to_message_id: Optional[int] = None,
-                             reply_markup=None):
+                             reply_markup=None,
+                             server_path: Optional[str] = None):
     """Отправка одного медиа-сообщения в чат/ветку или ЛС."""
+    import os as _os
     kwargs = {'chat_id': chat_id}
     if thread_id is not None:
         kwargs['message_thread_id'] = thread_id
@@ -1738,22 +1749,28 @@ async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
         kwargs['reply_to_message_id'] = reply_to_message_id
     if reply_markup is not None:
         kwargs['reply_markup'] = reply_markup
+    if caption:
+        kwargs['caption'] = caption
+        kwargs['parse_mode'] = parse_mode
+
+    # Определяем источник медиа: file_id или файл с диска
+    def _media_src():
+        if media_id:
+            return media_id
+        if server_path and _os.path.isfile(server_path):
+            return open(server_path, 'rb')
+        return None
+
+    media_src = _media_src()
+    if not media_src:
+        return None
 
     if media_type == 'photo':
-        if caption:
-            kwargs['caption'] = caption
-            kwargs['parse_mode'] = parse_mode
-        return await bot.send_photo(photo=media_id, **kwargs)
+        return await bot.send_photo(photo=media_src, **kwargs)
     if media_type == 'video':
-        if caption:
-            kwargs['caption'] = caption
-            kwargs['parse_mode'] = parse_mode
-        return await bot.send_video(video=media_id, **kwargs)
+        return await bot.send_video(video=media_src, **kwargs)
     if media_type == 'animation':
-        if caption:
-            kwargs['caption'] = caption
-            kwargs['parse_mode'] = parse_mode
-        return await bot.send_animation(animation=media_id, **kwargs)
+        return await bot.send_animation(animation=media_src, **kwargs)
 
     logger.warning(f"Unsupported media_type in trigger action: {media_type}")
     return None

@@ -1,5 +1,6 @@
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.staticfiles import StaticFiles
 import io
 import re
 import httpx
@@ -475,7 +476,9 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
                 'text':                 first.get('text', ''),
                 'media_type':           first.get('media_type', 'none'),
                 'media_id':             first.get('media_id'),
+                'media_server_path':    first.get('media_server_path'),
                 'reply_target':         cfg.get('reply_target', 'none'),
+                'target_thread_id':     cfg.get('target_thread_id'),
                 'buttons':              _keyboard_to_buttons(cfg.get('keyboard', [])),
                 'link_preview':         not settings.get('disable_preview', False),
                 'disable_notification': bool(settings.get('disable_notify', False)),
@@ -493,9 +496,10 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
                 bot_configs['rotation'] = {
                     'items': [
                         {
-                            'text':       v.get('text', ''),
-                            'media_id':   v.get('media_id'),
-                            'media_type': v.get('media_type', 'none'),
+                            'text':            v.get('text', ''),
+                            'media_id':        v.get('media_id'),
+                            'media_type':      v.get('media_type', 'none'),
+                            'media_server_path': v.get('media_server_path'),
                         }
                         for v in variants
                     ],
@@ -591,6 +595,67 @@ async def get_custom_placeholders():
         return [{'name': r['name'], 'value': r['value'], 'description': r['description'] or ''} for r in rows]
     except Exception as e:
         return []  # Таблица может не существовать — возвращаем пустой список
+
+
+@app.get("/api/topics")
+async def get_topics():
+    """Ветки (топики) группы из БД"""
+    try:
+        chat_id = int(os.getenv('TARGET_CHAT_ID', 0))
+        rows = db.get_all_topics(chat_id)
+        result = []
+        for r in rows:
+            result.append({
+                'thread_id':   r['thread_id'],
+                'name':        r['thread_name'] or f'Ветка #{r["thread_id"]}',
+                'is_main':     bool(r['is_main_thread']),
+                'total_msgs':  int(r['total_messages'] or 0),
+            })
+        return result
+    except Exception as e:
+        logger.warning(f"get_topics error: {e}")
+        return []
+
+
+# ── Медиа-загрузка ──────────────────────────────────────────────
+MEDIA_DIR = os.path.join(current_dir, 'Admin_SITE', 'media_uploads')
+os.makedirs(MEDIA_DIR, exist_ok=True)
+
+# Служим статику из media_uploads (для превью на сайте)
+app.mount("/media", StaticFiles(directory=MEDIA_DIR), name="media")
+
+
+@app.post("/api/media/upload")
+async def upload_media(file: UploadFile = File(...)):
+    """Загрузка медиафайла. Возвращает url для предпросмотра и server_path."""
+    import uuid
+    allowed = {'image/jpeg', 'image/png', 'image/gif', 'image/webp',
+               'video/mp4', 'video/mpeg', 'video/quicktime'}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=400, detail="Недопустимый тип файла")
+    ext = os.path.splitext(file.filename or '')[1] or '.bin'
+    fname = f"{uuid.uuid4().hex}{ext}"
+    fpath = os.path.join(MEDIA_DIR, fname)
+    try:
+        contents = await file.read()
+        with open(fpath, 'wb') as fh:
+            fh.write(contents)
+        # Определяем тип
+        ct = file.content_type or ''
+        if ct.startswith('video'):
+            media_type = 'video'
+        elif ct == 'image/gif':
+            media_type = 'animation'
+        else:
+            media_type = 'photo'
+        return {
+            'url':         f'/media/{fname}',
+            'server_path': fpath,
+            'media_type':  media_type,
+            'filename':    fname,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/triggers")
