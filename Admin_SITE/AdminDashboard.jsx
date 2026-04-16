@@ -1076,9 +1076,9 @@ export default function App() {
                 {/* Группы условий */}
                 {conditionGroups.map((group, gIdx) => {
                   return (
-                    <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm">
                       {/* Шапка группы */}
-                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                         <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
                           {conditionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Условия'}
                           {conditionGroups.length > 1 && gIdx < conditionGroups.length - 1 && (
@@ -1871,9 +1871,113 @@ export default function App() {
                               )}
 
                               {/* ── warn ── */}
-                              {action.type === 'warn' && (
-                                <p className="text-xs text-gray-400 font-medium italic">Действие выполнится автоматически без дополнительных настроек.</p>
-                              )}
+                              {action.type === 'warn' && (() => {
+                                const WARN_TARGETS = [
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'initiator', l:'Инициатор триггера'                 },
+                                  { v:'replied',   l:'Кому ответили'                      },
+                                  { v:'command',   l:'Режим команды'                      },
+                                ];
+                                const warnNotify  = action.warn_notify  ?? true;
+                                const warnTarget  = action.warn_target  || 'initiator';
+                                const warnCount   = action.warn_count   ?? 1;
+
+                                const warnTgtKey    = `warnTgt_${gIdx}_${aIdx}`;
+                                const warnNotifyGear = `warnNotifyGear_${gIdx}_${aIdx}`;
+                                const warnTgtGear    = `warnTgtGear_${gIdx}_${aIdx}`;
+
+                                const curTgt = WARN_TARGETS.find(o => o.v === warnTarget) || WARN_TARGETS[1];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Отправлять уведомление */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-gray-700">Отправлять уведомление о предупреждении</p>
+                                        {!warnNotify && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === warnNotifyGear ? null : warnNotifyGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === warnNotifyGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_notify', true); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'warn_notify', !warnNotify)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${warnNotify ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${warnNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                    {/* На кого */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-gray-800">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {warnTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtGear ? null : warnTgtGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === warnTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtKey ? null : warnTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === warnTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === warnTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === warnTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {WARN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'warn_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${warnTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Кол-во */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-black text-gray-800">
+                                        Кол-во <span className="text-red-400">*</span>
+                                      </p>
+                                      <input type="number" min="1" max="999"
+                                        value={warnCount}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_count', Math.max(1, parseInt(e.target.value)||1))}
+                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
 
                               {/* ── delete ── */}
                               {action.type === 'delete' && (() => {
