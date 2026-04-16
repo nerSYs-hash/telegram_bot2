@@ -1864,11 +1864,96 @@ export default function App() {
                               )}
 
                               {/* ── emoji ── */}
-                              {action.type === 'emoji' && (
-                                <input type="text" placeholder="👀 🔥 ❤️"
-                                  value={action.emoji_reaction || ''} onChange={e => updAction(gIdx, aIdx, 'emoji_reaction', e.target.value)}
-                                  className="w-full p-2.5 bg-white border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
-                              )}
+                              {action.type === 'emoji' && (() => {
+                                const EMOJI_TARGETS = [
+                                  { v:'initiator', l:'инициатора триггера'   },
+                                  { v:'replied',   l:'на которое ответили'   },
+                                ];
+                                const TG_EMOJIS = [
+                                  '👍','👎','❤️','🔥','🥰','👏','😁','🤔','🤯','😱',
+                                  '🤬','😢','🎉','🤩','🤮','💩','🙏','👌','🕊','🤡',
+                                  '🥱','🥴','😍','🐳','❤️‍🔥','🌚','🌭','💯','🤣','⚡',
+                                  '🍌','🏆','💔','🤨','😐','🍓','🍾','💋','🖕','😈',
+                                  '😴','😭','🤓','👻','👨‍💻','👀','🎃','🙈','😇','😂',
+                                  '🤝','✍️','🤗','🫡','🎅','🎄','☃️','💅','🤪','🗿',
+                                  '🆒','💘','🙉','🦄','😘','💊','🙊','😎','👾','🤷',
+                                  '🫠',
+                                ];
+                                const emojiTarget  = action.emoji_target  || 'initiator';
+                                const emojiReaction = action.emoji_reaction || '👍';
+                                const emojiTgtKey  = `emojiTgt_${gIdx}_${aIdx}`;
+                                const emojiPickKey = `emojiPick_${gIdx}_${aIdx}`;
+                                const emojiTgtGear = `emojiTgtGear_${gIdx}_${aIdx}`;
+                                const curTgt = EMOJI_TARGETS.find(o => o.v === emojiTarget) || EMOJI_TARGETS[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Отметить эмодзи сообщение */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-gray-800">Отметить эмодзи сообщение</p>
+                                        {emojiTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtGear ? null : emojiTgtGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === emojiTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'emoji_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtKey ? null : emojiTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === emojiTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === emojiTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === emojiTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {EMOJI_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'emoji_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${emojiTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Эмодзи */}
+                                    <div>
+                                      <p className="text-sm font-black text-gray-800 mb-1.5">Эмодзи</p>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiPickKey ? null : emojiPickKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-lg hover:border-blue-300 transition-all ${actOpenDropdown === emojiPickKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{emojiReaction}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === emojiPickKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === emojiPickKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-52 overflow-y-auto">
+                                            {TG_EMOJIS.map(em => (
+                                              <button key={em} onClick={() => { updAction(gIdx, aIdx, 'emoji_reaction', em); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2 text-xl text-left border-b border-gray-50 last:border-0 transition-all hover:bg-gray-50 ${emojiReaction === em ? 'bg-blue-50' : ''}`}>
+                                                {em}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
 
                               {/* ── warn ── */}
                               {action.type === 'warn' && (() => {
