@@ -107,7 +107,8 @@ export default function App() {
   const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
   const [leaveTarget, setLeaveTarget] = useState(null);
   const [phDropdown, setPhDropdown] = useState(null); // ключ 'gIdx_aIdx_varIdx' | null
-  const [settingHint, setSettingHint] = useState(null); // 'key' | null
+  const [settingHint, setSettingHint] = useState(null);      // 'key' | null
+  const [settingHintPos, setSettingHintPos] = useState({x:0,y:0});
   const [showEditorHelp, setShowEditorHelp] = useState(false);
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
@@ -323,13 +324,7 @@ export default function App() {
     return () => window.removeEventListener('beforeunload', h);
   }, [editingTrigger]);
 
-  // Закрываем dropdown плейсхолдеров при клике вне
-  useEffect(() => {
-    if (!phDropdown) return;
-    const h = () => setPhDropdown(null);
-    document.addEventListener('mousedown', h);
-    return () => document.removeEventListener('mousedown', h);
-  }, [phDropdown]);
+  // phDropdown закрывается через клик на оверлей fixed-модала (см. JSX ниже)
 
   // Отслеживаем активное форматирование для подсветки кнопок тулбара
   useEffect(() => {
@@ -1775,41 +1770,12 @@ export default function App() {
                                                 };
 
                                                 return (
-                                                  <div className="relative ml-auto"
-                                                    onMouseDown={e => e.stopPropagation()}>
+                                                  <div className="ml-auto">
                                                     <button
                                                       onMouseDown={e => { e.preventDefault(); e.stopPropagation(); openPh(); }}
                                                       className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-blue-500 border-blue-200 hover:bg-blue-50'}`}>
                                                       %плейсхолдеры%
                                                     </button>
-                                                    {phOpen && (
-                                                      <div className="absolute right-0 top-full mt-1.5 w-64 bg-white border border-gray-100 rounded-2xl shadow-2xl z-50 overflow-hidden">
-                                                        <div className="px-3 py-2 border-b border-gray-50">
-                                                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Плейсхолдеры</p>
-                                                          <p className="text-[9px] text-gray-300 mt-0.5">Кликни — вставится в курсор</p>
-                                                        </div>
-                                                        <div className="max-h-72 overflow-y-auto p-2 space-y-2">
-                                                          {PH_GROUPS.map(g => (
-                                                            <div key={g.label}>
-                                                              <p className="text-[9px] font-black text-gray-400 uppercase tracking-wider px-1 mb-1">{g.label}</p>
-                                                              <div className="flex flex-wrap gap-1">
-                                                                {g.items.map(it => (
-                                                                  <button key={it.key}
-                                                                    onMouseDown={e => { e.preventDefault(); e.stopPropagation(); insertPh(it.key); }}
-                                                                    className={`px-2 py-0.5 text-[10px] font-bold rounded-lg border transition-all ${COLOR_MAP[g.color]}`}
-                                                                    title={`%${it.key}%`}>
-                                                                    {it.label}
-                                                                  </button>
-                                                                ))}
-                                                              </div>
-                                                            </div>
-                                                          ))}
-                                                        </div>
-                                                        <div className="border-t border-gray-50 px-3 py-2">
-                                                          <p className="text-[9px] text-gray-300">Для цитируемого: замени <b className="text-gray-400">act_</b> на <b className="text-gray-400">rpl_</b></p>
-                                                        </div>
-                                                      </div>
-                                                    )}
                                                   </div>
                                                 );
                                               })()}
@@ -1889,21 +1855,19 @@ export default function App() {
                                                   <div className="flex items-center gap-1 min-w-0">
                                                     <span className="text-xs font-medium text-gray-700 leading-tight">{s.label}</span>
                                                     <button
-                                                      onMouseDown={e => { e.preventDefault(); setSettingHint(settingHint === s.key ? null : s.key); }}
-                                                      className="w-4 h-4 rounded-full bg-blue-100 text-blue-500 text-[9px] font-black flex items-center justify-center flex-shrink-0 hover:bg-blue-200 transition-all">?</button>
+                                                      onMouseDown={e => {
+                                                        e.preventDefault();
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        setSettingHintPos({x: r.right + 10, y: r.top - 8});
+                                                        setSettingHint(settingHint === s.key ? null : s.key);
+                                                      }}
+                                                      className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-all ${settingHint===s.key?'bg-blue-500 text-white':'bg-blue-100 text-blue-500 hover:bg-blue-200'}`}>?</button>
                                                   </div>
                                                   <button onClick={() => updSetting(s.key, !settings[s.key])}
                                                     className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-gray-200'}`}>
                                                     <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
                                                   </button>
                                                 </div>
-
-                                                {/* Подсказка */}
-                                                {settingHint === s.key && (
-                                                  <div className="mt-1.5 px-3 py-2 bg-blue-50 border border-blue-100 rounded-xl text-[10px] text-blue-700 leading-relaxed">
-                                                    {SETTING_HINTS[s.key]}
-                                                  </div>
-                                                )}
 
                                                 {/* Инпут времени (для delete_after и send_delayed) */}
                                                 {s.hasTime && settings[s.key] && (
@@ -3659,6 +3623,161 @@ export default function App() {
           </div>
         </div>
       </main>
+
+      {/* ── Модал: панель плейсхолдеров ── */}
+      {phDropdown && (() => {
+        const PH_GROUPS_FULL = [
+          { label:'Инициатор', color:'blue', desc:'Пользователь, чьё сообщение сработало триггер', items:[
+            { key:'user_name',     label:'Имя',            desc:'Отображаемое имя в Telegram' },
+            { key:'user_username', label:'@username',       desc:'Никнейм (может отсутствовать)' },
+            { key:'user_id',       label:'ID',              desc:'Числовой ID пользователя' },
+            { key:'act_tgun',      label:'Имя TG (новый)', desc:'Имя в Telegram (новый формат)' },
+            { key:'act_nn',        label:'@nick (новый)',   desc:'Никнейм (новый формат)' },
+            { key:'act_blns',      label:'Баланс пульсов',  desc:'Текущий баланс пульсов' },
+            { key:'act_d',         label:'Дней в чате',     desc:'Сколько дней участник в чате' },
+            { key:'act_rnk',       label:'Ранг',            desc:'Текущий ранг пользователя' },
+            { key:'act_plc',       label:'Место в топе',    desc:'Позиция в рейтинге чата' },
+            { key:'act_jt',        label:'Дата вступления', desc:'Когда вступил в чат' },
+          ]},
+          { label:'Цель', color:'purple', desc:'Пользователь, на которого направлено действие', items:[
+            { key:'target_name',     label:'Имя цели',       desc:'Отображаемое имя цели' },
+            { key:'target_username', label:'@username цели',  desc:'Никнейм цели' },
+            { key:'target_id',       label:'ID цели',         desc:'Числовой ID цели' },
+          ]},
+          { label:'Чат', color:'green', desc:'Данные о текущем чате и времени', items:[
+            { key:'chat_name', label:'Название чата', desc:'Официальное название группы' },
+            { key:'date',      label:'Дата',           desc:'Текущая дата дд.мм.гггг' },
+            { key:'time',      label:'Время',          desc:'Текущее время чч:мм (МСК)' },
+          ]},
+          { label:'Статистика сообщений', color:'amber', desc:'Количество сообщений инициатора', items:[
+            { key:'act_msg',   label:'Сообщений всего', desc:'За всё время' },
+            { key:'act_msg_t', label:'За сегодня',      desc:'Сообщений за текущий день' },
+            { key:'act_msg_w', label:'За неделю',        desc:'Сообщений за последние 7 дней' },
+            { key:'act_msg_m', label:'За месяц',         desc:'Сообщений за последние 30 дней' },
+            { key:'act_msg_y', label:'За год',           desc:'Сообщений за последние 365 дней' },
+          ]},
+          { label:'Санкции', color:'red', desc:'Нарушения и предупреждения', items:[
+            { key:'warn_count', label:'Предупреждений',        desc:'Общее кол-во предупреждений' },
+            { key:'act_w',      label:'Предупреждений (новый)',desc:'Предупреждения (новый формат)' },
+          ]},
+          { label:'Анкета', color:'pink', desc:'Данные из анкеты пользователя', items:[
+            { key:'act_form', label:'Полная анкета', desc:'Все поля анкеты одним блоком' },
+            { key:'act_un',   label:'Имя из анкеты', desc:'Имя, указанное в анкете' },
+            { key:'act_city', label:'Город',          desc:'Город из анкеты' },
+            { key:'act_yo',   label:'Возраст',        desc:'Возраст из анкеты' },
+            { key:'act_sr',   label:'Роль',           desc:'Роль/статус из анкеты' },
+          ]},
+          { label:'Рефералы', color:'green', desc:'Реферальная программа', items:[
+            { key:'act_rfrl_c', label:'Кол-во рефералов', desc:'Сколько человек пригласил' },
+          ]},
+        ];
+
+        const COLOR_BADGE = {
+          blue:   'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100',
+          purple: 'bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100',
+          green:  'bg-green-50 text-green-700 border border-green-100 hover:bg-green-100',
+          amber:  'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100',
+          red:    'bg-red-50 text-red-700 border border-red-100 hover:bg-red-100',
+          pink:   'bg-pink-50 text-pink-700 border border-pink-100 hover:bg-pink-100',
+        };
+
+        const insertPh = (key) => {
+          const el = document.getElementById(`ce_${phDropdown}`);
+          if (!el) return;
+          el.focus();
+          if (window._savedPhRange) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(window._savedPhRange);
+            window._savedPhRange = null;
+          }
+          document.execCommand('insertText', false, `%${key}%`);
+          // Синхронизируем state через событие input
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          setPhDropdown(null);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[300] flex items-center justify-end bg-black/20 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={() => setPhDropdown(null)}>
+            <div className="relative bg-white h-full w-[380px] max-w-[95vw] shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Шапка */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+                <div>
+                  <p className="font-black text-gray-900 text-base">Плейсхолдеры</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">Нажми — вставится в позицию курсора</p>
+                </div>
+                <button onClick={() => setPhDropdown(null)}
+                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all active:scale-90">
+                  <X size={16}/>
+                </button>
+              </div>
+
+              {/* Список */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                {PH_GROUPS_FULL.map(g => (
+                  <div key={g.label}>
+                    <div className="mb-2">
+                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider">{g.label}</p>
+                      <p className="text-[10px] text-gray-400">{g.desc}</p>
+                    </div>
+                    <div className="space-y-1">
+                      {g.items.map(it => (
+                        <button key={it.key}
+                          onClick={() => insertPh(it.key)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left ${COLOR_BADGE[g.color]}`}>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black leading-tight">{it.label}</p>
+                            <p className="text-[10px] opacity-70 mt-0.5 leading-tight">{it.desc}</p>
+                          </div>
+                          <span className="ml-3 font-mono text-[10px] opacity-60 shrink-0">%{it.key}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3">
+                  <p className="text-[10px] font-black text-gray-500 mb-1">💡 Для цитируемого</p>
+                  <p className="text-[10px] text-gray-400 leading-relaxed">Замени <code className="bg-gray-200 px-1 rounded">act_</code> на <code className="bg-gray-200 px-1 rounded">rpl_</code> — получишь данные пользователя, на сообщение которого ответили.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Попап: подсказка по тумблеру настроек ── */}
+      {settingHint && (() => {
+        const HINTS = {
+          delete_after:      'Сообщение бота будет удалено через указанное время. Оставьте "0", чтобы не удалять.',
+          send_delayed:      'Сообщение будет отправлено через указанное время после срабатывания триггера.',
+          pin:               'Отправленное сообщение автоматически закрепится в шапке чата.',
+          disable_preview:   'В Telegram ссылки показывают превью. Включи — превью скрыто не будет.',
+          disable_notify:    'Сообщение придёт без звука. Удобно для ночных рассылок.',
+          delete_previous:   'Предыдущее сообщение бота по этому триггеру будет удалено при следующем срабатывании.',
+          content_protection:'Защищает содержимое сообщения от пересылки и сохранения.',
+        };
+        const left = Math.min(settingHintPos.x, window.innerWidth - 300);
+        const top  = Math.min(settingHintPos.y, window.innerHeight - 120);
+        return (
+          <div className="fixed z-[400] w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 animate-in fade-in zoom-in-95 duration-150"
+            style={{left, top}}>
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={14} className="text-blue-500"/>
+              </div>
+              <p className="text-sm text-gray-700 leading-relaxed flex-1">{HINTS[settingHint]}</p>
+              <button onClick={() => setSettingHint(null)}
+                className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0 transition-all">
+                <X size={10}/>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Модал: справка по кнопкам форматирования ── */}
       {showEditorHelp && (
