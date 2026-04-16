@@ -1965,6 +1965,13 @@ export default function App() {
                           </div>
                         );
                       })}
+
+                      {/* Добавить действие в группу — всегда видна (в т.ч. когда список пуст) */}
+                      <button
+                        onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
+                        className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
+                        <PlusCircle size={12}/> Добавить действие
+                      </button>
                     </div>
                   </div>
                 ))}
