@@ -13,7 +13,7 @@ import {
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
-  GripVertical, Play, Square, Copy, Search, Check, RotateCcw
+  GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════
@@ -1146,7 +1146,7 @@ export default function App() {
                                     <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${condOpenDropdown === typeKey ? 'rotate-180' : ''}`}/>
                                   </button>
                                   {condOpenDropdown === typeKey && (
-                                    <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
                                       {Object.entries(COND_TYPE_LABELS).map(([key, lbl]) => (
                                         <button key={key}
                                           onClick={() => { updCond(gIdx, cIdx, 'condition', key); setCondOpenDropdown(null); }}
@@ -1177,7 +1177,7 @@ export default function App() {
                                       ⚙
                                     </button>
                                     {condOpenDropdown === `kw_${gIdx}_${cIdx}` && (
-                                      <div className="absolute left-0 top-6 z-30 bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+                                      <div className="absolute left-0 top-6 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
                                         <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); updCond(gIdx, cIdx, 'keyword', ''); setCondOpenDropdown(null); setCondChipInput(''); }}
                                           className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
                                           <RotateCcw size={11}/> Отменить изменения
@@ -1262,7 +1262,7 @@ export default function App() {
                                     <ChevronDown size={13} className={`text-gray-400 flex-shrink-0 transition-transform ${condOpenDropdown === modKey ? 'rotate-180' : ''}`}/>
                                   </button>
                                   {condOpenDropdown === modKey && (
-                                    <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
                                       <button onClick={() => { updCond(gIdx, cIdx, 'modifier', 'nocase'); setCondOpenDropdown(null); }}
                                         className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.modifier === 'nocase' ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                                         Не учитывать регистр
@@ -1642,7 +1642,7 @@ export default function App() {
                                           <ChevronDown size={14} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === replyDropKey && (
-                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {[{v:'none',l:'Отправить сообщение реплаем'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
                                                 className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-gray-50 last:border-0 ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
@@ -1717,11 +1717,11 @@ export default function App() {
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === delGearKey && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 overflow-hidden whitespace-nowrap">
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-lg shadow-xl z-[500] overflow-hidden whitespace-nowrap">
                                                 <button
                                                   onClick={() => { updAction(gIdx, aIdx, 'delete_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
                                             )}
@@ -1736,11 +1736,11 @@ export default function App() {
                                           <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === delTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {TARGET_OPTIONS.map(o => (
                                               <button key={o.v}
                                                 onClick={() => { updAction(gIdx, aIdx, 'delete_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-3 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -1768,11 +1768,11 @@ export default function App() {
                                             <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delUnitKey ? 'rotate-180' : ''}`}/>
                                           </button>
                                           {actOpenDropdown === delUnitKey && (
-                                            <div className="absolute top-full right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                            <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
                                               {UNIT_OPTIONS.map(o => (
                                                 <button key={o.v}
                                                   onClick={() => { updAction(gIdx, aIdx, 'delete_delay_unit', o.v); setActOpenDropdown(null); }}
-                                                  className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delDelayUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                  className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delDelayUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
                                                   {o.l}
                                                 </button>
                                               ))}
@@ -1829,10 +1829,10 @@ export default function App() {
                                                 <Settings size={14}/>
                                               </button>
                                               {actOpenDropdown === pinTimeGear && (
-                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                   <button onClick={() => { updAction(gIdx, aIdx, 'pin_time_enabled', false); updAction(gIdx, aIdx, 'pin_time_value', 10); updAction(gIdx, aIdx, 'pin_time_unit', 'seconds'); setActOpenDropdown(null); }}
-                                                    className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                    <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                   </button>
                                                 </div>
                                               )}
@@ -1841,8 +1841,8 @@ export default function App() {
                                         </div>
                                         {pinTimeEnabled ? (
                                           <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', false)}
-                                            className="p-1.5 text-gray-400 hover:text-red-500 active:scale-90 transition-all">
-                                            <Ghost size={16}/>
+                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            <Ban size={14}/>
                                           </button>
                                         ) : (
                                           <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', true)}
@@ -1864,10 +1864,10 @@ export default function App() {
                                               <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinUnitKey ? 'rotate-180' : ''}`}/>
                                             </button>
                                             {actOpenDropdown === pinUnitKey && (
-                                              <div className="absolute top-full right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[120px]">
+                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
                                                 {PIN_UNITS.map(o => (
                                                   <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_time_unit', o.v); setActOpenDropdown(null); }}
-                                                    className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
                                                     {o.l}
                                                   </button>
                                                 ))}
@@ -1889,10 +1889,10 @@ export default function App() {
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === pinNotifyGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'pin_notify', false); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
                                             )}
@@ -1916,10 +1916,10 @@ export default function App() {
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === pinTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-30 whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'pin_target', ''); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                  <RotateCcw size={13} className="text-red-400"/> Отменить изменения
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
                                             )}
@@ -1935,10 +1935,10 @@ export default function App() {
                                           <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === pinTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-30 bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {PIN_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-3 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -1951,15 +1951,6 @@ export default function App() {
                                 );
                               })()}
 
-                            </div>
-
-                            {/* Кнопка Добавить действие — футер карточки */}
-                            <div className="border-t border-gray-100">
-                              <button
-                                onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
-                                className="w-full py-3 bg-blue-500 text-white font-black text-sm flex items-center justify-center gap-2 hover:bg-blue-600 active:scale-[0.99] transition-all">
-                                Добавить действие
-                              </button>
                             </div>
 
                           </div>
