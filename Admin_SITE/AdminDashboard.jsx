@@ -46,6 +46,20 @@ const LATEST_VERSION = UPDATES[0].version;
 export default function App() {
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
   const navigateTo = (id) => {
+    // Если идёт редактирование триггера — показываем подтверждение
+    if (editingTrigger) {
+      setLeaveTarget(id);
+      setShowLeaveConfirm(true);
+      return;
+    }
+    setActiveTab(id);
+    window.location.hash = id;
+    if (id === 'updates') {
+      localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+      setHasNewUpdate(false);
+    }
+  };
+  const _doNavigate = (id) => {
     setActiveTab(id);
     window.location.hash = id;
     if (id === 'updates') {
@@ -89,6 +103,9 @@ export default function App() {
   const [kbButtonType, setKbButtonType] = useState(null);           // null|'link'|'trigger'|'share'|'reaction'
   const [kbNewButton, setKbNewButton] = useState({});
   const [kbReactionEmoji, setKbReactionEmoji] = useState('🌐');
+  const [fmtState, setFmtState] = useState({bold:false,italic:false,underline:false,strikeThrough:false});
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaveTarget, setLeaveTarget] = useState(null);
   const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
   const [triggerSearch, setTriggerSearch] = useState('');
   const [showTriggerMenu, setShowTriggerMenu] = useState(false);
@@ -290,6 +307,35 @@ export default function App() {
 
   useEffect(() => { fetchStats('today'); }, []);
 
+  // Предупреждение при обновлении/закрытии страницы во время редактирования триггера
+  useEffect(() => {
+    const h = (e) => {
+      if (editingTrigger) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [editingTrigger]);
+
+  // Отслеживаем активное форматирование для подсветки кнопок тулбара
+  useEffect(() => {
+    const h = () => {
+      try {
+        setFmtState({
+          bold:         document.queryCommandState('bold'),
+          italic:       document.queryCommandState('italic'),
+          underline:    document.queryCommandState('underline'),
+          strikeThrough:document.queryCommandState('strikeThrough'),
+        });
+      } catch(e){}
+    };
+    document.addEventListener('selectionchange', h);
+    return () => document.removeEventListener('selectionchange', h);
+  }, []);
+
   const handlePeriodChange = (period) => {
     setStatsPeriod(period);
     fetchStats(period);
@@ -340,7 +386,7 @@ export default function App() {
     setCondOpenDropdown(null);
     setCondChipInput('');
     setShowMediaPicker(false);
-    navigateTo('triggers');
+    _doNavigate('triggers');  // без confirm — это открытие редактора
   };
 
   const saveTrigger = () => {
@@ -981,7 +1027,7 @@ export default function App() {
 
                 {/* Кнопки действий */}
                 <div className="flex items-center gap-2">
-                  <button onClick={() => setEditingTrigger(null)}
+                  <button onClick={() => { setLeaveTarget(null); setShowLeaveConfirm(true); }}
                     className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all mr-auto">
                     <X size={20}/>
                   </button>
@@ -1542,67 +1588,99 @@ export default function App() {
                                         </div>
                                       </div>
 
-                                      {/* Редактор */}
+                                      {/* Редактор — WYSIWYG */}
                                       {msgTab === 'editor' && (() => {
-                                        const taId = `ta_${gIdx}_${aIdx}_${curVarIdx}`;
-                                        const wrapTag = (open, close) => {
-                                          const ta = document.getElementById(taId);
-                                          if (!ta) return;
-                                          const start = ta.selectionStart;
-                                          const end   = ta.selectionEnd;
-                                          const val   = ta.value;
-                                          const selected = val.slice(start, end);
-                                          const newVal = val.slice(0, start) + open + selected + close + val.slice(end);
-                                          updVar('text', newVal);
-                                          // Восстанавливаем курсор после React re-render
-                                          requestAnimationFrame(() => {
-                                            ta.focus();
-                                            ta.setSelectionRange(start + open.length, end + open.length);
-                                          });
+                                        const ceId = `ce_${gIdx}_${aIdx}_${curVarIdx}`;
+
+                                        // execCommand-форматирование (bold/italic/underline/strikeThrough)
+                                        const execFmt = (cmd) => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          document.execCommand(cmd, false, null);
+                                          updVar('text', el.innerHTML);
                                         };
-                                        const clearTags = () => {
-                                          const ta = document.getElementById(taId);
-                                          if (!ta) return;
-                                          const start = ta.selectionStart;
-                                          const end   = ta.selectionEnd;
-                                          const val   = ta.value;
-                                          const selected = val.slice(start, end);
-                                          const clean = selected.replace(/<[^>]+>/g, '');
-                                          const newVal = val.slice(0, start) + clean + val.slice(end);
-                                          updVar('text', newVal);
+
+                                        // Вставка произвольного HTML-тега вокруг выделения
+                                        const insertCustomTag = (open, close) => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          const sel = window.getSelection();
+                                          if (!sel || !sel.rangeCount) return;
+                                          const range = sel.getRangeAt(0);
+                                          const text = range.toString() || '\u200B';
+                                          const tmp = document.createElement('div');
+                                          tmp.innerHTML = open + text + close;
+                                          const frag = document.createDocumentFragment();
+                                          let last;
+                                          while (tmp.firstChild) last = frag.appendChild(tmp.firstChild);
+                                          range.deleteContents();
+                                          range.insertNode(frag);
+                                          if (last) {
+                                            const r2 = document.createRange();
+                                            r2.setStartAfter(last);
+                                            r2.collapse(true);
+                                            sel.removeAllRanges();
+                                            sel.addRange(r2);
+                                          }
+                                          setTimeout(() => updVar('text', el.innerHTML), 0);
                                         };
+
+                                        // Ссылка
                                         const insertLink = () => {
-                                          const ta = document.getElementById(taId);
-                                          if (!ta) return;
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
                                           const url = window.prompt('Введите URL:');
                                           if (!url) return;
-                                          const start = ta.selectionStart;
-                                          const end   = ta.selectionEnd;
-                                          const val   = ta.value;
-                                          const selected = val.slice(start, end) || 'ссылка';
-                                          const newVal = val.slice(0, start) + `<a href="${url}">${selected}</a>` + val.slice(end);
-                                          updVar('text', newVal);
+                                          el.focus();
+                                          document.execCommand('createLink', false, url);
+                                          // Убираем target="_blank" который браузер может добавить
+                                          el.querySelectorAll('a').forEach(a => a.removeAttribute('target'));
+                                          updVar('text', el.innerHTML);
                                         };
+
+                                        // Очистить теги в выделении
+                                        const clearFmt = () => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          const sel = window.getSelection();
+                                          if (!sel || !sel.rangeCount) return;
+                                          const range = sel.getRangeAt(0);
+                                          const text = range.toString();
+                                          range.deleteContents();
+                                          range.insertNode(document.createTextNode(text));
+                                          setTimeout(() => updVar('text', el.innerHTML), 0);
+                                        };
+
                                         const TOOLBAR = [
-                                          { l:'B',  cls:'font-black',              onClick: () => wrapTag('<b>','</b>') },
-                                          { l:'I',  cls:'italic',                  onClick: () => wrapTag('<i>','</i>') },
-                                          { l:'S',  cls:'line-through',            onClick: () => wrapTag('<s>','</s>') },
-                                          { l:'U',  cls:'underline',               onClick: () => wrapTag('<u>','</u>') },
-                                          { l:'<>', cls:'font-mono text-[9px]',    onClick: () => wrapTag('<code>','</code>') },
-                                          { l:'»',  cls:'',                        onClick: () => wrapTag('<blockquote>','</blockquote>') },
-                                          { l:'🔗', cls:'',                        onClick: insertLink },
-                                          { l:'✒',  cls:'',                        onClick: () => wrapTag('<tg-spoiler>','</tg-spoiler>') },
-                                          { l:'Tx', cls:'text-[9px]',              onClick: clearTags },
+                                          { l:'B',  cmd:'bold',          cls:'font-black' },
+                                          { l:'I',  cmd:'italic',        cls:'italic' },
+                                          { l:'S',  cmd:'strikeThrough', cls:'line-through' },
+                                          { l:'U',  cmd:'underline',     cls:'underline' },
+                                          { l:'<>', custom:()=>insertCustomTag('<code>','</code>'),           cls:'font-mono text-[9px]' },
+                                          { l:'»',  custom:()=>insertCustomTag('<blockquote>','</blockquote>'),cls:'' },
+                                          { l:'🔗', custom:insertLink,                                        cls:'' },
+                                          { l:'✒',  custom:()=>insertCustomTag('<tg-spoiler>','</tg-spoiler>'),cls:'' },
+                                          { l:'Tx', custom:clearFmt,                                          cls:'text-[9px]' },
                                         ];
+
+                                        const textLen = (curVar.text||'').replace(/<[^>]+>/g,'').length;
+
                                         return (
                                           <div>
                                             <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
-                                              {TOOLBAR.map(f => (
-                                                <button key={f.l} onClick={f.onClick}
-                                                  className={`w-7 h-7 text-[11px] text-gray-600 hover:bg-gray-100 rounded flex items-center justify-center transition-all active:scale-90 ${f.cls}`}>
-                                                  {f.l}
-                                                </button>
-                                              ))}
+                                              {TOOLBAR.map(f => {
+                                                const isActive = f.cmd ? fmtState[f.cmd] : false;
+                                                return (
+                                                  <button key={f.l}
+                                                    onMouseDown={e => { e.preventDefault(); f.cmd ? execFmt(f.cmd) : f.custom(); }}
+                                                    className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                                    {f.l}
+                                                  </button>
+                                                );
+                                              })}
                                               <button className="ml-auto px-2 py-1 text-[10px] font-bold text-blue-500 border border-blue-200 rounded-lg hover:bg-blue-50 transition-all whitespace-nowrap">
                                                 %плейсхолдеры%
                                               </button>
@@ -1612,14 +1690,27 @@ export default function App() {
                                               </div>
                                             </div>
                                             <div className="relative">
-                                              <textarea
-                                                id={taId}
-                                                value={curVar.text || ''}
-                                                onChange={e => updVar('text', e.target.value)}
-                                                placeholder="Insert text here ..."
-                                                rows={6}
-                                                className="w-full px-4 py-3 text-sm font-medium text-gray-700 italic outline-none resize-none bg-white placeholder:text-gray-300 placeholder:not-italic"/>
-                                              <span className="absolute bottom-2 right-3 text-[10px] text-blue-500 font-black bg-white px-1">{(curVar.text||'').length}/4096</span>
+                                              {!curVar.text && (
+                                                <span className="absolute top-3 left-4 text-sm text-gray-300 italic pointer-events-none select-none">
+                                                  Insert text here ...
+                                                </span>
+                                              )}
+                                              <div
+                                                key={`ce_${gIdx}_${aIdx}_${curVarIdx}`}
+                                                id={ceId}
+                                                contentEditable
+                                                suppressContentEditableWarning
+                                                ref={el => {
+                                                  if (el) {
+                                                    const html = curVar.text || '';
+                                                    if (el.innerHTML !== html) el.innerHTML = html;
+                                                  }
+                                                }}
+                                                onInput={e => updVar('text', e.currentTarget.innerHTML)}
+                                                className="w-full min-h-[120px] px-4 py-3 text-sm font-medium text-gray-700 outline-none bg-white"
+                                                style={{wordBreak:'break-word'}}
+                                              />
+                                              <span className="absolute bottom-2 right-3 text-[10px] text-blue-500 font-black bg-white px-1">{textLen}/4096</span>
                                             </div>
                                           </div>
                                         );
@@ -3384,10 +3475,48 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
-          <div className="max-w-3xl mx-auto">{renderContent()}</div>
+          <div className={activeTab === 'triggers' && editingTrigger ? 'w-full' : 'max-w-3xl mx-auto'}>
+            {renderContent()}
+          </div>
         </div>
       </main>
 
+      {/* ── Модал: подтверждение выхода из редактора триггера ── */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={20} className="text-amber-600"/>
+              </div>
+              <div>
+                <p className="font-black text-gray-900 text-base leading-tight">Внимание</p>
+                <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                  Вы уверены, что хотите покинуть раздел?<br/>
+                  Несохранённые изменения триггера будут потеряны.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  setEditingTrigger(null);
+                  if (leaveTarget) { _doNavigate(leaveTarget); }
+                  setLeaveTarget(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all">
+                Выйти
+              </button>
+              <button
+                onClick={() => { setShowLeaveConfirm(false); setLeaveTarget(null); }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-500 hover:bg-blue-600 active:scale-95 transition-all shadow-md shadow-blue-200">
+                Продолжить настройку
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
     </div>
   );
