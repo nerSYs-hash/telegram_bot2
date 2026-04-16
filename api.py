@@ -417,6 +417,72 @@ class TriggerIn(BaseModel):
     is_enabled: bool = True
 
 
+# ── Маппинг типов: сайт ↔ бот ──
+_SITE_TO_BOT = {'send_text': 'msg_chat', 'dm': 'msg_dm'}
+_BOT_TO_SITE = {v: k for k, v in _SITE_TO_BOT.items()}
+
+
+def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
+    """Переводит типы и формат из сайта в формат бота перед записью в БД."""
+    bot_actions = []
+    bot_configs = {}
+    for site_type in site_actions:
+        bot_type = _SITE_TO_BOT.get(site_type, site_type)
+        bot_actions.append(bot_type)
+        cfg = site_configs.get(site_type, {})
+
+        if site_type in ('send_text', 'dm'):
+            # Извлекаем текст из первого варианта
+            variants = cfg.get('variants') or [{}]
+            first = variants[0] if variants else {}
+            bot_configs[bot_type] = {
+                'text':         first.get('text', ''),
+                'media_type':   first.get('media_type', 'none'),
+                'media_id':     first.get('media_id'),
+                'reply_target': cfg.get('reply_target', 'none'),
+                'buttons':      cfg.get('keyboard', []),
+                'link_preview': cfg.get('settings', {}).get('disable_preview', False) is False,
+                # Сохраняем все варианты для ротации и для восстановления на сайте
+                '_variants':    variants,
+                '_settings':    cfg.get('settings', {}),
+            }
+        else:
+            bot_configs[bot_type] = cfg
+
+    return bot_actions, bot_configs
+
+
+def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
+    """Переводит типы и формат из БД (бот) в формат сайта."""
+    site_actions = []
+    site_configs = {}
+    for bot_type in bot_actions:
+        site_type = _BOT_TO_SITE.get(bot_type, bot_type)
+        site_actions.append(site_type)
+        cfg = bot_configs.get(bot_type, {})
+
+        if bot_type in ('msg_chat', 'msg_dm'):
+            # Восстанавливаем варианты — если были сохранены _variants, используем их
+            variants = cfg.get('_variants') or [{
+                'id': 1,
+                'text':       cfg.get('text', ''),
+                'media_type': cfg.get('media_type', 'none'),
+                'media_id':   cfg.get('media_id'),
+            }]
+            site_configs[site_type] = {
+                'variants':       variants,
+                'currentVariant': 0,
+                'msgTab':         'editor',
+                'reply_target':   cfg.get('reply_target', 'none'),
+                'keyboard':       cfg.get('buttons', []),
+                'settings':       cfg.get('_settings', {}),
+            }
+        else:
+            site_configs[site_type] = cfg
+
+    return site_actions, site_configs
+
+
 def _row_to_trigger(row: dict) -> dict:
     actions = []
     try:
@@ -433,6 +499,8 @@ def _row_to_trigger(row: dict) -> dict:
     except Exception:
         pass
 
+    site_actions, site_configs = _bot_to_site(actions, action_configs)
+
     return {
         'id':                  row['id'],
         'name':                row['name'],
@@ -443,8 +511,8 @@ def _row_to_trigger(row: dict) -> dict:
         'initiator':           row.get('initiator', 'all'),
         'target':              row.get('target', 'nobody'),
         'target_user':         row.get('target_user', '') or '',
-        'actions':             actions,
-        'action_configs':      action_configs,
+        'actions':             site_actions,
+        'action_configs':      site_configs,
         'bot_msg_delete':      row.get('bot_msg_delete', 'no'),
         'bot_msg_delete_after':row.get('bot_msg_delete_after') or 60,
         'fire_limit':          row.get('fire_limit') or 0,
@@ -467,6 +535,7 @@ async def get_triggers():
 async def create_trigger(t: TriggerIn):
     """Создать триггер"""
     try:
+        bot_actions, bot_configs = _site_to_bot(t.actions, t.action_configs)
         db.cursor.execute('''
             INSERT INTO triggers
                 (name, keywords, condition, probability,
@@ -478,7 +547,7 @@ async def create_trigger(t: TriggerIn):
         ''', (
             t.name, t.keywords, t.condition, t.probability,
             t.where_fires, t.initiator, t.target, t.target_user,
-            json.dumps(t.actions), json.dumps(t.action_configs),
+            json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), int(t.is_enabled),
         ))
@@ -492,6 +561,7 @@ async def create_trigger(t: TriggerIn):
 async def update_trigger(trigger_id: int, t: TriggerIn):
     """Обновить триггер"""
     try:
+        bot_actions, bot_configs = _site_to_bot(t.actions, t.action_configs)
         db.cursor.execute('''
             UPDATE triggers SET
                 name=?, keywords=?, condition=?, probability=?,
@@ -503,7 +573,7 @@ async def update_trigger(trigger_id: int, t: TriggerIn):
         ''', (
             t.name, t.keywords, t.condition, t.probability,
             t.where_fires, t.initiator, t.target, t.target_user,
-            json.dumps(t.actions), json.dumps(t.action_configs),
+            json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), int(t.is_enabled),
             trigger_id,
