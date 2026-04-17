@@ -384,6 +384,7 @@ export default function App() {
       setEditingTrigger({
         id: null, name: '', probability: 100,
         where_fires: 'all', initiator: 'all',
+        fire_limit: 0,
         conditionGroups: [{ id: 1, conditions: [] }],
         actionGroups: [{ id: 1, probability: 100, actions: [] }]
       });
@@ -1089,17 +1090,30 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ── Вероятность ── */}
-              <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100 mb-5">
-                <div className="flex items-center justify-between mb-2">
-                  <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
-                    <Percent size={11}/> Шанс срабатывания
-                  </span>
-                  <span className="text-xl font-black text-amber-800">{editingTrigger.probability}%</span>
+              {/* ── Вероятность + Лимит срабатываний ── */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
+                      <Percent size={11}/> Шанс срабатывания
+                    </span>
+                    <span className="text-xl font-black text-amber-800">{editingTrigger.probability}%</span>
+                  </div>
+                  <input type="range" min="1" max="100" value={editingTrigger.probability}
+                    onChange={e => upd('probability', parseInt(e.target.value))}
+                    className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600"/>
                 </div>
-                <input type="range" min="1" max="100" value={editingTrigger.probability}
-                  onChange={e => upd('probability', parseInt(e.target.value))}
-                  className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600"/>
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Лимит срабатываний</span>
+                    <span className="text-[10px] font-bold text-blue-400">{(editingTrigger.fire_limit || 0) === 0 ? '∞' : editingTrigger.fire_limit}</span>
+                  </div>
+                  <input type="number" min="0" max="9999"
+                    value={editingTrigger.fire_limit || 0}
+                    onChange={e => upd('fire_limit', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-black text-sm outline-none focus:border-blue-400 transition-all text-center"/>
+                  <p className="text-[9px] text-blue-400 mt-1 text-center">0 = без лимита</p>
+                </div>
               </div>
 
               {/* ── УСЛОВИЯ + ДЕЙСТВИЯ (2 колонки) ── */}
