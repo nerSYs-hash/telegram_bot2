@@ -1129,6 +1129,17 @@ export default function App() {
             [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
             return {...prev, actionGroups: groups};
           });
+          const moveActionInGroup = (gIdx, aIdx, dir) => setEditingTrigger(prev => {
+            const groups = (prev.actionGroups||[]).map((g, gi) => {
+              if (gi !== gIdx) return g;
+              const acts = [...g.actions];
+              const newIdx = aIdx + dir;
+              if (newIdx < 0 || newIdx >= acts.length) return g;
+              [acts[aIdx], acts[newIdx]] = [acts[newIdx], acts[aIdx]];
+              return {...g, actions: acts};
+            });
+            return {...prev, actionGroups: groups};
+          });
           const COND_TOOLTIP_TEXT = {
             'msg_keyword': 'Проверяет текст входящего сообщения — содержит ли оно указанное слово или фразу.',
             'msg_any':     'Срабатывает на любое текстовое сообщение, без проверки содержимого.',
@@ -1288,7 +1299,7 @@ export default function App() {
                       </div>
 
                       {/* Условия внутри группы */}
-                      <div className="p-3 space-y-2">
+                      <div className="p-3">
                         {group.conditions.length === 0 && (
                           <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
                             Список пуст
@@ -1299,7 +1310,17 @@ export default function App() {
                           const typeKey = `type_${gIdx}_${cIdx}`;
                           const modKey  = `mod_${gIdx}_${cIdx}`;
                           return (
-                          <div key={cond.id} className="bg-white rounded-2xl border border-gray-200">
+                          <div key={cond.id}>
+                            {cIdx > 0 && (
+                              <div className="flex justify-center my-3">
+                                <div className="flex flex-col items-center">
+                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                  <div className="w-px h-6 bg-blue-100"/>
+                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                </div>
+                              </div>
+                            )}
+                          <div className="bg-white rounded-2xl border border-gray-200">
                             {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                               <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
@@ -1310,13 +1331,13 @@ export default function App() {
                               {cond.placeholder_key && (
                                 <span className="text-[9px] font-bold text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded-full">%{cond.placeholder_key}%</span>
                               )}
-                              <div className="flex items-center gap-0">
+                              <div className="flex items-center gap-0.5">
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, -1)} disabled={cIdx === 0}
-                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↑</button>
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, 1)} disabled={cIdx === group.conditions.length - 1}
-                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↓</button>
                                 <button onClick={() => removeCond(gIdx, cIdx)}
-                                  className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-red-300 hover:text-red-500 hover:bg-red-50 active:scale-90 transition-all ml-0.5">
                                   <Trash2 size={11}/>
                                 </button>
                               </div>
@@ -1593,7 +1614,7 @@ export default function App() {
                     </div>
 
                     {/* Действия внутри группы */}
-                    <div className="p-2.5 space-y-2">
+                    <div className="p-2.5">
                       {group.actions.length === 0 && (
                         <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
                           Список пуст
@@ -1624,7 +1645,17 @@ export default function App() {
                         const updSetting = (key, val) => updAction(gIdx, aIdx, 'settings', {...settings, [key]: val});
 
                         return (
-                          <div key={action.id} className="bg-white rounded-2xl border border-gray-200">
+                          <div key={action.id}>
+                            {aIdx > 0 && (
+                              <div className="flex justify-center my-3">
+                                <div className="flex flex-col items-center">
+                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                  <div className="w-px h-6 bg-blue-100"/>
+                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                </div>
+                              </div>
+                            )}
+                            <div className="bg-white rounded-2xl border border-gray-200">
                             {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                               <button
@@ -1634,10 +1665,10 @@ export default function App() {
                               </button>
                               <span className="text-[11px] font-black text-gray-700 flex-1">Действие {aIdx + 1}</span>
                               <div className="flex items-center gap-0">
-                                <button onClick={() => { /* moveActionInGroup */ }} disabled={aIdx === 0}
-                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
-                                <button onClick={() => { /* moveActionInGroup */ }} disabled={aIdx === group.actions.length - 1}
-                                  className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                                <button onClick={() => moveActionInGroup(gIdx, aIdx, -1)} disabled={aIdx === 0}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↑</button>
+                                <button onClick={() => moveActionInGroup(gIdx, aIdx, 1)} disabled={aIdx === group.actions.length - 1}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↓</button>
                                 <button onClick={() => removeAction(gIdx, aIdx)}
                                   className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
                                   <Trash2 size={11}/>
@@ -1761,8 +1792,8 @@ export default function App() {
                                               {actOpenDropdown === mediaPosKey && (
                                                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                                                   {[
-                                                    { v:'above', icon:'🖼', l:'Медиа с подписью',       desc:'Текст идёт подписью к медиа (одно сообщение)' },
-                                                    { v:'below', icon:'📝', l:'Сначала текст, потом медиа', desc:'Бот отправит два отдельных сообщения' },
+                                                    { v:'above', icon:'🖼', l:'Медиа над текстом',      desc:'Сначала медиа, текст идёт подписью снизу (одно сообщение)' },
+                                                    { v:'below', icon:'📝', l:'Медиа под текстом',      desc:'Сначала текст, потом медиа отдельным сообщением' },
                                                   ].map(o => (
                                                     <button key={o.v}
                                                       onClick={() => { updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v)); setActOpenDropdown(null); }}
@@ -1807,8 +1838,8 @@ export default function App() {
                                               {/* Расположение после загрузки */}
                                               <div className="flex gap-1.5">
                                                 {[
-                                                  { v:'above', l:'🖼+📝 Медиа с подписью' },
-                                                  { v:'below', l:'📝→🖼 Текст, потом медиа' },
+                                                  { v:'above', l:'🖼 Медиа над текстом' },
+                                                  { v:'below', l:'📝 Медиа под текстом' },
                                                 ].map(o => (
                                                   <button key={o.v}
                                                     onClick={() => updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v))}
@@ -2990,6 +3021,7 @@ export default function App() {
 
                             </div>
 
+                            </div>
                           </div>
                         );
                       })}
