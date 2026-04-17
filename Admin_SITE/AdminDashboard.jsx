@@ -3542,13 +3542,6 @@ export default function App() {
                                   className="w-full mt-2 p-3 bg-white border border-gray-200 rounded-xl font-black text-center outline-none focus:border-blue-300"/>
                               )}
                             </div>
-                            <div className="flex items-center justify-between pt-1">
-                              <span className="text-[10px] font-black text-gray-400 uppercase">Закрепить ответ бота</span>
-                              <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
-                                className={`w-10 h-5 rounded-full transition-all relative flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editingTrigger.auto_pin ? 'left-[22px]' : 'left-0.5'}`}/>
-                              </button>
-                            </div>
                           </>)}
                         </>)}
                         {(action.type==='mute'||action.type==='ban') && (

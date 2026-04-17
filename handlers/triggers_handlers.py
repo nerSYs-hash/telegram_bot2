@@ -1639,8 +1639,9 @@ async def process_triggers(
         except Exception as _fe:
             logger.warning(f"fire_count increment failed: {_fe}")
 
-        # Автозакреп ответного сообщения
-        auto_pin = tdata.get('auto_pin', 0)
+        # Автозакреп ответного сообщения (trigger-level ИЛИ action-level settings.pin)
+        msg_chat_cfg = cfgs.get('msg_chat', {})
+        auto_pin = tdata.get('auto_pin', 0) or msg_chat_cfg.get('pin', False)
         if auto_pin and last_bot_msg_for_pin:
             try:
                 await context.bot.pin_chat_message(
