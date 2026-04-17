@@ -160,14 +160,7 @@ export default function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  if (authLoading) return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-950">
-      <Loader2 size={32} className="text-blue-400 animate-spin"/>
-    </div>
-  );
-  if (!authUser) return <LoginPage onLogin={u => { setAuthUser(u); }}/>;
-
-  const isAdmin = authUser.is_admin || authUser.is_owner;
+  const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
 
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
   const navigateTo = (id) => {
@@ -3865,6 +3858,13 @@ export default function App() {
     }
   };
 
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <Loader2 size={32} className="text-blue-400 animate-spin"/>
+    </div>
+  );
+  if (!authUser) return <LoginPage onLogin={setAuthUser}/>;
+
   return (
     <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-gray-900 selection:bg-blue-100 overflow-hidden">
       <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-gray-100 flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
@@ -3926,7 +3926,23 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center space-x-3">
-            <div className="w-14 h-14 rounded-[1.5rem] bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-2xl border-4 border-white shadow-xl">В</div>
+            <div className="flex items-center gap-2">
+              <div className="text-right hidden sm:block">
+                <p className="text-sm font-black text-gray-900 leading-none">{authUser.first_name}</p>
+                {authUser.username && <p className="text-[10px] font-bold text-gray-400 mt-0.5">@{authUser.username}</p>}
+              </div>
+              {authUser.photo_url
+                ? <img src={authUser.photo_url} alt="avatar" className="w-10 h-10 rounded-2xl border-2 border-white shadow-lg object-cover"/>
+                : <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg border-2 border-white shadow-lg">
+                    {(authUser.first_name||'?')[0]}
+                  </div>
+              }
+              <button onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
+                className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90"
+                title="Выйти">
+                <Power size={16}/>
+              </button>
+            </div>
           </div>
         </header>
 
