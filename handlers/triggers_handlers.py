@@ -1425,9 +1425,9 @@ async def process_triggers(
         if not matched:
             continue
 
-        # Проверка лимита срабатываний
+        # Проверка лимита срабатываний (0 или None = без лимита)
         fire_limit = tdata.get('fire_limit')
-        if fire_limit is not None:
+        if fire_limit is not None and fire_limit > 0:
             try:
                 fire_count = int(trigger['fire_count'] if 'fire_count' in trigger.keys() else 0) or 0
             except (TypeError, ValueError):
