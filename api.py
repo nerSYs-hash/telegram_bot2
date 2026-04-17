@@ -449,6 +449,22 @@ def _buttons_to_keyboard(buttons: list) -> list:
     return keyboard
 
 
+_TIME_UNIT_TO_SEC = {
+    'seconds': 1, 'minutes': 60, 'hours': 3600,
+    'days': 86400, 'weeks': 604800, 'months': 2592000,
+    # русские (из send_text settings)
+    'секунда': 1, 'минута': 60, 'час': 3600,
+    'день': 86400, 'неделя': 604800, 'месяц': 2592000,
+}
+
+def _sec_to_val_unit(seconds: int) -> tuple:
+    """Обратное: секунды → (value, unit_key)."""
+    for unit, sec in [('days', 86400), ('hours', 3600), ('minutes', 60)]:
+        if seconds % sec == 0 and seconds >= sec:
+            return seconds // sec, unit
+    return seconds, 'seconds'
+
+
 def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
     """Переводит типы и формат из сайта в формат бота перед записью в БД."""
     bot_actions = []
@@ -462,13 +478,11 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
             variants = cfg.get('variants') or [{}]
             first = variants[0] if variants else {}
             settings = cfg.get('settings', {})
-            # Перевод единиц времени → секунды
-            _unit_sec = {'секунда':1,'минута':60,'час':3600,'день':86400,'неделя':604800,'месяц':2592000}
             def _to_sec(val_key, unit_key):
                 try:
                     val = int(settings.get(val_key) or 1)
                     unit = settings.get(unit_key) or 'секунда'
-                    return val * _unit_sec.get(unit, 1)
+                    return val * _TIME_UNIT_TO_SEC.get(unit, 1)
                 except Exception:
                     return None
             bot_configs[bot_type] = {
@@ -486,24 +500,76 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
                 'delete_previous':      bool(settings.get('delete_previous', False)),
                 'delete_after_seconds': _to_sec('delete_after_val','delete_after_unit') if settings.get('delete_after') else None,
                 'send_delay_seconds':   _to_sec('send_delayed_val','send_delayed_unit') if settings.get('send_delayed') else None,
-                # Сохраняем все варианты для восстановления на сайте
                 '_variants':    variants,
                 '_settings':    settings,
             }
-            # Ротация: если вариантов > 1 — кладём в action_configs['rotation']
             if len(variants) > 1 and site_type == 'send_text':
                 bot_configs['rotation'] = {
                     'items': [
                         {
-                            'text':            v.get('text', ''),
-                            'media_id':        v.get('media_id'),
-                            'media_type':      v.get('media_type', 'none'),
+                            'text':              v.get('text', ''),
+                            'media_id':          v.get('media_id'),
+                            'media_type':        v.get('media_type', 'none'),
                             'media_server_path': v.get('media_server_path'),
                         }
                         for v in variants
                     ],
                     'next_idx': 0,
                 }
+
+        elif site_type == 'mute':
+            # Конвертируем value+unit → секунды
+            dur_sec = 3600
+            if cfg.get('mute_time_enabled'):
+                try:
+                    val = int(cfg.get('mute_time_value') or 1)
+                    unit = cfg.get('mute_time_unit') or 'hours'
+                    dur_sec = val * _TIME_UNIT_TO_SEC.get(unit, 3600)
+                except Exception:
+                    pass
+            bot_configs['mute'] = {
+                'duration_seconds': dur_sec,
+                'mute_target':      cfg.get('mute_target', 'initiator'),
+                'mute_type':        cfg.get('mute_type', 'all'),
+            }
+
+        elif site_type == 'ban':
+            bot_configs['ban'] = {
+                'ban_target': cfg.get('ban_target', 'initiator'),
+            }
+
+        elif site_type == 'emoji':
+            bot_configs['emoji'] = {
+                'emoji':        cfg.get('emoji_reaction', '👍'),
+                'emoji_target': cfg.get('emoji_target', 'initiator'),
+            }
+
+        elif site_type == 'warn':
+            bot_configs['warn'] = {
+                'warn_target': cfg.get('warn_target', 'initiator'),
+                'warn_notify': cfg.get('warn_notify', True),
+                'warn_count':  int(cfg.get('warn_count') or 1),
+            }
+
+        elif site_type == 'delete':
+            del_target = cfg.get('delete_target', 'initiator')
+            if del_target == 'both':
+                what = ['trigger_word', 'quoted_message']
+            elif del_target == 'replied':
+                what = ['quoted_message']
+            else:
+                what = ['trigger_word']
+            bot_configs['delete'] = {
+                'what':             what,
+                'delete_delay':     cfg.get('delete_delay', 0),
+                'delete_delay_unit': cfg.get('delete_delay_unit', 'seconds'),
+            }
+
+        elif site_type == 'pin':
+            bot_configs['pin'] = {
+                'notify': bool(cfg.get('pin_notify', False)),
+            }
+
         else:
             bot_configs[bot_type] = cfg
 
@@ -520,7 +586,6 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
         cfg = bot_configs.get(bot_type, {})
 
         if bot_type in ('msg_chat', 'msg_dm'):
-            # Восстанавливаем варианты: сначала _variants (если есть), иначе из rotation.items
             rot_items = (bot_configs.get('rotation') or {}).get('items', [])
             if cfg.get('_variants'):
                 variants = cfg['_variants']
@@ -539,6 +604,63 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
                 'keyboard':       _buttons_to_keyboard(cfg.get('buttons', [])),
                 'settings':       cfg.get('_settings', {}),
             }
+
+        elif bot_type == 'mute':
+            # duration_seconds → value+unit для UI
+            dur_sec = cfg.get('duration_seconds')
+            if dur_sec is None:
+                # Обратная совместимость со старым ключом '5m'/'60m' из бота
+                _legacy = {'5m': 300, '15m': 900, '30m': 1800, '60m': 3600, '24h': 86400}
+                dur_sec = _legacy.get(cfg.get('duration', '60m'), 3600)
+            val, unit = _sec_to_val_unit(int(dur_sec))
+            site_configs['mute'] = {
+                'mute_target':      cfg.get('mute_target', 'initiator'),
+                'mute_time_enabled': True,
+                'mute_time_value':  val,
+                'mute_time_unit':   unit,
+                'mute_type':        cfg.get('mute_type', 'all'),
+            }
+
+        elif bot_type == 'ban':
+            site_configs['ban'] = {
+                'ban_target': cfg.get('ban_target', 'initiator'),
+            }
+
+        elif bot_type == 'emoji':
+            site_configs['emoji'] = {
+                'emoji_reaction': cfg.get('emoji', '👍'),
+                'emoji_target':   cfg.get('emoji_target', 'initiator'),
+            }
+
+        elif bot_type == 'warn':
+            site_configs['warn'] = {
+                'warn_target': cfg.get('warn_target', 'initiator'),
+                'warn_notify': cfg.get('warn_notify', True),
+                'warn_count':  cfg.get('warn_count', 1),
+            }
+
+        elif bot_type == 'delete':
+            what = cfg.get('what', ['trigger_word'])
+            if isinstance(what, list):
+                if 'trigger_word' in what and 'quoted_message' in what:
+                    del_target = 'both'
+                elif 'quoted_message' in what:
+                    del_target = 'replied'
+                else:
+                    del_target = 'initiator'
+            else:
+                del_target = 'initiator'
+            site_configs['delete'] = {
+                'delete_target':    del_target,
+                'delete_delay':     cfg.get('delete_delay', 0),
+                'delete_delay_unit': cfg.get('delete_delay_unit', 'seconds'),
+            }
+
+        elif bot_type == 'pin':
+            site_configs['pin'] = {
+                'pin_notify': cfg.get('notify', False),
+            }
+
         else:
             site_configs[site_type] = cfg
 

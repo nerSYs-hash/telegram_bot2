@@ -1364,6 +1364,9 @@ async def process_triggers(
 
         # Фильтр: Где (7.3.2)
         where = tdata.get('where_fires', 'all')
+        # Нормализуем значения сайта, которые бот не различает
+        if where in ('chat', 'pv', 'global'):
+            where = 'all'
         if where != 'all':
             try:
                 allowed = json.loads(where) if isinstance(where, str) else where
@@ -1382,7 +1385,7 @@ async def process_triggers(
                 continue
             elif initiator == 'owner' and not is_owner:
                 continue
-            elif initiator == 'admins_owner' and not (is_admin or is_owner):
+            elif initiator in ('admins_owner', 'admins') and not (is_admin or is_owner):
                 continue
 
         # Вероятность
@@ -1534,9 +1537,13 @@ async def process_triggers(
                             pass
 
                 elif act == 'mute':
-                    dur_key = act_cfg.get('duration', '60m')
-                    _, dur_sec = MUTE_OPTIONS.get(dur_key, ('', 3600))
-                    uid = _resolve_target(user, target_type, tdata)
+                    # duration_seconds (сайт) или legacy duration-ключ (бот)
+                    dur_sec = act_cfg.get('duration_seconds')
+                    if dur_sec is None:
+                        _legacy = {'5m': 300, '15m': 900, '30m': 1800, '60m': 3600, '24h': 86400}
+                        dur_sec = _legacy.get(act_cfg.get('duration', '60m'), 3600)
+                    mute_tgt = act_cfg.get('mute_target', target_type)
+                    uid = _resolve_action_target(user, mute_tgt, message, tdata)
                     if uid:
                         try:
                             await context.bot.restrict_chat_member(
@@ -1548,18 +1555,40 @@ async def process_triggers(
                                     can_send_voice_notes=False, can_send_polls=False,
                                     can_send_other_messages=False,
                                     can_add_web_page_previews=False),
-                                until_date=int(time.time()) + dur_sec)
+                                until_date=int(time.time()) + int(dur_sec))
                         except Exception as e:
                             logger.error(f"Mute failed: {e}")
+                    # Если цель 'both' — мутим и цитируемого тоже
+                    if mute_tgt == 'both':
+                        replied = getattr(message, 'reply_to_message', None)
+                        if replied and replied.from_user and replied.from_user.id != user.id:
+                            try:
+                                await context.bot.restrict_chat_member(
+                                    chat_id=target_chat_id, user_id=replied.from_user.id,
+                                    permissions=ChatPermissions(can_send_messages=False),
+                                    until_date=int(time.time()) + int(dur_sec))
+                            except Exception as e:
+                                logger.error(f"Mute both (replied) failed: {e}")
+
+                elif act == 'ban':
+                    ban_tgt = act_cfg.get('ban_target', target_type)
+                    uid = _resolve_action_target(user, ban_tgt, message, tdata)
+                    if uid:
+                        try:
+                            await context.bot.ban_chat_member(
+                                chat_id=target_chat_id, user_id=uid)
+                        except Exception as e:
+                            logger.error(f"Ban failed: {e}")
 
                 elif act == 'warn':
-                    uid = _resolve_target(user, target_type, tdata)
+                    warn_tgt = act_cfg.get('warn_target', target_type)
+                    uid = _resolve_action_target(user, warn_tgt, message, tdata)
                     if not uid:
                         continue
-                    wp = tdata.get('warn_period')
+                    warn_notify = act_cfg.get('warn_notify', True)
+                    wp = tdata.get('warn_period') or act_cfg.get('warn_period')
                     count = _get_violations_in_period(db, user.id, trigger['id'], wp)
-                    # При включенной ротации не дублируем чат дополнительными сообщениями warn.
-                    if not has_rotation:
+                    if warn_notify and not has_rotation:
                         bot_msg = await message.reply_text(
                             f"⚠️ {_user_link(user)}, предупреждение ({count})!",
                             parse_mode='HTML')
@@ -1573,7 +1602,7 @@ async def process_triggers(
                                     chat_id=target_chat_id, user_id=uid,
                                     permissions=ChatPermissions(can_send_messages=False),
                                     until_date=int(time.time()) + mute_sec)
-                                if not has_rotation:
+                                if warn_notify and not has_rotation:
                                     await message.reply_text(
                                         f"🔇 {_user_link(user)} — мут {_format_duration(mute_sec)} "
                                         f"({count} предупр.)", parse_mode='HTML')
@@ -1583,7 +1612,7 @@ async def process_triggers(
                             break
 
                 elif act == 'emoji':
-                    emoji_char = act_cfg.get('emoji', '👀')
+                    emoji_char = act_cfg.get('emoji', '👍')
                     try:
                         await message.set_reaction(emoji_char)
                     except Exception as e:
@@ -1627,6 +1656,25 @@ def _resolve_target(user, target_type: str, tdata: dict) -> Optional[int]:
         except (ValueError, TypeError): pass
     if target_type == 'nobody': return None
     return user.id  # fallback
+
+
+def _resolve_action_target(user, act_target: str, message, tdata: dict) -> Optional[int]:
+    """Разрешает цель действия по значениям с сайта (initiator/replied/both/command/nobody)."""
+    if act_target == 'initiator':
+        return user.id
+    if act_target == 'replied':
+        replied = getattr(message, 'reply_to_message', None)
+        if replied and replied.from_user:
+            return replied.from_user.id
+        return user.id  # fallback
+    if act_target == 'both':
+        return user.id  # действие будет применено к инициатору (replied — отдельно)
+    if act_target == 'command':
+        return user.id
+    if act_target == 'nobody':
+        return None
+    # legacy fallback через trigger-level target
+    return _resolve_target(user, act_target, tdata)
 
 
 def _build_url_markup(act_cfg: dict):
