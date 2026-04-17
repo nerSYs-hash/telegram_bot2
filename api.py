@@ -559,6 +559,7 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
                 'media_type':           first.get('media_type', 'none'),
                 'media_id':             first.get('media_id'),
                 'media_server_path':    first.get('media_server_path'),
+                'media_pos':            first.get('media_pos', 'above'),
                 'reply_target':         cfg.get('reply_target', 'none'),
                 'target_thread_id':     cfg.get('target_thread_id'),
                 'buttons':              _keyboard_to_buttons(cfg.get('keyboard', [])),
@@ -665,7 +666,7 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
                     for i, it in enumerate(rot_items)
                 ]
             else:
-                variants = [{'id': 1, 'text': cfg.get('text', ''), 'media_type': cfg.get('media_type', 'none'), 'media_id': cfg.get('media_id')}]
+                variants = [{'id': 1, 'text': cfg.get('text', ''), 'media_type': cfg.get('media_type', 'none'), 'media_id': cfg.get('media_id'), 'media_pos': cfg.get('media_pos', 'above')}]
             site_configs[site_type] = {
                 'variants':       variants,
                 'currentVariant': 0,

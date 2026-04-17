@@ -1693,10 +1693,13 @@ export default function App() {
                                     {(() => {
                                       const isUploading = mediaUploading && mediaUploading.gIdx===gIdx && mediaUploading.aIdx===aIdx && mediaUploading.varIdx===curVarIdx;
                                       const hasMedia = curVar.media_type && curVar.media_type !== 'none';
-                                      const pickMedia = () => {
+                                      const mediaPos = curVar.media_pos || 'above';
+                                      const mediaPosKey = `mediaPos_${gIdx}_${aIdx}`;
+
+                                      const pickFile = (accept) => {
                                         const inp = document.createElement('input');
                                         inp.type = 'file';
-                                        inp.accept = 'image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime';
+                                        inp.accept = accept;
                                         inp.onchange = async (e) => {
                                           const file = e.target.files?.[0];
                                           if (!file) return;
@@ -1707,7 +1710,6 @@ export default function App() {
                                             const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
                                             if (!res.ok) throw new Error(await res.text());
                                             const data = await res.json();
-                                            // Обновляем все поля за один вызов, иначе замыкание затирает
                                             updAction(gIdx, aIdx, 'variants',
                                               variants.map((v, vi) => vi === curVarIdx
                                                 ? {...v, media_type: data.media_type, media_url: data.url, media_server_path: data.server_path}
@@ -1720,43 +1722,104 @@ export default function App() {
                                         };
                                         inp.click();
                                       };
+
+                                      const MEDIA_TYPES = [
+                                        { type:'photo',     label:'Изображение', icon:'🖼',  accept:'image/jpeg,image/png,image/webp', active:true  },
+                                        { type:'video',     label:'Видео',        icon:'🎬',  accept:'video/mp4,video/quicktime',       active:true  },
+                                        { type:'animation', label:'Анимация',     icon:'🎭',  accept:'image/gif',                       active:true  },
+                                        { type:'voice',     label:'Голосовое',    icon:'🎤',  accept:'',                                active:false },
+                                        { type:'audio',     label:'Аудио',        icon:'🎵',  accept:'',                                active:false },
+                                        { type:'document',  label:'Документ',     icon:'📄',  accept:'',                                active:false },
+                                      ];
+
+                                      const typeLabel = { photo:'Изображение', video:'Видео', animation:'Анимация' };
+
                                       return (
-                                        <div className="relative mb-2">
-                                          {hasMedia ? (
-                                            <div className="w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative group">
-                                              {curVar.media_type === 'photo' ? (
-                                                <img src={curVar.media_url} alt="preview" className="w-full max-h-48 object-contain"/>
-                                              ) : curVar.media_type === 'video' ? (
-                                                <video src={curVar.media_url} className="w-full max-h-48 object-contain" controls={false} muted/>
-                                              ) : (
-                                                <img src={curVar.media_url} alt="gif" className="w-full max-h-48 object-contain"/>
-                                              )}
-                                              <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
-                                                <button onClick={e=>{e.stopPropagation();pickMedia();}}
-                                                  className="px-3 py-1.5 bg-white text-gray-800 rounded-lg text-xs font-bold shadow">Заменить</button>
-                                                <button onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_type:'none',media_url:'',media_server_path:''}:v));}}
-                                                  className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
+                                        <div className="mb-2 space-y-2">
+                                          {!hasMedia ? (
+                                            <>
+                                              <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'6px'}}>
+                                                {MEDIA_TYPES.map(m => (
+                                                  <button key={m.type}
+                                                    onClick={() => m.active && !isUploading && pickFile(m.accept)}
+                                                    className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
+                                                      ${m.active ? 'border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50' : 'border-dashed border-gray-200 text-gray-300 cursor-not-allowed'}`}>
+                                                    <span className="text-xl">{m.icon}</span>
+                                                    <span>{m.label}</span>
+                                                    {!m.active && <span className="absolute top-1 right-1 text-[7px] font-black bg-amber-100 text-amber-500 px-1 py-0.5 rounded-full uppercase">Скоро</span>}
+                                                  </button>
+                                                ))}
+                                                {/* Расположение */}
+                                                <button
+                                                  onClick={() => setActOpenDropdown(actOpenDropdown === mediaPosKey ? null : mediaPosKey)}
+                                                  className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
+                                                    ${actOpenDropdown === mediaPosKey ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}
+                                                    ${mediaPos !== 'above' ? 'border-blue-300' : ''}`}>
+                                                  <span className="text-xl">📐</span>
+                                                  <span>Расположение</span>
+                                                  {mediaPos !== 'above' && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-400 rounded-full"/>}
+                                                </button>
                                               </div>
-                                              <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded uppercase">
-                                                {curVar.media_type}
-                                              </span>
-                                            </div>
-                                          ) : (
-                                            <div onClick={isUploading ? undefined : pickMedia}
-                                              className={`w-full h-28 border-2 border-dashed rounded-xl flex flex-col items-center justify-center transition-all select-none ${isUploading ? 'border-blue-300 bg-blue-50/30 cursor-wait' : 'border-blue-200 cursor-pointer hover:border-blue-400 hover:bg-blue-50/30'}`}>
-                                              {isUploading ? (
-                                                <>
-                                                  <span className="text-xl mb-1 animate-spin">⏳</span>
-                                                  <span className="text-xs text-blue-500 font-semibold">Загрузка...</span>
-                                                </>
-                                              ) : (
-                                                <>
-                                                  <span className="text-2xl mb-1">👆</span>
-                                                  <span className="text-xs text-blue-500 font-semibold">Нажмите, чтобы загрузить медиа</span>
-                                                  <span className="text-[10px] text-gray-400 mt-0.5">JPG, PNG, GIF, MP4</span>
-                                                </>
+                                              {actOpenDropdown === mediaPosKey && (
+                                                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                                  {[
+                                                    { v:'above', icon:'🖼', l:'Медиа с подписью',       desc:'Текст идёт подписью к медиа (одно сообщение)' },
+                                                    { v:'below', icon:'📝', l:'Сначала текст, потом медиа', desc:'Бот отправит два отдельных сообщения' },
+                                                  ].map(o => (
+                                                    <button key={o.v}
+                                                      onClick={() => { updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v)); setActOpenDropdown(null); }}
+                                                      className={`w-full px-4 py-3 text-left border-b border-gray-50 last:border-0 transition-all flex items-start gap-3 ${mediaPos===o.v?'bg-blue-50':'hover:bg-gray-50'}`}>
+                                                      <span className="text-lg mt-0.5">{o.icon}</span>
+                                                      <div>
+                                                        <p className={`text-sm font-bold ${mediaPos===o.v?'text-blue-600':'text-gray-700'}`}>{o.l}</p>
+                                                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">{o.desc}</p>
+                                                      </div>
+                                                      {mediaPos===o.v && <span className="ml-auto text-blue-500 text-sm">✓</span>}
+                                                    </button>
+                                                  ))}
+                                                </div>
                                               )}
-                                            </div>
+                                              {isUploading && (
+                                                <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-blue-200 rounded-xl">
+                                                  <span className="animate-spin text-xl">⏳</span>
+                                                  <span className="text-sm text-blue-500 font-semibold">Загрузка...</span>
+                                                </div>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <>
+                                              <div className="w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative group">
+                                                {curVar.media_type === 'photo' ? (
+                                                  <img src={curVar.media_url} alt="preview" className="w-full max-h-48 object-contain"/>
+                                                ) : curVar.media_type === 'video' ? (
+                                                  <video src={curVar.media_url} className="w-full max-h-48 object-contain" controls={false} muted/>
+                                                ) : (
+                                                  <img src={curVar.media_url} alt="gif" className="w-full max-h-48 object-contain"/>
+                                                )}
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                                                  <button onClick={e=>{e.stopPropagation();pickFile('image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime');}}
+                                                    className="px-3 py-1.5 bg-white text-gray-800 rounded-lg text-xs font-bold shadow">Заменить</button>
+                                                  <button onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_type:'none',media_url:'',media_server_path:''}:v));}}
+                                                    className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
+                                                </div>
+                                                <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded uppercase">
+                                                  {typeLabel[curVar.media_type] || curVar.media_type}
+                                                </span>
+                                              </div>
+                                              {/* Расположение после загрузки */}
+                                              <div className="flex gap-1.5">
+                                                {[
+                                                  { v:'above', l:'🖼+📝 Медиа с подписью' },
+                                                  { v:'below', l:'📝→🖼 Текст, потом медиа' },
+                                                ].map(o => (
+                                                  <button key={o.v}
+                                                    onClick={() => updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v))}
+                                                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all border-2 ${mediaPos===o.v?'border-blue-400 bg-blue-50 text-blue-600':'border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </>
                                           )}
                                         </div>
                                       );
