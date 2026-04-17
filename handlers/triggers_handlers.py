@@ -1352,6 +1352,7 @@ async def process_triggers(
 
     ensure_trigger_tables(db)
     triggers = _get_enabled_triggers(db)
+    logger.info(f"[TRIGGERS] process_triggers called: user={user.id}, text={repr(message.text[:50] if message.text else '')}, triggers_count={len(triggers)}")
     if not triggers:
         return False
 
@@ -1361,6 +1362,7 @@ async def process_triggers(
 
     for trigger in triggers:
         tdata = _trigger_to_data(trigger)
+        tname = tdata.get('name', '?')
 
         # Фильтр: Где (7.3.2)
         where = tdata.get('where_fires', 'all')
@@ -1371,6 +1373,7 @@ async def process_triggers(
             try:
                 allowed = json.loads(where) if isinstance(where, str) else where
                 if isinstance(allowed, list) and thread_id not in allowed:
+                    logger.info(f"[TRIGGERS] '{tname}' skip: where_fires={where}, thread_id={thread_id}")
                     continue
             except (json.JSONDecodeError, TypeError):
                 pass
@@ -1382,10 +1385,13 @@ async def process_triggers(
             is_admin = udata and (udata['is_admin'] or udata['is_owner'])
             is_owner = user.id == main_admin_id or (udata and udata['is_owner'])
             if initiator == 'users' and (is_admin or is_owner):
+                logger.info(f"[TRIGGERS] '{tname}' skip: initiator=users but user is admin/owner")
                 continue
             elif initiator == 'owner' and not is_owner:
+                logger.info(f"[TRIGGERS] '{tname}' skip: initiator=owner but user is not owner")
                 continue
             elif initiator in ('admins_owner', 'admins') and not (is_admin or is_owner):
+                logger.info(f"[TRIGGERS] '{tname}' skip: initiator=admins but user is not admin")
                 continue
 
         # Вероятность
@@ -1399,6 +1405,7 @@ async def process_triggers(
                 prob = 100
         prob = max(0, min(100, prob))
         if prob < 100 and random.randint(1, 100) > prob:
+            logger.info(f"[TRIGGERS] '{tname}' skip: probability={prob} not met")
             continue
 
         # Проверка совпадения
@@ -1410,9 +1417,10 @@ async def process_triggers(
             elif cond == 'contains':  matched = (kw in msg_text)
             elif cond == 'starts_with': matched = msg_text.startswith(kw)
             elif cond == 'ends_with':   matched = msg_text.endswith(kw)
-            elif cond == 'whole_word':  matched = bool(re.search(rf'\b{re.escape(kw)}\b', msg_text))
+            elif cond == 'whole_word':  matched = bool(re.search(rf'(?<!\w){re.escape(kw)}(?!\w)', msg_text, re.UNICODE))
             if matched:
                 break
+        logger.info(f"[TRIGGERS] '{tname}' cond={cond} kws={keywords} msg={repr(msg_text)} matched={matched}")
 
         if not matched:
             continue
