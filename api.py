@@ -414,6 +414,7 @@ class TriggerIn(BaseModel):
     bot_msg_delete_after: int = 60
     fire_limit: int = 0
     auto_pin: int = 0
+    warn_period: int = 0
     is_enabled: bool = True
 
 
@@ -803,14 +804,14 @@ async def create_trigger(t: TriggerIn):
                  where_fires, initiator, target, target_user,
                  actions, action_configs,
                  bot_msg_delete, bot_msg_delete_after,
-                 fire_limit, auto_pin, is_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 fire_limit, auto_pin, warn_period, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             t.name, t.keywords, t.condition, t.probability,
             t.where_fires, t.initiator, t.target, t.target_user,
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
-            t.fire_limit, int(t.auto_pin), int(t.is_enabled),
+            t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
         ))
         db.conn.commit()
         return {'id': db.cursor.lastrowid, 'success': True}
@@ -829,14 +830,14 @@ async def update_trigger(trigger_id: int, t: TriggerIn):
                 where_fires=?, initiator=?, target=?, target_user=?,
                 actions=?, action_configs=?,
                 bot_msg_delete=?, bot_msg_delete_after=?,
-                fire_limit=?, auto_pin=?, is_enabled=?
+                fire_limit=?, auto_pin=?, warn_period=?, is_enabled=?
             WHERE id=?
         ''', (
             t.name, t.keywords, t.condition, t.probability,
             t.where_fires, t.initiator, t.target, t.target_user,
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
-            t.fire_limit, int(t.auto_pin), int(t.is_enabled),
+            t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
             trigger_id,
         ))
         db.conn.commit()
