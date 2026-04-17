@@ -3424,12 +3424,39 @@ export default function App() {
                                   className="w-full mt-2 p-3 bg-white border border-gray-200 rounded-xl font-black text-center outline-none focus:border-blue-300"/>
                               )}
                             </div>
+                            <div className="flex items-center justify-between pt-1">
+                              <span className="text-[10px] font-black text-gray-400 uppercase">Закрепить ответ бота</span>
+                              <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
+                                className={`w-10 h-5 rounded-full transition-all relative flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all ${editingTrigger.auto_pin ? 'left-[22px]' : 'left-0.5'}`}/>
+                              </button>
+                            </div>
                           </>)}
                         </>)}
                         {(action.type==='mute'||action.type==='ban') && (
                           <input type="text" placeholder="Длительность: 30m / 2h / forever"
                             value={action.duration} onChange={e => updAction(idx,'duration',e.target.value)}
                             className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
+                        )}
+                        {action.type==='warn' && (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <span className="text-[10px] font-black text-gray-400 uppercase">За какой период считать предупреждения</span>
+                              <div className="relative group">
+                                <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[9px] font-black flex items-center justify-center cursor-help">?</span>
+                                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-56 bg-gray-900 text-white text-[10px] font-bold rounded-xl px-3 py-2 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50 leading-relaxed">
+                                  Бот считает сколько раз этот пользователь уже получал предупреждение за последние N секунд. Когда набирается 3 — мут на час, 5 — мут на сутки. 0 = считать за всё время без сброса.
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input type="number" min="0" placeholder="0"
+                                value={editingTrigger.warn_period || 0}
+                                onChange={e => upd('warn_period', parseInt(e.target.value)||0)}
+                                className="w-28 p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm text-center outline-none focus:border-blue-300"/>
+                              <span className="text-[11px] font-bold text-gray-400">секунд (0 = за всё время)</span>
+                            </div>
+                          </div>
                         )}
                         {action.type==='emoji' && (
                           <input type="text" placeholder="👀 🔥 ❤️"
@@ -3443,107 +3470,46 @@ export default function App() {
               </div>}
 
               {/* ── Дополнительно ── */}
-              {(() => {
-                const hasWarn = (editingTrigger.actionGroups||[]).some(g=>(g.actions||[]).some(a=>a.type==='warn'));
-                const hasMsgChat = (editingTrigger.actionGroups||[]).some(g=>(g.actions||[]).some(a=>a.type==='send_text'||a.type==='dm'));
-                return (
-                <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Дополнительно</span>
+              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
+                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Дополнительно</span>
 
-                  {/* Где срабатывает */}
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Где срабатывает</p>
-                    <div className="flex gap-2">
-                      {[{v:'all',l:'Везде'},{v:'chat',l:'Чат'},{v:'pv',l:'Личка'}].map(o => (
-                        <button key={o.v} onClick={() => upd('where_fires',o.v)}
-                          className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
-                        </button>
-                      ))}
-                    </div>
+                {/* Где срабатывает */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Где срабатывает</p>
+                  <div className="flex gap-2">
+                    {[{v:'all',l:'Везде'},{v:'chat',l:'Чат'},{v:'pv',l:'Личка'}].map(o => (
+                      <button key={o.v} onClick={() => upd('where_fires',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      </button>
+                    ))}
                   </div>
-
-                  {/* На кого реагирует (initiator) */}
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">На кого реагирует</p>
-                    <div className="flex gap-2">
-                      {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
-                        <button key={o.v} onClick={() => upd('initiator',o.v)}
-                          className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-
-                  {/* Действие применить к (target) */}
-                  <div>
-                    <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Действие применить к</p>
-                    <div className="flex gap-2 flex-wrap">
-                      {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'nobody',l:'Никто'}].map(o => (
-                        <button key={o.v} onClick={() => upd('target', o.v)}
-                          className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
-                        </button>
-                      ))}
-                    </div>
-                    {editingTrigger.target === 'specific' && (
-                      <input type="text" placeholder="Telegram ID пользователя"
-                        value={editingTrigger.target_user || ''}
-                        onChange={e => upd('target_user', e.target.value)}
-                        className="w-full mt-2 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
-                    )}
-                  </div>
-
-                  {/* Удалить ответ бота */}
-                  {hasMsgChat && (
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Удалить ответ бота</p>
-                      <div className="flex gap-2">
-                        {[{v:'no',l:'Нет'},{v:'period',l:'Через N сек'},{v:'next',l:'После след.'}].map(o => (
-                          <button key={o.v} onClick={() => upd('bot_msg_delete', o.v)}
-                            className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${(editingTrigger.bot_msg_delete||'no')===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
-                          </button>
-                        ))}
-                      </div>
-                      {(editingTrigger.bot_msg_delete||'no') === 'period' && (
-                        <div className="flex items-center gap-2 mt-2">
-                          <input type="number" min="5" max="3600"
-                            value={editingTrigger.bot_msg_delete_after || 60}
-                            onChange={e => upd('bot_msg_delete_after', parseInt(e.target.value)||60)}
-                            className="w-24 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300 text-center"/>
-                          <span className="text-[11px] font-bold text-gray-400">секунд</span>
-                        </div>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Период варнов */}
-                  {hasWarn && (
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Период варнов (сек)</p>
-                      <div className="flex items-center gap-2">
-                        <input type="number" min="0"
-                          value={editingTrigger.warn_period || 0}
-                          onChange={e => upd('warn_period', parseInt(e.target.value)||0)}
-                          className="w-28 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300 text-center"/>
-                        <span className="text-[11px] font-bold text-gray-400">0 = за всё время</span>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Автозакреп ответа бота */}
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-[10px] font-bold text-gray-700 uppercase">Закрепить ответ бота</p>
-                      <p className="text-[9px] text-gray-400">Автоматически закрепить сообщение бота</p>
-                    </div>
-                    <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
-                      className={`w-11 h-6 rounded-full transition-all relative flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                      <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all ${editingTrigger.auto_pin ? 'left-[22px]' : 'left-0.5'}`}/>
-                    </button>
-                  </div>
-
                 </div>
-                );
-              })()}
+
+                {/* На кого реагирует (initiator) */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">На кого реагирует</p>
+                  <div className="flex gap-2">
+                    {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
+                      <button key={o.v} onClick={() => upd('initiator',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Действие применить к (target) */}
+                <div>
+                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Действие применить к</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'nobody',l:'Никто'}].map(o => (
+                      <button key={o.v} onClick={() => upd('target', o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+              </div>
 
             </div>
           );

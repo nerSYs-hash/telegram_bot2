@@ -547,9 +547,10 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
 
         elif site_type == 'warn':
             bot_configs['warn'] = {
-                'warn_target': cfg.get('warn_target', 'initiator'),
-                'warn_notify': cfg.get('warn_notify', True),
-                'warn_count':  int(cfg.get('warn_count') or 1),
+                'warn_target':  cfg.get('warn_target', 'initiator'),
+                'warn_notify':  cfg.get('warn_notify', True),
+                'warn_count':   int(cfg.get('warn_count') or 1),
+                'warn_period':  cfg.get('warn_period', 0),
             }
 
         elif site_type == 'delete':
