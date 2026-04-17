@@ -24,7 +24,11 @@ jobs:
             cd /root/PulsBot
             git fetch origin main
             git reset --hard origin/main
-            # ─── dist собирается локально, просто даём права ───
+            # ─── Собираем фронт на сервере ───
+            cd /root/PulsBot/Admin_SITE
+            npm ci --prefer-offline 2>/dev/null || npm install
+            npm run build
+            cd /root/PulsBot
             chmod -R o+rX /root/PulsBot/Admin_SITE/dist
             # ─── РЕСТАРТ API + NGINX ───
             systemctl restart pulsapi
