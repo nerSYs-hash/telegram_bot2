@@ -99,10 +99,8 @@ function LoginPage({ onLogin }) {
 
           {/* Логотип */}
           <div className="flex flex-col items-center mb-8">
-            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4">
-              <Zap size={32} className="text-white"/>
-            </div>
-            <h1 className="text-2xl font-black text-white tracking-tight">Pulse Pro</h1>
+            <img src="/logo.jpg" alt="Puls Chat" className="w-24 h-24 rounded-3xl shadow-2xl shadow-blue-500/40 mb-4 object-cover"/>
+            <h1 className="text-2xl font-black text-white tracking-tight">Puls Chat</h1>
             <p className="text-sm text-white/40 font-medium mt-1">Панель управления чатом</p>
           </div>
 
@@ -3924,11 +3922,9 @@ export default function App() {
       <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-gray-100 flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
         <div className="h-16 flex items-center justify-between px-5 border-b border-gray-100">
           <div className="flex items-center space-x-3">
-            <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center shadow-lg">
-              <Bot size={18} className="text-white" />
-            </div>
+            <img src="/logo.jpg" alt="Puls Chat" className="w-9 h-9 rounded-xl object-cover shadow-md"/>
             <div>
-              <span className="block font-black text-base text-gray-900 leading-none">Pulse Admin</span>
+              <span className="block font-black text-base text-gray-900 leading-none">Puls Chat</span>
               <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mt-0.5 block">Owner Console</span>
             </div>
           </div>
