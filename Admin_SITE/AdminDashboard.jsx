@@ -1444,7 +1444,7 @@ export default function App() {
                                         placeholder=""
                                         className="flex-1 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
                                       <button onClick={() => addChip(gIdx, cIdx, condChipInput)}
-                                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-gray-500 active:scale-95 transition-all">
+                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${condChipInput.trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}`}>
                                         <Check size={13}/>
                                       </button>
                                     </div>
