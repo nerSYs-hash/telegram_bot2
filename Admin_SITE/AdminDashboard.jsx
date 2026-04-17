@@ -1763,9 +1763,9 @@ export default function App() {
                                     })()}
 
                                     {/* Топики + вкладки + редактор */}
-                                    <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                    <div className="border border-gray-200 rounded-xl">
                                       {/* Строка вкладок */}
-                                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200">
+                                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-xl">
                                         <div className="flex items-center gap-1.5">
                                           {/* Топик-пикер */}
                                           {(() => {
@@ -1905,15 +1905,15 @@ export default function App() {
                                         };
 
                                         const TOOLBAR = [
-                                          { l:'B',  cmd:'bold',          cls:'font-black' },
-                                          { l:'I',  cmd:'italic',        cls:'italic' },
-                                          { l:'S',  cmd:'strikeThrough', cls:'line-through' },
-                                          { l:'U',  cmd:'underline',     cls:'underline' },
-                                          { l:'<>', custom:()=>insertCustomTag('<code>','</code>'),           cls:'font-mono text-[9px]' },
-                                          { l:'»',  custom:()=>insertCustomTag('<blockquote>','</blockquote>'),cls:'' },
-                                          { l:'🔗', custom:insertLink,                                        cls:'' },
-                                          { l:'✒',  custom:()=>insertCustomTag('<tg-spoiler>','</tg-spoiler>'),cls:'' },
-                                          { l:'Tx', custom:clearFmt,                                          cls:'text-[9px]' },
+                                          { l:'B',  cmd:'bold',          cls:'font-black',      tip:'Жирный' },
+                                          { l:'I',  cmd:'italic',        cls:'italic',          tip:'Курсив' },
+                                          { l:'S',  cmd:'strikeThrough', cls:'line-through',    tip:'Зачёркнутый' },
+                                          { l:'U',  cmd:'underline',     cls:'underline',       tip:'Подчёркнутый' },
+                                          { l:'<>', custom:()=>insertCustomTag('<code>','</code>'),            cls:'font-mono text-[9px]', tip:'Моноширинный / код' },
+                                          { l:'»',  custom:()=>insertCustomTag('<blockquote>','</blockquote>'),cls:'',                    tip:'Цитата' },
+                                          { l:'🔗', custom:insertLink,                                         cls:'',                    tip:'Ссылка' },
+                                          { l:'✒',  custom:()=>insertCustomTag('<tg-spoiler>','</tg-spoiler>'), cls:'',                    tip:'Спойлер' },
+                                          { l:'Tx', custom:clearFmt,                                           cls:'text-[9px]',           tip:'Очистить форматирование' },
                                         ];
 
                                         const textLen = (curVar.text||'').replace(/<[^>]+>/g,'').length;
@@ -1925,12 +1925,48 @@ export default function App() {
                                                 const isActive = f.cmd ? fmtState[f.cmd] : false;
                                                 return (
                                                   <button key={f.l}
+                                                    title={f.tip}
                                                     onMouseDown={e => { e.preventDefault(); f.cmd ? execFmt(f.cmd) : f.custom(); }}
                                                     className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
                                                     {f.l}
                                                   </button>
                                                 );
                                               })}
+                                              {/* ── Emoji picker ── */}
+                                              {(() => {
+                                                const emojiKey = `emoji_${gIdx}_${aIdx}_${curVarIdx}`;
+                                                const emojiOpen = actOpenDropdown === emojiKey;
+                                                const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','👍','👎','🙏','🔥','❤️','💯','🎉','😊','😭','🤣','😱','😴','💪','✅','❌','⚠️','💡','📌','🚀','👋','🌟','💬','🎯','⭐','🏆','🔑','💎','🍀','🎵'];
+                                                const insertEmoji = (emoji) => {
+                                                  const el = document.getElementById(ceId);
+                                                  if (!el) return;
+                                                  el.focus();
+                                                  document.execCommand('insertText', false, emoji);
+                                                  updVar('text', el.innerHTML);
+                                                  setActOpenDropdown(null);
+                                                };
+                                                return (
+                                                  <div className="relative">
+                                                    <button
+                                                      title="Эмодзи"
+                                                      onMouseDown={e => { e.preventDefault(); setActOpenDropdown(emojiOpen ? null : emojiKey); }}
+                                                      className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                                      😊
+                                                    </button>
+                                                    {emojiOpen && (
+                                                      <div className="absolute left-0 top-8 z-[700] bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 grid grid-cols-7 gap-0.5">
+                                                        {EMOJIS.map(em => (
+                                                          <button key={em}
+                                                            onMouseDown={ev => { ev.preventDefault(); insertEmoji(em); }}
+                                                            className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-gray-100 transition-all active:scale-90">
+                                                            {em}
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
                                               {/* ── Кнопка %плейсхолдеры% с выпадающим списком ── */}
                                               {(() => {
                                                 const phKey = `${gIdx}_${aIdx}_${curVarIdx}`;
@@ -2158,7 +2194,7 @@ export default function App() {
                                       })()}
 
                                       {/* Создать / Редактировать клавиатуру */}
-                                      <div className="border-t border-gray-100">
+                                      <div className="border-t border-gray-100 rounded-b-xl overflow-hidden">
                                         {keyboard.length === 0 ? (
                                           <button
                                             onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
@@ -2597,6 +2633,18 @@ export default function App() {
                                       <input type="number" min="1" max="999"
                                         value={warnCount}
                                         onChange={e => updAction(gIdx, aIdx, 'warn_count', Math.max(1, parseInt(e.target.value)||1))}
+                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                    </div>
+
+                                    {/* Период варнов */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-black text-gray-800">Период варнов</p>
+                                        <span className="text-xs text-gray-400 font-normal">(дней, 0 = без сброса)</span>
+                                      </div>
+                                      <input type="number" min="0" max="365"
+                                        value={action.warn_period ?? 0}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_period', Math.max(0, parseInt(e.target.value)||0))}
                                         className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
                                     </div>
 
@@ -3259,32 +3307,21 @@ export default function App() {
                           <p className="text-sm font-black text-gray-800 mb-4">Выберите тип кнопки</p>
                           <div className="grid grid-cols-3 gap-2">
                             <button
-                              onClick={() => { setKbButtonType('trigger'); setKbNewButton({}); }}
-                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
-                              Вызов триггера
-                            </button>
-                            <button
-                              onClick={() => { setKbButtonType('share'); setKbNewButton({}); }}
-                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
-                              Поделиться
-                            </button>
-                            {REACTION_PRESETS.map((r, ri) => (
-                              <button key={ri}
-                                onClick={() => {
-                                  setKbButtonType('reaction');
-                                  setKbReactionEmoji(r.emoji);
-                                  setKbNewButton({ text: r.emoji, noMultiple: true, uniqueOnly: true });
-                                }}
-                                className="flex items-center gap-2 px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
-                                <span className="text-lg">{r.emoji}</span>
-                                <span>Реакция</span>
-                              </button>
-                            ))}
-                            <button
                               onClick={() => { setKbButtonType('link'); setKbNewButton({}); }}
                               className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
-                              Ссылка
+                              🔗 Ссылка
                             </button>
+                            <div className="relative px-4 py-4 border border-dashed border-gray-200 rounded-xl text-sm font-bold text-gray-400 text-left cursor-not-allowed select-none">
+                              Вызов триггера
+                              <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-amber-100 text-amber-500 px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                            </div>
+                            {REACTION_PRESETS.map((r, ri) => (
+                              <div key={ri} className="relative flex items-center gap-2 px-4 py-4 border border-dashed border-gray-200 rounded-xl text-sm font-bold text-gray-400 text-left cursor-not-allowed select-none">
+                                <span className="text-lg">{r.emoji}</span>
+                                <span>Реакция</span>
+                                <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-amber-100 text-amber-500 px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                              </div>
+                            ))}
                           </div>
                         </div>
 
@@ -3298,24 +3335,14 @@ export default function App() {
                               className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all text-lg font-bold leading-none">←</button>
                             {kbButtonType === 'reaction' && <span className="text-xl">{kbReactionEmoji}</span>}
                             <h3 className="text-base font-black text-gray-900">
-                              {kbButtonType === 'trigger' ? 'Вызов триггера' :
-                               kbButtonType === 'share'   ? 'Поделиться'    :
-                               kbButtonType === 'reaction'? 'Реакция'       : 'Ссылка'}
+                              {kbButtonType === 'reaction' ? 'Реакция' : 'Ссылка'}
                             </h3>
                           </div>
 
                           {/* Info box */}
                           <div className="px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-[12px] text-blue-700 font-medium leading-relaxed">
-                            {kbButtonType === 'trigger' && <>
-                              Кнопка при нажатии на которую запустится выбранный триггер.<br/><br/>
-                              <span className="underline cursor-pointer">Пример</span>: сделайте триггер без условий с развёрнутыми правилами чата и поместите его в кнопку "Вызов триггера".
-                            </>}
-                            {kbButtonType === 'share' && <>
-                              Здесь можно создать кнопку, при нажатии на которую у пользователя сразу откроется список его контактов и чатов для пересылки этого сообщения (поста).
-                            </>}
                             {kbButtonType === 'reaction' && <>
                               Если вы отключили реакции на посты в канале, но мнение пользователей об определённой публикации или теме важно — помогут кнопки с реакциями. Можно вставить любые эмодзи вместо предложенных в поле "Текст кнопки".<br/><br/>
-                              Задать уведомление, которое увидит пользователь после нажатия на кнопку, можно в поле "Сообщение пользователю".<br/><br/>
                               После того, как читатели нажмут на кнопку, рядом с эмодзи появится количество нажатий. Вот как это будет выглядеть с использованием текущего эмодзи: {kbReactionEmoji} - 3.
                             </>}
                             {kbButtonType === 'link' && <>
@@ -3331,35 +3358,6 @@ export default function App() {
                               onChange={e => setKbNewButton(p => ({...p, text: e.target.value}))}
                               className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
                           </div>
-
-                          {/* Триггер dropdown */}
-                          {kbButtonType === 'trigger' && (
-                            <div>
-                              <p className="text-sm font-black text-gray-700 mb-0.5">Триггер <span className="text-red-400">*</span></p>
-                              <p className="text-[11px] text-gray-400 font-medium mb-2">* Выбранный триггер будет вызван после нажатия на кнопку</p>
-                              <div className="relative">
-                                <button
-                                  onClick={() => setKbNewButton(p => ({...p, _open: !p._open}))}
-                                  className="w-full flex items-center justify-between px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-gray-700 hover:border-blue-300 transition-all">
-                                  <span className={kbNewButton.trigger_id ? 'text-gray-800' : 'text-gray-400'}>
-                                    {triggers.find(t => t.id === kbNewButton.trigger_id)?.name || ''}
-                                  </span>
-                                  <ChevronDown size={14} className={`text-gray-400 transition-transform ${kbNewButton._open ? 'rotate-180' : ''}`}/>
-                                </button>
-                                {kbNewButton._open && (
-                                  <div className="absolute top-full left-0 right-0 z-10 bg-white border border-gray-200 rounded-xl shadow-xl mt-1 max-h-52 overflow-y-auto">
-                                    {triggers.map(t => (
-                                      <button key={t.id}
-                                        onClick={() => setKbNewButton(p => ({...p, trigger_id: t.id, _open: false}))}
-                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${kbNewButton.trigger_id === t.id ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'}`}>
-                                        {t.name}
-                                      </button>
-                                    ))}
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                          )}
 
                           {/* URL */}
                           {kbButtonType === 'link' && (
