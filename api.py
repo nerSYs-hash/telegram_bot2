@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request
 from fastapi.responses import StreamingResponse, FileResponse
 import io
 import re
@@ -11,6 +11,10 @@ import uvicorn
 import os
 import sys
 import json
+import hmac
+import hashlib
+import time
+import jwt
 from datetime import datetime, timedelta
 import logging
 from decimal import Decimal
@@ -59,6 +63,70 @@ try:
         logger.warning("⚠️ Файл stats_calculators.py не найден в корне")
 except Exception as e:
     logger.warning(f"⚠️ Ошибка импорта stats_calculators: {e}")
+
+# ── Auth config ──
+_BOT_TOKEN    = os.getenv("BOT_TOKEN", "")
+_BOT_USERNAME = "Pulse_On_bot"
+_JWT_SECRET   = os.getenv("JWT_SECRET", "pulse-jwt-secret-2026")
+_JWT_DAYS     = 7
+
+
+def _verify_tg_hash(data: dict) -> bool:
+    received = data.get("hash", "")
+    check = {k: v for k, v in data.items() if k != "hash"}
+    data_str = "\n".join(f"{k}={v}" for k, v in sorted(check.items()))
+    secret = hashlib.sha256(_BOT_TOKEN.encode()).digest()
+    computed = hmac.new(secret, data_str.encode(), hashlib.sha256).hexdigest()
+    return hmac.compare_digest(computed, received)
+
+
+def _make_jwt(payload: dict) -> str:
+    payload["exp"] = int(time.time()) + _JWT_DAYS * 86400
+    return jwt.encode(payload, _JWT_SECRET, algorithm="HS256")
+
+
+def _decode_jwt(token: str) -> dict:
+    return jwt.decode(token, _JWT_SECRET, algorithms=["HS256"])
+
+
+@app.get("/api/auth/config")
+async def auth_config():
+    return {"bot_username": _BOT_USERNAME}
+
+
+@app.post("/api/auth/telegram")
+async def auth_telegram(request: Request):
+    data = await request.json()
+    if not _verify_tg_hash(data):
+        raise HTTPException(status_code=401, detail="Подпись Telegram не совпадает")
+    if time.time() - int(data.get("auth_date", 0)) > 86400:
+        raise HTTPException(status_code=401, detail="Данные авторизации устарели")
+    user_id = int(data["id"])
+    udata = db.get_user(user_id) if db else None
+    is_admin = bool(udata and (udata["is_admin"] or udata["is_owner"]))
+    is_owner = bool(udata and udata["is_owner"])
+    token = _make_jwt({
+        "user_id":    user_id,
+        "username":   data.get("username", ""),
+        "first_name": data.get("first_name", ""),
+        "photo_url":  data.get("photo_url", ""),
+        "is_admin":   is_admin,
+        "is_owner":   is_owner,
+    })
+    return {"token": token, "is_admin": is_admin, "is_owner": is_owner}
+
+
+@app.get("/api/auth/me")
+async def auth_me(authorization: str = Header(default=None)):
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    try:
+        return _decode_jwt(authorization[7:])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Токен истёк")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Неверный токен")
+
 
 # --- ЭНДПОИНТЫ ДЛЯ AdminDashboard.jsx ---
 

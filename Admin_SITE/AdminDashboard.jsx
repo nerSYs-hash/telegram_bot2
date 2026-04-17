@@ -43,7 +43,132 @@ const UPDATES = [
 
 const LATEST_VERSION = UPDATES[0].version;
 
+// ═══════════════════════════════════════════
+//  LOGIN PAGE
+// ═══════════════════════════════════════════
+function LoginPage({ onLogin }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    window.onTelegramAuth = async (tgUser) => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tgUser),
+        });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Ошибка'); }
+        const { token, is_admin, is_owner } = await res.json();
+        localStorage.setItem('auth_token', token);
+        onLogin({ ...tgUser, is_admin, is_owner });
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    const container = document.getElementById('tg-login-btn');
+    if (container && !container.querySelector('script')) {
+      const s = document.createElement('script');
+      s.src = 'https://telegram.org/js/telegram-widget.js?22';
+      s.setAttribute('data-telegram-login', 'Pulse_On_bot');
+      s.setAttribute('data-size', 'large');
+      s.setAttribute('data-radius', '12');
+      s.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      s.setAttribute('data-request-access', 'write');
+      s.async = true;
+      container.appendChild(s);
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-blue-950 to-gray-900 px-4">
+      {/* Фоновые blur-пятна */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-500 rounded-full opacity-10 blur-3xl"/>
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-indigo-500 rounded-full opacity-10 blur-3xl"/>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400 rounded-full opacity-5 blur-3xl"/>
+      </div>
+
+      <div className="relative w-full max-w-sm">
+        {/* Карточка */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+
+          {/* Логотип */}
+          <div className="flex flex-col items-center mb-8">
+            <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-blue-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/30 mb-4">
+              <Zap size={32} className="text-white"/>
+            </div>
+            <h1 className="text-2xl font-black text-white tracking-tight">Pulse Pro</h1>
+            <p className="text-sm text-white/40 font-medium mt-1">Панель управления чатом</p>
+          </div>
+
+          {/* Разделитель */}
+          <div className="h-px bg-white/10 mb-6"/>
+
+          {/* Текст */}
+          <div className="text-center mb-6">
+            <p className="text-sm font-bold text-white/60">Войди через Telegram</p>
+            <p className="text-xs text-white/30 mt-1">Доступ только для администраторов</p>
+          </div>
+
+          {/* Кнопка Telegram */}
+          <div className="flex justify-center">
+            {loading ? (
+              <div className="flex items-center gap-2 text-white/50 text-sm font-bold">
+                <Loader2 size={18} className="animate-spin"/> Входим...
+              </div>
+            ) : (
+              <div id="tg-login-btn"/>
+            )}
+          </div>
+
+          {/* Ошибка */}
+          {error && (
+            <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+              <p className="text-xs font-bold text-red-400">{error}</p>
+            </div>
+          )}
+
+          {/* Подсказка */}
+          <div className="mt-6 pt-5 border-t border-white/10 text-center">
+            <p className="text-[10px] text-white/20 leading-relaxed">
+              Используем официальный виджет Telegram.<br/>Пароли и данные нам не передаются.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  // ── АВТОРИЗАЦИЯ ──
+  const [authUser, setAuthUser]       = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
+
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { setAuthLoading(false); return; }
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => { if (u) setAuthUser(u); else localStorage.removeItem('auth_token'); })
+      .catch(() => localStorage.removeItem('auth_token'))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <Loader2 size={32} className="text-blue-400 animate-spin"/>
+    </div>
+  );
+  if (!authUser) return <LoginPage onLogin={u => { setAuthUser(u); }}/>;
+
+  const isAdmin = authUser.is_admin || authUser.is_owner;
+
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
   const navigateTo = (id) => {
     // Если идёт редактирование триггера — показываем подтверждение

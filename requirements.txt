@@ -8,3 +8,4 @@ openpyxl
 aiohttp
 reportlab
 python-dateutil
+PyJWT
