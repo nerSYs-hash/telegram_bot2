@@ -1954,7 +1954,7 @@ export default function App() {
                                                       😊
                                                     </button>
                                                     {emojiOpen && (
-                                                      <div className="absolute left-0 top-8 z-[700] bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 grid grid-cols-7 gap-0.5">
+                                                      <div className="absolute left-0 top-8 z-[700] bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 gap-0.5" style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',width:'220px'}}>
                                                         {EMOJIS.map(em => (
                                                           <button key={em}
                                                             onMouseDown={ev => { ev.preventDefault(); insertEmoji(em); }}
