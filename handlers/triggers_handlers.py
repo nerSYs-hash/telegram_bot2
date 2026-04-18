@@ -1591,10 +1591,37 @@ async def process_triggers(
                             logger.warning(f"DM failed: {e}")
 
                 elif act == 'pin':
+                    # pin_target: 'initiator' (сообщение-триггер) или 'replied' (сообщение, на которое ответили)
+                    pin_target = act_cfg.get('pin_target', '') or ''
+                    target_msg = message
+                    if pin_target == 'replied':
+                        quoted = getattr(message, 'reply_to_message', None)
+                        if quoted:
+                            target_msg = quoted
+                        else:
+                            logger.info(f"[TRIGGERS] pin: pin_target=replied, но reply_to_message нет — закрепляю сообщение-триггер")
+                    notify = bool(act_cfg.get('notify', False))
                     try:
-                        await message.pin(disable_notification=not act_cfg.get('notify', False))
+                        await target_msg.pin(disable_notification=not notify)
                     except Exception as e:
                         logger.warning(f"Pin failed: {e}")
+                        target_msg = None
+
+                    # авто-открепление через unpin_after секунд
+                    unpin_after = int(act_cfg.get('unpin_after', 0) or 0)
+                    if target_msg is not None and unpin_after > 0:
+                        chat_id_for_unpin = target_msg.chat_id
+                        msg_id_for_unpin  = target_msg.message_id
+                        bot_for_unpin     = context.bot
+
+                        async def _auto_unpin(delay, cid, mid, bot):
+                            try:
+                                await asyncio.sleep(delay)
+                                await bot.unpin_chat_message(chat_id=cid, message_id=mid)
+                            except Exception as e:
+                                logger.warning(f"Auto-unpin failed (chat={cid}, msg={mid}): {e}")
+
+                        asyncio.create_task(_auto_unpin(unpin_after, chat_id_for_unpin, msg_id_for_unpin, bot_for_unpin))
 
                 elif act == 'delete':
                     what = act_cfg.get('what', ['trigger_word'])

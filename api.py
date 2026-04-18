@@ -650,8 +650,23 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
             }
 
         elif site_type == 'pin':
+            # конвертируем pin_time_value+pin_time_unit в секунды (0 = без автоотпкрепления)
+            pin_time_enabled = bool(cfg.get('pin_time_enabled', False))
+            pin_time_value   = int(cfg.get('pin_time_value', 0) or 0)
+            pin_time_unit    = cfg.get('pin_time_unit', 'seconds') or 'seconds'
+            _PIN_UNIT_SEC = {
+                'seconds': 1, 'minutes': 60, 'hours': 3600,
+                'days': 86400, 'weeks': 604800, 'months': 2592000,
+            }
+            unpin_after = pin_time_value * _PIN_UNIT_SEC.get(pin_time_unit, 1) if pin_time_enabled else 0
             bot_configs['pin'] = {
-                'notify': bool(cfg.get('pin_notify', False)),
+                'notify':       bool(cfg.get('pin_notify', False)),
+                'pin_target':   cfg.get('pin_target', '') or '',
+                'unpin_after':  int(unpin_after),
+                # сохраняем исходные поля для round-trip обратно в UI
+                'pin_time_enabled': pin_time_enabled,
+                'pin_time_value':   pin_time_value,
+                'pin_time_unit':    pin_time_unit,
             }
 
         else:
@@ -742,7 +757,11 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
 
         elif bot_type == 'pin':
             site_configs['pin'] = {
-                'pin_notify': cfg.get('notify', False),
+                'pin_notify':       bool(cfg.get('notify', False)),
+                'pin_target':       cfg.get('pin_target', '') or '',
+                'pin_time_enabled': bool(cfg.get('pin_time_enabled', False)),
+                'pin_time_value':   int(cfg.get('pin_time_value', 10) or 10),
+                'pin_time_unit':    cfg.get('pin_time_unit', 'seconds') or 'seconds',
             }
 
         else:
