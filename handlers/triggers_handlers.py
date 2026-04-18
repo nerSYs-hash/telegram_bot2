@@ -530,8 +530,10 @@ def _reset_violations(db, user_id: int, trigger_id: int):
     db.conn.commit()
 
 def _user_link(user) -> str:
+    import html as _html
     name = user.first_name or "Пользователь"
-    return f'<a href="tg://user?id={user.id}">{name}</a>'
+    # экранируем, иначе символы < и & в имени ломают parse_mode=HTML
+    return f'<a href="tg://user?id={user.id}">{_html.escape(name, quote=False)}</a>'
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -544,6 +546,37 @@ def _format_duration(seconds) -> str:
     if seconds < 3600: return f"{seconds // 60} мин"
     if seconds < 86400: return f"{seconds // 3600} ч"
     return f"{seconds // 86400} дн"
+
+
+def _build_mute_permissions(mute_type: str) -> ChatPermissions:
+    """Строит ChatPermissions по типу мута с сайта.
+    all     — полный мут (всё False)
+    media   — запрет медиа (audio/photo/video/voice/doc/video_note)
+    inline  — запрет inline-сообщений (can_send_other_messages)
+    invite  — запрет приглашать (can_invite_users)
+    polls   — запрет опросов (can_send_polls)
+    """
+    mt = (mute_type or 'all').lower()
+    if mt == 'media':
+        return ChatPermissions(
+            can_send_audios=False, can_send_documents=False,
+            can_send_photos=False, can_send_videos=False,
+            can_send_video_notes=False, can_send_voice_notes=False,
+        )
+    if mt == 'inline':
+        return ChatPermissions(can_send_other_messages=False)
+    if mt == 'invite':
+        return ChatPermissions(can_invite_users=False)
+    if mt == 'polls':
+        return ChatPermissions(can_send_polls=False)
+    # 'all' и fallback — полный мут
+    return ChatPermissions(
+        can_send_messages=False, can_send_audios=False,
+        can_send_documents=False, can_send_photos=False,
+        can_send_videos=False, can_send_video_notes=False,
+        can_send_voice_notes=False, can_send_polls=False,
+        can_send_other_messages=False, can_add_web_page_previews=False,
+    )
 
 def _parse_duration_input(text: str) -> Optional[int]:
     """Парсит '30 мин', '2 часа', '1 день', '30' (→ минуты)."""
@@ -1627,16 +1660,41 @@ async def process_triggers(
                     what = act_cfg.get('what', ['trigger_word'])
                     if not what:
                         what = ['trigger_word']
+                    # delete_delay в секундах (или 0 — немедленно)
+                    try:
+                        _dd_val = int(act_cfg.get('delete_delay', 0) or 0)
+                    except (TypeError, ValueError):
+                        _dd_val = 0
+                    _dd_unit = (act_cfg.get('delete_delay_unit') or 'seconds').lower()
+                    _DD_SEC = {'seconds':1, 'minutes':60, 'hours':3600, 'days':86400}
+                    del_delay = _dd_val * _DD_SEC.get(_dd_unit, 1)
+
+                    async def _do_delete(msg):
+                        try:
+                            await msg.delete()
+                        except Exception as e:
+                            logger.warning(f"delete (delayed) failed: {e}")
+
                     for del_item in what:
                         try:
+                            target_del = None
                             if del_item == 'trigger_word':
-                                await message.delete()
-                                handled = True
+                                target_del = message
                             elif del_item == 'quoted_message':
-                                quoted = getattr(message, 'reply_to_message', None)
-                                if quoted:
-                                    await quoted.delete()
-                                    handled = True
+                                target_del = getattr(message, 'reply_to_message', None)
+                            if target_del is None:
+                                continue
+                            if del_delay > 0:
+                                async def _delayed(m=target_del, d=del_delay):
+                                    try:
+                                        await asyncio.sleep(d)
+                                        await m.delete()
+                                    except Exception as e:
+                                        logger.warning(f"delete after {d}s failed: {e}")
+                                asyncio.create_task(_delayed())
+                            else:
+                                await target_del.delete()
+                            handled = True
                         except Exception:
                             pass
 
@@ -1646,30 +1704,26 @@ async def process_triggers(
                     if dur_sec is None:
                         _legacy = {'5m': 300, '15m': 900, '30m': 1800, '60m': 3600, '24h': 86400}
                         dur_sec = _legacy.get(act_cfg.get('duration', '60m'), 3600)
-                    mute_tgt = act_cfg.get('mute_target', target_type)
+                    mute_tgt  = act_cfg.get('mute_target', target_type)
+                    mute_type = act_cfg.get('mute_type', 'all') or 'all'
+                    perms = _build_mute_permissions(mute_type)
                     uid = _resolve_action_target(user, mute_tgt, message, tdata)
                     if uid:
                         try:
                             await context.bot.restrict_chat_member(
                                 chat_id=target_chat_id, user_id=uid,
-                                permissions=ChatPermissions(
-                                    can_send_messages=False, can_send_audios=False,
-                                    can_send_documents=False, can_send_photos=False,
-                                    can_send_videos=False, can_send_video_notes=False,
-                                    can_send_voice_notes=False, can_send_polls=False,
-                                    can_send_other_messages=False,
-                                    can_add_web_page_previews=False),
+                                permissions=perms,
                                 until_date=int(time.time()) + int(dur_sec))
                         except Exception as e:
                             logger.error(f"Mute failed: {e}")
-                    # Если цель 'both' — мутим и цитируемого тоже
+                    # Если цель 'both' — мутим и цитируемого тоже (теми же правами)
                     if mute_tgt == 'both':
                         replied = getattr(message, 'reply_to_message', None)
                         if replied and replied.from_user and replied.from_user.id != user.id:
                             try:
                                 await context.bot.restrict_chat_member(
                                     chat_id=target_chat_id, user_id=replied.from_user.id,
-                                    permissions=ChatPermissions(can_send_messages=False),
+                                    permissions=perms,
                                     until_date=int(time.time()) + int(dur_sec))
                             except Exception as e:
                                 logger.error(f"Mute both (replied) failed: {e}")
@@ -1698,8 +1752,18 @@ async def process_triggers(
                             parse_mode='HTML')
                         sent_public_bot_message = True
                         await _handle_bot_msg_deletion(context, db, trigger, bot_msg)
-                    # Эскалация
-                    for threshold, mute_sec in WARN_ESCALATION:
+                    # Эскалация: сперва кастомный порог warn_count с сайта, иначе жёстко заданная лестница
+                    custom_wc = act_cfg.get('warn_count')
+                    try:
+                        custom_wc = int(custom_wc) if custom_wc is not None else None
+                    except (TypeError, ValueError):
+                        custom_wc = None
+                    if custom_wc and custom_wc > 0:
+                        # порог задан в карточке: при достижении — мут на дефолтный час (UI для длительности warn-мута нет)
+                        escalation = [(custom_wc, 3600)]
+                    else:
+                        escalation = WARN_ESCALATION
+                    for threshold, mute_sec in escalation:
                         if count == threshold:
                             try:
                                 await context.bot.restrict_chat_member(
@@ -2145,8 +2209,15 @@ async def _handle_action_settings(context, db, trigger, bot_msg, act_cfg: dict):
     # ── Удалить предыдущее сообщение бота ──
     if act_cfg.get('delete_previous'):
         try:
-            old_id   = trigger.get('last_bot_msg_id')
-            old_chat = trigger.get('last_bot_msg_chat')
+            # trigger — sqlite3.Row, .get() не поддерживается → читаем через []
+            try:
+                old_id = trigger['last_bot_msg_id'] if 'last_bot_msg_id' in trigger.keys() else None
+            except Exception:
+                old_id = None
+            try:
+                old_chat = trigger['last_bot_msg_chat'] if 'last_bot_msg_chat' in trigger.keys() else None
+            except Exception:
+                old_chat = None
             if old_id and old_chat:
                 try:
                     await context.bot.delete_message(chat_id=old_chat, message_id=old_id)

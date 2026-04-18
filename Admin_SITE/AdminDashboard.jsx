@@ -1110,7 +1110,7 @@ export default function App() {
             })
           }));
           const addActionToGroup = (gIdx, type) => {
-            const base = { id: Date.now(), type, duration: '', emoji_reaction: '' };
+            const base = { id: Date.now(), type, duration: '', emoji: '' };
             const sendTextExtra = type === 'send_text' || type === 'dm' ? {
               variants: [{ id: Date.now(), text: '', media_type: 'none' }],
               currentVariant: 0, msgTab: 'editor', reply_target: 'none',
@@ -2571,7 +2571,8 @@ export default function App() {
                                   '🫠',
                                 ];
                                 const emojiTarget  = action.emoji_target  || 'initiator';
-                                const emojiReaction = action.emoji_reaction || '👍';
+                                // основной ключ — action.emoji; emoji_reaction оставлен как legacy-фолбэк для старых триггеров
+                                const emojiReaction = action.emoji || action.emoji_reaction || '👍';
                                 const emojiTgtKey  = `emojiTgt_${gIdx}_${aIdx}`;
                                 const emojiPickKey = `emojiPick_${gIdx}_${aIdx}`;
                                 const emojiTgtGear = `emojiTgtGear_${gIdx}_${aIdx}`;
@@ -2632,7 +2633,7 @@ export default function App() {
                                         {actOpenDropdown === emojiPickKey && (
                                           <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-52 overflow-y-auto">
                                             {TG_EMOJIS.map(em => (
-                                              <button key={em} onClick={() => { updAction(gIdx, aIdx, 'emoji_reaction', em); setActOpenDropdown(null); }}
+                                              <button key={em} onClick={() => { updAction(gIdx, aIdx, 'emoji', em); setActOpenDropdown(null); }}
                                                 className={`w-full px-4 py-2 text-xl text-left border-b border-gray-50 last:border-0 transition-all hover:bg-gray-50 ${emojiReaction === em ? 'bg-blue-50' : ''}`}>
                                                 {em}
                                               </button>

@@ -1009,8 +1009,8 @@ async def copy_trigger(trigger_id: int):
                  where_fires, initiator, target, target_user,
                  actions, action_configs,
                  bot_msg_delete, bot_msg_delete_after,
-                 fire_limit, auto_pin, is_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
+                 fire_limit, auto_pin, warn_period, condition_groups, is_enabled)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,0)
         ''', (
             r['name'] + ' (копия)',
             r.get('keywords', ''), r.get('condition', 'contains'),
@@ -1020,6 +1020,7 @@ async def copy_trigger(trigger_id: int):
             r.get('actions', '[]'), r.get('action_configs', '{}'),
             r.get('bot_msg_delete', 'no'), r.get('bot_msg_delete_after', 60),
             r.get('fire_limit', 0), r.get('auto_pin', 0),
+            r.get('warn_period', 0), r.get('condition_groups'),
         ))
         db.conn.commit()
         return {'id': db.cursor.lastrowid, 'success': True}
