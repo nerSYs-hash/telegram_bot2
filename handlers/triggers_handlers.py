@@ -315,6 +315,7 @@ def _migrate_trigger_columns(db):
         ("fire_limit",           "INTEGER DEFAULT NULL"),
         ("fire_count",           "INTEGER DEFAULT 0"),
         ("auto_pin",             "INTEGER DEFAULT 0"),
+        ("condition_groups",     "TEXT DEFAULT NULL"),
     ]
     for col_name, col_def in new_cols:
         try:

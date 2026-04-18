@@ -478,11 +478,17 @@ export default function App() {
   // ================= ФУНКЦИИ =================
   const openTriggerModal = (t = null) => {
     if (t) {
-      // ── Условия: восстанавливаем из keywords строки ──
-      const chips = t.keywords ? t.keywords.split(',').map(s => s.trim()).filter(Boolean) : [];
-      const conditions = chips.length > 0
-        ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', chips, keyword: chips[0] || '' }]
-        : [];
+      // ── Условия: приоритет исходных conditionGroups из БД, иначе fallback на keywords ──
+      let conditionGroups;
+      if (Array.isArray(t.conditionGroups) && t.conditionGroups.length > 0) {
+        conditionGroups = t.conditionGroups;
+      } else {
+        const chips = t.keywords ? t.keywords.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const conditions = chips.length > 0
+          ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', chips, keyword: chips[0] || '' }]
+          : [];
+        conditionGroups = [{ id: 1, conditions }];
+      }
 
       // ── Действия: восстанавливаем из actions[] + action_configs{} ──
       const actionList = (t.actions || []).map((type, i) => ({
@@ -493,7 +499,7 @@ export default function App() {
 
       setEditingTrigger({
         ...t,
-        conditionGroups: [{ id: 1, conditions }],
+        conditionGroups,
         actionGroups: [{ id: 1, probability: t.probability ?? 100, actions: actionList }],
       });
     } else {
@@ -518,16 +524,16 @@ export default function App() {
   };
 
   const saveTrigger = () => {
-    // ── Условия: берём из первой группы ──
+    // ── Условия: для обратной совместимости плющим ПЕРВУЮ keyword-карточку ──
+    // (полная структура с группами/И-ИЛИ летит в condition_groups)
     const firstGroup = (editingTrigger.conditionGroups || [])[0] || {};
     const conditions = firstGroup.conditions || [];
-    const firstCond  = conditions[0] || {};
-    // keywords: объединяем chips всех keyword-условий через запятую
-    const keywords = conditions
-      .filter(c => c.type === 'keyword')
-      .flatMap(c => c.chips && c.chips.length ? c.chips : (c.keyword ? [c.keyword] : []))
-      .join(',');
-    const condition = firstCond.condition || 'contains';
+    const firstKeywordCond = conditions.find(c => c.type === 'keyword') || conditions[0] || {};
+    const keywords = (firstKeywordCond.chips && firstKeywordCond.chips.length
+      ? firstKeywordCond.chips
+      : (firstKeywordCond.keyword ? [firstKeywordCond.keyword] : [])
+    ).join(',');
+    const condition = firstKeywordCond.condition || 'contains';
 
     // ── Действия: собираем из всех групп ──
     const allActions = (editingTrigger.actionGroups || []).flatMap(g => g.actions || []);
@@ -550,6 +556,7 @@ export default function App() {
       target_user:          editingTrigger.target_user  || '',
       actions:              actionTypes,
       action_configs:       actionConfigs,
+      condition_groups:     editingTrigger.conditionGroups || [],
       bot_msg_delete:       editingTrigger.bot_msg_delete       || 'no',
       bot_msg_delete_after: editingTrigger.bot_msg_delete_after || 60,
       fire_limit:           editingTrigger.fire_limit   || 0,

@@ -478,6 +478,7 @@ class TriggerIn(BaseModel):
     target_user: str = ''
     actions: list = []                 # ["msg_chat", "pin", "delete"]
     action_configs: dict = {}          # {"msg_chat": {...}, "pin": {...}}
+    condition_groups: list = []        # исходные группы условий с сайта (JSON)
     bot_msg_delete: str = 'no'
     bot_msg_delete_after: int = 60
     fire_limit: int = 0
@@ -756,6 +757,14 @@ def _row_to_trigger(row: dict) -> dict:
 
     site_actions, site_configs = _bot_to_site(actions, action_configs)
 
+    cond_groups = []
+    try:
+        cg_raw = row.get('condition_groups')
+        if cg_raw:
+            cond_groups = json.loads(cg_raw)
+    except Exception:
+        cond_groups = []
+
     return {
         'id':                  row['id'],
         'name':                row['name'],
@@ -768,6 +777,7 @@ def _row_to_trigger(row: dict) -> dict:
         'target_user':         row.get('target_user', '') or '',
         'actions':             site_actions,
         'action_configs':      site_configs,
+        'conditionGroups':     cond_groups,
         'bot_msg_delete':      row.get('bot_msg_delete', 'no'),
         'bot_msg_delete_after':row.get('bot_msg_delete_after') or 60,
         'fire_limit':          row.get('fire_limit') or 0,
@@ -874,14 +884,16 @@ async def create_trigger(t: TriggerIn):
                  where_fires, initiator, target, target_user,
                  actions, action_configs,
                  bot_msg_delete, bot_msg_delete_after,
-                 fire_limit, auto_pin, warn_period, is_enabled)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                 fire_limit, auto_pin, warn_period, is_enabled,
+                 condition_groups)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             t.name, t.keywords, t.condition, t.probability,
             t.where_fires, t.initiator, t.target, t.target_user,
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
+            json.dumps(t.condition_groups) if t.condition_groups else None,
         ))
         db.conn.commit()
         return {'id': db.cursor.lastrowid, 'success': True}
@@ -900,7 +912,8 @@ async def update_trigger(trigger_id: int, t: TriggerIn):
                 where_fires=?, initiator=?, target=?, target_user=?,
                 actions=?, action_configs=?,
                 bot_msg_delete=?, bot_msg_delete_after=?,
-                fire_limit=?, auto_pin=?, warn_period=?, is_enabled=?
+                fire_limit=?, auto_pin=?, warn_period=?, is_enabled=?,
+                condition_groups=?
             WHERE id=?
         ''', (
             t.name, t.keywords, t.condition, t.probability,
@@ -908,6 +921,7 @@ async def update_trigger(trigger_id: int, t: TriggerIn):
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
+            json.dumps(t.condition_groups) if t.condition_groups else None,
             trigger_id,
         ))
         db.conn.commit()
