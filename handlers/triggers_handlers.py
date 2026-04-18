@@ -2066,6 +2066,56 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             kwargs['protect_content'] = True
         return await bot.send_message(**kwargs)
 
+    # ChatKeeper-style: медиа отдельным сообщением, текст — реплаем на медиа
+    # (тонкая голубая полоса слева от медиа). Медиа само идёт реплаем на триггер-сообщение.
+    if media_pos == 'reply' and text:
+        sent_media = await _send_action_media(
+            bot=bot,
+            chat_id=chat_id,
+            thread_id=thread_id,
+            media_id=media_id,
+            media_type=media_type,
+            reply_to_message_id=reply_to_message_id,
+            reply_quote=reply_quote,
+            server_path=server_path,
+        )
+        if sent_media is not None:
+            kwargs = {
+                'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode,
+                'disable_web_page_preview': not link_preview,
+                'reply_parameters': _build_reply_params(sent_media.message_id),
+            }
+            if thread_id is not None:
+                kwargs['message_thread_id'] = thread_id
+            if reply_markup:
+                kwargs['reply_markup'] = reply_markup
+            if act_cfg.get('disable_notification'):
+                kwargs['disable_notification'] = True
+            if act_cfg.get('protect_content'):
+                kwargs['protect_content'] = True
+            try:
+                await bot.send_message(**kwargs)
+            except Exception as e:
+                logger.warning(f"reply-on-media send failed: {e}")
+            return sent_media
+        # fallback — если медиа не отправилось, пробуем текстом с прежним reply_to
+        kwargs = {
+            'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode,
+            'disable_web_page_preview': not link_preview,
+        }
+        if thread_id is not None:
+            kwargs['message_thread_id'] = thread_id
+        _rp = _build_reply_params(reply_to_message_id, reply_quote)
+        if _rp is not None:
+            kwargs['reply_parameters'] = _rp
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
+        if act_cfg.get('disable_notification'):
+            kwargs['disable_notification'] = True
+        if act_cfg.get('protect_content'):
+            kwargs['protect_content'] = True
+        return await bot.send_message(**kwargs)
+
     # Автосплит: если caption слишком длинный — медиа без подписи + текст отдельным сообщением.
     # Для media_pos='above' порядок: медиа → текст. Для 'below' — стандартный блок ниже.
     if media_pos == 'above' and caption_too_long:

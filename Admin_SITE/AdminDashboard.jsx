@@ -506,7 +506,7 @@ export default function App() {
       setEditingTrigger({
         id: null, name: '', probability: 100,
         where_fires: 'all', initiator: 'all',
-        fire_limit: 0, warn_period: 0, auto_pin: 0,
+        fire_limit: 0, auto_pin: 0,
         conditionGroups: [{ id: 1, conditions: [] }],
         actionGroups: [{ id: 1, probability: 100, actions: [] }]
       });
@@ -561,7 +561,6 @@ export default function App() {
       bot_msg_delete_after: editingTrigger.bot_msg_delete_after || 60,
       fire_limit:           editingTrigger.fire_limit   || 0,
       auto_pin:             editingTrigger.auto_pin     || 0,
-      warn_period:          editingTrigger.warn_period  || 0,
       is_enabled:           editingTrigger.is_enabled   ?? true,
     };
     const isEdit = !!editingTrigger.id;
@@ -1254,36 +1253,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* ── Период варнов + Автозакреп ── */}
-              <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black text-rose-700 uppercase tracking-widest">Период варнов (дней)</span>
-                    <span className="text-[10px] font-bold text-rose-400">{(editingTrigger.warn_period || 0) === 0 ? '∞' : editingTrigger.warn_period}</span>
-                  </div>
-                  <input type="number" min="0" max="365"
-                    value={editingTrigger.warn_period || 0}
-                    onChange={e => upd('warn_period', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl font-black text-sm outline-none focus:border-rose-400 transition-all text-center"/>
-                  <p className="text-[9px] text-rose-400 mt-1 text-center">0 = без сброса</p>
-                </div>
-                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col">
-                  <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Автозакреп ответа бота</span>
-                  </div>
-                  <div className="flex-1 flex items-center justify-between">
-                    <span className="text-xs font-bold text-emerald-600">
-                      {editingTrigger.auto_pin ? 'Включён' : 'Выключен'}
-                    </span>
-                    <button
-                      onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
-                      className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-gray-200'}`}>
-                      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
-                    </button>
-                  </div>
-                </div>
-              </div>
-
               {/* ── УСЛОВИЯ + ДЕЙСТВИЯ (2 колонки) ── */}
               <div className="grid grid-cols-2 gap-3 mb-5">
 
@@ -1847,6 +1816,7 @@ export default function App() {
                                                   {[
                                                     { v:'above', icon:'🖼', l:'Медиа над текстом',      desc:'Сначала медиа, текст идёт подписью снизу (одно сообщение)' },
                                                     { v:'below', icon:'📝', l:'Медиа под текстом',      desc:'Сначала текст, потом медиа отдельным сообщением' },
+                                                    { v:'reply', icon:'💬', l:'Текст реплаем на медиа', desc:'Медиа отдельно → текст как ответ на него (стиль ChatKeeper, голубая полоса слева)' },
                                                   ].map(o => (
                                                     <button key={o.v}
                                                       onClick={() => { updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v)); setActOpenDropdown(null); }}
@@ -1891,8 +1861,9 @@ export default function App() {
                                               {/* Расположение после загрузки */}
                                               <div className="flex gap-1.5">
                                                 {[
-                                                  { v:'above', l:'🖼 Медиа над текстом' },
-                                                  { v:'below', l:'📝 Медиа под текстом' },
+                                                  { v:'above', l:'🖼 Над' },
+                                                  { v:'below', l:'📝 Под' },
+                                                  { v:'reply', l:'💬 Реплаем' },
                                                 ].map(o => (
                                                   <button key={o.v}
                                                     onClick={() => updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v))}
@@ -2378,12 +2349,12 @@ export default function App() {
                                         <div className="relative">
                                           <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
                                             className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
-                                            <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Отправить сообщение реплаем'}</span>
+                                            <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Без реплая (обычное сообщение)'}</span>
                                             <ChevronDown size={14} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
                                           </button>
                                           {actOpenDropdown === replyDropKey && (
                                             <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
-                                              {[{v:'none',l:'Отправить сообщение реплаем'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
+                                              {[{v:'none',l:'Без реплая (обычное сообщение)'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
                                                 <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
                                                   className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-gray-50 last:border-0 ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
                                                   {o.l}
@@ -3102,6 +3073,18 @@ export default function App() {
                                 return (
                                   <div className="space-y-4">
 
+                                    {/* Автозакреп ответа бота (trigger-level) */}
+                                    <div className="flex items-center justify-between bg-emerald-50 -mx-1 px-3 py-2.5 rounded-xl border border-emerald-100">
+                                      <div className="flex flex-col">
+                                        <p className="text-sm font-black text-emerald-700">Автозакреп ответа бота</p>
+                                        <p className="text-[10px] text-emerald-500 font-semibold">Закрепить сообщение-ответ бота после отправки</p>
+                                      </div>
+                                      <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
                                     {/* Через какое время открепить */}
                                     <div>
                                       <div className="flex items-center justify-between">
@@ -3751,9 +3734,9 @@ export default function App() {
               {actionSettingsModal && (() => {
                 const { gIdx, aIdx } = actionSettingsModal;
                 return (
-                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
-                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                  <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200 z-[10000]">
                       <div className="flex items-center justify-between">
                         <h3 className="font-black text-base text-gray-900">Дополнительные настройки действия</h3>
                         <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
@@ -3920,12 +3903,24 @@ export default function App() {
                 <div>
                   <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Действие применить к</p>
                   <div className="flex gap-2 flex-wrap">
-                    {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'nobody',l:'Никто'}].map(o => (
+                    {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'specific',l:'Указанный'},{v:'nobody',l:'Никто'}].map(o => (
                       <button key={o.v} onClick={() => upd('target', o.v)}
                         className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
                       </button>
                     ))}
                   </div>
+                  {editingTrigger.target === 'specific' && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        value={editingTrigger.target_user || ''}
+                        onChange={e => upd('target_user', e.target.value.trim())}
+                        placeholder="user_id или @username"
+                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none focus:border-blue-400 transition-all"
+                      />
+                      <p className="text-[9px] text-gray-400 mt-1">Целевой пользователь для действий на «Указанного»</p>
+                    </div>
+                  )}
                 </div>
 
               </div>
