@@ -467,6 +467,32 @@ async def get_system():
     except Exception as e:
         return {"error": str(e)}
 
+def _resolve_target_user_raw(raw) -> str:
+    """Приводит trigger.target_user к числовому user_id.
+    Принимает: int, "12345" или "@username". Для @username — ищет в users, возвращает user_id.
+    Если не найден — оставляет как есть (бот отработает fallback)."""
+    if raw is None:
+        return ''
+    s = str(raw).strip()
+    if not s:
+        return ''
+    if s.lstrip('-').isdigit():
+        return s
+    if s.startswith('@') and db is not None:
+        uname = s[1:].lstrip('@').strip()
+        if uname:
+            try:
+                db.cursor.execute('SELECT user_id FROM users WHERE username = ? LIMIT 1', (uname,))
+                row = db.cursor.fetchone()
+                if row:
+                    uid = row['user_id'] if hasattr(row, 'keys') else row[0]
+                    if uid:
+                        return str(uid)
+            except Exception:
+                pass
+    return s
+
+
 class TriggerIn(BaseModel):
     name: str
     condition: str = 'contains'
@@ -951,7 +977,7 @@ async def create_trigger(t: TriggerIn):
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
         ''', (
             t.name, t.keywords, t.condition, t.probability,
-            t.where_fires, t.initiator, t.target, t.target_user,
+            t.where_fires, t.initiator, t.target, _resolve_target_user_raw(t.target_user),
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
@@ -979,7 +1005,7 @@ async def update_trigger(trigger_id: int, t: TriggerIn):
             WHERE id=?
         ''', (
             t.name, t.keywords, t.condition, t.probability,
-            t.where_fires, t.initiator, t.target, t.target_user,
+            t.where_fires, t.initiator, t.target, _resolve_target_user_raw(t.target_user),
             json.dumps(bot_actions), json.dumps(bot_configs),
             t.bot_msg_delete, t.bot_msg_delete_after,
             t.fire_limit, int(t.auto_pin), t.warn_period, int(t.is_enabled),
