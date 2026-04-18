@@ -1961,16 +1961,45 @@ async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
         kwargs['caption'] = caption
         kwargs['parse_mode'] = parse_mode
 
+    def _resolve_local_file(path: str) -> Optional[str]:
+        """Поиск файла с fallback'ами — устойчивость к переезду/разным разделителям."""
+        if not path:
+            return None
+        # 1) путь как есть
+        if _os.path.isfile(path):
+            return path
+        # 2) нормализация разделителей (Windows ↔ POSIX)
+        norm = path.replace('\\', '/').replace('//', '/')
+        if _os.path.isfile(norm):
+            return norm
+        # 3) basename в текущем MEDIA_DIR проекта
+        try:
+            project_root = _os.path.dirname(_os.path.dirname(_os.path.abspath(__file__)))
+            media_dir = _os.path.join(project_root, 'Admin_SITE', 'media_uploads')
+            fallback = _os.path.join(media_dir, _os.path.basename(path))
+            if _os.path.isfile(fallback):
+                logger.info(f"[TRIGGERS] media fallback resolved: {path!r} → {fallback!r}")
+                return fallback
+        except Exception as _re:
+            logger.debug(f"media fallback error: {_re}")
+        return None
+
     # Определяем источник медиа: file_id или файл с диска
     def _media_src():
         if media_id:
             return media_id
-        if server_path and _os.path.isfile(server_path):
-            return open(server_path, 'rb')
+        resolved = _resolve_local_file(server_path) if server_path else None
+        if resolved:
+            try:
+                return open(resolved, 'rb')
+            except OSError as _oe:
+                logger.warning(f"media open failed for {resolved!r}: {_oe}")
         return None
 
     media_src = _media_src()
     if not media_src:
+        if server_path:
+            logger.warning(f"[TRIGGERS] media file not found anywhere: {server_path!r}")
         return None
 
     if media_type == 'photo':
