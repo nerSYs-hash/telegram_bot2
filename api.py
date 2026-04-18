@@ -622,8 +622,9 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
             }
 
         elif site_type == 'emoji':
+            # сайт шлёт ключ 'emoji' (action.emoji в UI), а не 'emoji_reaction'
             bot_configs['emoji'] = {
-                'emoji':        cfg.get('emoji_reaction', '👍'),
+                'emoji':        cfg.get('emoji') or cfg.get('emoji_reaction') or '👍',
                 'emoji_target': cfg.get('emoji_target', 'initiator'),
             }
 
@@ -726,8 +727,11 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
             }
 
         elif bot_type == 'emoji':
+            # UI ждёт ключ 'emoji' (action.emoji); дублируем 'emoji_reaction' для совместимости со старым фронтом
+            _em = cfg.get('emoji', '👍')
             site_configs['emoji'] = {
-                'emoji_reaction': cfg.get('emoji', '👍'),
+                'emoji':          _em,
+                'emoji_reaction': _em,
                 'emoji_target':   cfg.get('emoji_target', 'initiator'),
             }
 

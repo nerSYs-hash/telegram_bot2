@@ -1716,9 +1716,18 @@ async def process_triggers(
                             break
 
                 elif act == 'emoji':
-                    emoji_char = act_cfg.get('emoji', '👍')
+                    emoji_char = act_cfg.get('emoji') or '👍'
+                    # emoji_target: 'initiator' (сообщение-триггер) или 'replied' (цитируемое сообщение)
+                    emoji_target = act_cfg.get('emoji_target', 'initiator') or 'initiator'
+                    target_msg = message
+                    if emoji_target == 'replied':
+                        quoted = getattr(message, 'reply_to_message', None)
+                        if quoted:
+                            target_msg = quoted
+                        else:
+                            logger.info(f"[TRIGGERS] emoji: emoji_target=replied, но reply_to_message нет — ставлю на сообщение-триггер")
                     try:
-                        await message.set_reaction(emoji_char)
+                        await target_msg.set_reaction(emoji_char)
                     except Exception as e:
                         logger.warning(f"Emoji reaction failed: {e}")
 
