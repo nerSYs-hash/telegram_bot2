@@ -476,6 +476,7 @@ def _trigger_to_data(t) -> dict:
         'delayed_configs': _json(t['delayed_configs'], {}),
         'fire_limit': _safe_int(t['fire_limit'] if 'fire_limit' in t.keys() else None),
         'auto_pin': _safe_int(t['auto_pin'] if 'auto_pin' in t.keys() else 0, default=0),
+        'condition_groups': _json(t['condition_groups'] if 'condition_groups' in t.keys() else None, []),
     }
     return _normalize_rotation_action(data)
 
@@ -1329,6 +1330,63 @@ async def _show_edit_menu(src, ctx, db, trigger_id: int):
 #  ДВИЖОК — ОБРАБОТКА СООБЩЕНИЙ
 # ═══════════════════════════════════════════════════════════════
 
+def _match_single_keyword(msg_text: str, op: str, kw: str) -> bool:
+    """Проверка одного ключевого слова по оператору."""
+    if op == 'exact':       return msg_text == kw
+    if op == 'contains':    return kw in msg_text
+    if op == 'starts_with': return msg_text.startswith(kw)
+    if op == 'ends_with':   return msg_text.endswith(kw)
+    if op == 'whole_word':
+        return bool(re.search(rf'(?<!\w){re.escape(kw)}(?!\w)', msg_text, re.UNICODE))
+    return kw in msg_text
+
+
+def _match_condition_groups(msg_text: str, groups: list) -> Optional[bool]:
+    """
+    Матчит conditionGroups. Возвращает:
+    - True если любая группа подошла (между группами OR)
+    - False если ни одна не подошла, но структура валидна
+    - None если groups пустой/невалидный — зовущая сторона должна использовать плоский fallback
+    Внутри группы все условия должны совпасть (AND). Внутри одного условия
+    между чипами — OR. `inverted` инвертирует результат условия.
+    """
+    if not groups or not isinstance(groups, list):
+        return None
+    valid_groups = 0
+    for group in groups:
+        if not isinstance(group, dict):
+            continue
+        conditions = group.get('conditions') or []
+        if not conditions:
+            continue
+        valid_groups += 1
+        group_ok = True
+        for cond in conditions:
+            if not isinstance(cond, dict):
+                group_ok = False
+                break
+            ctype = cond.get('type', 'keyword')
+            if ctype != 'keyword':
+                # другие типы пока не поддерживаем — считаем несовпадением
+                group_ok = False
+                break
+            raw_chips = cond.get('chips') or ([cond.get('keyword')] if cond.get('keyword') else [])
+            chips = [c.strip().lower() for c in raw_chips if c and str(c).strip()]
+            if not chips:
+                group_ok = False
+                break
+            op = cond.get('condition', 'contains')
+            cond_ok = any(_match_single_keyword(msg_text, op, kw) for kw in chips)
+            if cond.get('inverted'):
+                cond_ok = not cond_ok
+            if not cond_ok:
+                group_ok = False
+                break
+        if group_ok:
+            return True
+    return False if valid_groups > 0 else None
+
+
 async def process_triggers(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE,
@@ -1417,19 +1475,21 @@ async def process_triggers(
             logger.info(f"[TRIGGERS] '{tname}' skip: probability={prob} not met")
             continue
 
-        # Проверка совпадения
-        keywords = [kw.strip().lower() for kw in tdata['keywords'].split(',') if kw.strip()]
-        cond = tdata.get('condition', 'contains')
-        matched = False
-        for kw in keywords:
-            if cond == 'exact':     matched = (msg_text == kw)
-            elif cond == 'contains':  matched = (kw in msg_text)
-            elif cond == 'starts_with': matched = msg_text.startswith(kw)
-            elif cond == 'ends_with':   matched = msg_text.endswith(kw)
-            elif cond == 'whole_word':  matched = bool(re.search(rf'(?<!\w){re.escape(kw)}(?!\w)', msg_text, re.UNICODE))
-            if matched:
-                break
-        logger.info(f"[TRIGGERS] '{tname}' cond={cond} kws={keywords} msg={repr(msg_text)} matched={matched}")
+        # Проверка совпадения — приоритет condition_groups, fallback на плоские keywords/condition
+        cond_groups = tdata.get('condition_groups') or []
+        groups_result = _match_condition_groups(msg_text, cond_groups)
+        if groups_result is not None:
+            matched = groups_result
+            logger.info(f"[TRIGGERS] '{tname}' groups_match={matched} groups_count={len(cond_groups)}")
+        else:
+            keywords = [kw.strip().lower() for kw in tdata['keywords'].split(',') if kw.strip()]
+            cond = tdata.get('condition', 'contains')
+            matched = False
+            for kw in keywords:
+                if _match_single_keyword(msg_text, cond, kw):
+                    matched = True
+                    break
+            logger.info(f"[TRIGGERS] '{tname}' cond={cond} kws={keywords} msg={repr(msg_text)} matched={matched}")
 
         if not matched:
             continue
