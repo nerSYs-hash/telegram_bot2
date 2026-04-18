@@ -26,7 +26,7 @@ from datetime import datetime
 from typing import Optional
 
 from telegram import (
-    Update, ChatPermissions,
+    Update, ChatPermissions, ReplyParameters,
     InlineKeyboardButton as IKB,
     InlineKeyboardMarkup as IKM,
 )
@@ -951,6 +951,7 @@ async def _execute_rotation_action(context, db, trigger, cfgs, message):
         text=(item_cfg.get('text') or '').strip(),
         act_cfg=item_cfg,
         parse_mode='HTML',
+        context=context,
     )
 
     rot_cfg['next_idx'] = (idx + 1) % len(items)
@@ -1585,13 +1586,19 @@ async def process_triggers(
                         reply_target = act_cfg.get('reply_target', 'none')
                         if reply_target == 'none' and act_cfg.get('reply_to_user', False):
                             reply_target = 'initiator'
+                        reply_id = None
+                        reply_src_msg = None
                         if reply_target == 'initiator':
                             reply_id = message.message_id
+                            reply_src_msg = message
                         elif reply_target == 'quoted':
                             quoted = getattr(message, 'reply_to_message', None)
-                            reply_id = quoted.message_id if quoted else message.message_id
-                        else:
-                            reply_id = None
+                            if quoted:
+                                reply_id = quoted.message_id
+                                reply_src_msg = quoted
+                            else:
+                                reply_id = message.message_id
+                                reply_src_msg = message
                         bot_msg = await _send_action_message(
                             bot=context.bot,
                             chat_id=message.chat.id,
@@ -1600,6 +1607,8 @@ async def process_triggers(
                             act_cfg=act_cfg,
                             parse_mode='HTML',
                             reply_to_message_id=reply_id,
+                            reply_quote=_reply_quote_from_message(reply_src_msg),
+                            context=context,
                         )
                     if bot_msg:
                         sent_public_bot_message = True
@@ -1619,6 +1628,7 @@ async def process_triggers(
                                 text=dm_text,
                                 act_cfg=act_cfg,
                                 parse_mode='HTML',
+                                context=context,
                             )
                         except Exception as e:
                             logger.warning(f"DM failed: {e}")
@@ -1730,13 +1740,30 @@ async def process_triggers(
 
                 elif act == 'ban':
                     ban_tgt = act_cfg.get('ban_target', target_type)
+                    ban_dur = int(act_cfg.get('duration_seconds', 0) or 0)
+                    ban_revoke = bool(act_cfg.get('revoke_messages', False))
                     uid = _resolve_action_target(user, ban_tgt, message, tdata)
+                    _ban_kwargs = {}
+                    if ban_dur > 0:
+                        _ban_kwargs['until_date'] = int(time.time()) + ban_dur
+                    if ban_revoke:
+                        _ban_kwargs['revoke_messages'] = True
                     if uid:
                         try:
                             await context.bot.ban_chat_member(
-                                chat_id=target_chat_id, user_id=uid)
+                                chat_id=target_chat_id, user_id=uid, **_ban_kwargs)
                         except Exception as e:
                             logger.error(f"Ban failed: {e}")
+                    # Если цель 'both' — банить и цитируемого тоже
+                    if ban_tgt == 'both':
+                        replied = getattr(message, 'reply_to_message', None)
+                        if replied and replied.from_user and replied.from_user.id != user.id:
+                            try:
+                                await context.bot.ban_chat_member(
+                                    chat_id=target_chat_id, user_id=replied.from_user.id,
+                                    **_ban_kwargs)
+                            except Exception as e:
+                                logger.error(f"Ban both (replied) failed: {e}")
 
                 elif act == 'warn':
                     warn_tgt = act_cfg.get('warn_target', target_type)
@@ -1917,10 +1944,88 @@ def _sanitize_tg_html(text: str) -> str:
     return s.strip('\n')
 
 
+def _reply_quote_from_message(msg) -> Optional[str]:
+    """Извлекает короткий фрагмент для ReplyParameters.quote из сообщения-цели.
+    Telegram требует ТОЧНОЕ вхождение в исходное сообщение, поэтому берём срез первых ~150 символов.
+    """
+    if msg is None:
+        return None
+    raw = getattr(msg, 'text', None) or getattr(msg, 'caption', None) or ''
+    raw = raw.strip()
+    if not raw:
+        return None
+    return raw[:150]
+
+
+def _build_reply_params(reply_to_message_id: Optional[int], reply_quote: Optional[str] = None):
+    """Строит ReplyParameters для компактной реплай-шапки (Bot API 7.0).
+    Без quote — обычный reply. С quote — подсвечивается фрагмент исходного сообщения.
+    """
+    if not reply_to_message_id:
+        return None
+    kw = {'message_id': int(reply_to_message_id)}
+    if reply_quote:
+        q = str(reply_quote)[:1024]
+        if q.strip():
+            kw['quote'] = q
+    return ReplyParameters(**kw)
+
+
+async def _delayed_send_job(context):
+    """JobQueue callback — повторно вызывает _send_action_message с обнулённым delay."""
+    try:
+        d = context.job.data
+        await _send_action_message(
+            bot=context.bot,
+            chat_id=d['chat_id'],
+            thread_id=d.get('thread_id'),
+            text=d.get('text', ''),
+            act_cfg=d.get('act_cfg', {}),
+            parse_mode=d.get('parse_mode', 'HTML'),
+            reply_to_message_id=d.get('reply_to_message_id'),
+            reply_quote=d.get('reply_quote'),
+            context=context,
+        )
+    except Exception as e:
+        logger.warning(f"delayed send job failed: {e}")
+
+
 async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text: str,
                                act_cfg: dict, parse_mode: str = 'HTML',
-                               reply_to_message_id: Optional[int] = None):
-    """Отправка сообщения действия с опциональным медиа и URL-кнопками."""
+                               reply_to_message_id: Optional[int] = None,
+                               reply_quote: Optional[str] = None,
+                               context=None):
+    """Отправка сообщения действия с опциональным медиа и URL-кнопками.
+    Если act_cfg['send_delay_seconds'] > 0 и context с job_queue — планируется job
+    и функция возвращает None сразу (не блокируя цикл действий).
+    """
+    # Задержка отправки через JobQueue (не блокирующий sleep)
+    try:
+        delay_sec = int(act_cfg.get('send_delay_seconds') or 0)
+    except (TypeError, ValueError):
+        delay_sec = 0
+    if delay_sec > 0:
+        jq = getattr(context, 'job_queue', None) if context is not None else None
+        if jq is not None:
+            _act_cfg = dict(act_cfg)
+            _act_cfg['send_delay_seconds'] = 0  # чтобы job не ушёл в рекурсивный sleep
+            jq.run_once(
+                _delayed_send_job, when=delay_sec,
+                data={
+                    'chat_id': chat_id, 'thread_id': thread_id, 'text': text,
+                    'act_cfg': _act_cfg, 'parse_mode': parse_mode,
+                    'reply_to_message_id': reply_to_message_id,
+                    'reply_quote': reply_quote,
+                },
+                name=f"trig_delayed_send_{chat_id}_{int(time.time())}",
+            )
+            return None
+        # Фоллбэк: если job_queue недоступен — старый блокирующий sleep
+        try:
+            await asyncio.sleep(delay_sec)
+        except Exception:
+            pass
+
     media_id = act_cfg.get('media_id')
     media_type = act_cfg.get('media_type')
     media_pos = act_cfg.get('media_pos', 'above')
@@ -1929,14 +2034,6 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
     if parse_mode == 'HTML':
         text = _sanitize_tg_html(text)
     reply_markup = _build_url_markup(act_cfg)
-
-    # Задержка отправки (send_delayed)
-    delay_sec = act_cfg.get('send_delay_seconds')
-    if delay_sec:
-        try:
-            await asyncio.sleep(int(delay_sec))
-        except Exception:
-            pass
 
     server_path = act_cfg.get('media_server_path')
     # Если указан топик в конфиге — переопределяем thread_id
@@ -1958,8 +2055,9 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         }
         if thread_id is not None:
             kwargs['message_thread_id'] = thread_id
-        if reply_to_message_id is not None:
-            kwargs['reply_to_message_id'] = reply_to_message_id
+        _rp = _build_reply_params(reply_to_message_id, reply_quote)
+        if _rp is not None:
+            kwargs['reply_parameters'] = _rp
         if reply_markup:
             kwargs['reply_markup'] = reply_markup
         if act_cfg.get('disable_notification'):
@@ -1978,6 +2076,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             media_id=media_id,
             media_type=media_type,
             reply_to_message_id=reply_to_message_id,
+            reply_quote=reply_quote,
             server_path=server_path,
         )
         kwargs = {
@@ -1987,9 +2086,11 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         if thread_id is not None:
             kwargs['message_thread_id'] = thread_id
         if sent_media is not None:
-            kwargs['reply_to_message_id'] = sent_media.message_id
-        elif reply_to_message_id is not None:
-            kwargs['reply_to_message_id'] = reply_to_message_id
+            kwargs['reply_parameters'] = _build_reply_params(sent_media.message_id)
+        else:
+            _rp = _build_reply_params(reply_to_message_id, reply_quote)
+            if _rp is not None:
+                kwargs['reply_parameters'] = _rp
         if reply_markup:
             kwargs['reply_markup'] = reply_markup
         if act_cfg.get('disable_notification'):
@@ -2009,6 +2110,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
             caption=text or None,
             parse_mode=parse_mode,
             reply_to_message_id=reply_to_message_id,
+            reply_quote=reply_quote,
             reply_markup=reply_markup,
             server_path=server_path,
         )
@@ -2021,8 +2123,9 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         }
         if thread_id is not None:
             kwargs['message_thread_id'] = thread_id
-        if reply_to_message_id is not None:
-            kwargs['reply_to_message_id'] = reply_to_message_id
+        _rp = _build_reply_params(reply_to_message_id, reply_quote)
+        if _rp is not None:
+            kwargs['reply_parameters'] = _rp
         if reply_markup:
             kwargs['reply_markup'] = reply_markup
         sent_text = await bot.send_message(**kwargs)
@@ -2034,6 +2137,7 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         media_id=media_id,
         media_type=media_type,
         reply_to_message_id=sent_text.message_id if sent_text else reply_to_message_id,
+        reply_quote=None if sent_text else reply_quote,
         reply_markup=reply_markup if not sent_text else None,
         server_path=server_path,
     )
@@ -2046,6 +2150,7 @@ async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
                              caption: Optional[str] = None,
                              parse_mode: str = 'HTML',
                              reply_to_message_id: Optional[int] = None,
+                             reply_quote: Optional[str] = None,
                              reply_markup=None,
                              server_path: Optional[str] = None):
     """Отправка одного медиа-сообщения в чат/ветку или ЛС."""
@@ -2053,8 +2158,9 @@ async def _send_action_media(bot, chat_id: int, thread_id: Optional[int],
     kwargs = {'chat_id': chat_id}
     if thread_id is not None:
         kwargs['message_thread_id'] = thread_id
-    if reply_to_message_id is not None:
-        kwargs['reply_to_message_id'] = reply_to_message_id
+    _rp = _build_reply_params(reply_to_message_id, reply_quote)
+    if _rp is not None:
+        kwargs['reply_parameters'] = _rp
     if reply_markup is not None:
         kwargs['reply_markup'] = reply_markup
     if caption:

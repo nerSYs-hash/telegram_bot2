@@ -506,7 +506,7 @@ export default function App() {
       setEditingTrigger({
         id: null, name: '', probability: 100,
         where_fires: 'all', initiator: 'all',
-        fire_limit: 0,
+        fire_limit: 0, warn_period: 0, auto_pin: 0,
         conditionGroups: [{ id: 1, conditions: [] }],
         actionGroups: [{ id: 1, probability: 100, actions: [] }]
       });
@@ -1251,6 +1251,36 @@ export default function App() {
                     onChange={e => upd('fire_limit', parseInt(e.target.value) || 0)}
                     className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-black text-sm outline-none focus:border-blue-400 transition-all text-center"/>
                   <p className="text-[9px] text-blue-400 mt-1 text-center">0 = без лимита</p>
+                </div>
+              </div>
+
+              {/* ── Период варнов + Автозакреп ── */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-rose-50 p-4 rounded-2xl border border-rose-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-rose-700 uppercase tracking-widest">Период варнов (дней)</span>
+                    <span className="text-[10px] font-bold text-rose-400">{(editingTrigger.warn_period || 0) === 0 ? '∞' : editingTrigger.warn_period}</span>
+                  </div>
+                  <input type="number" min="0" max="365"
+                    value={editingTrigger.warn_period || 0}
+                    onChange={e => upd('warn_period', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-white border border-rose-200 rounded-xl font-black text-sm outline-none focus:border-rose-400 transition-all text-center"/>
+                  <p className="text-[9px] text-rose-400 mt-1 text-center">0 = без сброса</p>
+                </div>
+                <div className="bg-emerald-50 p-4 rounded-2xl border border-emerald-100 flex flex-col">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">Автозакреп ответа бота</span>
+                  </div>
+                  <div className="flex-1 flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-600">
+                      {editingTrigger.auto_pin ? 'Включён' : 'Выключен'}
+                    </span>
+                    <button
+                      onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
+                      className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-gray-200'}`}>
+                      <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                    </button>
+                  </div>
                 </div>
               </div>
 
@@ -2550,9 +2580,172 @@ export default function App() {
                               })()}
 
                               {/* ── ban ── */}
-                              {action.type === 'ban' && (
-                                <p className="text-xs text-gray-400 font-medium italic">Карточка бана — в разработке.</p>
-                              )}
+                              {action.type === 'ban' && (() => {
+                                const BAN_TARGETS = [
+                                  { v:'initiator', l:'Инициатор триггера' },
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'replied',   l:'Кому ответили' },
+                                ];
+                                const BAN_UNITS = [
+                                  { v:'seconds', l:'секунда' },
+                                  { v:'minutes', l:'минута'  },
+                                  { v:'hours',   l:'час'     },
+                                  { v:'days',    l:'день'    },
+                                ];
+                                const banTarget      = action.ban_target        || 'initiator';
+                                const banTimeOn      = action.ban_time_enabled  || false;
+                                const banTimeVal     = action.ban_time_value    ?? 1;
+                                const banTimeUnit    = action.ban_time_unit     || 'hours';
+                                const banRevokeMsgs  = action.ban_revoke_messages || false;
+
+                                const banTgtKey     = `banTgt_${gIdx}_${aIdx}`;
+                                const banUnitKey    = `banUnit_${gIdx}_${aIdx}`;
+                                const banTgtGear    = `banTgtGear_${gIdx}_${aIdx}`;
+                                const banTimeGear   = `banTimeGear_${gIdx}_${aIdx}`;
+                                const banRevokeGear = `banRevokeGear_${gIdx}_${aIdx}`;
+
+                                const curTgt  = BAN_TARGETS.find(o => o.v === banTarget) || BAN_TARGETS[0];
+                                const curUnit = BAN_UNITS.find(o => o.v === banTimeUnit) || BAN_UNITS[2];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-gray-800">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {banTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtGear ? null : banTgtGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === banTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'ban_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtKey ? null : banTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === banTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === banTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === banTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {BAN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${banTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Временный бан */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-black text-gray-800">Временный бан</p>
+                                          {banTimeOn && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === banTimeGear ? null : banTimeGear)}
+                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === banTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'ban_time_enabled', false); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {banTimeOn ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', false)}
+                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            <Ban size={14}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {banTimeOn && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={banTimeVal}
+                                            onChange={e => updAction(gIdx, aIdx, 'ban_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banUnitKey ? null : banUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === banUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === banUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === banUnitKey && (
+                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                                {BAN_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${banTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {!banTimeOn && (
+                                        <p className="text-[11px] text-gray-400 mt-1">Без ограничения по времени (перманентный бан)</p>
+                                      )}
+                                    </div>
+
+                                    {/* Удалить сообщения за 24ч */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-gray-700">Удалить сообщения пользователя за 24ч</p>
+                                        {banRevokeMsgs && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banRevokeGear ? null : banRevokeGear)}
+                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === banRevokeGear && (
+                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'ban_revoke_messages', false); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'ban_revoke_messages', !banRevokeMsgs)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${banRevokeMsgs ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${banRevokeMsgs ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
 
                               {/* ── emoji ── */}
                               {action.type === 'emoji' && (() => {

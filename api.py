@@ -617,8 +617,23 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
             }
 
         elif site_type == 'ban':
+            # Конвертируем ban_time_value+unit → duration_seconds (0 = permanent)
+            dur_sec = 0
+            if cfg.get('ban_time_enabled'):
+                try:
+                    val = int(cfg.get('ban_time_value') or 1)
+                    unit = cfg.get('ban_time_unit') or 'hours'
+                    dur_sec = val * _TIME_UNIT_TO_SEC.get(unit, 3600)
+                except Exception:
+                    pass
             bot_configs['ban'] = {
-                'ban_target': cfg.get('ban_target', 'initiator'),
+                'ban_target':       cfg.get('ban_target', 'initiator'),
+                'duration_seconds': int(dur_sec),
+                'revoke_messages':  bool(cfg.get('ban_revoke_messages', False)),
+                # round-trip поля для UI
+                'ban_time_enabled': bool(cfg.get('ban_time_enabled', False)),
+                'ban_time_value':   int(cfg.get('ban_time_value', 1) or 1),
+                'ban_time_unit':    cfg.get('ban_time_unit', 'hours') or 'hours',
             }
 
         elif site_type == 'emoji':
@@ -722,8 +737,20 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
             }
 
         elif bot_type == 'ban':
+            # duration_seconds → value+unit для UI. 0 = permanent → enabled=false
+            dur_sec = int(cfg.get('duration_seconds', 0) or 0)
+            if dur_sec > 0:
+                val, unit = _sec_to_val_unit(dur_sec)
+                ban_time_enabled = True
+            else:
+                val, unit = cfg.get('ban_time_value', 1), cfg.get('ban_time_unit', 'hours')
+                ban_time_enabled = False
             site_configs['ban'] = {
-                'ban_target': cfg.get('ban_target', 'initiator'),
+                'ban_target':          cfg.get('ban_target', 'initiator'),
+                'ban_time_enabled':    ban_time_enabled,
+                'ban_time_value':      val,
+                'ban_time_unit':       unit,
+                'ban_revoke_messages': bool(cfg.get('revoke_messages', False)),
             }
 
         elif bot_type == 'emoji':
