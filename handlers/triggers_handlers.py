@@ -1712,6 +1712,51 @@ def _build_url_markup(act_cfg: dict):
     return IKM(rows) if rows else None
 
 
+# ── Санитизация HTML из contenteditable перед отправкой в Telegram ──
+_TG_ALLOWED_TAGS = {
+    'b', 'strong', 'i', 'em', 'u', 'ins', 's', 'strike', 'del',
+    'code', 'pre', 'a', 'tg-spoiler', 'blockquote',
+}
+
+def _sanitize_tg_html(text: str) -> str:
+    """
+    Чистит HTML из contenteditable (AdminDashboard) под parse_mode='HTML' Telegram.
+    - <br> → \\n
+    - <div>/<p> → перенос строки после содержимого
+    - <span>/<font>/прочие неизвестные — убираются, содержимое остаётся
+    - У <a> оставляется только href; у <code> — class (для языка)
+    """
+    if not text or '<' not in text:
+        return text or ''
+    s = text
+    s = re.sub(r'<br\s*/?>', '\n', s, flags=re.IGNORECASE)
+    s = re.sub(r'<(?:div|p)\b[^>]*>', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'</(?:div|p)\s*>', '\n', s, flags=re.IGNORECASE)
+
+    def _close(m):
+        name = m.group(1).lower()
+        return f'</{name}>' if name in _TG_ALLOWED_TAGS else ''
+
+    def _open(m):
+        name = m.group(1).lower()
+        attrs = m.group(2) or ''
+        if name not in _TG_ALLOWED_TAGS:
+            return ''
+        if name == 'a':
+            href_m = re.search(r'href\s*=\s*["\']([^"\']*)["\']', attrs, flags=re.IGNORECASE)
+            return f'<a href="{href_m.group(1)}">' if href_m else ''
+        if name == 'code':
+            cls_m = re.search(r'class\s*=\s*["\']([^"\']*)["\']', attrs, flags=re.IGNORECASE)
+            if cls_m:
+                return f'<code class="{cls_m.group(1)}">'
+        return f'<{name}>'
+
+    s = re.sub(r'</([a-zA-Z][a-zA-Z0-9-]*)\s*>', _close, s)
+    s = re.sub(r'<([a-zA-Z][a-zA-Z0-9-]*)\b([^>]*)>', _open, s)
+    s = re.sub(r'\n{3,}', '\n\n', s)
+    return s.strip('\n')
+
+
 async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text: str,
                                act_cfg: dict, parse_mode: str = 'HTML',
                                reply_to_message_id: Optional[int] = None):
@@ -1721,6 +1766,8 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
     media_pos = act_cfg.get('media_pos', 'above')
     link_preview = act_cfg.get('link_preview', True)
     text = (text or '').strip()
+    if parse_mode == 'HTML':
+        text = _sanitize_tg_html(text)
     reply_markup = _build_url_markup(act_cfg)
 
     # Задержка отправки (send_delayed)
