@@ -1845,6 +1845,10 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
 
     has_media = (media_id or server_path) and media_type and media_type != 'none'
 
+    # Telegram caption limit: 1024 символа. Если text длиннее — автосплит на медиа+сообщение.
+    _TG_CAPTION_LIMIT = 1024
+    caption_too_long = has_media and bool(text) and len(text) > _TG_CAPTION_LIMIT
+
     if not has_media:
         if not text:
             return None
@@ -1863,6 +1867,37 @@ async def _send_action_message(bot, chat_id: int, thread_id: Optional[int], text
         if act_cfg.get('protect_content'):
             kwargs['protect_content'] = True
         return await bot.send_message(**kwargs)
+
+    # Автосплит: если caption слишком длинный — медиа без подписи + текст отдельным сообщением.
+    # Для media_pos='above' порядок: медиа → текст. Для 'below' — стандартный блок ниже.
+    if media_pos == 'above' and caption_too_long:
+        sent_media = await _send_action_media(
+            bot=bot,
+            chat_id=chat_id,
+            thread_id=thread_id,
+            media_id=media_id,
+            media_type=media_type,
+            reply_to_message_id=reply_to_message_id,
+            server_path=server_path,
+        )
+        kwargs = {
+            'chat_id': chat_id, 'text': text, 'parse_mode': parse_mode,
+            'disable_web_page_preview': not link_preview,
+        }
+        if thread_id is not None:
+            kwargs['message_thread_id'] = thread_id
+        if sent_media is not None:
+            kwargs['reply_to_message_id'] = sent_media.message_id
+        elif reply_to_message_id is not None:
+            kwargs['reply_to_message_id'] = reply_to_message_id
+        if reply_markup:
+            kwargs['reply_markup'] = reply_markup
+        if act_cfg.get('disable_notification'):
+            kwargs['disable_notification'] = True
+        if act_cfg.get('protect_content'):
+            kwargs['protect_content'] = True
+        sent_text = await bot.send_message(**kwargs)
+        return sent_media or sent_text
 
     if media_pos == 'above':
         return await _send_action_media(
