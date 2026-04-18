@@ -487,8 +487,17 @@ class TriggerIn(BaseModel):
     is_enabled: bool = True
 
 
-# ── Маппинг типов: сайт ↔ бот ──
-_SITE_TO_BOT = {'send_text': 'msg_chat', 'dm': 'msg_dm'}
+# ── Маппинг типов действий: сайт ↔ бот (явный для всех активных типов) ──
+_SITE_TO_BOT = {
+    'send_text': 'msg_chat',
+    'dm':        'msg_dm',
+    'pin':       'pin',
+    'delete':    'delete',
+    'warn':      'warn',
+    'mute':      'mute',
+    'ban':       'ban',
+    'emoji':     'emoji',
+}
 _BOT_TO_SITE = {v: k for k, v in _SITE_TO_BOT.items()}
 
 
@@ -540,7 +549,10 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
     bot_actions = []
     bot_configs = {}
     for site_type in site_actions:
-        bot_type = _SITE_TO_BOT.get(site_type, site_type)
+        if site_type not in _SITE_TO_BOT:
+            logger.warning(f"[TRIGGERS] неизвестный тип действия с сайта: {site_type!r} — пропускаю")
+            continue
+        bot_type = _SITE_TO_BOT[site_type]
         bot_actions.append(bot_type)
         cfg = site_configs.get(site_type, {})
 
