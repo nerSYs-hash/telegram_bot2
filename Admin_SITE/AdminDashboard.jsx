@@ -210,7 +210,7 @@ export default function App() {
   const [actPickerGroupIdx, setActPickerGroupIdx] = useState(0);
   const [actPickerSearch, setActPickerSearch] = useState('');
   const [actGroupSettingsIdx, setActGroupSettingsIdx] = useState(null);
-  const [condChipInput, setCondChipInput] = useState('');
+  const [condChipInputs, setCondChipInputs] = useState({});
   const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
   const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
   const [actOpenDropdown, setActOpenDropdown] = useState(null);     // 'reply_g_a'
@@ -1045,13 +1045,16 @@ export default function App() {
             }));
             setShowCondPickerModal(false);
           };
+          const chipKey = (gi, ci) => `${gi}_${ci}`;
+          const getChipInput = (gi, ci) => condChipInputs[chipKey(gi, ci)] || '';
+          const setChipInput = (gi, ci, val) => setCondChipInputs(prev => ({...prev, [chipKey(gi, ci)]: val}));
           const addChip = (gIdx, cIdx, text) => {
             const trimmed = text.trim();
             if (!trimmed) return;
             const chips = [...(conditionGroups[gIdx]?.conditions[cIdx]?.chips || []), trimmed];
             updCond(gIdx, cIdx, 'chips', chips);
             updCond(gIdx, cIdx, 'keyword', chips.join(', '));
-            setCondChipInput('');
+            setChipInput(gIdx, cIdx, '');
           };
           const removeChip = (gIdx, cIdx, chipIdx) => {
             const chips = (conditionGroups[gIdx]?.conditions[cIdx]?.chips || []).filter((_, i) => i !== chipIdx);
@@ -1333,9 +1336,13 @@ export default function App() {
                               )}
                               <div className="flex items-center gap-0.5">
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, -1)} disabled={cIdx === 0}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↑</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronUp size={14}/>
+                                </button>
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, 1)} disabled={cIdx === group.conditions.length - 1}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↓</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronDown size={14}/>
+                                </button>
                                 <button onClick={() => removeCond(gIdx, cIdx)}
                                   className="w-6 h-6 flex items-center justify-center rounded-lg text-red-300 hover:text-red-500 hover:bg-red-50 active:scale-90 transition-all ml-0.5">
                                   <Trash2 size={11}/>
@@ -1438,13 +1445,13 @@ export default function App() {
                                     )}
                                     <div className="flex gap-1">
                                       <input type="text"
-                                        value={condChipInput}
-                                        onChange={e => setCondChipInput(e.target.value)}
-                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip(gIdx, cIdx, condChipInput); }}}
+                                        value={getChipInput(gIdx, cIdx)}
+                                        onChange={e => setChipInput(gIdx, cIdx, e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip(gIdx, cIdx, getChipInput(gIdx, cIdx)); }}}
                                         placeholder=""
                                         className="flex-1 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
-                                      <button onClick={() => addChip(gIdx, cIdx, condChipInput)}
-                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${condChipInput.trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}`}>
+                                      <button onClick={() => addChip(gIdx, cIdx, getChipInput(gIdx, cIdx))}
+                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${getChipInput(gIdx, cIdx).trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}`}>
                                         <Check size={13}/>
                                       </button>
                                     </div>
@@ -1601,9 +1608,13 @@ export default function App() {
                       </span>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => moveActionGroup(gIdx, -1)} disabled={gIdx === 0}
-                          className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                          <ChevronUp size={14}/>
+                        </button>
                         <button onClick={() => moveActionGroup(gIdx, 1)} disabled={gIdx === actionGroups.length - 1}
-                          className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                          <ChevronDown size={14}/>
+                        </button>
                         {actionGroups.length > 1 && (
                           <button onClick={() => removeActionGroup(gIdx)}
                             className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all ml-0.5">
@@ -1666,9 +1677,13 @@ export default function App() {
                               <span className="text-[11px] font-black text-gray-700 flex-1">Действие {aIdx + 1}</span>
                               <div className="flex items-center gap-0">
                                 <button onClick={() => moveActionInGroup(gIdx, aIdx, -1)} disabled={aIdx === 0}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↑</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronUp size={14}/>
+                                </button>
                                 <button onClick={() => moveActionInGroup(gIdx, aIdx, 1)} disabled={aIdx === group.actions.length - 1}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all text-sm font-black">↓</button>
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronDown size={14}/>
+                                </button>
                                 <button onClick={() => removeAction(gIdx, aIdx)}
                                   className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
                                   <Trash2 size={11}/>
