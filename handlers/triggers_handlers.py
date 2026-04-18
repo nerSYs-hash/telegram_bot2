@@ -1367,10 +1367,18 @@ async def process_triggers(
 
         # Фильтр: Где (7.3.2)
         where = tdata.get('where_fires', 'all')
-        # Нормализуем значения сайта, которые бот не различает
+        chat_type = getattr(message.chat, 'type', None)
+        # 'chat' — только групповой чат; 'pv' — только личка; 'global'/'all' — везде
+        if where == 'chat' and chat_type not in ('group', 'supergroup'):
+            logger.info(f"[TRIGGERS] '{tname}' skip: where_fires=chat но chat_type={chat_type}")
+            continue
+        if where == 'pv' and chat_type != 'private':
+            logger.info(f"[TRIGGERS] '{tname}' skip: where_fires=pv но chat_type={chat_type}")
+            continue
         if where in ('chat', 'pv', 'global'):
-            where = 'all'
-        if where != 'all':
+            # фильтр по типу чата уже применён выше; дальше фильтра по thread не требуется
+            pass
+        elif where != 'all':
             try:
                 allowed = json.loads(where) if isinstance(where, str) else where
                 if isinstance(allowed, list) and thread_id not in allowed:
