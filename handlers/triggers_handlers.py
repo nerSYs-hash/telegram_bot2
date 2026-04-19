@@ -1565,6 +1565,16 @@ async def process_triggers(
             try:
                 act_cfg = cfgs.get(act, {})
 
+                # Вероятность срабатывания конкретного действия (⚙️ шестерёнка на сайте)
+                try:
+                    act_prob = int(act_cfg.get('action_probability', 100) or 100)
+                except (TypeError, ValueError):
+                    act_prob = 100
+                act_prob = max(0, min(100, act_prob))
+                if act_prob < 100 and random.randint(1, 100) > act_prob:
+                    logger.info(f"[TRIGGERS] '{tname}' action '{act}' skipped by action_probability={act_prob}")
+                    continue
+
                 if act == 'msg_chat':
                     if has_rotation:
                         bot_msg = await _execute_rotation_action(context, db, trigger, cfgs, message)
@@ -1790,8 +1800,13 @@ async def process_triggers(
                     except (TypeError, ValueError):
                         custom_wc = None
                     if custom_wc and custom_wc > 0:
-                        # порог задан в карточке: при достижении — мут на дефолтный час (UI для длительности warn-мута нет)
-                        escalation = [(custom_wc, 3600)]
+                        # порог задан в карточке: длительность мута из warn_mute_duration_seconds (UI), дефолт 1ч
+                        try:
+                            warn_mute_sec = int(act_cfg.get('warn_mute_duration_seconds') or 3600)
+                        except (TypeError, ValueError):
+                            warn_mute_sec = 3600
+                        warn_mute_sec = max(60, warn_mute_sec)
+                        escalation = [(custom_wc, warn_mute_sec)]
                     else:
                         escalation = WARN_ESCALATION
                     for threshold, mute_sec in escalation:

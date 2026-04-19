@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
   Tooltip, ResponsiveContainer, Brush
@@ -2928,6 +2929,18 @@ export default function App() {
                                         className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
                                     </div>
 
+                                    {/* Длительность мута при достижении кол-ва */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-black text-gray-800">Длительность мута</p>
+                                        <span className="text-xs text-gray-400 font-normal">(минут, при эскалации)</span>
+                                      </div>
+                                      <input type="number" min="1" max="43200"
+                                        value={Math.max(1, Math.floor((action.warn_mute_duration_seconds ?? 3600) / 60))}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_mute_duration_seconds', Math.max(60, (parseInt(e.target.value)||1) * 60))}
+                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                    </div>
+
                                   </div>
                                 );
                               })()}
@@ -3730,13 +3743,13 @@ export default function App() {
                 );
               })()}
 
-              {/* ── МОДАЛ ДОПОЛНИТЕЛЬНЫХ НАСТРОЕК ДЕЙСТВИЯ ── */}
-              {actionSettingsModal && (() => {
+              {/* ── МОДАЛ ДОПОЛНИТЕЛЬНЫХ НАСТРОЕК ДЕЙСТВИЯ (через портал — вне стэкинг-контекста карточек) ── */}
+              {actionSettingsModal && createPortal((() => {
                 const { gIdx, aIdx } = actionSettingsModal;
                 return (
-                  <div className="fixed inset-0 z-[9999] flex items-center justify-center px-4">
+                  <div className="fixed inset-0 z-[99999] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200 z-[10000]">
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
                         <h3 className="font-black text-base text-gray-900">Дополнительные настройки действия</h3>
                         <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
@@ -3767,7 +3780,7 @@ export default function App() {
                     </div>
                   </div>
                 );
-              })()}
+              })(), document.body)}
 
               {/* ── ДЕЙСТВИЯ (старый блок — удалён, теперь в правой колонке) ── */}
               {false && <div className="mb-5 space-y-2">

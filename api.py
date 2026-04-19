@@ -675,6 +675,7 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
                 'warn_notify':  cfg.get('warn_notify', True),
                 'warn_count':   int(cfg.get('warn_count') or 1),
                 'warn_period':  cfg.get('warn_period', 0),
+                'warn_mute_duration_seconds': int(cfg.get('warn_mute_duration_seconds') or 3600),
             }
 
         elif site_type == 'delete':
@@ -713,6 +714,13 @@ def _site_to_bot(site_actions: list, site_configs: dict) -> tuple:
 
         else:
             bot_configs[bot_type] = cfg
+
+        # action_probability — шестерёнка ⚙️ в UI, применяется ко всем типам действий
+        if 'action_probability' in cfg:
+            try:
+                bot_configs[bot_type]['action_probability'] = int(cfg.get('action_probability') or 100)
+            except (TypeError, ValueError):
+                pass
 
     return bot_actions, bot_configs
 
@@ -793,6 +801,8 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
                 'warn_target': cfg.get('warn_target', 'initiator'),
                 'warn_notify': cfg.get('warn_notify', True),
                 'warn_count':  cfg.get('warn_count', 1),
+                'warn_period': cfg.get('warn_period', 0),
+                'warn_mute_duration_seconds': int(cfg.get('warn_mute_duration_seconds') or 3600),
             }
 
         elif bot_type == 'delete':
@@ -823,6 +833,10 @@ def _bot_to_site(bot_actions: list, bot_configs: dict) -> tuple:
 
         else:
             site_configs[site_type] = cfg
+
+        # action_probability — round-trip обратно в UI
+        if 'action_probability' in cfg and site_type in site_configs:
+            site_configs[site_type]['action_probability'] = cfg.get('action_probability', 100)
 
     return site_actions, site_configs
 
