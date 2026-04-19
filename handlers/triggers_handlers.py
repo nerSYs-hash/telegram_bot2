@@ -1599,6 +1599,10 @@ async def process_triggers(
                             else:
                                 reply_id = message.message_id
                                 reply_src_msg = message
+                        # media_pos='reply' требует реплай — форсим на триггер-сообщение
+                        if reply_id is None and act_cfg.get('media_pos') == 'reply':
+                            reply_id = message.message_id
+                            reply_src_msg = message
                         bot_msg = await _send_action_message(
                             bot=context.bot,
                             chat_id=message.chat.id,
