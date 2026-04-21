@@ -165,7 +165,7 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
     await query.edit_message_text(
         f"👁 Предпросмотр:\n\n"
         f"{preview_formatted}\n\n"
-        f"<i>© Pulse Chat Community 2026</i>\n\n"
+        f"<i>© Сообщество Pulse 2026</i>\n\n"
         f"{photo_line}"
         f"🎯 Куда: {thread_name}\n\n"
         f"⏰ Когда опубликовать?",
@@ -259,7 +259,7 @@ async def handle_pr_full_preview(query, user, context, db, admin_id):
         f"👁 <b>ПОЛНЫЙ ПРЕДПРОСМОТР</b>\n"
         f"{'━' * 20}\n\n"
         f"{formatted_text}\n\n"
-        f"<i>© Сообщество Pulse</i>"
+        f"<i>© Сообщество Pulse 2026</i>"
     )
 
     try:
@@ -325,7 +325,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
 
     press_release = (
         f"{formatted_text}\n\n"
-        f"<i>© Сообщество Pulse</i>"
+        f"<i>© Сообщество Pulse 2026</i>"
     )
 
     try:
@@ -762,7 +762,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
 
     press_release = (
         f"{formatted_text}\n\n"
-        f"<i>© Сообщество Pulse</i>"
+        f"<i>© Сообщество Pulse 2026</i>"
     )
 
     try:
