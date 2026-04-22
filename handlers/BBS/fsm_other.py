@@ -602,7 +602,17 @@ async def show_other_edit_menu(query, context):
     )
 
 
-async def delete_other_post_messages(bot, db, post, target_chat_id):
+async def delete_other_post_messages(bot, db, post, target_chat_id, deleted_by: str = 'system'):
+    """
+    Удаляет объявление раздела "Другое": удаляет сообщения из чата И помечает как удалённое.
+    
+    deleted_by может быть:
+    - 'user': пользователь явно удалил объявление
+    - 'system': система удалила при перепубликации или другой процесс
+    
+    При deleted_by='user' — объявление НЕ восстанавливается при restore.
+    При других значениях — восстанавливается при восстановлении ветки BBS.
+    """
     message_ids = post.get('message_ids') or '[]'
     if isinstance(message_ids, str):
         try:
@@ -614,7 +624,13 @@ async def delete_other_post_messages(bot, db, post, target_chat_id):
         await _safe_delete_message(bot, target_chat_id, message_id)
 
     try:
-        db.cursor.execute('DELETE FROM bbs_other_posts WHERE id = ?', (post['id'],))
+        from utils.helpers import get_moscow_time
+        now_iso = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
+        
+        db.cursor.execute(
+            'UPDATE bbs_other_posts SET deleted_by = ?, deleted_at = ? WHERE id = ?',
+            (deleted_by, now_iso, post['id'])
+        )
         db.conn.commit()
     except Exception as exc:
         logging.error(f'BBS Other delete db error: {exc}')
@@ -955,7 +971,7 @@ async def handle_other_callback(query, context, db, target_chat_id, bbs_thread_i
         if data == 'other_delete_yes':
             post = get_other_post(db, query.from_user.id)
             if post:
-                await delete_other_post_messages(context.bot, db, post, target_chat_id)
+                await delete_other_post_messages(context.bot, db, post, target_chat_id, deleted_by='user')
                 await query.edit_message_text(
                     '✅ Объявление удалено.',
                     reply_markup=InlineKeyboardMarkup([
@@ -1201,10 +1217,12 @@ async def republish_other_post(bot, db, post: dict, target_chat_id: int, bbs_thr
 async def restore_all_other_posts(bot, db, target_chat_id: int, bbs_thread_id: int) -> tuple[int, int]:
     """
     Перепубликует все объявления раздела «Другое» из БД в ветку.
+    Восстанавливает ТОЛЬКО объявления, удалённые системой (deleted_by IS NULL или != 'user').
+    Объявления, удалённые пользователями явно, НЕ восстанавливаются.
     Возвращает (успешно, ошибок).
     """
     try:
-        db.cursor.execute('SELECT * FROM bbs_other_posts')
+        db.cursor.execute('SELECT * FROM bbs_other_posts WHERE deleted_by IS NULL OR deleted_by != ?', ('user',))
         posts = [dict(row) for row in db.cursor.fetchall()]
     except Exception as exc:
         logging.error(f'BBS Other restore: ошибка чтения БД: {exc}')

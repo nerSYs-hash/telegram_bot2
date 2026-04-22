@@ -1069,7 +1069,8 @@ async def restore_bbs_execute(query, context, db, admin_id: int) -> None:
 
     try:
         db.cursor.execute(
-            "SELECT user_id FROM bbs_profiles WHERE published_at IS NOT NULL"
+            "SELECT user_id FROM bbs_profiles WHERE published_at IS NOT NULL AND (deleted_by IS NULL OR deleted_by != ?)",
+            ('user',)
         )
         rows = db.cursor.fetchall()
     except Exception as e:

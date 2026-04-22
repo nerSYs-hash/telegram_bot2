@@ -229,23 +229,34 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id):
                     logging.warning(f"BBS: Could not remove msg {mid}: {e2}")
 
 
-async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None):
+async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None, deleted_by: str = 'system'):
     """
-    Полное удаление: удаляет сообщения из чата И запись из БД.
-    Используется при удалении анкеты пользователем или перепубликации с нуля.
+    Полное удаление: удаляет сообщения из чата И помечает запись как удалённую.
+    
+    deleted_by может быть:
+    - 'user': пользователь явно удалил анкету  
+    - 'system': система удалила при перепубликации или другой процесс
+    - 'admin': администратор удалил
+    
+    При deleted_by='user' — анкета НЕ восстанавливается при restore.
+    При других значениях — восстанавливается при восстановлении ветки BBS.
     """
     await delete_profile_chat_messages(bot, profile, target_chat_id)
 
     try:
+        from utils.helpers import get_moscow_time
+        now_iso = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
+        
         db.cursor.execute(
             'DELETE FROM bbs_reactions WHERE profile_id = ?', (profile['id'],)
         )
         db.cursor.execute(
-            'DELETE FROM bbs_profiles WHERE id = ?', (profile['id'],)
+            'UPDATE bbs_profiles SET deleted_by = ?, deleted_at = ? WHERE id = ?',
+            (deleted_by, now_iso, profile['id'])
         )
         db.conn.commit()
     except Exception as e:
-        logging.error(f"BBS: Error deleting profile from DB: {e}")
+        logging.error(f"BBS: Error marking profile as deleted: {e}")
 
 
 # ═══════════════════════════════════════════════════════════════

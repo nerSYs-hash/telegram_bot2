@@ -26,6 +26,8 @@ CREATE TABLE IF NOT EXISTS bbs_profiles (
     edited_fields     TEXT    NOT NULL DEFAULT '[]',
     reaction_count    INTEGER NOT NULL DEFAULT 0,
     bonus_paid_at     TEXT    DEFAULT NULL,
+    deleted_by        TEXT    DEFAULT NULL,
+    deleted_at        TEXT    DEFAULT NULL,
     created_at        TEXT    NOT NULL DEFAULT (datetime('now')),
     updated_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
@@ -54,6 +56,8 @@ CREATE TABLE IF NOT EXISTS bbs_other_posts (
     message_ids       TEXT    NOT NULL DEFAULT '[]',
     thread_id         INTEGER DEFAULT NULL,
     published_at      TEXT    DEFAULT NULL,
+    deleted_by        TEXT    DEFAULT NULL,
+    deleted_at        TEXT    DEFAULT NULL,
     created_at        TEXT    NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -90,6 +94,8 @@ def init_bbs_tables(db):
             'edited_fields': "TEXT NOT NULL DEFAULT '[]'",
             'reaction_count': "INTEGER NOT NULL DEFAULT 0",
             'bonus_paid_at': "TEXT DEFAULT NULL",
+            'deleted_by': "TEXT DEFAULT NULL",
+            'deleted_at': "TEXT DEFAULT NULL",
             'created_at': "TEXT NOT NULL DEFAULT (datetime('now'))",
             'updated_at': "TEXT NOT NULL DEFAULT (datetime('now'))",
         }
@@ -100,6 +106,30 @@ def init_bbs_tables(db):
                 db.cursor.execute(f"ALTER TABLE bbs_profiles ADD COLUMN {col} {col_def}")
                 migrated = True
                 logging.info(f"BBS: Migrated — added column bbs_profiles.{col}")
+
+        if migrated:
+            db.conn.commit()
+
+        # Миграции для bbs_other_posts
+        db.cursor.execute("PRAGMA table_info(bbs_other_posts)")
+        other_columns = {row['name'] for row in db.cursor.fetchall()}
+        
+        other_required_columns = {
+            'username': "TEXT",
+            'photos': "TEXT NOT NULL DEFAULT '[]'",
+            'message_ids': "TEXT NOT NULL DEFAULT '[]'",
+            'thread_id': "INTEGER DEFAULT NULL",
+            'published_at': "TEXT DEFAULT NULL",
+            'deleted_by': "TEXT DEFAULT NULL",
+            'deleted_at': "TEXT DEFAULT NULL",
+            'created_at': "TEXT NOT NULL DEFAULT (datetime('now'))",
+        }
+        
+        for col, col_def in other_required_columns.items():
+            if col not in other_columns:
+                db.cursor.execute(f"ALTER TABLE bbs_other_posts ADD COLUMN {col} {col_def}")
+                logging.info(f"BBS: Migrated — added column bbs_other_posts.{col}")
+                migrated = True
 
         if migrated:
             db.conn.commit()

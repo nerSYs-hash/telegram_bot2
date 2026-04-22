@@ -402,7 +402,7 @@ async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id)
     if data == 'bbs_delete_yes':
         profile = get_profile(db, user_id)
         if profile:
-            await delete_profile_messages(context.bot, db, profile, target_chat_id, profile.get('thread_id'))
+            await delete_profile_messages(context.bot, db, profile, target_chat_id, profile.get('thread_id'), deleted_by='user')
             await query.edit_message_text(
                 "✅ Анкета удалена.",
                 reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 В меню", callback_data="menu_bbs")]
