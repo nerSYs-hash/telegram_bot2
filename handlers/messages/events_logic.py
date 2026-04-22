@@ -169,17 +169,6 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
             'return_on_leave',
             'Покинул чат, баланс заморожен на 30 дней и возвращён в банк'
         )
-        try:
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=f"Пользователь покинул чат.\n"
-                     f"Имя {user_mention} [{user_id}] #user{user_id}\n"
-                     f"👋 Время: {formatted_time}\n"
-                     f"❄️ {format_number(balance)} Пульсов заморожено на 30 дней.\n"
-                     f"🏦 Баланс Банка: {format_number(db.get_bank_balance())} Пульсов"
-            )
-        except Exception as e:
-            logging.error(f"Error sending leave notification: {e}")
     else:
         # Баланс 0 — транзакцию всё равно создаём для учёта в статистике
         db.add_transaction(
@@ -189,16 +178,6 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
             'return_on_leave',
             'Покинул чат (баланс 0)'
         )
-        try:
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=f"Пользователь покинул чат.\n"
-                     f"Имя {user_mention} [{user_id}] #user{user_id}\n"
-                     f"👋 Время: {formatted_time}\n"
-                     f"💎 Баланс: 0 Пульсов"
-            )
-        except Exception as e:
-            logging.error(f"Error sending leave notification: {e}")
     
     # ═══ db_friend: сохраняем last_exit_at (для метки #Возвращение при повторной заявке) ═══
     try:
@@ -459,18 +438,6 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             db.conn.commit()
             
             logging.info(f"✅ Unfroze {restore_amount} pulses for user {user_id}")
-            
-            # Уведомить админа
-            try:
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"🔄 Пользователь вернулся в чат!\n"
-                         f"Имя {user_mention} [{user_id}] #user{user_id}\n"
-                         f"✅ {format_number(restore_amount)} Пульсов разморожено и возвращено.\n"
-                         f"🏦 Баланс Банка: {format_number(db.get_bank_balance())} Пульсов"
-                )
-            except Exception as e:
-                logging.error(f"Error sending return notification: {e}")
             
             # Уведомить пользователя
             try:
