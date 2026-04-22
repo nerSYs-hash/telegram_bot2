@@ -217,7 +217,8 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         WHERE date >= ? AND date <= ?
     ''', (prev_start, prev_end))
 
-    stats_message += f"💬 Сообщений: {int(total_messages)}{_delta_str(total_messages, prev_msgs)}\n"
+    formatted_total = "{:,}".format(int(total_messages)).replace(',', ' ')
+    stats_message += f"💬 Сообщений: {formatted_total}{_delta_str(total_messages, prev_msgs)}\n"
 
     # ── 2. Активных пользователей ──
     db.cursor.execute('''
@@ -342,14 +343,14 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         val_d = round_decimal(_d(raw_val), 1 if is_avg else 0)
         
         if is_avg:
+            # Для среднего значения (СДС) оставляем один знак после запятой
             stats_message += f"• {label}: {float(val_d):.1f}\n"
         else:
-            # Используем int() для целых чисел, чтобы убрать .00
-            # format_number используем только для ОКС (где тысячи), для остальных просто число
-            if label == 'ОКС — символов':
-                stats_message += f"• {label}: {format_number(int(val_d))}\n"
-            else:
-                stats_message += f"• {label}: {int(val_d)}\n"
+            # Для всех остальных (ОКС, Медиа, Реакции) убираем .00
+            # Мы НЕ используем здесь format_number, а форматируем вручную с пробелом-разделителем
+            val_int = int(val_d)
+            formatted_val = "{:,}".format(val_int).replace(',', ' ')
+            stats_message += f"• {label}: {formatted_val}\n"
 
     keyboard = [
         [InlineKeyboardButton("📊 Скачать отчёт",       callback_data=f"stats_export_{period}_{stats_type}")],
