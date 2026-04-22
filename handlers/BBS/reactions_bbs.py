@@ -11,7 +11,7 @@ from utils.helpers import format_number
 # Константы
 BBS_BONUS_AMOUNT = 10       # Пульсов автору за 10 реакций
 BBS_BONUS_COOLDOWN = 30     # Дней между бонусами автору
-AMBASSADOR_REWARD = 20.0    # Награда "Амбассадор Любви" (20 💎)
+AMBASSADOR_REWARD = 10.0    # Награда "Амбассадор Любви" (10 💎)
 
 
 async def handle_bbs_reaction(reaction_update, context, db, target_chat_id):
@@ -86,7 +86,7 @@ async def handle_bbs_reaction(reaction_update, context, db, target_chat_id):
 
 
 async def _check_ambassador_of_love(db, user, context):
-    """Скрытая механика: 3 реакции ❤️/🔥 на разные анкеты за 24 часа = +20 💎"""
+    """Скрытая механика: 3 реакции ❤️/🔥 на разные анкеты за 24 часа = +10 💎"""
     
     # 1. Проверяем, получал ли он этот бонус сегодня (защита от абуза)
     db.cursor.execute(
@@ -133,7 +133,7 @@ async def _check_ambassador_of_love(db, user, context):
                 text=(
                     "🤫 <b>СЕКРЕТ РАСКРЫТ!</b>\n\n"
                     "Вы оценили 3 разные анкеты в BBS!\n"
-                    "Скрытый навык <b>«💖 Амбассадор Любви»</b> приносит вам бонус: <b>+20 💎</b>!\n\n"
+                    "Скрытый навык <b>«💖 Амбассадор Любви»</b> приносит вам бонус: <b>+10 💎</b>!\n\n"
                     "<i>(Этот секрет можно открывать 1 раз в день)</i>"
                 ),
                 parse_mode='HTML'
