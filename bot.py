@@ -591,12 +591,9 @@ class TelegramBot:
         # Message handler
         self.application.add_handler(
             MessageHandler(
-                # Мы берем все твои фильтры и добавляем исключение StatusUpdate.ALL
-                (
-                    filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | 
-                    filters.AUDIO | filters.ANIMATION | filters.Document.ALL |
-                    filters.VIDEO_NOTE | filters.Sticker.ALL
-                ) & (~filters.StatusUpdate.ALL), 
+                (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | 
+                 filters.AUDIO | filters.ANIMATION | filters.Document.ALL |
+                 filters.VIDEO_NOTE | filters.Sticker.ALL) & (~filters.StatusUpdate.ALL),
                 self.message_handler.handle_message
             )
         )
