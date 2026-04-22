@@ -1,37 +1,43 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """Статистика активности и динамика пользователей. Вынесено из Database."""
-
+import logging
 
 def update_user_activity(db, user_id, date, **kwargs):
-    """Update user activity statistics"""
-    db.cursor.execute('''
-        SELECT * FROM user_stats WHERE user_id = ? AND date = ?
-    ''', (user_id, date))
+    """Обновление статистики пользователя (Защита от дублирования сообщений)"""
+    if not kwargs:
+        return
 
-    existing = db.cursor.fetchone()
+    # Список колонок, которые мы обновляем
+    allowed_cols = [
+        'total_chars', 'total_messages', 'total_words', 'reactions_given',
+        'reactions_received', 'replies_received', 'replies_sent',
+        'mentions_received', 'media_sent', 'other_threads_posts'
+    ]
+    
+    # Очищаем входящие данные
+    data = {k: v for k, v in kwargs.items() if k in allowed_cols and v is not None}
+    
+    columns = ['user_id', 'date'] + list(data.keys())
+    placeholders = ', '.join(['?'] * len(columns))
+    
+    # Магия ON CONFLICT: если запись (user_id + date) уже есть, просто прибавляем значения
+    update_stmt = ", ".join([f"{col} = {col} + excluded.{col}" for col in data.keys()])
 
-    if existing:
-        fields = []
-        values = []
-        for key, value in kwargs.items():
-            if value is not None:
-                fields.append(f"{key} = {key} + ?")
-                values.append(value)
+    sql = f'''
+        INSERT INTO user_stats ({", ".join(columns)})
+        VALUES ({placeholders})
+        ON CONFLICT(user_id, date) DO UPDATE SET
+        {update_stmt}
+    '''
 
-        if fields:
-            query = f"UPDATE user_stats SET {', '.join(fields)} WHERE user_id = ? AND date = ?"
-            values.extend([user_id, date])
-            db.cursor.execute(query, values)
-    else:
-        fields = ['user_id', 'date'] + list(kwargs.keys())
-        placeholders = ['?'] * len(fields)
-        values = [user_id, date] + list(kwargs.values())
-
-        query = f"INSERT INTO user_stats ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
-        db.cursor.execute(query, values)
-
-    db.conn.commit()
+    try:
+        params = [user_id, date] + list(data.values())
+        db.cursor.execute(sql, params)
+        db.conn.commit()
+    except Exception as e:
+        logging.error(f"DB Stats Error: {e}")
+        db.conn.rollback()
 
 
 def get_active_core_count(db, date):
