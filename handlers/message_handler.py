@@ -305,26 +305,30 @@ class MessageHandler:
         if message.entities:
             mentions_count = sum(1 for e in message.entities if e.type == 'mention')
         
-        # Update user statistics (exclude self-replies)
-        stats_update = {
-            'total_chars': char_count,
-            'total_messages': 1,
-            'total_words': word_count,
-            'replies_sent': 1 if (is_reply and not is_self_reply) else 0,  # Exclude self-replies
-            'media_sent': 1 if is_media else 0,
-            'mentions_received': mentions_count,
-            'other_threads_posts': 1 if thread_id is not None else 0
-        }
+ # 1. ПРОВЕРКА: является ли сообщение командой?
+        is_command = text.strip().startswith('/')
         
-        self.db.update_user_activity(user.id, today, **stats_update)
+        # Update user statistics (exclude commands)
+        if not is_command:    
+            stats_update = {
+                'total_chars': char_count,
+                'total_messages': 1,
+                'total_words': word_count,
+                'replies_sent': 1 if (is_reply and not is_self_reply) else 0,
+                'media_sent': 1 if is_media else 0,
+                'mentions_received': mentions_count,
+                'other_threads_posts': 1 if thread_id is not None else 0
+            }
+            # ВАЖНО: Эти строки должны быть ВНУТРИ блока if not is_command
+            self.db.update_user_activity(user.id, today, **stats_update)
 
-        # ═══ ПОЧАСОВАЯ СТАТИСТИКА (для % активности) ═══
-        try:
-            from utils.helpers import get_moscow_time
-            now_msk = get_moscow_time()
-            self.db.update_user_activity_hourly(user.id, today, now_msk.hour, **stats_update)
-        except Exception as e:
-            logging.debug(f"Hourly stats error: {e}")
+            # ═══ ПОЧАСОВАЯ СТАТИСТИКА ═══
+            try:
+                from utils.helpers import get_moscow_time
+                now_msk = get_moscow_time()
+                self.db.update_user_activity_hourly(user.id, today, now_msk.hour, **stats_update)
+            except Exception as e: # Добавил 'as e'
+                logging.debug(f"Hourly stats error: {e}")
 
          # ═══ МГНОВЕННОЕ ОБНОВЛЕНИЕ КУРСА (дельта) ═══
         try:
@@ -410,35 +414,35 @@ class MessageHandler:
         except Exception as e:
             logging.error(f"shipper resonance hook error: {e}")
         
-        # === ОБНОВЛЕНИЕ СТАТИСТИКИ ЧАТА ===
-        # Check if user is admin for message counting
-        is_admin_message = is_excluded
-        
-        self.db.cursor.execute('''
-            INSERT INTO chat_stats (date, total_chars, total_messages, total_messages_with_admins,
-                                   total_messages_without_admins, total_words, total_replies, 
-                                   total_mentions, total_media, other_threads_posts)
-            VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(date) DO UPDATE SET
-                total_chars = total_chars + excluded.total_chars,
-                total_messages = total_messages + 1,
-                total_messages_with_admins = total_messages_with_admins + excluded.total_messages_with_admins,
-                total_messages_without_admins = total_messages_without_admins + excluded.total_messages_without_admins,
-                total_words = total_words + excluded.total_words,
-                total_replies = total_replies + excluded.total_replies,
-                total_mentions = total_mentions + excluded.total_mentions,
-                total_media = total_media + excluded.total_media,
-                other_threads_posts = other_threads_posts + excluded.other_threads_posts,
-                avg_message_length = CAST(total_chars AS REAL) / total_messages
-        ''', (today, char_count, 
-              1 if is_admin_message else 0,  # with admins
-              0 if is_admin_message else 1,  # without admins
-              word_count, 
-              1 if (is_reply and not is_self_reply) else 0,
-              mentions_count,
-              1 if is_media else 0,
-              1 if thread_id is not None else 0))
-        self.db.conn.commit()
+       # === ОБНОВЛЕНИЕ СТАТИСТИКИ ЧАТА ===
+        # ЭТОТ БЛОК БОЛЬШЕ НЕ НУЖЕН, ТАК КАК МЫ БЕРЕМ ДАННЫЕ ИЗ USER_STATS
+        # is_admin_message = is_excluded
+        # 
+        # self.db.cursor.execute('''
+        #     INSERT INTO chat_stats (date, total_chars, total_messages, total_messages_with_admins,
+        #                            total_messages_without_admins, total_words, total_replies, 
+        #                            total_mentions, total_media, other_threads_posts)
+        #     VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+        #     ON CONFLICT(date) DO UPDATE SET
+        #         total_chars = total_chars + excluded.total_chars,
+        #         total_messages = total_messages + 1,
+        #         total_messages_with_admins = total_messages_with_admins + excluded.total_messages_with_admins,
+        #         total_messages_without_admins = total_messages_without_admins + excluded.total_messages_without_admins,
+        #         total_words = total_words + excluded.total_words,
+        #         total_replies = total_replies + excluded.total_replies,
+        #         total_mentions = total_mentions + excluded.total_mentions,
+        #         total_media = total_media + excluded.total_media,
+        #         other_threads_posts = other_threads_posts + excluded.other_threads_posts,
+        #         avg_message_length = CAST(total_chars AS REAL) / total_messages
+        # ''', (today, char_count, 
+        #       1 if is_admin_message else 0,  # with admins
+        #       0 if is_admin_message else 1,  # without admins
+        #       word_count, 
+        #       1 if (is_reply and not is_self_reply) else 0,
+        #       mentions_count,
+        #       1 if is_media else 0,
+        #       1 if thread_id is not None else 0))
+        # self.db.conn.commit()
         
         # === НАЧИСЛЕНИЕ НАГРАД ===
         _reward, _notification = process_mining_reward(

@@ -217,7 +217,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         WHERE date >= ? AND date <= ?
     ''', (prev_start, prev_end))
 
-    stats_message += f"💬 Сообщений: {format_number(total_messages)}{_delta_str(total_messages, prev_msgs)}\n"
+    stats_message += f"💬 Сообщений: {int(total_messages)}{_delta_str(total_messages, prev_msgs)}\n"
 
     # ── 2. Активных пользователей ──
     db.cursor.execute('''
@@ -318,17 +318,17 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
 
     stats_message += "\n"
 
-    # ── ДЕТАЛЬНЫЕ ПАРАМЕТРЫ ──
+   # ── ДЕТАЛЬНЫЕ ПАРАМЕТРЫ (Полностью переведены на user_stats для точности) ──
     stats_message += "📈 ДЕТАЛЬНЫЕ ПАРАМЕТРЫ:\n"
 
     params_queries = [
-        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',       False),
-        ('СДС — ср. длина сообщ.',  'SELECT COALESCE(AVG(avg_message_length), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?', True),
-        ('Медиа',                   'SELECT COALESCE(SUM(total_media), 0) as v FROM chat_stats WHERE date >= ? AND date <= ?',        False),
+        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
+        ('СДС — ср. длина сообщ.',  'SELECT CASE WHEN SUM(total_messages) > 0 THEN CAST(SUM(total_chars) AS REAL) / SUM(total_messages) ELSE 0 END as v FROM user_stats WHERE date >= ? AND date <= ?', True),
+        ('Медиа',                   'SELECT COALESCE(SUM(media_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',        False),
         ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
         ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
         ('Ответов всего',           'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('Отвечали (уник.)',        'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_sent > 0',     False),
+        ('Отвечали (уник.)',        'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND total_messages > 0',     False),
         ('Получили ответ (уник.)',  'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_received > 0', False),
         ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
         ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
@@ -336,14 +336,20 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
 
     for label, sql, is_avg in params_queries:
         db.cursor.execute(sql, (date_from, date_to))
-        raw_val = db.cursor.fetchone()['v']
-        val_d   = round_decimal(_d(raw_val), 1 if is_avg else 0)
+        row = db.cursor.fetchone()
+        raw_val = row['v'] if row['v'] is not None else 0
+        
+        val_d = round_decimal(_d(raw_val), 1 if is_avg else 0)
+        
         if is_avg:
             stats_message += f"• {label}: {float(val_d):.1f}\n"
         else:
-            stats_message += f"• {label}: {format_number(int(val_d))}\n"
-
-    stats_message += "\n"
+            # Используем int() для целых чисел, чтобы убрать .00
+            # format_number используем только для ОКС (где тысячи), для остальных просто число
+            if label == 'ОКС — символов':
+                stats_message += f"• {label}: {format_number(int(val_d))}\n"
+            else:
+                stats_message += f"• {label}: {int(val_d)}\n"
 
     keyboard = [
         [InlineKeyboardButton("📊 Скачать отчёт",       callback_data=f"stats_export_{period}_{stats_type}")],
