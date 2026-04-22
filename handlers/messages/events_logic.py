@@ -519,32 +519,18 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
         logging.error(f"Journal log_join error: {e}")
 
 async def handle_reaction(update, context, db, target_chat_id):
-    """Handle message reactions"""
-    
+    """обработка реакций (Защита от накрутки и инфляции)"""
     reaction_update = update.message_reaction
     
-    if not reaction_update:
-        logging.debug("❌ No reaction in update")
+    if not reaction_update or reaction_update.chat.id != target_chat_id:
         return
-    
-    # Only process reactions from target chat
-    if reaction_update.chat.id != target_chat_id:
-        logging.debug(f"⚠️ Skipping reaction: wrong chat {reaction_update.chat.id}")
-        return
-    
+
     # ═══ BBS: проверить, относится ли реакция к BBS-анкете ═══
     await handle_bbs_reaction(reaction_update, context, db, target_chat_id)
     
-    user = reaction_update.user  # Кто поставил реакцию
-    
+    user = reaction_update.user
     today = get_today_date_msk()
-    
-    db.add_user(
-        user.id,
-        user.username,
-        user.first_name,
-        user.last_name
-    )
+    db.add_user(user.id, user.username, user.first_name, user.last_name)
     
     new_reaction = reaction_update.new_reaction
     old_reaction = reaction_update.old_reaction
@@ -552,25 +538,30 @@ async def handle_reaction(update, context, db, target_chat_id):
     added_count = len(new_reaction) if new_reaction else 0
     removed_count = len(old_reaction) if old_reaction else 0
     
+    # Считаем чистую разницу
     net_change = added_count - removed_count
-    
-    if net_change == 0:
+
+    # ВАЖНО: Если реакция удалена (net_change <= 0), мы просто выходим.
+    # Мы не даем награду и не повышаем статистику за удаление лайка!
+    if net_change <= 0:
         return
     
-    logging.info(f"👍 Reaction update: user {user.id} net_change={net_change}")
-    
-    if net_change != 0:
-        db.update_user_activity(user.id, today, reactions_given=abs(net_change))
-        try:
-            from utils.helpers import get_moscow_time
-            now_msk = get_moscow_time()
-            db.update_user_activity_hourly(user.id, today, now_msk.hour, reactions_given=abs(net_change))
-        except Exception:
-            pass
-    
+    # Ограничиваем влияние одного события единицей (защита от массовых эмодзи)
+    actual_increment = 1 
+
+    logging.info(f"👍 Reaction ADDED: user {user.id}")
+
+    # 1. ОБНОВЛЯЕМ СТАТИСТИКУ ТОМУ, КТО ПОСТАВИЛ (Giver)
+    db.update_user_activity(user.id, today, reactions_given=actual_increment)
+    try:
+        from utils.helpers import get_moscow_time
+        now_msk = get_moscow_time()
+        db.update_user_activity_hourly(user.id, today, now_msk.hour, reactions_given=actual_increment)
+    except Exception: pass
+
+    # 2. ИЩЕМ АВТОРА СООБЩЕНИЯ И ОБНОВЛЯЕМ ЕМУ
     try:
         message_id = reaction_update.message_id
-        
         db.cursor.execute('''
             SELECT user_id FROM messages 
             WHERE chat_id = ? AND telegram_message_id = ?
@@ -581,88 +572,59 @@ async def handle_reaction(update, context, db, target_chat_id):
         
         if result:
             message_author_id = result['user_id']
+            # Себе лайки не считаем в статистику полученных
             if message_author_id != user.id:
-                db.update_user_activity(message_author_id, today, reactions_received=abs(net_change))
+                db.update_user_activity(message_author_id, today, reactions_received=actual_increment)
                 try:
-                    from utils.helpers import get_moscow_time
-                    now_msk = get_moscow_time()
-                    db.update_user_activity_hourly(message_author_id, today, now_msk.hour, reactions_received=abs(net_change))
-                except Exception:
-                    pass
-                logging.info(f"👍 User {message_author_id} received {abs(net_change)} reactions from {user.id}")
-        else:
-            logging.warning(f"⚠️ Could not find message author for reaction")
-    
+                    db.update_user_activity_hourly(message_author_id, today, now_msk.hour, reactions_received=actual_increment)
+                except Exception: pass
+                logging.info(f"👍 User {message_author_id} received reaction from {user.id}")
+        
     except Exception as e:
         logging.error(f"Error updating reactions_received: {e}")
-    
-    try:
-        db.cursor.execute('''
-            INSERT INTO chat_stats (date, total_reactions)
-            VALUES (?, ?)
-            ON CONFLICT(date) DO UPDATE SET
-                total_reactions = total_reactions + excluded.total_reactions
-        ''', (today, abs(net_change)))
-        db.conn.commit()
-    except Exception as e:
-        logging.error(f"Error updating chat_stats reactions: {e}")
 
-    # ═══ НАЧИСЛЕНИЕ НАГРАД ЗА РЕАКЦИИ ═══
-    if net_change <= 0:
-        return
-
+    # 3. НАЧИСЛЕНИЕ НАГРАД (Только за добавление!)
     try:
-        # Микро-награда тому, кто поставил реакцию
+        # Награда тому, кто поставил
         rg_reward = calculate_reaction_given_reward()
         if rg_reward > 0:
-            bank_balance = db.get_bank_balance()
-            if bank_balance >= rg_reward:
+            if db.get_bank_balance() >= rg_reward:
                 db.update_user_balance(user.id, rg_reward, 'add')
                 db.update_bank_balance(rg_reward, 'subtract')
                 db.add_transaction(None, user.id, rg_reward, 'reaction_given_reward', 'Реакция')
 
-        # Микро-награда автору поста
-        if result:
-            message_author_id = result['user_id']
-            if message_author_id != user.id:
-                rr_reward = calculate_reaction_received_reward()
-                if rr_reward > 0:
-                    bank_balance = db.get_bank_balance()
-                    if bank_balance >= rr_reward:
-                        db.update_user_balance(message_author_id, rr_reward, 'add')
-                        db.update_bank_balance(rr_reward, 'subtract')
-                        db.add_transaction(None, message_author_id, rr_reward, 'reaction_received_reward', 'Получена реакция')
+        # Награда автору поста
+        if result and result['user_id'] != user.id:
+            author_id = result['user_id']
+            rr_reward = calculate_reaction_received_reward()
+            if rr_reward > 0:
+                if db.get_bank_balance() >= rr_reward:
+                    db.update_user_balance(author_id, rr_reward, 'add')
+                    db.update_bank_balance(rr_reward, 'subtract')
+                    db.add_transaction(None, author_id, rr_reward, 'reaction_received_reward', 'Получена реакция')
 
-                # Проверка social combos для автора поста
-                now = get_moscow_time()
-                claimed_combos = _get_claimed_combos(db, message_author_id, now)
+            # Проверка социальных комбо
+            now = get_moscow_time()
+            claimed_combos = _get_claimed_combos(db, author_id, now)
 
-                # Считаем текущие реакции и ответы на этот пост
-                db.cursor.execute('''
-                    SELECT
-                        COALESCE(reactions_received, 0) AS rr,
-                        COALESCE(replies_received, 0) AS rep
-                    FROM user_stats
-                    WHERE user_id = ? AND date = ?
-                ''', (message_author_id, today))
-                stats_row = db.cursor.fetchone()
-                total_reactions = stats_row['rr'] if stats_row else 0
-                total_replies = stats_row['rep'] if stats_row else 0
+            db.cursor.execute('''
+                SELECT COALESCE(reactions_received, 0) AS rr, COALESCE(replies_received, 0) AS rep
+                FROM user_stats WHERE user_id = ? AND date = ?
+            ''', (author_id, today))
+            stats_row = db.cursor.fetchone()
+            
+            combo_reward, new_combos = calculate_social_combos(
+                reply_count=stats_row['rep'] if stats_row else 0,
+                reaction_count=stats_row['rr'] if stats_row else 0,
+                completed_today=list(claimed_combos.keys()),
+            )
 
-                combo_reward, new_combos = calculate_social_combos(
-                    reply_count=total_replies,
-                    reaction_count=total_reactions,
-                    completed_today=list(claimed_combos.keys()),
-                )
-
-                if combo_reward > 0 and new_combos:
-                    bank_balance = db.get_bank_balance()
-                    if bank_balance >= combo_reward:
-                        db.update_user_balance(message_author_id, combo_reward, 'add')
-                        db.update_bank_balance(combo_reward, 'subtract')
-                        db.add_transaction(None, message_author_id, combo_reward, 'combo_reward', 'Тайное Комбо (соц.)')
-                        _save_combo_claims(db, message_author_id, new_combos, combo_reward, now)
-                        logging.info(f"🏆 SOCIAL COMBO for {message_author_id}: {new_combos} = {combo_reward}")
+            if combo_reward > 0 and new_combos:
+                if db.get_bank_balance() >= combo_reward:
+                    db.update_user_balance(author_id, combo_reward, 'add')
+                    db.update_bank_balance(combo_reward, 'subtract')
+                    db.add_transaction(None, author_id, combo_reward, 'combo_reward', 'Тайное Комбо (соц.)')
+                    _save_combo_claims(db, author_id, new_combos, combo_reward, now)
 
     except Exception as e:
         logging.error(f"Error in reaction rewards: {e}")

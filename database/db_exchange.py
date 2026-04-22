@@ -311,48 +311,41 @@ def get_all_top_appearances(db, days=30):
 # ═══════════════════════════════════════════════════
 
 def update_user_activity_hourly(db, user_id, date, hour, **kwargs):
-    """Обновить почасовую статистику пользователя (аналог update_user_activity)."""
-    db.cursor.execute('''
-        SELECT id FROM user_stats_hourly WHERE user_id = ? AND date = ? AND hour = ?
-    ''', (user_id, date, hour))
+    """Атомарное обновление почасовой статистики (Защита от Race Condition)"""
+    # Список разрешенных полей
+    allowed = [
+        'total_chars', 'total_messages', 'total_words', 'reactions_given', 
+        'reactions_received', 'replies_received', 'replies_sent', 
+        'mentions_received', 'media_sent', 'other_threads_posts'
+    ]
+    
+    # Фильтруем входящие данные
+    data = {k: v for k, v in kwargs.items() if k in allowed and v is not None}
+    if not data:
+        return
 
-    existing = db.cursor.fetchone()
+    # Подготовка SQL запроса
+    columns = ['user_id', 'date', 'hour'] + list(data.keys())
+    placeholders = ', '.join(['?'] * len(columns))
+    
+    # Инструкция для обновления: прибавляем новые значения к старым
+    update_stmt = ", ".join([f"{col} = {col} + excluded.{col}" for col in data.keys()])
 
-    if existing:
-        fields = []
-        values = []
-        for key, value in kwargs.items():
-            if value is not None and key in (
-                'total_chars', 'total_messages', 'total_words',
-                'reactions_given', 'reactions_received',
-                'replies_received', 'replies_sent',
-                'mentions_received', 'media_sent', 'other_threads_posts'
-            ):
-                fields.append(f"{key} = {key} + ?")
-                values.append(value)
+    sql = f'''
+        INSERT INTO user_stats_hourly ({", ".join(columns)})
+        VALUES ({placeholders})
+        ON CONFLICT(user_id, date, hour) DO UPDATE SET
+        {update_stmt}
+    '''
 
-        if fields:
-            query = f"UPDATE user_stats_hourly SET {', '.join(fields)} WHERE user_id = ? AND date = ? AND hour = ?"
-            values.extend([user_id, date, hour])
-            db.cursor.execute(query, values)
-    else:
-        cols = {'user_id': user_id, 'date': date, 'hour': hour}
-        for key, value in kwargs.items():
-            if value is not None and key in (
-                'total_chars', 'total_messages', 'total_words',
-                'reactions_given', 'reactions_received',
-                'replies_received', 'replies_sent',
-                'mentions_received', 'media_sent', 'other_threads_posts'
-            ):
-                cols[key] = value
-
-        fields = list(cols.keys())
-        placeholders = ['?'] * len(fields)
-        values = list(cols.values())
-        query = f"INSERT INTO user_stats_hourly ({', '.join(fields)}) VALUES ({', '.join(placeholders)})"
-        db.cursor.execute(query, values)
-
-    db.conn.commit()
+    try:
+        params = [user_id, date, hour] + list(data.values())
+        db.cursor.execute(sql, params)
+        db.conn.commit()
+    except Exception as e:
+        import logging
+        logging.error(f"Hourly Stats Update Error: {e}")
+        db.conn.rollback()
 
 
 def save_top5_percent(db, entries, window_start, window_end):
