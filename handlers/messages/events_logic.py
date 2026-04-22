@@ -540,11 +540,12 @@ async def handle_reaction(update, context, db, target_chat_id):
     
     # Считаем чистую разницу
     net_change = added_count - removed_count
-
     # ВАЖНО: Если реакция удалена (net_change <= 0), мы просто выходим.
     # Мы не даем награду и не повышаем статистику за удаление лайка!
     if net_change <= 0:
         return
+      # Считаем только факт добавления (всегда +1)
+    db.update_user_activity(user.id, today, reactions_given=1)
     
     # Ограничиваем влияние одного события единицей (защита от массовых эмодзи)
     actual_increment = 1 
