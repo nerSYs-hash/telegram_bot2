@@ -211,6 +211,7 @@ export default function App() {
   const [actPickerGroupIdx, setActPickerGroupIdx] = useState(0);
   const [actPickerSearch, setActPickerSearch] = useState('');
   const [actGroupSettingsIdx, setActGroupSettingsIdx] = useState(null);
+  const [newActionIds, setNewActionIds] = useState(() => new Set());
   const [condChipInputs, setCondChipInputs] = useState({});
   const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
   const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
@@ -240,6 +241,34 @@ export default function App() {
   const [topicsLoaded, setTopicsLoaded] = useState(false);
   const [mediaUploading, setMediaUploading] = useState(false); // {gIdx,aIdx,varIdx} | false
   const [showPreview, setShowPreview] = useState(null); // {text, mediaUrl, mediaType, keyboard} | null
+
+  useEffect(() => {
+    if (document.getElementById('connector-insert-kf')) return;
+    const style = document.createElement('style');
+    style.id = 'connector-insert-kf';
+    style.innerHTML = `
+@keyframes connectorLineGrow {
+  0%   { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+@keyframes connectorDotPop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.connector-insert .connector-line {
+  transform-origin: center;
+  animation: connectorLineGrow 260ms cubic-bezier(.4,0,.2,1) 120ms both;
+}
+.connector-insert .connector-dot-top {
+  animation: connectorDotPop 220ms cubic-bezier(.34,1.56,.64,1) 380ms both;
+}
+.connector-insert .connector-dot-bot {
+  animation: connectorDotPop 220ms cubic-bezier(.34,1.56,.64,1) 380ms both;
+}
+`;
+    document.head.appendChild(style);
+  }, []);
 
   const fetchTriggers = () => {
     setTriggersLoading(true);
@@ -1043,11 +1072,15 @@ export default function App() {
               ...g, conditions: g.conditions.filter((_, ci) => ci !== cIdx)
             })
           }));
-          const addConditionToGroup = (gIdx, signal) => {
+          const addConditionToGroup = (gIdx, signal, ctype = 'keyword') => {
+            const newId = Date.now();
+            const newCond = ctype === 'reply_type'
+              ? { id: newId, signal: 'message', type: 'reply_type', chips: [], inverted: false, placeholder_key: '' }
+              : { id: newId, signal, type: 'keyword', condition: 'contains', keyword: '', chips: [], keywordMode: 'chips', inverted: false, modifier: 'nocase', placeholder_key: '' };
             setEditingTrigger(prev => ({
               ...prev,
               conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
-                ...g, conditions: [...g.conditions, { id: Date.now(), signal, type: 'keyword', condition: 'contains', keyword: '', chips: [], keywordMode: 'chips', inverted: false, modifier: 'nocase', placeholder_key: '' }]
+                ...g, conditions: [...g.conditions, newCond]
               })
             }));
             setShowCondPickerModal(false);
@@ -1110,7 +1143,8 @@ export default function App() {
             })
           }));
           const addActionToGroup = (gIdx, type) => {
-            const base = { id: Date.now(), type, duration: '', emoji: '' };
+            const newId = Date.now();
+            const base = { id: newId, type, duration: '', emoji: '' };
             const sendTextExtra = type === 'send_text' || type === 'dm' ? {
               variants: [{ id: Date.now(), text: '', media_type: 'none' }],
               currentVariant: 0, msgTab: 'editor', reply_target: 'none',
@@ -1125,6 +1159,10 @@ export default function App() {
               })
             }));
             setShowActPickerModal(false);
+            setNewActionIds(prev => { const n = new Set(prev); n.add(newId); return n; });
+            setTimeout(() => {
+              setNewActionIds(prev => { const n = new Set(prev); n.delete(newId); return n; });
+            }, 800);
           };
           const addActionGroup = () => setEditingTrigger(prev => ({
             ...prev, actionGroups: [...(prev.actionGroups||[]), { id: Date.now(), probability: 100, actions: [] }]
@@ -1155,7 +1193,38 @@ export default function App() {
             'msg_any':     'Срабатывает на любое текстовое сообщение, без проверки содержимого.',
             'qmsg_keyword': 'Проверяет текст сообщения, на которое ответили (цитируемое).',
             'qmsg_any':    'Срабатывает, когда пользователь отвечает на любое сообщение цитированием.',
+            'msg_reply_type': 'Проверяет тип сообщения: обычное, реплай, первое сообщение пользователя, комментарий под постом и т.д.',
           };
+          const REPLY_TYPE_OPTIONS = [
+            { key: 'any',                label: 'Любое сообщение' },
+            { key: 'any_reply',          label: 'Все ответы' },
+            { key: 'reply_bot',          label: 'Ответ боту' },
+            { key: 'reply_user',         label: 'Ответ участнику' },
+            { key: 'reply_admin',        label: 'Ответ админу' },
+            { key: 'reply_non_admin',    label: 'Ответ не админу' },
+            { key: 'reply_self_bot',     label: 'Ответ @Pulse_On_bot' },
+            { key: 'non_reply',          label: 'Не ответ' },
+            { key: 'first_message',      label: 'Первое сообщение пользователя' },
+            { key: 'reply_linked_post',  label: 'Ответ на пост в привязанном канале' },
+            { key: 'reply_channel',      label: 'Ответ на сообщение от имени канала' },
+            { key: 'comment_under_post', label: 'Любой комментарий под постом' },
+            { key: 'reply_self',         label: 'Ответ самому себе' },
+          ];
+          const REPLY_TYPE_INFO = `Бот будет реагировать на определённые типы сообщения участников чата. Например, на «ответы админу». Настройка полезна, если хотите контролировать ответы в группе, например — разрешить или запретить их.
+
+• Любое сообщение — триггер будет срабатывать на любые типы сообщений участников.
+• Все ответы — сработает, если участник написал сообщение в ответ (реплай) на любое сообщение.
+• Ответ боту — сработает, если участник написал сообщение в ответ на сообщение бота.
+• Ответ участнику — сработает, если участник написал сообщение в ответ на сообщение другого участника.
+• Ответ админу — сработает, если участник написал сообщение в ответ на сообщение администратора.
+• Ответ не админу — сработает, если участник написал сообщение в ответ тому, кто не является админом.
+• Ответ @Pulse_On_bot — сработает, если участник написал сообщение в ответ нашему боту.
+• Не ответ — сработает, если участник написал обычное сообщение, не в ответ кому-либо.
+• Первое сообщение пользователя — сработает, если участник написал в чате впервые.
+• Ответ на пост в привязанном канале — сработает, если участник пишет в ответ на пост в канале, который привязан к группе.
+• Ответ на сообщение от имени канала — сработает, если участник пишет в ответ на сообщение, которое написано от имени любого канала.
+• Любой комментарий под постом — сработает, если участник оставит любой комментарий или ответ на комментарий под постом.
+• Ответ самому себе — сработает, если участник отвечает на своё собственное сообщение.`;
 
           const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
           const ACTION_TYPES = [
@@ -1360,6 +1429,94 @@ export default function App() {
                             {/* Тело карточки */}
                             <div className="px-3 py-3 space-y-3" onClick={() => setCondOpenDropdown(null)}>
 
+                              {cond.type === 'reply_type' ? (
+                                <>
+                                  {/* Заголовок "Тип ответа" + ? */}
+                                  <div className="flex items-center gap-1.5 relative">
+                                    <span className="text-[13px] font-black text-gray-800">Тип ответа</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_info_${gIdx}_${cIdx}` ? null : `rt_info_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                    {condTooltip === `rt_info_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-[600] w-[280px] bg-gray-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-2xl leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto">
+                                        {REPLY_TYPE_INFO}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                                    Сигнал для вызова триггера: 📋 Сообщение
+                                  </p>
+                                  {/* Значения условия (multi-select) */}
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <p className="text-[9px] font-black text-gray-500 uppercase">
+                                        Значения условия <span className="text-red-400">*</span>
+                                      </p>
+                                      <div className="relative">
+                                        <button
+                                          onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` ? null : `rt_gear_${gIdx}_${cIdx}`)}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
+                                        {condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` && (
+                                          <div className="absolute left-0 top-6 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
+                                            <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondOpenDropdown(null); }}
+                                              className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
+                                              <RotateCcw size={11}/> Отменить изменения
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? null : `rt_dd_${gIdx}_${cIdx}`)}
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-white border-2 border-gray-200 rounded-xl hover:border-gray-300 transition-all">
+                                        <div className="flex flex-wrap gap-1 flex-1">
+                                          {(cond.chips||[]).length === 0 && <span className="text-gray-300 text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).map((key, ci) => {
+                                            const lbl = REPLY_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
+                                            return (
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold">
+                                                {lbl}
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-gray-400 hover:text-gray-700 leading-none ml-0.5">×</button>
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        <ChevronDown size={14} className={`text-gray-400 flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                      </button>
+                                      {condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` && (
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                          {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
+                                            <button key={o.key}
+                                              onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-gray-700 hover:bg-gray-50">
+                                              {o.label}
+                                            </button>
+                                          ))}
+                                          {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
+                                            <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">Все опции выбраны</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-1">Обязательное поле</p>}
+                                  </div>
+                                  {/* Инвертировать */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                        <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_inv_${gIdx}_${cIdx}` ? null : `rt_inv_${gIdx}_${cIdx}`); }}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                      </div>
+                                      <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                  </div>
+                                </>
+                              ) : (<>
                               {/* Сигнал */}
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[12px] font-black text-gray-800">
@@ -1528,6 +1685,7 @@ export default function App() {
                                 </div>
                                 <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
                               </div>
+                              </>)}
 
                             </div>
                           </div>
@@ -1667,10 +1825,10 @@ export default function App() {
                           <div key={action.id}>
                             {aIdx > 0 && (
                               <div className="flex justify-center my-3">
-                                <div className="flex flex-col items-center">
-                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
-                                  <div className="w-px h-6 bg-blue-100"/>
-                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                <div className={`flex flex-col items-center ${newActionIds.has(action.id) ? 'connector-insert' : ''}`}>
+                                  <div className="w-2 h-2 rounded-full bg-blue-200 connector-dot-top"/>
+                                  <div className="w-px h-6 bg-blue-100 connector-line"/>
+                                  <div className="w-2 h-2 rounded-full bg-blue-200 connector-dot-bot"/>
                                 </div>
                               </div>
                             )}
@@ -3351,6 +3509,27 @@ export default function App() {
                               {condTooltip === `picker_kw_${condPickerTab}` && (
                                 <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
                                   {condPickerTab === 'message' ? COND_TOOLTIP_TEXT['msg_keyword'] : COND_TOOLTIP_TEXT['qmsg_keyword']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Тип ответа — только для message-таба */}
+                          {condPickerTab === 'message' && (condPickerSearch === '' || 'тип ответа reply'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'reply_type')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">↩️</span>
+                              <span className="text-[11px] font-black text-gray-800 leading-tight">Тип ответа</span>
+                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Реплай, первое сообщ., коммент...</span>
+                              <span className="absolute top-1.5 left-1.5 text-[8px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full uppercase animate-pulse z-10">NEW</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_rt' ? null : 'picker_rt'); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === 'picker_rt' && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {COND_TOOLTIP_TEXT['msg_reply_type']}
                                 </div>
                               )}
                             </button>

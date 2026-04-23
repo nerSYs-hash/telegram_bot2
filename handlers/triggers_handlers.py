@@ -1375,7 +1375,60 @@ def _match_single_keyword(msg_text: str, op: str, kw: str) -> bool:
     return kw in msg_text
 
 
-def _match_condition_groups(msg_text: str, groups: list) -> Optional[bool]:
+def _check_reply_type(message, chips: list, admin_ids: set, bot_id: Optional[int], is_first_msg: bool) -> bool:
+    """Проверяет тип сообщения (reply_type condition). OR между chips."""
+    if not chips:
+        return False
+    reply = getattr(message, 'reply_to_message', None)
+    sender_chat = getattr(message, 'sender_chat', None)
+    is_comment_under_post = False
+    try:
+        if reply is not None and getattr(reply, 'sender_chat', None) is not None:
+            is_comment_under_post = getattr(getattr(reply, 'sender_chat'), 'type', '') == 'channel'
+    except Exception:
+        pass
+
+    for key in chips:
+        k = str(key).strip().lower()
+        if k == 'any':
+            return True
+        if k == 'any_reply' and reply is not None:
+            return True
+        if k == 'non_reply' and reply is None:
+            return True
+        if k == 'first_message' and is_first_msg:
+            return True
+        if k == 'comment_under_post' and is_comment_under_post:
+            return True
+        if reply is not None:
+            r_user = getattr(reply, 'from_user', None)
+            r_uid = getattr(r_user, 'id', None)
+            r_is_bot = bool(getattr(r_user, 'is_bot', False)) if r_user else False
+            r_sender_chat = getattr(reply, 'sender_chat', None)
+            r_chat_type = getattr(r_sender_chat, 'type', None) if r_sender_chat else None
+            r_is_admin = r_uid in admin_ids if r_uid else False
+            cur_uid = getattr(getattr(message, 'from_user', None), 'id', None)
+            if k == 'reply_bot' and r_is_bot:
+                return True
+            if k == 'reply_self_bot' and bot_id is not None and r_uid == bot_id:
+                return True
+            if k == 'reply_user' and r_user and not r_is_bot and not r_is_admin:
+                return True
+            if k == 'reply_admin' and r_is_admin:
+                return True
+            if k == 'reply_non_admin' and r_user and not r_is_admin:
+                return True
+            if k == 'reply_self' and cur_uid is not None and r_uid == cur_uid:
+                return True
+            if k == 'reply_channel' and r_chat_type == 'channel':
+                return True
+            if k == 'reply_linked_post' and r_chat_type == 'channel':
+                # пост в привязанном канале — reply на сообщение от sender_chat=channel
+                return True
+    return False
+
+
+def _match_condition_groups(msg_text: str, groups: list, message=None, admin_ids: Optional[set] = None, bot_id: Optional[int] = None, is_first_msg: bool = False) -> Optional[bool]:
     """
     Матчит conditionGroups. Возвращает:
     - True если любая группа подошла (между группами OR)
@@ -1386,6 +1439,7 @@ def _match_condition_groups(msg_text: str, groups: list) -> Optional[bool]:
     """
     if not groups or not isinstance(groups, list):
         return None
+    admin_ids = admin_ids or set()
     valid_groups = 0
     for group in groups:
         if not isinstance(group, dict):
@@ -1400,8 +1454,19 @@ def _match_condition_groups(msg_text: str, groups: list) -> Optional[bool]:
                 group_ok = False
                 break
             ctype = cond.get('type', 'keyword')
+            if ctype == 'reply_type':
+                if message is None:
+                    group_ok = False
+                    break
+                chips = cond.get('chips') or []
+                cond_ok = _check_reply_type(message, chips, admin_ids, bot_id, is_first_msg)
+                if cond.get('inverted'):
+                    cond_ok = not cond_ok
+                if not cond_ok:
+                    group_ok = False
+                    break
+                continue
             if ctype != 'keyword':
-                # другие типы пока не поддерживаем — считаем несовпадением
                 group_ok = False
                 break
             raw_chips = cond.get('chips') or ([cond.get('keyword')] if cond.get('keyword') else [])
@@ -1511,7 +1576,38 @@ async def process_triggers(
 
         # Проверка совпадения — приоритет condition_groups, fallback на плоские keywords/condition
         cond_groups = tdata.get('condition_groups') or []
-        groups_result = _match_condition_groups(msg_text, cond_groups)
+        # Готовим контекст для reply_type условий: admin_ids, bot_id, is_first_msg
+        _admin_ids = set()
+        _bot_id = None
+        _is_first_msg = False
+        if any(
+            (c.get('type') == 'reply_type')
+            for g in (cond_groups if isinstance(cond_groups, list) else [])
+            if isinstance(g, dict)
+            for c in (g.get('conditions') or [])
+            if isinstance(c, dict)
+        ):
+            try:
+                _bot_id = context.bot.id
+            except Exception:
+                pass
+            try:
+                admins = await context.bot.get_chat_administrators(message.chat.id)
+                _admin_ids = {a.user.id for a in admins if getattr(a, 'user', None)}
+            except Exception as _ae:
+                logger.debug(f"get_chat_administrators failed: {_ae}")
+            try:
+                udata = db.get_user(user.id)
+                # Если у пользователя 0 сообщений до текущего — это первое
+                msg_count = 0
+                try:
+                    msg_count = int(udata['messages'] if udata and 'messages' in udata.keys() else 0)
+                except (TypeError, ValueError, KeyError):
+                    msg_count = 0
+                _is_first_msg = msg_count <= 1
+            except Exception:
+                pass
+        groups_result = _match_condition_groups(msg_text, cond_groups, message=message, admin_ids=_admin_ids, bot_id=_bot_id, is_first_msg=_is_first_msg)
         if groups_result is not None:
             matched = groups_result
             logger.info(f"[TRIGGERS] '{tname}' groups_match={matched} groups_count={len(cond_groups)}")
