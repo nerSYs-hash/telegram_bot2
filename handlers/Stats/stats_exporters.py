@@ -227,8 +227,9 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
     try:
         now = get_moscow_time()
         if period == 'yesterday':
-            start_date = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date   = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            yesterday = (now - timedelta(days=1))
+            start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_date   = yesterday.replace(hour=23, minute=59, second=59, microsecond=0)
             period_name = "За вчера"
         elif period == 'day':
             start_date  = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -260,29 +261,27 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
         b_count = int(os.getenv('BOT_COUNT', 1))
         divisor = Decimal(max(m_count - b_count - 1, 1))   # ← Decimal
 
-        # 2. Агрегированные данные из БД
+        # 1. Агрегированные данные из user_stats (заменяем chat_stats)
         db.cursor.execute('''
             SELECT
                 COALESCE(SUM(total_chars), 0)                as chars,
                 COALESCE(SUM(total_messages), 0)             as msgs,
                 COALESCE(SUM(total_words), 0)                as words,
-                COALESCE(SUM(total_reactions), 0)            as reacts,
-                COALESCE(SUM(total_media), 0)                as media,
-                COALESCE(SUM(total_pulses_mined), 0)         as pulses,
-                COALESCE(SUM(total_messages_with_admins), 0) as with_adm,
-                COALESCE(SUM(total_messages_without_admins), 0) as no_adm,
-                COALESCE(AVG(avg_message_length), 0)         as avg_len
-            FROM chat_stats WHERE date >= ? AND date <= ?
+                COALESCE(SUM(media_sent), 0)                 as media,
+                COALESCE(SUM(pulses_mined), 0)               as pulses,
+                CAST(SUM(total_chars) AS REAL) / NULLIF(SUM(total_messages), 0) as avg_len
+            FROM user_stats WHERE date >= ? AND date <= ?
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
         raw = db.cursor.fetchone()
 
+        # 2. Детальные данные из user_stats (для индексов)
         db.cursor.execute('''
             SELECT
-                COALESCE(SUM(reactions_given), 0)   as korp,
+                COALESCE(SUM(reactions_given), 0)    as korp,
                 COALESCE(SUM(reactions_received), 0) as kprp,
-                COALESCE(SUM(replies_received), 0)  as kopyup,
-                COALESCE(SUM(replies_sent), 0)      as kopyap,
-                COALESCE(SUM(mentions_received), 0) as kupp,
+                COALESCE(SUM(replies_received), 0)   as kopyup,
+                COALESCE(SUM(replies_sent), 0)       as kopyap,
+                COALESCE(SUM(mentions_received), 0)  as kupp,
                 COALESCE(SUM(other_threads_posts), 0) as pivdvp
             FROM user_stats WHERE date >= ? AND date <= ?
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))

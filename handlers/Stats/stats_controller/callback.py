@@ -34,8 +34,9 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
 
     now = get_moscow_time()
     if period == 'yesterday':
-        start_date  = (now - timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
-        end_date    = now.replace(hour=0, minute=0, second=0, microsecond=0)
+        yesterday = (now - timedelta(days=1))
+        start_date = yesterday.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_date   = yesterday.replace(hour=23, minute=59, second=59, microsecond=0)
         period_name = "За вчера"
     elif period == 'day':
         start_date  = now.replace(hour=0, minute=0, second=0, microsecond=0)
@@ -245,26 +246,48 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
         stats_message += f"⏱ Средний срок в чате: {int(avg_days)} дней\n"
 
     # Пульсов заработано — все виды наград
+    # 1. Считаем чистую добычу (Майнинг) из user_stats
+    db.cursor.execute('''
+        SELECT COALESCE(SUM(pulses_mined), 0) as total 
+        FROM user_stats 
+        WHERE date >= ? AND date <= ?
+    ''', (date_from, date_to))
+    net_mined = Decimal(str(db.cursor.fetchone()['total']))
+    
+    
+    # 1. Сначала берем "грязный" майнинг из статистики
+    db.cursor.execute('''
+        SELECT COALESCE(SUM(pulses_mined), 0) as total 
+        FROM user_stats 
+        WHERE date >= ? AND date <= ?
+    ''', (date_from, date_to))
+    raw_mined = Decimal(str(db.cursor.fetchone()['total']))
+
+    # 2. Берем ШТРАФЫ и ОБЩИЙ заработок из транзакций
     db.cursor.execute('''
         SELECT
-            COALESCE(SUM(CASE WHEN transaction_type IN ('message_reward','combo_reward','sprint_reward') THEN amount ELSE 0 END), 0) AS mined,
+            COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalized,
             COALESCE(SUM(CASE WHEN transaction_type IN (
                 'message_reward','combo_reward','sprint_reward',
                 'referral_reward','lottery_win','bingo_win',
                 'monthly_gift','reaction_given_reward','reaction_received_reward',
                 'lootbox_win','bbs_popularity','admin_give','compensation_reward'
-            ) THEN amount ELSE 0 END), 0) AS total_earned,
-            COALESCE(SUM(CASE WHEN transaction_type = 'penalty_deduct' THEN amount ELSE 0 END), 0) AS penalized
+            ) THEN amount ELSE 0 END), 0) AS total_earned
         FROM transactions
         WHERE to_user_id IS NOT NULL
           AND timestamp >= ? AND timestamp <= ?
     ''', (start_date, end_date))
+    
     r = db.cursor.fetchone()
-    _mined   = _d(r['mined'])
-    _earned  = _d(r['total_earned'])
     _penalty = _d(r['penalized'])
-    net_mined  = max(_mined - _penalty, Decimal('0'))
+    _earned  = _d(r['total_earned'])
+
+    # 3. Применяем твою математику (Чистая прибыль = Грязная - Штрафы)
+    # Здесь мы используем raw_mined, который взяли из user_stats
+    net_mined  = max(raw_mined - _penalty, Decimal('0'))
     net_earned = max(_earned - _penalty, Decimal('0'))
+
+    # Формируем сообщение
     stats_message += (
         f"💎 Добыто Пульсов: {format_number(net_mined)}"
         f" | Всего заработано: {format_number(net_earned)}\n"
@@ -324,7 +347,7 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
 
     params_queries = [
         ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('СДС — ср. длина сообщ.',  'SELECT CASE WHEN SUM(total_messages) > 0 THEN CAST(SUM(total_chars) AS REAL) / SUM(total_messages) ELSE 0 END as v FROM user_stats WHERE date >= ? AND date <= ?', True),
+        ('СДС — ср. длина сообщ.', 'SELECT CAST(SUM(total_chars) AS REAL) / NULLIF(SUM(total_messages), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', True),
         ('Медиа',                   'SELECT COALESCE(SUM(media_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',        False),
         ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
         ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
