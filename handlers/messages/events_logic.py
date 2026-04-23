@@ -544,11 +544,8 @@ async def handle_reaction(update, context, db, target_chat_id):
     # Мы не даем награду и не повышаем статистику за удаление лайка!
     if net_change <= 0:
         return
-      # Считаем только факт добавления (всегда +1)
-    db.update_user_activity(user.id, today, reactions_given=1)
-    
-    # Ограничиваем влияние одного события единицей (защита от массовых эмодзи)
-    actual_increment = 1 
+
+    actual_increment = 1
 
     logging.info(f"👍 Reaction ADDED: user {user.id}")
 

@@ -316,16 +316,18 @@ class MessageHandler:
         if message.entities:
             mentions_count = sum(1 for e in message.entities if e.type == 'mention')
         
- # 1. ПРОВЕРКА: является ли сообщение командой?
-        is_command = text.strip().startswith('/')
-        
        # === ОБНОВЛЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ ===
         if not should_ignore:    
+            _reply_to_real_user = (
+                is_reply and not is_self_reply
+                and message.reply_to_message.from_user
+                and not message.reply_to_message.from_user.is_bot
+            )
             stats_update = {
                 'total_chars': char_count,
                 'total_messages': 1,
                 'total_words': word_count,
-                'replies_sent': 1 if (is_reply and not is_self_reply) else 0,
+                'replies_sent': 1 if _reply_to_real_user else 0,
                 'media_sent': 1 if is_media else 0,
                 'mentions_received': mentions_count,
                 'other_threads_posts': 1 if thread_id is not None else 0
@@ -372,20 +374,11 @@ class MessageHandler:
         except Exception as e:
             logging.debug(f"Rate delta error: {e}")
         
-        # Обновить replies_received для того, кому ответили
+        # Дельта курса за replies_received (статистика обновляется выше внутри should_ignore-блока)
         if is_reply and not is_self_reply and message.reply_to_message.from_user:
             replied_to_user_id = message.reply_to_message.from_user.id
-            # Не обновляем если ответили самому себе (уже проверено выше)
             if replied_to_user_id != user.id:
-                self.db.update_user_activity(replied_to_user_id, today, replies_received=1)
-                try:
-                    from utils.helpers import get_moscow_time
-                    now_msk = get_moscow_time()
-                    self.db.update_user_activity_hourly(replied_to_user_id, today, now_msk.hour, replies_received=1)
-                except Exception:
-                    pass
                 logging.info(f"📬 User {replied_to_user_id} received reply from {user.id}")
-                # Дельта для replies_received
                 try:
                     from utils.exchange_rate import rate_cache, calculate_reply_received_delta
                     if rate_cache.initialized and not rate_cache.is_manual:
