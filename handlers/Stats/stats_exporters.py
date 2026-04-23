@@ -261,7 +261,7 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
         b_count = int(os.getenv('BOT_COUNT', 1))
         divisor = Decimal(max(m_count - b_count - 1, 1))   # ← Decimal
 
-        # 1. Агрегированные данные из user_stats (с разделением по админам)
+        # 1. Агрегированные данные из user_stats (Самый полный набор для raw)
         db.cursor.execute('''
             SELECT
                 COALESCE(SUM(us.total_chars), 0)                as chars,
@@ -269,17 +269,22 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                 COALESCE(SUM(us.total_words), 0)                as words,
                 COALESCE(SUM(us.media_sent), 0)                 as media,
                 COALESCE(SUM(us.pulses_mined), 0)               as pulses,
+                -- СДС (Средняя длина)
                 CAST(SUM(us.total_chars) AS REAL) / NULLIF(SUM(us.total_messages), 0) as avg_len,
-                -- Новые колонки для Excel-отчета:
+                -- Разделение по админам
                 COALESCE(SUM(CASE WHEN u.is_admin = 1 OR u.is_owner = 1 THEN us.total_messages ELSE 0 END), 0) as with_adm,
-                COALESCE(SUM(CASE WHEN u.is_admin = 0 AND u.is_owner = 0 THEN us.total_messages ELSE 0 END), 0) as no_adm
+                COALESCE(SUM(CASE WHEN u.is_admin = 0 AND u.is_owner = 0 THEN us.total_messages ELSE 0 END), 0) as no_adm,
+                -- Доп. поля, которые может искать экспортер
+                COALESCE(SUM(us.reactions_given + us.reactions_received), 0) as total_reactions,
+                COALESCE(SUM(us.replies_sent + us.replies_received), 0) as total_replies,
+                COALESCE(SUM(us.mentions_received), 0) as total_mentions
             FROM user_stats us
-            JOIN users u ON us.user_id = u.user_id
+            LEFT JOIN users u ON us.user_id = u.user_id
             WHERE us.date >= ? AND us.date <= ?
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
         raw = db.cursor.fetchone()
 
-        # 2. Детальные данные из user_stats (для индексов)
+        # 2. Детальные данные из user_stats (для индексов) - оставляем как было, но через LEFT JOIN
         db.cursor.execute('''
             SELECT
                 COALESCE(SUM(reactions_given), 0)    as korp,
