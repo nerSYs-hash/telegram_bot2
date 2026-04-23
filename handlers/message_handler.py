@@ -296,15 +296,15 @@ class MessageHandler:
         is_media = is_media_message(message)
         is_reply = message.reply_to_message is not None
         
-         # 2. Список слов-триггеров, которые мы НЕ считаем в статистику
+        # Слова-триггеры (не считаем как реальные сообщения)
         BOT_TRIGGERS = {'богач', 'богачи', 'активист', 'активисты', 'курс'}
-        
-        # 3. Определяем, нужно ли игнорировать это сообщение
-        is_command = text.strip().startswith('/')  # Сообщения на /
-        is_trigger = clean_text in BOT_TRIGGERS    # Слова-триггеры без /
-        
-        # Мы игнорируем сообщение, если это команда ИЛИ триггер
-        should_ignore = is_command or is_trigger
+
+        is_command    = text.strip().startswith('/')
+        is_trigger    = clean_text in BOT_TRIGGERS
+        is_btn_press  = text.strip() in REPLY_BUTTONS  # нажатие кнопки ReplyKeyboard
+
+        # Игнорируем в статистике: команды, триггеры, нажатия кнопок
+        should_ignore = is_command or is_trigger or is_btn_press
         
         # Check if reply is to self (exclude from statistics)
         is_self_reply = False

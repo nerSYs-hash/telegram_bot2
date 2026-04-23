@@ -204,42 +204,23 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     except Exception as e:
         logging.error(f"BBS cleanup error: {e}")
 
-    # ═══ Запуск exit-опроса при любом выходе пользователя ═══
-    try:
-        from handlers.exit_survey_handlers import handle_exit_reason
-        # Имитация нажатия первой кнопки (Q1) — можно доработать под свою функцию старта
-        class DummyQuery:
-            def __init__(self, user_id):
-                self.data = f"exit_boring_{user_id}"
-            async def answer(self, *a, **kw):
-                pass
-            async def edit_message_text(self, *a, **kw):
-                pass
-        dummy_query = DummyQuery(user_id)
-        await handle_exit_reason(dummy_query, f"exit_boring_{user_id}", context, db, admin_id)
-    except Exception as e:
-        logging.error(f"Exit survey trigger error: {e}")
-
-    # ═══ EXIT SURVEY: отправляем опрос ═══
+    # ═══ EXIT SURVEY: отправляем опрос пользователю ═══
     try:
         from database.db_friend import (
-            should_send_survey, 
+            should_send_survey,
             update_user as update_reg_user
         )
-        
-        # Проверяем, нужно ли отправлять опрос (ограничение 1 раз в 30 дней)
+
         if not await should_send_survey(user_id):
             logging.info(f"⏭ Skip exit survey for user {user_id} (already sent recently)")
             return
 
         user_link = f"@{username}" if username else (user_data['first_name'] or 'Друг')
 
-        # Генерируем одноразовую ссылку возврата
         chat_id = update.chat_member.chat.id
         invite_link = await get_chat_invite_link(context, target_chat_id, chat_id, user_link)
 
         context.bot_data['exit_survey_chat_id'] = target_chat_id
-        
         try:
             target_user_data = context.application.user_data.setdefault(user_id, {})
             target_user_data['exit_survey_chat_id'] = target_chat_id
@@ -248,7 +229,6 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         except Exception:
             pass
 
-        # ── 15 кнопок причин (2 в ряд) ──────────────────────────
         reasons = [
             ("😴 Скучно",            f"exit_boring_{user_id}"),
             ("👥 Одни и те же лица", f"exit_same_faces_{user_id}"),
@@ -266,18 +246,14 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
             ("🔔 Много уведомлений", f"exit_notifs_{user_id}"),
             ("📝 Другое",            f"exit_other_{user_id}"),
         ]
-        # Попарно, последняя «Другое» — одна в ряду
         keyboard = [
             [InlineKeyboardButton(reasons[i][0], callback_data=reasons[i][1]),
              InlineKeyboardButton(reasons[i+1][0], callback_data=reasons[i+1][1])]
             for i in range(0, len(reasons) - 1, 2)
         ]
         keyboard.append([InlineKeyboardButton(reasons[-1][0], callback_data=reasons[-1][1])])
-
         if invite_link:
             keyboard.insert(0, [InlineKeyboardButton("🔄 Вернуться в чат", url=invite_link)])
-
-        reply_markup = InlineKeyboardMarkup(keyboard)
 
         frozen_msg = ""
         if balance > 0:
@@ -303,11 +279,10 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
                     f"Нам очень жаль расставаться!{frozen_msg}\n\n"
                     f"Если не сложно — нажми кнопку и укажи причину ухода. Это займёт пару минут:"
                 ),
-                reply_markup=reply_markup
+                reply_markup=InlineKeyboardMarkup(keyboard)
             )
-            # Сохраняем дату отправки и ID сообщения для очистки истории
             await update_reg_user(
-                user_id, 
+                user_id,
                 survey_sent_at=datetime.now().isoformat(),
                 invite_message_id=msg.message_id
             )
@@ -462,19 +437,8 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             db.conn.commit()
             
             logging.info(f"⏰ Freeze expired for user {user_id}, {frozen_balance} pulses lost")
-            
-            # Уведомить админа
-            try:
-                await context.bot.send_message(
-                    chat_id=admin_id,
-                    text=f"🔄 Пользователь вернулся в чат.\n"
-                         f"Имя {user_mention} [{user_id}]\n"
-                         f"⏰ Заморозка истекла — {format_number(frozen_balance)} Пульсов остались в Банке."
-                )
-            except Exception as e:
-                logging.error(f"Error sending return notification: {e}")
-            
-            # Уведомить пользователя
+
+            # Уведомить только пользователя (информация для админа — в Журнале)
             try:
                 await context.bot.send_message(
                     chat_id=user_id,
@@ -487,17 +451,8 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
                 logging.error(f"Error sending expired freeze message: {e}")
     
     else:
-        # Нет замороженных Пульсов — просто уведомить админа
+        # Нет замороженных Пульсов — информация в Журнале, ЛС админу не нужно
         logging.info(f"🔄 User {user_id} returned, no frozen balance")
-        try:
-            await context.bot.send_message(
-                chat_id=admin_id,
-                text=f"🔄 Пользователь вернулся в чат.\n"
-                     f"Имя {user_mention} [{user_id}]\n"
-                     f"💎 Замороженных Пульсов нет."
-            )
-        except Exception as e:
-            logging.error(f"Error sending return notification: {e}")
 
     # ═══ ЖУРНАЛ: логируем вход ═══
     try:
