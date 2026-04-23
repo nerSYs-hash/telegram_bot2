@@ -319,7 +319,7 @@ class MessageHandler:
  # 1. ПРОВЕРКА: является ли сообщение командой?
         is_command = text.strip().startswith('/')
         
-        # Update user statistics (exclude commands)
+       # === ОБНОВЛЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ ===
         if not should_ignore:    
             stats_update = {
                 'total_chars': char_count,
@@ -330,15 +330,30 @@ class MessageHandler:
                 'mentions_received': mentions_count,
                 'other_threads_posts': 1 if thread_id is not None else 0
             }
-            # ВАЖНО: Эти строки должны быть ВНУТРИ блока if not is_command
+            
+            # Записываем статистику отправителю
             self.db.update_user_activity(user.id, today, **stats_update)
 
-            # ═══ ПОЧАСОВАЯ СТАТИСТИКА ═══
+            # --- ЛОГИКА ОТВЕТОВ (ВНУТРИ IF NOT SHOULD_IGNORE) ---
+            if is_reply and not is_self_reply and message.reply_to_message.from_user:
+                replied_to_user = message.reply_to_message.from_user
+                
+                # Считаем ответ ТОЛЬКО если ответили реальному человеку, а не боту
+                if not replied_to_user.is_bot:
+                    self.db.update_user_activity(replied_to_user.id, today, replies_received=1)
+                    
+                    try:
+                        from utils.helpers import get_moscow_time
+                        now_msk = get_moscow_time()
+                        self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, replies_received=1)
+                    except Exception: pass
+            
+            # Почасовая статистика для отправителя
             try:
                 from utils.helpers import get_moscow_time
                 now_msk = get_moscow_time()
                 self.db.update_user_activity_hourly(user.id, today, now_msk.hour, **stats_update)
-            except Exception as e: # Добавил 'as e'
+            except Exception as e:
                 logging.debug(f"Hourly stats error: {e}")
 
          # ═══ МГНОВЕННОЕ ОБНОВЛЕНИЕ КУРСА (дельта) ═══
