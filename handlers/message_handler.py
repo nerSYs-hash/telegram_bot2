@@ -290,10 +290,21 @@ class MessageHandler:
         
         # Calculate message stats
         text = message.text or message.caption or ""
+        clean_text = text.lower().strip()
         char_count = len(text)
         word_count = count_words(text)
         is_media = is_media_message(message)
         is_reply = message.reply_to_message is not None
+        
+         # 2. Список слов-триггеров, которые мы НЕ считаем в статистику
+        BOT_TRIGGERS = {'богач', 'богачи', 'активист', 'активисты', 'курс'}
+        
+        # 3. Определяем, нужно ли игнорировать это сообщение
+        is_command = text.strip().startswith('/')  # Сообщения на /
+        is_trigger = clean_text in BOT_TRIGGERS    # Слова-триггеры без /
+        
+        # Мы игнорируем сообщение, если это команда ИЛИ триггер
+        should_ignore = is_command or is_trigger
         
         # Check if reply is to self (exclude from statistics)
         is_self_reply = False
@@ -309,7 +320,7 @@ class MessageHandler:
         is_command = text.strip().startswith('/')
         
         # Update user statistics (exclude commands)
-        if not is_command:    
+        if not should_ignore:    
             stats_update = {
                 'total_chars': char_count,
                 'total_messages': 1,
