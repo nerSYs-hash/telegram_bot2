@@ -1375,6 +1375,57 @@ def _match_single_keyword(msg_text: str, op: str, kw: str) -> bool:
     return kw in msg_text
 
 
+def _check_msg_type(message, chips: list) -> bool:
+    """Проверяет тип входящего сообщения (msg_type condition). OR между chips."""
+    if not chips:
+        return False
+    for key in chips:
+        k = str(key).strip().lower()
+        if k == 'text':
+            if message.text and not any([
+                message.photo, message.video, message.document, message.audio,
+                message.voice, message.sticker, message.animation,
+                message.video_note, message.contact, message.location,
+                message.poll, message.game,
+            ]):
+                return True
+        elif k == 'photo' and message.photo:
+            return True
+        elif k == 'video' and message.video:
+            return True
+        elif k == 'sticker' and message.sticker:
+            return True
+        elif k == 'animation' and message.animation:
+            return True
+        elif k == 'voice' and message.voice:
+            return True
+        elif k == 'audio' and message.audio:
+            return True
+        elif k == 'video_note' and message.video_note:
+            return True
+        elif k == 'contact' and message.contact:
+            return True
+        elif k == 'location' and message.location:
+            return True
+        elif k == 'poll' and message.poll:
+            return True
+        elif k == 'game' and message.game:
+            return True
+        elif k == 'document' and message.document:
+            mime = getattr(message.document, 'mime_type', '') or ''
+            if not mime.startswith('image/') and not mime.startswith('video/'):
+                return True
+        elif k == 'photo_file' and message.document:
+            mime = getattr(message.document, 'mime_type', '') or ''
+            if mime.startswith('image/'):
+                return True
+        elif k == 'video_file' and message.document:
+            mime = getattr(message.document, 'mime_type', '') or ''
+            if mime.startswith('video/'):
+                return True
+    return False
+
+
 def _check_reply_type(message, chips: list, admin_ids: set, bot_id: Optional[int], is_first_msg: bool) -> bool:
     """Проверяет тип сообщения (reply_type condition). OR между chips."""
     if not chips:
@@ -1454,6 +1505,18 @@ def _match_condition_groups(msg_text: str, groups: list, message=None, admin_ids
                 group_ok = False
                 break
             ctype = cond.get('type', 'keyword')
+            if ctype == 'msg_type':
+                if message is None:
+                    group_ok = False
+                    break
+                chips = cond.get('chips') or []
+                cond_ok = _check_msg_type(message, chips)
+                if cond.get('inverted'):
+                    cond_ok = not cond_ok
+                if not cond_ok:
+                    group_ok = False
+                    break
+                continue
             if ctype == 'reply_type':
                 if message is None:
                     group_ok = False
@@ -1495,7 +1558,7 @@ async def process_triggers(
 ) -> bool:
     """Проверяет сообщение на совпадение с триггерами. True если обработано."""
     message = update.effective_message
-    if not message or not message.text:
+    if not message:
         return False
     user = message.from_user
     if not user:
@@ -1514,7 +1577,7 @@ async def process_triggers(
     if not triggers:
         return False
 
-    msg_text = message.text.lower().strip()
+    msg_text = (message.text or '').lower().strip()
     thread_id = getattr(message, 'message_thread_id', None)
     handled = False
 

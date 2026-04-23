@@ -1239,6 +1239,8 @@ export default function App() {
             const newId = Date.now();
             const newCond = ctype === 'reply_type'
               ? { id: newId, signal: 'message', type: 'reply_type', chips: [], inverted: false, placeholder_key: '' }
+              : ctype === 'msg_type'
+              ? { id: newId, signal: 'message', type: 'msg_type', chips: [], inverted: false, placeholder_key: '' }
               : { id: newId, signal, type: 'keyword', condition: 'contains', keyword: '', chips: [], keywordMode: 'chips', inverted: false, modifier: 'nocase', placeholder_key: '' };
             setEditingTrigger(prev => ({
               ...prev,
@@ -1357,7 +1359,43 @@ export default function App() {
             'qmsg_keyword': 'Проверяет текст сообщения, на которое ответили (цитируемое).',
             'qmsg_any':    'Срабатывает, когда пользователь отвечает на любое сообщение цитированием.',
             'msg_reply_type': 'Проверяет тип сообщения: обычное, реплай, первое сообщение пользователя, комментарий под постом и т.д.',
+            'msg_msg_type':   'Проверяет формат входящего сообщения: фото, видео, стикер, документ, голосовое и т.д. Всего 15 типов.',
           };
+          const MSG_TYPE_OPTIONS = [
+            { key: 'text',       label: 'Текст' },
+            { key: 'photo',      label: 'Фото' },
+            { key: 'photo_file', label: 'Фотофайл' },
+            { key: 'video',      label: 'Видео' },
+            { key: 'video_file', label: 'Видеофайл' },
+            { key: 'video_note', label: 'Видео заметка' },
+            { key: 'document',   label: 'Документ' },
+            { key: 'sticker',    label: 'Стикер' },
+            { key: 'animation',  label: 'Анимация' },
+            { key: 'audio',      label: 'Аудио' },
+            { key: 'voice',      label: 'Войс' },
+            { key: 'contact',    label: 'Контакт' },
+            { key: 'location',   label: 'Локация' },
+            { key: 'poll',       label: 'Опрос' },
+            { key: 'game',       label: 'Игра' },
+          ];
+          const MSG_TYPE_INFO = `Вызов триггера через параметр тип (или формат) посылаемого сообщения: фото, аудио, стикер и т.д. Всего доступно 15 типов сообщений.
+
+• Текст — триггер сработает, если пользователь отправил обычное текстовое сообщение без вложений.
+• Фото — триггер сработает, если отправлена фотография из галереи телефона.
+• Фотофайл — триггер сработает, если изображение отправлено как файл (без сжатия).
+• Видео — триггер сработает, если видеозапись загружена напрямую из галереи телефона.
+• Видеофайл — триггер сработает, если видеозапись отправлена как файл, а не из галереи.
+• Видео заметка — триггер сработает, если отправлено круглое видео (видеокружок).
+• Документ — триггер сработает, если отправлен файл: doc, word, pdf, excel и т.д.
+• Стикер — триггер сработает, если отправлен статичный или анимированный стикер Telegram.
+• Анимация — триггер сработает, если отправлен GIF или анимированное изображение.
+• Аудио — триггер сработает, если отправлен музыкальный файл или аудиозапись. Не относится к голосовым сообщениям.
+• Войс — триггер сработает, если отправлено голосовое сообщение в Telegram.
+• Контакт — триггер сработает, если отправлен контакт (номер телефона).
+• Локация — триггер сработает, если отправлена геолокация.
+• Опрос — триггер сработает, если создан опрос в чате.
+• Игра — триггер сработает, если отправлена Telegram-игра.`;
+
           const REPLY_TYPE_OPTIONS = [
             { key: 'any',                label: 'Любое сообщение' },
             { key: 'any_reply',          label: 'Все ответы' },
@@ -1562,7 +1600,8 @@ export default function App() {
                                 </div>
                               </div>
                             )}
-                          <div className="bg-white rounded-2xl border border-gray-200">
+                          <div className="bg-white rounded-2xl border border-gray-200"
+                            style={condOpenDropdown && condOpenDropdown.endsWith(`_${gIdx}_${cIdx}`) ? {position:'relative', zIndex:50} : {}}>
                             {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
                             <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
                               <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
@@ -1619,7 +1658,7 @@ export default function App() {
                                           onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` ? null : `rt_gear_${gIdx}_${cIdx}`)}
                                           className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
                                         {condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` && (
-                                          <div className="absolute left-0 top-6 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
+                                          <div className="absolute left-0 top-6 z-[9999] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
                                             <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondOpenDropdown(null); }}
                                               className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
                                               <RotateCcw size={11}/> Отменить изменения
@@ -1669,6 +1708,93 @@ export default function App() {
                                       <div className="flex items-center gap-1.5">
                                         <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
                                         <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_inv_${gIdx}_${cIdx}` ? null : `rt_inv_${gIdx}_${cIdx}`); }}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                      </div>
+                                      <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                  </div>
+                                </>
+                              ) : cond.type === 'msg_type' ? (
+                                <>
+                                  {/* Заголовок "Тип сообщения" + ? */}
+                                  <div className="flex items-center gap-1.5 relative">
+                                    <span className="text-[13px] font-black text-gray-800">Тип сообщения</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_info_${gIdx}_${cIdx}` ? null : `mt_info_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                    {condTooltip === `mt_info_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-[600] w-[300px] bg-gray-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-2xl leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto">
+                                        {MSG_TYPE_INFO}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                                    Сигнал для вызова триггера: 📨 Сообщение
+                                  </p>
+                                  {/* Мультивыбор типов */}
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <p className="text-[9px] font-black text-gray-500 uppercase">
+                                        Тип сообщения <span className="text-red-400">*</span>
+                                      </p>
+                                      <div className="relative">
+                                        <button
+                                          onClick={() => setCondOpenDropdown(condOpenDropdown === `mt_gear_${gIdx}_${cIdx}` ? null : `mt_gear_${gIdx}_${cIdx}`)}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
+                                        {condOpenDropdown === `mt_gear_${gIdx}_${cIdx}` && (
+                                          <div className="absolute left-0 top-6 z-[9999] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
+                                            <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondOpenDropdown(null); }}
+                                              className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
+                                              <RotateCcw size={11}/> Отменить изменения
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => setCondOpenDropdown(condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? null : `mt_dd_${gIdx}_${cIdx}`)}
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-white border-2 border-gray-200 rounded-xl hover:border-gray-300 transition-all">
+                                        <div className="flex flex-wrap gap-1 flex-1">
+                                          {(cond.chips||[]).length === 0 && <span className="text-gray-300 text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).map((key, ci) => {
+                                            const lbl = MSG_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
+                                            return (
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold">
+                                                {lbl}
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-gray-400 hover:text-gray-700 leading-none ml-0.5">×</button>
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        <ChevronDown size={14} className={`text-gray-400 flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                      </button>
+                                      {condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` && (
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                          {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
+                                            <button key={o.key}
+                                              onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-gray-700 hover:bg-gray-50">
+                                              {o.label}
+                                            </button>
+                                          ))}
+                                          {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
+                                            <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">Список пуст</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-1">Обязательное поле</p>}
+                                  </div>
+                                  {/* Инвертировать */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                        <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_inv_${gIdx}_${cIdx}` ? null : `mt_inv_${gIdx}_${cIdx}`); }}
                                           className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
                                       </div>
                                       <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
@@ -3684,7 +3810,6 @@ export default function App() {
                               <span className="text-xl">↩️</span>
                               <span className="text-[11px] font-black text-gray-800 leading-tight">Тип ответа</span>
                               <span className="text-[9px] text-gray-400 font-medium leading-tight">Реплай, первое сообщ., коммент...</span>
-                              <span className="absolute top-1.5 left-1.5 text-[8px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full uppercase animate-pulse z-10">NEW</span>
                               <button
                                 onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_rt' ? null : 'picker_rt'); }}
                                 className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
@@ -3693,6 +3818,27 @@ export default function App() {
                               {condTooltip === 'picker_rt' && (
                                 <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
                                   {COND_TOOLTIP_TEXT['msg_reply_type']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Тип сообщения — только для message-таба */}
+                          {condPickerTab === 'message' && (condPickerSearch === '' || 'тип сообщения формат медиа фото стикер'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'msg_type')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">🗂</span>
+                              <span className="text-[11px] font-black text-gray-800 leading-tight">Тип сообщения</span>
+                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Фото, видео, стикер, документ...</span>
+                              <span className="absolute top-1.5 left-1.5 text-[8px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full uppercase animate-pulse z-10">NEW</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_mt' ? null : 'picker_mt'); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === 'picker_mt' && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {COND_TOOLTIP_TEXT['msg_msg_type']}
                                 </div>
                               )}
                             </button>
