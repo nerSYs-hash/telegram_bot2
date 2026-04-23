@@ -261,16 +261,21 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
         b_count = int(os.getenv('BOT_COUNT', 1))
         divisor = Decimal(max(m_count - b_count - 1, 1))   # ← Decimal
 
-        # 1. Агрегированные данные из user_stats (заменяем chat_stats)
+        # 1. Агрегированные данные из user_stats (с разделением по админам)
         db.cursor.execute('''
             SELECT
-                COALESCE(SUM(total_chars), 0)                as chars,
-                COALESCE(SUM(total_messages), 0)             as msgs,
-                COALESCE(SUM(total_words), 0)                as words,
-                COALESCE(SUM(media_sent), 0)                 as media,
-                COALESCE(SUM(pulses_mined), 0)               as pulses,
-                CAST(SUM(total_chars) AS REAL) / NULLIF(SUM(total_messages), 0) as avg_len
-            FROM user_stats WHERE date >= ? AND date <= ?
+                COALESCE(SUM(us.total_chars), 0)                as chars,
+                COALESCE(SUM(us.total_messages), 0)             as msgs,
+                COALESCE(SUM(us.total_words), 0)                as words,
+                COALESCE(SUM(us.media_sent), 0)                 as media,
+                COALESCE(SUM(us.pulses_mined), 0)               as pulses,
+                CAST(SUM(us.total_chars) AS REAL) / NULLIF(SUM(us.total_messages), 0) as avg_len,
+                -- Новые колонки для Excel-отчета:
+                COALESCE(SUM(CASE WHEN u.is_admin = 1 OR u.is_owner = 1 THEN us.total_messages ELSE 0 END), 0) as with_adm,
+                COALESCE(SUM(CASE WHEN u.is_admin = 0 AND u.is_owner = 0 THEN us.total_messages ELSE 0 END), 0) as no_adm
+            FROM user_stats us
+            JOIN users u ON us.user_id = u.user_id
+            WHERE us.date >= ? AND us.date <= ?
         ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
         raw = db.cursor.fetchone()
 
