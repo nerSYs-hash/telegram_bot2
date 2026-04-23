@@ -428,6 +428,13 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in BBS cleanup: {e}")
 
+    async def _cleanup_stat_events_log(self):
+        """Удаляет старые записи из лога дедупликации (старше 3 дней)."""
+        try:
+            self.db.cleanup_stat_events_log(older_than_days=3)
+        except Exception as e:
+            logger.error(f"Error in stat_events_log cleanup: {e}")
+
     async def init_rate_cache(self):
         """Initialize rate cache at bot startup"""
         try:
@@ -721,6 +728,14 @@ class TelegramBot:
             'interval',
             hours=12,
             id='bbs_cleanup'
+        )
+
+        # Очистка лога дедупликации stat_events_log — раз в сутки
+        self.scheduler.add_job(
+            self._cleanup_stat_events_log,
+            'interval',
+            hours=24,
+            id='cleanup_stat_events_log'
         )
         
         # ═══ КУРС: полный пересчёт каждые 30 минут ═══

@@ -546,11 +546,13 @@ async def handle_reaction(update, context, db, target_chat_id):
         return
 
     actual_increment = 1
+    message_id = reaction_update.message_id
 
     logging.info(f"👍 Reaction ADDED: user {user.id}")
 
     # 1. ОБНОВЛЯЕМ СТАТИСТИКУ ТОМУ, КТО ПОСТАВИЛ (Giver)
-    db.update_user_activity(user.id, today, reactions_given=actual_increment)
+    react_given_eid = f"react_given_{user.id}_{message_id}_{today}"
+    db.update_user_activity(user.id, today, event_id=react_given_eid, reactions_given=actual_increment)
     try:
         from utils.helpers import get_moscow_time
         now_msk = get_moscow_time()
@@ -559,20 +561,20 @@ async def handle_reaction(update, context, db, target_chat_id):
 
     # 2. ИЩЕМ АВТОРА СООБЩЕНИЯ И ОБНОВЛЯЕМ ЕМУ
     try:
-        message_id = reaction_update.message_id
         db.cursor.execute('''
-            SELECT user_id FROM messages 
+            SELECT user_id FROM messages
             WHERE chat_id = ? AND telegram_message_id = ?
             LIMIT 1
         ''', (reaction_update.chat.id, message_id))
-        
+
         result = db.cursor.fetchone()
-        
+
         if result:
             message_author_id = result['user_id']
             # Себе лайки не считаем в статистику полученных
             if message_author_id != user.id:
-                db.update_user_activity(message_author_id, today, reactions_received=actual_increment)
+                react_recv_eid = f"react_recv_{message_author_id}_{message_id}_{today}"
+                db.update_user_activity(message_author_id, today, event_id=react_recv_eid, reactions_received=actual_increment)
                 try:
                     db.update_user_activity_hourly(message_author_id, today, now_msk.hour, reactions_received=actual_increment)
                 except Exception: pass

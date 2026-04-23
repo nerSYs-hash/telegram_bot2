@@ -3,10 +3,46 @@
 """Статистика активности и динамика пользователей. Вынесено из Database."""
 import logging
 
-def update_user_activity(db, user_id, date, **kwargs):
-    """Обновление статистики пользователя (Защита от дублирования сообщений)"""
+def register_stat_event(db, event_id: str) -> bool:
+    """Регистрирует событие статистики. Возвращает True если новое, False если уже было."""
+    try:
+        db.cursor.execute(
+            'INSERT OR IGNORE INTO stat_events_log (event_id) VALUES (?)',
+            (event_id,)
+        )
+        db.conn.commit()
+        return db.cursor.rowcount > 0
+    except Exception as e:
+        logging.error(f"register_stat_event error: {e}")
+        return True  # при ошибке — разрешаем, чтобы не терять данные
+
+
+def cleanup_stat_events_log(db, older_than_days: int = 3):
+    """Удаляет записи старше N дней — telegram-события не могут опоздать на 3 дня."""
+    try:
+        cutoff = int(__import__('time').time()) - older_than_days * 86400
+        db.cursor.execute('DELETE FROM stat_events_log WHERE ts < ?', (cutoff,))
+        deleted = db.cursor.rowcount
+        db.conn.commit()
+        if deleted:
+            logging.info(f"🧹 stat_events_log: удалено {deleted} старых записей")
+    except Exception as e:
+        logging.error(f"cleanup_stat_events_log error: {e}")
+
+
+def update_user_activity(db, user_id, date, event_id: str = None, **kwargs):
+    """Обновление статистики пользователя (Защита от дублирования сообщений).
+
+    event_id — уникальный ключ события (напр. 'react_123_456_2026-04-24').
+    Если передан и уже есть в stat_events_log — вызов игнорируется (дедупликация).
+    """
     if not kwargs:
         return
+
+    if event_id is not None:
+        if not register_stat_event(db, event_id):
+            logging.debug(f"[DEDUP] пропущен дубль: {event_id}")
+            return
 
     # Список колонок, которые мы обновляем
     allowed_cols = [

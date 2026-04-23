@@ -78,6 +78,11 @@ from database.db_migrations import (
     migrate_to_decimal_balances as _migrate_to_decimal_balances,
     add_telegram_message_id_to_messages as _add_telegram_message_id_to_messages,
     migrate_monthly_gifts_tables as _migrate_monthly_gifts_tables,
+    create_stat_events_log as _create_stat_events_log,
+)
+from database.db_stats import (
+    register_stat_event as _register_stat_event,
+    cleanup_stat_events_log as _cleanup_stat_events_log,
 )
 
 
@@ -527,6 +532,7 @@ class Database:
         _migrate_to_decimal_balances(self)
         _add_telegram_message_id_to_messages(self)
         _migrate_monthly_gifts_tables(self)
+        _create_stat_events_log(self)
 
         # Migration: add is_left column to users
         try:
@@ -587,8 +593,11 @@ class Database:
         return _update_bank_balance(self, amount, operation)
 
     # ── Stats ──
-    def update_user_activity(self, user_id, date, **kwargs):
-        _update_user_activity(self, user_id, date, **kwargs)
+    def update_user_activity(self, user_id, date, event_id: str = None, **kwargs):
+        _update_user_activity(self, user_id, date, event_id=event_id, **kwargs)
+
+    def cleanup_stat_events_log(self, older_than_days: int = 3):
+        _cleanup_stat_events_log(self, older_than_days)
 
     def get_active_core_count(self, date):
         return _get_active_core_count(self, date)

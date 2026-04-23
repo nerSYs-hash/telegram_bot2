@@ -279,3 +279,21 @@ def migrate_monthly_gifts_tables(db):
     except Exception as e:
         logging.error(f"Error migrating monthly_gifts tables: {e}")
         db.conn.rollback()
+
+
+def create_stat_events_log(db):
+    """Создать таблицу дедупликации stat_events_log (идемпотентно)."""
+    try:
+        db.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS stat_events_log (
+                event_id  TEXT PRIMARY KEY,
+                ts        INTEGER NOT NULL DEFAULT (CAST(strftime('%s','now') AS INTEGER))
+            )
+        ''')
+        db.cursor.execute('''
+            CREATE INDEX IF NOT EXISTS idx_sel_ts ON stat_events_log(ts)
+        ''')
+        db.conn.commit()
+        logging.info("✅ stat_events_log ready")
+    except Exception as e:
+        logging.error(f"create_stat_events_log error: {e}")

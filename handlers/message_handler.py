@@ -333,22 +333,20 @@ class MessageHandler:
                 'other_threads_posts': 1 if thread_id is not None else 0
             }
             
-            # Записываем статистику отправителю
-            self.db.update_user_activity(user.id, today, **stats_update)
+            # Записываем статистику отправителю (event_id = одно сообщение = один счёт)
+            msg_eid = f"msg_{user.id}_{message.message_id}"
+            self.db.update_user_activity(user.id, today, event_id=msg_eid, **stats_update)
 
             # --- ЛОГИКА ОТВЕТОВ (ВНУТРИ IF NOT SHOULD_IGNORE) ---
-            if is_reply and not is_self_reply and message.reply_to_message.from_user:
+            if _reply_to_real_user:
                 replied_to_user = message.reply_to_message.from_user
-                
-                # Считаем ответ ТОЛЬКО если ответили реальному человеку, а не боту
-                if not replied_to_user.is_bot:
-                    self.db.update_user_activity(replied_to_user.id, today, replies_received=1)
-                    
-                    try:
-                        from utils.helpers import get_moscow_time
-                        now_msk = get_moscow_time()
-                        self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, replies_received=1)
-                    except Exception: pass
+                reply_recv_eid = f"reply_recv_{replied_to_user.id}_{message.message_id}"
+                self.db.update_user_activity(replied_to_user.id, today, event_id=reply_recv_eid, replies_received=1)
+                try:
+                    from utils.helpers import get_moscow_time
+                    now_msk = get_moscow_time()
+                    self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, replies_received=1)
+                except Exception: pass
             
             # Почасовая статистика для отправителя
             try:
