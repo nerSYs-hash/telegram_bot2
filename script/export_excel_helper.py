@@ -103,43 +103,6 @@ def export_stats_to_excel(stats_data, filepath):
             else:
                 ws_top_msg.column_dimensions[col_letter].width = 12
         
-        # === ЛИСТ 3: ТОП ПО ЗАРАБОТКУ ===
-        ws_top_earn = wb.create_sheet("Топ по заработку")
-        
-        # Заголовок
-        ws_top_earn['A1'] = "ТОП-10 ПОЛЬЗОВАТЕЛЕЙ ПО ДОБЫТЫМ ПУЛЬСАМ"
-        ws_top_earn['A1'].font = Font(size=14, bold=True)
-        ws_top_earn.merge_cells('A1:D1')
-        
-        row = 3
-        
-        # Заголовки таблицы
-        if stats_data.get('top_earners'):
-            headers = list(stats_data['top_earners'][0].keys())
-            
-            for col_idx, header in enumerate(headers, 1):
-                cell = ws_top_earn.cell(row=row, column=col_idx, value=header)
-                cell.font = Font(bold=True, size=11)
-                cell.fill = PatternFill(start_color="70AD47", end_color="70AD47", fill_type="solid")
-                cell.font = Font(bold=True, size=11, color="FFFFFF")
-                cell.alignment = Alignment(horizontal='center', vertical='center')
-            
-            row += 1
-            
-            # Данные
-            for user_data in stats_data['top_earners']:
-                for col_idx, (key, value) in enumerate(user_data.items(), 1):
-                    cell = ws_top_earn.cell(row=row, column=col_idx, value=value)
-                    cell.font = Font(size=10)
-                    cell.alignment = Alignment(horizontal='center' if col_idx == 1 else 'left')
-                row += 1
-        
-        # Авто-ширина столбцов
-        ws_top_earn.column_dimensions['A'].width = 10
-        ws_top_earn.column_dimensions['B'].width = 20
-        ws_top_earn.column_dimensions['C'].width = 20
-        ws_top_earn.column_dimensions['D'].width = 15
-        
         # Сохранение файла
         wb.save(filepath)
         

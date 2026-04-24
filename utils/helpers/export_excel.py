@@ -209,48 +209,6 @@ def export_stats_to_excel(stats_data, filename):
 
         row += 1
 
-        # ── СЕКЦИЯ 3: ТОП-10 ПО ЗАРАБОТКУ ────────────────────────────────────
-        ws.merge_cells(f'A{row}:H{row}')
-        ws[f'A{row}'] = "💎 ТОП-10 ПО ЗАРАБОТКУ"
-        ws[f'A{row}'].font = section_font
-        ws[f'A{row}'].fill = section_fill
-        ws[f'A{row}'].alignment = section_align
-        ws[f'A{row}'].border = thick_border
-        ws.row_dimensions[row].height = 25
-        row += 1
-
-        for col, hdr in zip(['A', 'B', 'C'], ['№', 'Пользователь', 'Заработано 💎']):
-            ws[f'{col}{row}'] = hdr
-            ws[f'{col}{row}'].font = header_font
-            ws[f'{col}{row}'].fill = header_fill
-            ws[f'{col}{row}'].alignment = center_align
-            ws[f'{col}{row}'].border = thin_border
-        ws.row_dimensions[row].height = 20
-        row += 1
-
-        for idx, user_data in enumerate(stats_data.get('top_earners', [])[:10]):
-            fill = even_fill if idx % 2 == 0 else odd_fill
-            ws[f'A{row}'] = int(to_decimal(user_data.get('rank', idx + 1)))
-            ws[f'B{row}'] = user_data.get('Пользователь', user_data.get('username', 'Unknown'))
-
-            earned_val = user_data.get('💎 Добыто Пульсов', user_data.get('earned', 0))
-            ws[f'C{row}'] = _n(earned_val, 2)               # float ← было строка "1 234.56"
-            ws[f'C{row}'].number_format = _FMT_FLOAT2
-
-            for col in ['A', 'B', 'C']:
-                ws[f'{col}{row}'].fill = fill
-                ws[f'{col}{row}'].border = thin_border
-            ws[f'A{row}'].alignment = center_align
-            ws[f'B{row}'].alignment = left_align
-            ws[f'C{row}'].alignment = center_align
-
-            if idx == 0:   ws[f'A{row}'].font = Font(bold=True, color="FFD700", size=12)
-            elif idx == 1: ws[f'A{row}'].font = Font(bold=True, color="C0C0C0", size=12)
-            elif idx == 2: ws[f'A{row}'].font = Font(bold=True, color="CD7F32", size=12)
-            row += 1
-
-        row += 1
-
         # ── СЕКЦИЯ 4: ДЕТАЛЬНАЯ СТАТИСТИКА ───────────────────────────────────
         if stats_data.get('detailed_stats'):
             ws.merge_cells(f'A{row}:P{row}')
