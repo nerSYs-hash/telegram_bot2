@@ -41,13 +41,9 @@ class CommandHandler:
         await restore_news_execute(dummy_query, context, self.db, self.main_admin_id)
 
     async def resend_dossier_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
-        """Принудительно опубликовать досье пользователя из БД (только для владельца).
+        """Принудительно опубликовать досье пользователя из БД (владелец и разработчик).
         Использование: /resend_dossier <user_id>
         """
-        if update.effective_user.id != self.main_admin_id:
-            await update.message.reply_text("⛔ Нет доступа.")
-            return
-
         if not context.args:
             await update.message.reply_text("Использование: /resend_dossier <user_id>")
             return
@@ -58,13 +54,23 @@ class CommandHandler:
             await update.message.reply_text("❌ user_id должен быть числом.")
             return
 
-        await update.message.reply_text(f"⏳ Ищу данные для user_id={target_id}…")
-
         import html as _html
         from database.db_friend import get_user as _get_reg_user
-        from handlers.admin_moderation import _send_dossier, _fmt_date, _msk_now
-        from config import CHAT_ID
+        from handlers.admin_moderation import _fmt_date, _msk_now
+        from handlers.anketa_edit_handlers import ensure_anketa_edit_tables, upsert_anketa_edit, inject_presence
+        from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID, DEVELOPER_ID
         from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
+        # Разрешено: владелец и разработчик
+        caller = update.effective_user.id
+        if caller != self.main_admin_id and caller != DEVELOPER_ID:
+            await update.message.reply_text("⛔ Нет доступа.")
+            return
+
+        await update.message.reply_text(
+            f"⏳ Ищу данные для user_id={target_id}…\n"
+            f"📍 Цель: chat={ADMIN_CHAT_ID} thread={DOSSIER_THREAD_ID}"
+        )
 
         reg_data = await _get_reg_user(target_id)
         if not reg_data:
@@ -104,17 +110,75 @@ class CommandHandler:
             f"✅ Дата вступления: {joined_at}"
             + (f"\n🔁 Первое вступление: {_fmt_date(reg_data.get('created_at'))}" if is_returning else "")
         )
-        card_kb = InlineKeyboardMarkup([
-            [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_id}")]
+
+        # Добавляем индикатор присутствия
+        try:
+            card_text = inject_presence(card_text, in_chat=True)
+        except Exception as e:
+            logger.warning(f"resend_dossier inject_presence error: {e}")
+
+        kb = InlineKeyboardMarkup([
+            [
+                InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_id}"),
+                InlineKeyboardButton("✏️ Редактировать", callback_data=f"anketa_edit_{target_id}"),
+            ]
         ])
 
+        # Пробуем найти фото с лицом
+        face_photo = None
         try:
-            await _send_dossier(context.bot, target_id, card_text, card_kb,
-                                db=self.db, admin_username=admin_name)
-            await update.message.reply_text(f"✅ Досье для user_id={target_id} опубликовано в ветке Досье.")
+            from utils.face_detector import has_human_face
+            photos = await context.bot.get_user_profile_photos(target_id, limit=3)
+            for photo_size_list in (photos.photos or []):
+                try:
+                    file = await context.bot.get_file(photo_size_list[-1].file_id)
+                    byte_array = await file.download_as_bytearray()
+                    if await has_human_face(byte_array):
+                        face_photo = photo_size_list[-1].file_id
+                        break
+                except Exception:
+                    continue
         except Exception as e:
-            logger.error(f"resend_dossier error: {e}")
-            await update.message.reply_text(f"❌ Ошибка при отправке досье: {e}")
+            logger.warning(f"resend_dossier photo check error: {e}")
+
+        # Отправляем напрямую с нормальными ошибками
+        try:
+            ensure_anketa_edit_tables(self.db)
+            if face_photo:
+                sent = await context.bot.send_photo(
+                    chat_id=ADMIN_CHAT_ID,
+                    message_thread_id=DOSSIER_THREAD_ID,
+                    photo=face_photo,
+                    caption=card_text,
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                )
+                upsert_anketa_edit(self.db, target_id,
+                                   dossier_chat_id=sent.chat.id,
+                                   dossier_msg_id=sent.message_id,
+                                   dossier_is_photo=1,
+                                   admin_username=admin_name,
+                                   base_text=card_text)
+            else:
+                no_face_text = card_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на аватарках)</i>"
+                sent = await context.bot.send_message(
+                    chat_id=ADMIN_CHAT_ID,
+                    message_thread_id=DOSSIER_THREAD_ID,
+                    text=no_face_text,
+                    parse_mode="HTML",
+                    reply_markup=kb,
+                    disable_web_page_preview=True,
+                )
+                upsert_anketa_edit(self.db, target_id,
+                                   dossier_chat_id=sent.chat.id,
+                                   dossier_msg_id=sent.message_id,
+                                   dossier_is_photo=0,
+                                   admin_username=admin_name,
+                                   base_text=no_face_text)
+            await update.message.reply_text(f"✅ Досье для user_id={target_id} опубликовано в ветке Досье (msg_id={sent.message_id}).")
+        except Exception as e:
+            logger.error(f"resend_dossier send error: {e}")
+            await update.message.reply_text(f"❌ Ошибка при отправке в ветку: {e}")
 
     async def restore_bbs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Восстановить все анкеты BBS (только для владельца)."""
