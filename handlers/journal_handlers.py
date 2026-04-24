@@ -792,12 +792,17 @@ async def log_blacklist(
     added: bool,
     reason: str = None,
     admin_user=None,
+    chat=None,
 ) -> None:
     """Логирует добавление/удаление из ЧС → канал 3."""
     if added:
         lines = ["🚫 #Блокировка", ""]
     else:
         lines = ["✅ #Разблокировка", ""]
+
+    if chat:
+        lines.append(_fmt_chat_block(chat))
+        lines.append("")
 
     lines.append(f"Инициатор: {_fmt_user_block(admin_user, admin_id, db)}")
     lines.append("")
