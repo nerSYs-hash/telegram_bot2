@@ -566,6 +566,7 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False, thread_id:
              InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
             [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
              InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+            [InlineKeyboardButton("🆘 Восстановление веток", callback_data="owner_recovery_menu")],
         ])
         text = "👑 <b>Панель владельца</b>\n\nВыберите раздел:"
     else:
@@ -662,6 +663,7 @@ async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAUL
          InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
          InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
+        [InlineKeyboardButton("🆘 Восстановление веток", callback_data="owner_recovery_menu")],
         [InlineKeyboardButton("💾 Скачать БД", callback_data="owner_backup")],
     ])
     sent = await context.bot.send_message(
