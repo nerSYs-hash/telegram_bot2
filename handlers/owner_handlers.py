@@ -1080,10 +1080,20 @@ async def restore_bbs_execute(query, context, db, admin_id: int) -> None:
     await query.edit_message_text("⏳ Начинаю восстановление анкет...", parse_mode='HTML')
 
     try:
-        db.cursor.execute(
-            "SELECT user_id FROM bbs_profiles WHERE published_at IS NOT NULL AND (deleted_by IS NULL OR deleted_by != ?)",
-            ('user',)
-        )
+        # Восстанавливаем только анкеты которые:
+        # 1. Были опубликованы (published_at IS NOT NULL)
+        # 2. Реально удалены (deleted_at IS NOT NULL) — не активные
+        # 3. Удалены НЕ самим пользователем (deleted_by != 'user')
+        # 4. Пользователь сейчас в чате (is_left = 0 в основной БД)
+        db.cursor.execute('''
+            SELECT bp.user_id
+            FROM bbs_profiles bp
+            JOIN users u ON u.user_id = bp.user_id
+            WHERE bp.published_at IS NOT NULL
+              AND bp.deleted_at IS NOT NULL
+              AND (bp.deleted_by IS NULL OR bp.deleted_by NOT IN ('user'))
+              AND (u.is_left = 0 OR u.is_left IS NULL)
+        ''')
         rows = db.cursor.fetchall()
     except Exception as e:
         logger.error(f"restore_bbs_execute DB error: {e}")
