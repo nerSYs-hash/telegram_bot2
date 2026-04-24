@@ -672,9 +672,15 @@ async def handle_owner_text_input(
             return True
         db.cursor.execute('UPDATE users SET is_blacklisted = 1 WHERE user_id = ?', (target_id,))
         db.conn.commit()
+        # Кикаем из чата (бан без возможности вернуться самостоятельно)
+        if target_chat_id:
+            try:
+                await context.bot.ban_chat_member(chat_id=target_chat_id, user_id=target_id)
+            except Exception as e:
+                logger.error(f"BLACKLIST kick error: {e}")
         name = target['username'] or target['first_name'] or target_id
         await reply(
-            f"🚫 @{name} (<code>{target_id}</code>) добавлен в блэклист.",
+            f"🚫 @{name} (<code>{target_id}</code>) добавлен в блэклист и исключён из чата.",
             InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
         logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
         try:
@@ -701,9 +707,15 @@ async def handle_owner_text_input(
             return True
         db.cursor.execute('UPDATE users SET is_blacklisted = 0 WHERE user_id = ?', (target_id,))
         db.conn.commit()
+        # Разбаниваем в Telegram чтобы мог вернуться
+        if target_chat_id:
+            try:
+                await context.bot.unban_chat_member(chat_id=target_chat_id, user_id=target_id, only_if_banned=True)
+            except Exception as e:
+                logger.error(f"BLACKLIST unban error: {e}")
         name = target['username'] or target['first_name'] or target_id
         await reply(
-            f"✅ @{name} (<code>{target_id}</code>) убран из блэклиста.",
+            f"✅ @{name} (<code>{target_id}</code>) убран из блэклиста и разбанен.",
             InlineKeyboardMarkup([[InlineKeyboardButton("🛡 К модерации", callback_data="owner_moderation")]]))
         logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
         try:

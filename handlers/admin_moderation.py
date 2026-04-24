@@ -1188,8 +1188,14 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not target_id:
             return True
         await add_to_blacklist(target_id, reason=text, admin_id=OWNER_ID)
+        # Кикаем из чата
+        from config import CHAT_ID as _BL_CHAT_ID
+        try:
+            await context.bot.ban_chat_member(chat_id=_BL_CHAT_ID, user_id=target_id)
+        except Exception as e:
+            logger.error(f"BLACKLIST kick error: {e}")
         await update.message.reply_text(
-            f"🚫 Пользователь <code>{target_id}</code> добавлен в ЧС.\nПричина: {html.escape(text)}",
+            f"🚫 Пользователь <code>{target_id}</code> добавлен в ЧС и исключён из чата.\nПричина: {html.escape(text)}",
             parse_mode="HTML"
         )
         try:
@@ -1215,7 +1221,13 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
         await remove_from_blacklist(target_id)
-        await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из ЧС.",
+        # Разбаниваем в Telegram
+        from config import CHAT_ID as _BL_CHAT_ID
+        try:
+            await context.bot.unban_chat_member(chat_id=_BL_CHAT_ID, user_id=target_id, only_if_banned=True)
+        except Exception as e:
+            logger.error(f"BLACKLIST unban error: {e}")
+        await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из ЧС и разбанен.",
                                         parse_mode="HTML")
         try:
             from handlers.journal_handlers import log_blacklist
