@@ -7,7 +7,7 @@ from handlers.commands.economy_commands import (
     safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
 )
 from utils.ai_core import ask_ai
-from database.db_friend import get_user, get_user_pending_application
+from database.db_friend import get_user, get_user_pending_application, is_blacklisted, get_blacklist_reason
 #from handlers.profile_handlers import show_profile
 from handlers.commands.donation_commands import donate_command as _donate_command
 from handlers.commands.exchange_commands import course_command as _course_command
@@ -129,11 +129,46 @@ class CommandHandler:
                 user_status = user.get('status', '')
 
                 if user_status in ('left', 'approved', 'in_chat', 'registered'):
-                    # Был одобрен ранее, но сейчас не в чате — предлагаем вернуться
-                    await update.message.reply_text(
-                        "👋 Ты сейчас не состоишь в чате.\n\n"
-                        "Чтобы пользоваться ботом, нужно вступить обратно в чат."
-                    )
+                    # Был одобрен ранее — проверяем TG-статус и отправляем одноразовую ссылку
+                    tg_status = None
+                    try:
+                        cm = await context.bot.get_chat_member(self.target_chat_id, user_id)
+                        tg_status = cm.status
+                    except Exception:
+                        pass
+
+                    if tg_status == 'kicked':
+                        owner_link = f'<a href="tg://user?id={self.main_admin_id}">владельца чата</a>'
+                        await update.message.reply_text(
+                            f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                            f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
+                            f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения.",
+                            parse_mode="HTML"
+                        )
+                    else:
+                        name = user.get('q_name') or update.effective_user.first_name
+                        try:
+                            from database.db_friend import create_invite_link as _save_invite
+                            invite_obj = await context.bot.create_chat_invite_link(
+                                self.target_chat_id,
+                                member_limit=1,
+                                name=f"ret_{user_id}"[:32],
+                            )
+                            invite_url = invite_obj.invite_link
+                            sent = await update.message.reply_text(
+                                f"👋 С возвращением, {name}!\n\n"
+                                f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                                f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
+                                f"⚠️ Ссылка одноразовая — действует только для тебя и "
+                                f"сгорит сразу после использования."
+                            )
+                            await _save_invite(user_id, invite_url)
+                            logger.info(f"Return invite sent to {user_id}: {invite_url}")
+                        except Exception as e:
+                            logger.error(f"Error creating return invite for {user_id}: {e}")
+                            await update.message.reply_text(
+                                "❌ Не удалось создать ссылку для входа. Обратитесь к администратору."
+                            )
                 else:
                     # Проверяем есть ли активная заявка
                     pending_app = await get_user_pending_application(user_id)
