@@ -228,12 +228,29 @@ class MessageHandler:
                         return
                 # Ветки багов: сообщения от владельца или разработчика → создаём трекер-карточку
                 from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID, DEVELOPER_ID as _DEV_ID
-                if (message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE)
-                        and user.id in (_OWNER_ID, _DEV_ID)
-                        and not message.reply_to_message):
-                    from handlers.bug_tracker_handlers import handle_bug_message
-                    await handle_bug_message(message, self.db)
-                    return
+                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not message.reply_to_message:
+                    if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
+                        from handlers.bug_tracker_handlers import handle_bug_message
+                        await handle_bug_message(message, self.db)
+                        return
+                    else:
+                        # Диагностика: сообщаем реальный thread_id чтобы сверить с .env
+                        logging.warning(
+                            f"BUG_TRACKER: thread_id={message.message_thread_id} не совпал "
+                            f"с BUG_THREAD_BOT={BUG_THREAD_BOT} BUG_THREAD_SITE={BUG_THREAD_SITE}"
+                        )
+                        try:
+                            await message.reply_text(
+                                f"⚙️ <b>Диагностика треда</b>\n\n"
+                                f"thread_id этой ветки: <code>{message.message_thread_id}</code>\n\n"
+                                f"В .env сейчас:\n"
+                                f"BUG_THREAD_BOT = <code>{BUG_THREAD_BOT}</code>\n"
+                                f"BUG_THREAD_SITE = <code>{BUG_THREAD_SITE}</code>\n\n"
+                                f"Если thread_id не совпадает — обнови .env на сервере.",
+                                parse_mode="HTML"
+                            )
+                        except Exception:
+                            pass
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
