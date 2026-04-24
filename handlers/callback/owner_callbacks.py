@@ -51,7 +51,7 @@ from handlers.journal_handlers import (
     show_journal_menu, show_journal_channel_menu,
     journal_connect_start, journal_thread_start,
     journal_disconnect, journal_test,
-    log_kick, log_ban, log_unban, log_unmute,
+    log_kick, log_ban, log_unban, log_unmute, log_mute,
 )
 
 logger = logging.getLogger(__name__)
@@ -320,6 +320,18 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
                 ),
             )
             await query.answer("✅ Пользователь заглушён навсегда.", show_alert=True)
+            try:
+                chat_obj = await context.bot.get_chat(target_chat_id)
+                await log_mute(
+                    context.bot, db,
+                    target_id=uid,
+                    admin_id=user.id,
+                    duration_human="навсегда",
+                    chat=chat_obj,
+                    admin_user=user,
+                )
+            except Exception as je:
+                logger.error(f"Journal log_mute error: {je}")
         except Exception as e:
             await query.answer(f"❌ {e}", show_alert=True)
 

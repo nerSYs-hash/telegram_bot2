@@ -1891,12 +1891,29 @@ async def process_triggers(
                     mute_type = act_cfg.get('mute_type', 'all') or 'all'
                     perms = _build_mute_permissions(mute_type)
                     uid = _resolve_action_target(user, mute_tgt, message, tdata)
+                    _dur_sec_int = int(dur_sec)
+                    _dur_human = (
+                        f"{_dur_sec_int // 86400}д" if _dur_sec_int >= 86400 else
+                        f"{_dur_sec_int // 3600}ч"  if _dur_sec_int >= 3600  else
+                        f"{_dur_sec_int // 60}мин"  if _dur_sec_int >= 60    else
+                        f"{_dur_sec_int}с"
+                    )
                     if uid:
                         try:
                             await context.bot.restrict_chat_member(
                                 chat_id=target_chat_id, user_id=uid,
                                 permissions=perms,
-                                until_date=int(time.time()) + int(dur_sec))
+                                until_date=int(time.time()) + _dur_sec_int)
+                            try:
+                                from handlers.journal_handlers import log_mute
+                                await log_mute(
+                                    context.bot, db, uid, None,
+                                    duration_human=_dur_human,
+                                    chat=message.chat,
+                                    target_user=message.from_user if uid == user.id else None,
+                                )
+                            except Exception as je:
+                                logger.error(f"Journal trigger log_mute error: {je}")
                         except Exception as e:
                             logger.error(f"Mute failed: {e}")
                     # Если цель 'both' — мутим и цитируемого тоже (теми же правами)
@@ -1907,7 +1924,17 @@ async def process_triggers(
                                 await context.bot.restrict_chat_member(
                                     chat_id=target_chat_id, user_id=replied.from_user.id,
                                     permissions=perms,
-                                    until_date=int(time.time()) + int(dur_sec))
+                                    until_date=int(time.time()) + _dur_sec_int)
+                                try:
+                                    from handlers.journal_handlers import log_mute
+                                    await log_mute(
+                                        context.bot, db, replied.from_user.id, None,
+                                        duration_human=_dur_human,
+                                        chat=message.chat,
+                                        target_user=replied.from_user,
+                                    )
+                                except Exception as je:
+                                    logger.error(f"Journal trigger log_mute (both) error: {je}")
                             except Exception as e:
                                 logger.error(f"Mute both (replied) failed: {e}")
 
@@ -1925,6 +1952,16 @@ async def process_triggers(
                         try:
                             await context.bot.ban_chat_member(
                                 chat_id=target_chat_id, user_id=uid, **_ban_kwargs)
+                            try:
+                                from handlers.journal_handlers import log_ban
+                                await log_ban(
+                                    context.bot, db, uid, None,
+                                    chat=message.chat,
+                                    target_user=message.from_user if uid == user.id else None,
+                                    trigger_message=message,
+                                )
+                            except Exception as je:
+                                logger.error(f"Journal trigger log_ban error: {je}")
                         except Exception as e:
                             logger.error(f"Ban failed: {e}")
                     # Если цель 'both' — банить и цитируемого тоже
@@ -1935,6 +1972,16 @@ async def process_triggers(
                                 await context.bot.ban_chat_member(
                                     chat_id=target_chat_id, user_id=replied.from_user.id,
                                     **_ban_kwargs)
+                                try:
+                                    from handlers.journal_handlers import log_ban
+                                    await log_ban(
+                                        context.bot, db, replied.from_user.id, None,
+                                        chat=message.chat,
+                                        target_user=replied.from_user,
+                                        trigger_message=message,
+                                    )
+                                except Exception as je:
+                                    logger.error(f"Journal trigger log_ban (both) error: {je}")
                             except Exception as e:
                                 logger.error(f"Ban both (replied) failed: {e}")
 
