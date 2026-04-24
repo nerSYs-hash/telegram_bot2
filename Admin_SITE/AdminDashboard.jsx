@@ -335,6 +335,7 @@ export default function App() {
   const [newActionIds, setNewActionIds] = useState(() => new Set());
   const [condChipInputs, setCondChipInputs] = useState({});
   const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
+  const [condGearModal,     setCondGearModal]     = useState(null); // {gIdx, cIdx}
   const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
   const [actOpenDropdown, setActOpenDropdown] = useState(null);     // 'reply_g_a'
   const [showKeyboardModal, setShowKeyboardModal] = useState(false);
@@ -1611,19 +1612,9 @@ export default function App() {
                                       <p className="text-[9px] font-black text-gray-500 uppercase">
                                         Значения условия <span className="text-red-400">*</span>
                                       </p>
-                                      <div className="relative">
-                                        <button
-                                          onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` ? null : `rt_gear_${gIdx}_${cIdx}`)}
-                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
-                                        {condOpenDropdown === `rt_gear_${gIdx}_${cIdx}` && (
-                                          <div className="absolute left-0 top-6 z-[9999] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
-                                            <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondOpenDropdown(null); }}
-                                              className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
-                                              <RotateCcw size={11}/> Отменить изменения
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setCondGearModal({gIdx, cIdx}); }}
+                                        className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
                                     </div>
                                     <div className="relative">
                                       <button
@@ -1698,19 +1689,9 @@ export default function App() {
                                       <p className="text-[9px] font-black text-gray-500 uppercase">
                                         Тип сообщения <span className="text-red-400">*</span>
                                       </p>
-                                      <div className="relative">
-                                        <button
-                                          onClick={() => setCondOpenDropdown(condOpenDropdown === `mt_gear_${gIdx}_${cIdx}` ? null : `mt_gear_${gIdx}_${cIdx}`)}
-                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
-                                        {condOpenDropdown === `mt_gear_${gIdx}_${cIdx}` && (
-                                          <div className="absolute left-0 top-6 z-[9999] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[170px]">
-                                            <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondOpenDropdown(null); }}
-                                              className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
-                                              <RotateCcw size={11}/> Отменить изменения
-                                            </button>
-                                          </div>
-                                        )}
-                                      </div>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setCondGearModal({gIdx, cIdx}); }}
+                                        className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
                                     </div>
                                     <div className="relative">
                                       <button
@@ -3831,6 +3812,35 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* ── МОДАЛ ШЕСТЕРЁНКИ УСЛОВИЯ (Отменить изменения) ── */}
+              {condGearModal && (() => {
+                const { gIdx, cIdx } = condGearModal;
+                const cond = conditionGroups[gIdx]?.conditions[cIdx];
+                if (!cond) return null;
+                return (
+                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondGearModal(null)}/>
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-black text-sm text-gray-900">Значения условия</h3>
+                        <button onClick={() => setCondGearModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondGearModal(null); }}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-2xl transition-all text-left">
+                        <RotateCcw size={14}/> Отменить изменения
+                      </button>
+                      <button onClick={() => setCondGearModal(null)}
+                        className="w-full mt-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                        Закрыть
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ── МОДАЛ НАСТРОЕК УСЛОВИЯ (ключ плейсхолдера) ── */}
               {condSettingsModal && (() => {
