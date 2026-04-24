@@ -784,17 +784,42 @@ async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
     )
 
 
-async def log_blacklist(bot, db, target_id: int, admin_id: int, added: bool) -> None:
-    """Логирует добавление/удаление из блэклиста → канал 3."""
-    target_tag = _user_tag(db, target_id)
-    admin_tag = _user_tag(db, admin_id)
+async def log_blacklist(
+    bot,
+    db,
+    target_id: int,
+    admin_id: int,
+    added: bool,
+    reason: str = None,
+    admin_user=None,
+) -> None:
+    """Логирует добавление/удаление из ЧС → канал 3."""
     if added:
-        text = f"🚫 {target_tag} добавлен в блэклист\n👮 {admin_tag}"
-        hashtag = "#Блокировка"
+        lines = ["🚫 #Блокировка", ""]
     else:
-        text = f"✅ {target_tag} убран из блэклиста\n👮 {admin_tag}"
-        hashtag = "#Разблокировка"
-    await log_event(bot, db, 'blacklist', text, user_id=target_id, hashtag=hashtag, channel_num=3)
+        lines = ["✅ #Разблокировка", ""]
+
+    lines.append(f"Инициатор: {_fmt_user_block(admin_user, admin_id, db)}")
+    lines.append("")
+    lines.append(f"Пользователь: {_fmt_user_block(None, target_id, db)}")
+    lines.append("")
+
+    if reason:
+        lines.append(f"Причина: <blockquote>{reason}</blockquote>")
+        lines.append("")
+
+    lines.append(f"🕐 {_fmt_time_msk()}")
+
+    text = "\n".join(lines)
+
+    action_markup = InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🚫 Забанить", callback_data=f"jban_{target_id}"),
+            InlineKeyboardButton("🗑 Удалить", callback_data=f"jkick_{target_id}"),
+        ],
+    ]) if added else None
+
+    await log_event(bot, db, 'blacklist', text, user_id=target_id, channel_num=3, markup=action_markup)
 
 
 async def log_admin_action(bot, db, admin_id: int, action_text: str) -> None:

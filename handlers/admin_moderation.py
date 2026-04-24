@@ -1195,7 +1195,10 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             from handlers.journal_handlers import log_blacklist
             main_db = context.bot_data.get('db')
-            await log_blacklist(context.bot, main_db, target_id, update.effective_user.id, True)
+            await log_blacklist(
+                context.bot, main_db, target_id, update.effective_user.id, True,
+                reason=text, admin_user=update.effective_user,
+            )
         except Exception as je:
             logger.error(f"Journal log_blacklist (add) error: {je}")
 
@@ -1212,7 +1215,10 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             from handlers.journal_handlers import log_blacklist
             main_db = context.bot_data.get('db')
-            await log_blacklist(context.bot, main_db, target_id, update.effective_user.id, False)
+            await log_blacklist(
+                context.bot, main_db, target_id, update.effective_user.id, False,
+                admin_user=update.effective_user,
+            )
         except Exception as je:
             logger.error(f"Journal log_blacklist (remove) error: {je}")
 

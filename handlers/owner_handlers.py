@@ -679,7 +679,7 @@ async def handle_owner_text_input(
         logger.info(f"BLACKLIST ADD: {target_id} by {user.id}")
         try:
             from handlers.journal_handlers import log_blacklist
-            await log_blacklist(context.bot, db, target_id, user.id, True)
+            await log_blacklist(context.bot, db, target_id, user.id, True, admin_user=user)
         except Exception as e:
             logger.error(f"Journal log_blacklist error: {e}")
         return True
@@ -708,7 +708,7 @@ async def handle_owner_text_input(
         logger.info(f"BLACKLIST REMOVE: {target_id} by {user.id}")
         try:
             from handlers.journal_handlers import log_blacklist
-            await log_blacklist(context.bot, db, target_id, user.id, False)
+            await log_blacklist(context.bot, db, target_id, user.id, False, admin_user=user)
         except Exception as e:
             logger.error(f"Journal log_blacklist error: {e}")
         return True
