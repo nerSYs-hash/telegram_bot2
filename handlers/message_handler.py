@@ -231,22 +231,29 @@ class MessageHandler:
                 if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not message.reply_to_message:
                     if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
                         from handlers.bug_tracker_handlers import handle_bug_message
-                        await handle_bug_message(message, self.db)
+                        try:
+                            await handle_bug_message(message, self.db)
+                        except Exception as _bug_err:
+                            logging.error(f"handle_bug_message exception: {_bug_err}", exc_info=True)
+                            try:
+                                await context.bot.send_message(
+                                    chat_id=user.id,
+                                    text=f"❌ BUG TRACKER ERROR:\n<code>{_bug_err}</code>",
+                                    parse_mode="HTML"
+                                )
+                            except Exception:
+                                pass
                         return
                     else:
-                        # Диагностика: сообщаем реальный thread_id чтобы сверить с .env
-                        logging.warning(
-                            f"BUG_TRACKER: thread_id={message.message_thread_id} не совпал "
-                            f"с BUG_THREAD_BOT={BUG_THREAD_BOT} BUG_THREAD_SITE={BUG_THREAD_SITE}"
-                        )
                         try:
-                            await message.reply_text(
-                                f"⚙️ <b>Диагностика треда</b>\n\n"
-                                f"thread_id этой ветки: <code>{message.message_thread_id}</code>\n\n"
-                                f"В .env сейчас:\n"
-                                f"BUG_THREAD_BOT = <code>{BUG_THREAD_BOT}</code>\n"
-                                f"BUG_THREAD_SITE = <code>{BUG_THREAD_SITE}</code>\n\n"
-                                f"Если thread_id не совпадает — обнови .env на сервере.",
+                            await context.bot.send_message(
+                                chat_id=user.id,
+                                text=(
+                                    f"⚙️ <b>BUG TRACKER: thread_id не совпал</b>\n\n"
+                                    f"Эта ветка: <code>{message.message_thread_id}</code>\n"
+                                    f"BUG_THREAD_BOT: <code>{BUG_THREAD_BOT}</code>\n"
+                                    f"BUG_THREAD_SITE: <code>{BUG_THREAD_SITE}</code>"
+                                ),
                                 parse_mode="HTML"
                             )
                         except Exception:
