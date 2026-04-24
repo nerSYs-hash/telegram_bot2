@@ -680,8 +680,8 @@ async def handle_owner_text_input(
         try:
             from handlers.journal_handlers import log_blacklist
             await log_blacklist(context.bot, db, target_id, user.id, True)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Journal log_blacklist error: {e}")
         return True
 
     # ── Убрать из блэклиста ──
@@ -709,8 +709,8 @@ async def handle_owner_text_input(
         try:
             from handlers.journal_handlers import log_blacklist
             await log_blacklist(context.bot, db, target_id, user.id, False)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.error(f"Journal log_blacklist error: {e}")
         return True
 
     # ── Мут по ID из ЛС ──

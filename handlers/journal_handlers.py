@@ -202,8 +202,12 @@ async def log_event(
     thread_id = None
     if channel_num == 2:
         channel_id, thread_id = _get_journal_channel_2(db)
+        if not channel_id:
+            channel_id = _get_journal_channel(db)
     elif channel_num == 3:
         channel_id, thread_id = _get_journal_channel_3(db)
+        if not channel_id:
+            channel_id = _get_journal_channel(db)
     else:
         channel_id = _get_journal_channel(db)
 
