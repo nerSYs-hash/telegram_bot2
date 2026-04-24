@@ -221,6 +221,11 @@ class MessageHandler:
                         from handlers.shipper_handlers import send_shipper_panel
                         await send_shipper_panel(message, context, self.db, self.target_chat_id)
                         return
+                # FSM: ввод комментария к баг-карточке прямо в треде
+                if context.user_data.get('bug_awaiting_comment') and message.reply_to_message:
+                    from handlers.bug_tracker_handlers import handle_bug_comment_input
+                    if await handle_bug_comment_input(message, context, self.db):
+                        return
                 # FSM: редактирование анкеты (фото / примечание) в ADMIN_CHAT
                 if context.user_data.get('anketa_edit'):
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input

@@ -132,8 +132,12 @@ async def handle_bug_message(message, bot, db) -> None:
         text=card_text,
         parse_mode='HTML',
         reply_markup=kb,
-        reply_to_message_id=original_msg_id,
     )
+    # Удаляем исходное сообщение пользователя чтобы не было дублей
+    try:
+        await bot.delete_message(chat_id=chat_id, message_id=original_msg_id)
+    except Exception:
+        pass
     upsert_bug_card(db, original_msg_id,
                     thread_id=thread_id,
                     card_msg_id=sent.message_id,
@@ -168,16 +172,23 @@ async def handle_bug_callback(query, context, db) -> bool:
 
     # ── Редактировать (открыть FSM) ──
     if data.startswith('bug_edit_'):
+        from telegram import ForceReply
         orig_id = int(data[len('bug_edit_'):])
+        thread_id = query.message.message_thread_id
+        chat_id = query.message.chat.id
         context.user_data['bug_edit_orig_id'] = orig_id
         context.user_data['bug_edit_card_msg_id'] = query.message.message_id
-        context.user_data['bug_edit_chat_id'] = query.message.chat.id
+        context.user_data['bug_edit_chat_id'] = chat_id
         context.user_data['bug_awaiting_comment'] = True
         await query.answer()
-        await context.bot.send_message(
-            chat_id=query.from_user.id,
-            text="✏️ Напиши комментарий — он будет добавлен в карточку баг-репорта:"
+        # Спрашиваем прямо в треде (ForceReply — бот ждёт ответа именно от этого юзера)
+        prompt = await context.bot.send_message(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            text="✏️ Ответь на это сообщение с комментарием к баг-репорту:",
+            reply_markup=ForceReply(selective=True),
         )
+        context.user_data['bug_edit_prompt_msg_id'] = prompt.message_id
         return True
 
     return False
