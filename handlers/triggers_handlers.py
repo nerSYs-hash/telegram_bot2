@@ -1038,7 +1038,9 @@ async def _configure_action(src, ctx, action: str):
     cfg = data.get('action_configs', {}).get(action, {})
 
     if action == 'msg_chat':
-        cur_text = cfg.get('text', '<i>не задан</i>')
+        import html as _html
+        _raw_text = cfg.get('text') or ''
+        cur_text = _html.escape(_raw_text[:200]) if _raw_text else '<i>не задан</i>'
         has_media = '✅' if cfg.get('media_id') else '❌'
         pos = '🖼 Медиа + текст (одно сообщение)' if cfg.get('media_pos', 'above') == 'above' else '📝 Текст, затем 🖼 медиа'
         rot_items = _get_rotation_items(data)
@@ -1060,7 +1062,7 @@ async def _configure_action(src, ctx, action: str):
         btn_count = len(buttons)
         text = (
             f"💬 <b>Сообщение в чат</b>\n\n"
-            f"📝 Текст: {cur_text[:200]}\n"
+            f"📝 Текст: {cur_text}\n"
             f"🖼 Медиа: {has_media}\n"
             f"📐 Режим: {pos}\n"
             f"{rot_status}\n"
@@ -1081,7 +1083,9 @@ async def _configure_action(src, ctx, action: str):
         ]
 
     elif action == 'msg_dm':
-        cur_text = cfg.get('text', '<i>не задан</i>')
+        import html as _html
+        _raw_dm = cfg.get('text') or ''
+        cur_text = _html.escape(_raw_dm[:200]) if _raw_dm else '<i>не задан</i>'
         has_media = '✅' if cfg.get('media_id') else '❌'
         link_prev = cfg.get('link_preview', True)
         link_prev_icon = '✅' if link_prev else '❌'
@@ -1089,7 +1093,7 @@ async def _configure_action(src, ctx, action: str):
         dm_btn_count = len(dm_buttons)
         text = (
             f"✉️ <b>Сообщение в ЛС</b>\n\n"
-            f"📝 Текст: {cur_text[:200]}\n"
+            f"📝 Текст: {cur_text}\n"
             f"🖼 Медиа: {has_media}\n"
             f"🔗 Превью ссылок: {link_prev_icon}\n"
             f"🔘 Кнопки-ссылки: <b>{dm_btn_count}</b> шт."
