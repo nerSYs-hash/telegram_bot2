@@ -1968,31 +1968,10 @@ export default function App() {
                       {/* Шестерёнка */}
                       <div className="relative">
                         <button
-                          onClick={() => setActGroupSettingsIdx(actGroupSettingsIdx === gIdx ? null : gIdx)}
+                          onClick={e => { e.stopPropagation(); setActGroupSettingsIdx(gIdx); }}
                           className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
                           <Settings size={12}/>
                         </button>
-                        {actGroupSettingsIdx === gIdx && (
-                          <div className="absolute left-0 top-7 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 p-3 space-y-2"
-                            onClick={e => e.stopPropagation()}>
-                            <p className="text-[10px] font-black text-gray-600 uppercase tracking-wide">Настройки группы</p>
-                            <div className="flex items-center gap-2">
-                              <label className="text-[10px] font-bold text-gray-500 flex-1">Шанс выполнения</label>
-                              <div className="flex items-center gap-1 bg-gray-50 border border-gray-200 rounded-lg px-2 py-1">
-                                <input
-                                  type="number" min="1" max="100"
-                                  value={group.probability}
-                                  onChange={e => updActionGroup(gIdx, 'probability', Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
-                                  className="w-10 text-center font-black text-sm bg-transparent outline-none"/>
-                                <span className="text-[10px] font-black text-gray-400">%</span>
-                              </div>
-                            </div>
-                            <button onClick={() => setActGroupSettingsIdx(null)}
-                              className="w-full py-1.5 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase active:scale-95 transition-all">
-                              Готово
-                            </button>
-                          </div>
-                        )}
                       </div>
                       <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
                         {actionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Действия'}
@@ -3812,6 +3791,41 @@ export default function App() {
                   </div>
                 </div>
               )}
+
+              {/* ── МОДАЛ НАСТРОЕК ГРУППЫ ДЕЙСТВИЙ (Шанс выполнения) ── */}
+              {actGroupSettingsIdx !== null && (() => {
+                const gIdx = actGroupSettingsIdx;
+                const group = actionGroups[gIdx];
+                if (!group) return null;
+                return (
+                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActGroupSettingsIdx(null)}/>
+                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-black text-sm text-gray-900">Настройки группы {actionGroups.length > 1 ? gIdx + 1 : ''}</h3>
+                        <button onClick={() => setActGroupSettingsIdx(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <label className="text-sm font-bold text-gray-600 flex-1">Шанс выполнения</label>
+                        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                          <input
+                            type="number" min="1" max="100"
+                            value={group.probability}
+                            onChange={e => updActionGroup(gIdx, 'probability', Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
+                            className="w-12 text-center font-black text-sm bg-transparent outline-none"/>
+                          <span className="text-xs font-black text-gray-400">%</span>
+                        </div>
+                      </div>
+                      <button onClick={() => setActGroupSettingsIdx(null)}
+                        className="w-full px-4 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm hover:bg-blue-600 active:scale-95 transition-all">
+                        Готово
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
 
               {/* ── МОДАЛ ШЕСТЕРЁНКИ УСЛОВИЯ (Отменить изменения) ── */}
               {condGearModal && (() => {
