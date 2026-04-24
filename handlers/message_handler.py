@@ -226,6 +226,14 @@ class MessageHandler:
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input
                     if await handle_anketa_edit_input(message, context, self.db):
                         return
+                # Ветки багов: сообщения от владельца → создаём трекер-карточку
+                from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID
+                if (message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE)
+                        and user.id == _OWNER_ID
+                        and not message.reply_to_message):
+                    from handlers.bug_tracker_handlers import handle_bug_message
+                    await handle_bug_message(message, self.db)
+                    return
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
@@ -723,6 +731,12 @@ class MessageHandler:
                         await message.reply_text("⏳ Доступ открывается после вступления в чат и одобрения заявки.")
                     except Exception:
                         pass  # Forbidden — бот заблокирован пользователем
+                return
+
+        # ═══ BUG TRACKER: ввод комментария от владельца/зама ═══
+        if message.text and context.user_data.get('bug_awaiting_comment') and _is_owner_or_dep:
+            from handlers.bug_tracker_handlers import handle_bug_comment_input
+            if await handle_bug_comment_input(message, context, self.db):
                 return
 
         # ═══ КНОПКИ ReplyKeyboard — обрабатываются ДЛЯ ВСЕХ в ЛС ═══

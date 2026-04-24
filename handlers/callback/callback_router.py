@@ -84,6 +84,12 @@ class CallbackHandler:
                     pass
                 return
 
+        # ═══ BUG TRACKER CALLBACKS ═══
+        if data.startswith('bug_'):
+            from handlers.bug_tracker_handlers import handle_bug_callback
+            if await handle_bug_callback(query, context, self.db):
+                return
+
         # ═══ ANKETA EDIT CALLBACKS ═══
         if data.startswith('anketa_edit_'):
             from handlers.anketa_edit_handlers import handle_anketa_edit_callback, ensure_anketa_edit_tables

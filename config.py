@@ -15,6 +15,8 @@ ADMIN_CHAT_ID: int = int(os.getenv("ADMIN_CHAT_ID", -1003794322036))  # ID ча�
 DEVELOPER_ID: Optional[int] = int(os.getenv("DEVELOPER_ID", 7536752126))  # ID разработчика (@Nersys)
 DOSSIER_THREAD_ID: int = int(os.getenv("DOSSIER_THREAD_ID", 176))       # Тред для досье после одобрения
 APPLICATIONS_THREAD_ID: int = int(os.getenv("APPLICATIONS_THREAD_ID", 241))  # Тред для входящих заявок
+BUG_THREAD_BOT: int = int(os.getenv("BUG_THREAD_BOT", 12195))           # Тред багов бота
+BUG_THREAD_SITE: int = int(os.getenv("BUG_THREAD_SITE", 14235))         # Тред багов сайта
 JOURNAL_CHANNEL_ID: Optional[str] = os.getenv("JOURNAL_CHANNEL_ID")  # Устанавливается через бота
 
 # Проверка обязательных параметров
