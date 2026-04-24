@@ -580,6 +580,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("restore_bbs", self.command_handler.restore_bbs_command))
         # Восстановить все посты НьюзON (только для владельца)
         self.application.add_handler(CommandHandler("restore_news", self.command_handler.restore_news_command))
+        self.application.add_handler(CommandHandler("resend_dossier", self.command_handler.resend_dossier_command))
         self.application.add_handler(CommandHandler("mute", self.command_handler.mute_command))
         self.application.add_handler(CommandHandler("unmute", self.command_handler.unmute_command))
         self.application.add_handler(CommandHandler("ban", self.command_handler.ban_command))

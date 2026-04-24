@@ -40,6 +40,82 @@ class CommandHandler:
         dummy_query = DummyQuery(update.message)
         await restore_news_execute(dummy_query, context, self.db, self.main_admin_id)
 
+    async def resend_dossier_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Принудительно опубликовать досье пользователя из БД (только для владельца).
+        Использование: /resend_dossier <user_id>
+        """
+        if update.effective_user.id != self.main_admin_id:
+            await update.message.reply_text("⛔ Нет доступа.")
+            return
+
+        if not context.args:
+            await update.message.reply_text("Использование: /resend_dossier <user_id>")
+            return
+
+        try:
+            target_id = int(context.args[0])
+        except ValueError:
+            await update.message.reply_text("❌ user_id должен быть числом.")
+            return
+
+        await update.message.reply_text(f"⏳ Ищу данные для user_id={target_id}…")
+
+        import html as _html
+        from database.db_friend import get_user as _get_reg_user
+        from handlers.admin_moderation import _send_dossier, _fmt_date, _msk_now
+        from config import CHAT_ID
+        from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+
+        reg_data = await _get_reg_user(target_id)
+        if not reg_data:
+            await update.message.reply_text(
+                f"❌ Пользователь {target_id} не найден в БД регистраций.\n"
+                f"Убедись, что ID верный."
+            )
+            return
+
+        admin_name = f"@{update.effective_user.username}" if update.effective_user.username else str(update.effective_user.id)
+        is_returning = bool(reg_data.get('last_exit_at'))
+        block_b = "#Возвращение" if is_returning else "#Новый"
+        username_str = f"@{reg_data.get('username')}" if reg_data.get('username') else "нет"
+        full_name = _html.escape(
+            f"{reg_data.get('first_name') or ''} {reg_data.get('last_name') or ''}".strip()
+            or reg_data.get('q_name') or '—'
+        )
+        user_link = f'<a href="tg://user?id={target_id}">{full_name}</a>'
+        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">Pulse 4ever</a>'
+        applied_at = _fmt_date(reg_data.get('created_at'))
+        joined_at = _msk_now()
+
+        card_text = (
+            f"#Одобрено (ручная отправка)\n"
+            f"{block_b}\n"
+            f"Досье восстановлено {admin_name}\n\n"
+            f"Группа: {group_link}\n"
+            f"Пользователь: {user_link}\n"
+            f"Никнейм: {username_str}\n"
+            f"ID: <code>{target_id}</code> <b>#user{target_id}</b>\n\n"
+            f"<b>Анкета:</b>\n"
+            f"Имя: {_html.escape(reg_data.get('q_name') or '—')}\n"
+            f"Возраст: {reg_data.get('q_age') or '—'}\n"
+            f"Город: {_html.escape(reg_data.get('q_city') or '—')}\n"
+            f"Терапия: {_html.escape(reg_data.get('q_therapy') or '—')}\n\n"
+            f"📅 Дата заявки: {applied_at}\n"
+            f"✅ Дата вступления: {joined_at}"
+            + (f"\n🔁 Первое вступление: {_fmt_date(reg_data.get('created_at'))}" if is_returning else "")
+        )
+        card_kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={target_id}")]
+        ])
+
+        try:
+            await _send_dossier(context.bot, target_id, card_text, card_kb,
+                                db=self.db, admin_username=admin_name)
+            await update.message.reply_text(f"✅ Досье для user_id={target_id} опубликовано в ветке Досье.")
+        except Exception as e:
+            logger.error(f"resend_dossier error: {e}")
+            await update.message.reply_text(f"❌ Ошибка при отправке досье: {e}")
+
     async def restore_bbs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Восстановить все анкеты BBS (только для владельца)."""
         if update.effective_user.id != self.main_admin_id:

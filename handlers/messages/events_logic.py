@@ -374,28 +374,27 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
         logging.error(f"Dossier return update error for {user_id}: {e}")
 
     user_data = db.get_user(user_id)
-    if not user_data:
-        return
 
-    # Пометить пользователя как вернувшегося
-    db.cursor.execute('UPDATE users SET is_left = 0 WHERE user_id = ?', (user_id,))
-    db.conn.commit()
-    
+    if user_data:
+        # Пометить пользователя как вернувшегося
+        db.cursor.execute('UPDATE users SET is_left = 0 WHERE user_id = ?', (user_id,))
+        db.conn.commit()
+
     # sqlite3.Row does NOT support .get() — use bracket access
     try:
-        frozen_balance = float(user_data['frozen_balance'] or 0)
+        frozen_balance = float(user_data['frozen_balance'] or 0) if user_data else 0
     except (KeyError, IndexError):
         frozen_balance = 0
-    
+
     try:
-        freeze_until_str = user_data['freeze_until']
+        freeze_until_str = user_data['freeze_until'] if user_data else None
     except (KeyError, IndexError):
         freeze_until_str = None
-    
-    username = user_data['username']
-    first_name = user_data['first_name'] or 'Unknown'
+
+    username = user_data['username'] if user_data else None
+    first_name = (user_data['first_name'] if user_data else None) or 'Unknown'
     user_mention = f"@{username}" if username else first_name
-    
+
     logging.info(f"🔄 User {user_id} returned. frozen_balance={frozen_balance}, freeze_until={freeze_until_str}")
     
     if frozen_balance > 0 and freeze_until_str:
