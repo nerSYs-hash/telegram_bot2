@@ -120,9 +120,18 @@ class CommandHandler:
 
             # Пользователь совсем не регистрировался — ни в одной БД нет q_name
             if not q_name:
-                await update.message.reply_text(
-                    "Привет! Ты еще не зарегистрирован. Напиши /register"
-                )
+                pending_app = await get_user_pending_application(user_id)
+                if pending_app:
+                    await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
+                else:
+                    kb = InlineKeyboardMarkup([[
+                        InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
+                    ]])
+                    await update.message.reply_text(
+                        "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
+                        "Нажми кнопку ниже, чтобы пройти анкету заново:",
+                        reply_markup=kb
+                    )
                 return
 
             # Проверяем фактическое нахождение в чате (железобетонная проверка)
@@ -179,21 +188,6 @@ class CommandHandler:
                         logger.error(f"Error creating return invite for {user_id}: {e}")
                         await update.message.reply_text(
                             "❌ Не удалось создать ссылку для входа. Обратитесь к администратору."
-                        )
-                else:
-                    # Проверяем есть ли активная заявка
-                    pending_app = await get_user_pending_application(user_id)
-                    if pending_app:
-                        await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
-                    else:
-                        # Заявка потерялась — предлагаем пройти заново
-                        kb = InlineKeyboardMarkup([[
-                            InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
-                        ]])
-                        await update.message.reply_text(
-                            "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
-                            "Нажми кнопку ниже, чтобы пройти анкету заново:",
-                            reply_markup=kb
                         )
                 return
         
