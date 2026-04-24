@@ -1192,6 +1192,12 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
             f"🚫 Пользователь <code>{target_id}</code> добавлен в ЧС.\nПричина: {html.escape(text)}",
             parse_mode="HTML"
         )
+        try:
+            from handlers.journal_handlers import log_blacklist
+            main_db = context.bot_data.get('db')
+            await log_blacklist(context.bot, main_db, target_id, update.effective_user.id, True)
+        except Exception as je:
+            logger.error(f"Journal log_blacklist (add) error: {je}")
 
     # ─── УДАЛИТЬ ИЗ ЧС ───
     elif awaiting == 'bl_remove':
@@ -1203,6 +1209,12 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         await remove_from_blacklist(target_id)
         await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из ЧС.",
                                         parse_mode="HTML")
+        try:
+            from handlers.journal_handlers import log_blacklist
+            main_db = context.bot_data.get('db')
+            await log_blacklist(context.bot, main_db, target_id, update.effective_user.id, False)
+        except Exception as je:
+            logger.error(f"Journal log_blacklist (remove) error: {je}")
 
     # ─── ПРОВЕРКА ПОЛЬЗОВАТЕЛЯ (4.2.3) ───
     elif awaiting == 'check_user':
