@@ -131,43 +131,47 @@ async def mute_command(
         await message.reply_text("⛔ Нельзя замутить админа или владельца.")
         return
 
-    # Парсим время
-    raw_time = context.args[0] if context.args else '1h'
-    parsed = parse_duration(raw_time)
+    # Парсим время; без аргумента — навсегда
+    permanent = not context.args
+    if permanent:
+        seconds, human = 0, "навсегда"
+    else:
+        parsed = parse_duration(context.args[0])
+        if not parsed:
+            await message.reply_text(
+                "❌ Неверный формат.\nИспользуйте: <code>/mute 5m</code>, "
+                "<code>/mute 1h</code>, <code>/mute 1d</code>\n"
+                "Без времени — навсегда: <code>/mute</code>",
+                parse_mode='HTML',
+            )
+            return
+        seconds, human = parsed
 
-    if not parsed:
-        await message.reply_text(
-            "❌ Неверный формат.\nИспользуйте: <code>/mute 5m</code>, "
-            "<code>/mute 1h</code>, <code>/mute 1d</code>",
-            parse_mode='HTML',
-        )
-        return
-
-    seconds, human = parsed
-    # Unix timestamp (UTC) — гарантированно корректный для Telegram API
-    until_date = int(time.time()) + seconds
+    restrict_kwargs = dict(
+        chat_id=target_chat_id,
+        user_id=target.id,
+        permissions=ChatPermissions(
+            can_send_messages=False,
+            can_send_audios=False,
+            can_send_documents=False,
+            can_send_photos=False,
+            can_send_videos=False,
+            can_send_video_notes=False,
+            can_send_voice_notes=False,
+            can_send_polls=False,
+            can_send_other_messages=False,
+            can_add_web_page_previews=False,
+        ),
+    )
+    if not permanent:
+        restrict_kwargs['until_date'] = int(time.time()) + seconds
 
     try:
-        await context.bot.restrict_chat_member(
-            chat_id=target_chat_id,
-            user_id=target.id,
-            permissions=ChatPermissions(
-                can_send_messages=False,
-                can_send_audios=False,
-                can_send_documents=False,
-                can_send_photos=False,
-                can_send_videos=False,
-                can_send_video_notes=False,
-                can_send_voice_notes=False,
-                can_send_polls=False,
-                can_send_other_messages=False,
-                can_add_web_page_previews=False,
-            ),
-            until_date=until_date,
-        )
+        await context.bot.restrict_chat_member(**restrict_kwargs)
 
+        duration_text = f"на <b>{human}</b>" if not permanent else "<b>навсегда</b>"
         await message.reply_text(
-            f"🔇 {_user_link(target)} замучен на <b>{human}</b>",
+            f"🔇 {_user_link(target)} замучен {duration_text}",
             parse_mode='HTML',
         )
         await _delete_silently(message)
