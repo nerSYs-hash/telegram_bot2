@@ -118,26 +118,58 @@ async def handle_bug_message(message, bot, db) -> None:
     """Вызывается когда OWNER_ID/DEVELOPER_ID пишет в ветку багов."""
     ensure_bug_tables(db)
 
-    original_text = message.text or message.caption or '(медиа без текста)'
+    original_text = message.text or message.caption or ''
     original_msg_id = message.message_id
     thread_id = message.message_thread_id
     chat_id = message.chat.id
 
-    card_text = _build_card_text(original_text, STATUS_NEW, None)
+    card_text = _build_card_text(original_text or '(без текста)', STATUS_NEW, None)
     kb = _build_keyboard(original_msg_id, STATUS_NEW)
 
-    sent = await bot.send_message(
-        chat_id=chat_id,
-        message_thread_id=thread_id,
-        text=card_text,
-        parse_mode='HTML',
-        reply_markup=kb,
-    )
-    # Удаляем исходное сообщение пользователя чтобы не было дублей
+    # Определяем тип медиа
+    photo_id = None
+    video_id = None
+    if message.photo:
+        photo_id = message.photo[-1].file_id  # лучшее качество
+    elif message.video:
+        video_id = message.video.file_id
+
+    if photo_id:
+        sent = await bot.send_photo(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            photo=photo_id,
+            caption=card_text,
+            parse_mode='HTML',
+            reply_markup=kb,
+        )
+        is_photo = 1
+    elif video_id:
+        sent = await bot.send_video(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            video=video_id,
+            caption=card_text,
+            parse_mode='HTML',
+            reply_markup=kb,
+        )
+        is_photo = 0
+    else:
+        sent = await bot.send_message(
+            chat_id=chat_id,
+            message_thread_id=thread_id,
+            text=card_text,
+            parse_mode='HTML',
+            reply_markup=kb,
+        )
+        is_photo = 0
+
+    # Удаляем исходное сообщение — карточка его заменяет
     try:
         await bot.delete_message(chat_id=chat_id, message_id=original_msg_id)
     except Exception:
         pass
+
     upsert_bug_card(db, original_msg_id,
                     thread_id=thread_id,
                     card_msg_id=sent.message_id,
@@ -212,7 +244,11 @@ async def _set_status(query, db, original_msg_id: int, new_status: str) -> None:
     kb = _build_keyboard(original_msg_id, new_status)
 
     try:
-        await query.edit_message_text(new_text, parse_mode='HTML', reply_markup=kb)
+        # Карточка может быть фото/видео (caption) или текстом
+        if query.message.photo or query.message.video:
+            await query.edit_message_caption(new_text, parse_mode='HTML', reply_markup=kb)
+        else:
+            await query.edit_message_text(new_text, parse_mode='HTML', reply_markup=kb)
         upsert_bug_card(db, original_msg_id, status=new_status)
         await query.answer()
     except Exception as e:
@@ -221,13 +257,14 @@ async def _set_status(query, db, original_msg_id: int, new_status: str) -> None:
 
 
 async def handle_bug_comment_input(message, context, db) -> bool:
-    """Вызывается из message_handler при личном сообщении если ожидаем комментарий."""
+    """Вызывается когда ожидаем комментарий к баг-карточке (в треде или в ЛС)."""
     if not context.user_data.get('bug_awaiting_comment'):
         return False
 
-    orig_id   = context.user_data.pop('bug_edit_orig_id', None)
-    card_msg  = context.user_data.pop('bug_edit_card_msg_id', None)
-    chat_id   = context.user_data.pop('bug_edit_chat_id', None)
+    orig_id    = context.user_data.pop('bug_edit_orig_id', None)
+    card_msg   = context.user_data.pop('bug_edit_card_msg_id', None)
+    chat_id    = context.user_data.pop('bug_edit_chat_id', None)
+    prompt_msg = context.user_data.pop('bug_edit_prompt_msg_id', None)
     context.user_data.pop('bug_awaiting_comment', None)
 
     if not orig_id or not card_msg or not chat_id:
@@ -236,38 +273,65 @@ async def handle_bug_comment_input(message, context, db) -> bool:
     ensure_bug_tables(db)
     row = get_bug_card_by_original(db, orig_id)
     if not row:
-        await message.reply_text("❌ Карточка не найдена.")
         return True
 
-    comment = message.text.strip()
-    status  = row.get('status', STATUS_NEW)
+    comment = (message.text or '').strip()
+    if not comment:
+        return True
 
-    # Получаем оригинальный текст через stored текст карточки или восстанавливаем
-    # Сохраняем оригинальный текст в карточке при первом комментарии
-    stored_orig = row.get('comment')  # это старый комментарий
+    status = row.get('status', STATUS_NEW)
 
-    # Получаем оригинальный текст из карточки (из базы нет, придётся из API)
+    # Получаем оригинальный текст из карточки через API
     try:
         orig_chat_msg = await context.bot.forward_message(
-            chat_id=message.chat.id, from_chat_id=chat_id, message_id=orig_id
+            chat_id=chat_id, from_chat_id=chat_id, message_id=orig_id
         )
         original_text = orig_chat_msg.text or orig_chat_msg.caption or '—'
-        await context.bot.delete_message(chat_id=message.chat.id, message_id=orig_chat_msg.message_id)
+        await context.bot.delete_message(chat_id=chat_id, message_id=orig_chat_msg.message_id)
     except Exception:
         original_text = '—'
 
     new_text = _build_card_text(original_text, status, comment)
     kb = _build_keyboard(orig_id, status)
 
+    # Обновляем карточку (текст или подпись если медиа)
+    try:
+        card_message = await context.bot.copy_message(
+            chat_id=chat_id, from_chat_id=chat_id, message_id=card_msg
+        ) if False else None  # не используем, просто пробуем edit
+    except Exception:
+        pass
+
+    updated = False
     try:
         await context.bot.edit_message_text(
             chat_id=chat_id, message_id=card_msg,
             text=new_text, parse_mode='HTML', reply_markup=kb
         )
-        upsert_bug_card(db, orig_id, comment=comment)
-        await message.reply_text("✅ Комментарий добавлен в карточку.")
-    except Exception as e:
-        logger.error(f"handle_bug_comment_input error: {e}")
-        await message.reply_text("❌ Не удалось обновить карточку.")
+        updated = True
+    except Exception:
+        try:
+            await context.bot.edit_message_caption(
+                chat_id=chat_id, message_id=card_msg,
+                caption=new_text, parse_mode='HTML', reply_markup=kb
+            )
+            updated = True
+        except Exception as e:
+            logger.error(f"handle_bug_comment_input edit error: {e}")
 
+    if updated:
+        upsert_bug_card(db, orig_id, comment=comment)
+
+    # Удаляем: промпт, сообщение с комментарием — через 2 сек
+    import asyncio
+
+    async def _cleanup():
+        await asyncio.sleep(2)
+        for msg_id in filter(None, [prompt_msg, message.message_id]):
+            try:
+                await context.bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
+            except Exception:
+                pass
+
+    asyncio.create_task(_cleanup())
     return True
