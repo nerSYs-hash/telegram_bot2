@@ -115,30 +115,33 @@ def _build_keyboard(original_msg_id: int, status: str) -> InlineKeyboardMarkup:
 # ─────────────────────────────────────────────
 
 async def handle_bug_message(message, db) -> None:
-    """Вызывается когда OWNER_ID пишет в ветку багов."""
+    """Вызывается когда OWNER_ID/DEVELOPER_ID пишет в ветку багов."""
     ensure_bug_tables(db)
 
     original_text = message.text or message.caption or '(медиа без текста)'
     original_msg_id = message.message_id
     thread_id = message.message_thread_id
+    chat_id = message.chat.id
 
     card_text = _build_card_text(original_text, STATUS_NEW, None)
     kb = _build_keyboard(original_msg_id, STATUS_NEW)
 
-    try:
-        sent = await message.reply_text(
-            card_text,
-            parse_mode='HTML',
-            reply_markup=kb,
-        )
-        upsert_bug_card(db, original_msg_id,
-                        thread_id=thread_id,
-                        card_msg_id=sent.message_id,
-                        status=STATUS_NEW,
-                        comment=None)
-        logger.info(f"Bug card created: orig={original_msg_id} card={sent.message_id} thread={thread_id}")
-    except Exception as e:
-        logger.error(f"handle_bug_message error: {e}")
+    bot = message.get_bot()
+    # Явно передаём chat_id и message_thread_id — reply_text не всегда пробрасывает тред форума
+    sent = await bot.send_message(
+        chat_id=chat_id,
+        message_thread_id=thread_id,
+        text=card_text,
+        parse_mode='HTML',
+        reply_markup=kb,
+        reply_to_message_id=original_msg_id,
+    )
+    upsert_bug_card(db, original_msg_id,
+                    thread_id=thread_id,
+                    card_msg_id=sent.message_id,
+                    status=STATUS_NEW,
+                    comment=None)
+    logger.info(f"Bug card created: orig={original_msg_id} card={sent.message_id} thread={thread_id}")
 
 
 # ─────────────────────────────────────────────
