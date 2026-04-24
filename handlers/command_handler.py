@@ -120,19 +120,40 @@ class CommandHandler:
 
             # Пользователь совсем не регистрировался — ни в одной БД нет q_name
             if not q_name:
+                # Проверяем: может есть pending-заявка или одобренная (q_name слетел при тестах/сбое)
                 pending_app = await get_user_pending_application(user_id)
                 if pending_app:
                     await update.message.reply_text("⏳ Твоя анкета ещё на проверке у администраторов. Пожалуйста, подожди!")
+                    return
+
+                # Третий fallback: ищем одобренную заявку — значит пользователь был в чате
+                approved_app = None
+                try:
+                    from database.db_friend import db_pool
+                    from constants import ApplicationStatus
+                    async with db_pool.get_connection() as _db:
+                        async with _db.execute(
+                            "SELECT * FROM applications WHERE user_id = ? AND status = ? ORDER BY created_at DESC LIMIT 1",
+                            (user_id, ApplicationStatus.APPROVED)
+                        ) as _cur:
+                            from database.db_friend import row_to_dict
+                            approved_app = row_to_dict(await _cur.fetchone())
+                except Exception as e:
+                    logger.error(f"Approved app fallback failed for {user_id}: {e}")
+
+                if approved_app:
+                    # Пользователь был одобрен — имя берём из TG-профиля, генерируем ссылку
+                    q_name = update.effective_user.first_name
                 else:
                     kb = InlineKeyboardMarkup([[
-                        InlineKeyboardButton("📝 Подать заявку заново", callback_data="restart_registration")
+                        InlineKeyboardButton("📝 Подать заявку", callback_data="restart_registration")
                     ]])
                     await update.message.reply_text(
-                        "⚠️ Похоже, что-то пошло не так — твоя заявка не найдена в системе.\n\n"
-                        "Нажми кнопку ниже, чтобы пройти анкету заново:",
+                        "👋 Привет! Ты ещё не зарегистрирован в Pulse 4ever.\n\n"
+                        "Нажми кнопку ниже, чтобы подать заявку:",
                         reply_markup=kb
                     )
-                return
+                    return
 
             # Проверяем фактическое нахождение в чате (железобетонная проверка)
             from utils.membership import verify_chat_membership
