@@ -30,22 +30,26 @@ logger = logging.getLogger(__name__)
 IKB = InlineKeyboardButton
 
 from config.emojis import ICON_GREEN_CIRCLE, ICON_RED_CIRCLE
-_PRESENCE_MARKER  = '<!-- presence -->'
+# ‌ — невидимый символ (ZERO WIDTH NON-JOINER), Telegram его не парсит как HTML
+_PRESENCE_MARKER  = '‌'
 PRESENCE_IN_CHAT  = f'{ICON_GREEN_CIRCLE} В чате'
 PRESENCE_NOT_CHAT = f'{ICON_RED_CIRCLE} Не в чате'
 
 
 def build_presence_line(in_chat: bool) -> str:
     emoji = PRESENCE_IN_CHAT if in_chat else PRESENCE_NOT_CHAT
-    return f"{emoji} {_PRESENCE_MARKER}"
+    return f"{emoji}{_PRESENCE_MARKER}"
 
 
 def inject_presence(text: str, in_chat: bool) -> str:
     """Вставляет/заменяет строку индикатора в начале текста досье."""
     line = build_presence_line(in_chat)
-    if _PRESENCE_MARKER in text:
+    # Ищем и новый маркер (ZWNJ), и старый HTML-комментарий (для миграции)
+    _old_marker = '<!-- presence -->'
+    has_marker = _PRESENCE_MARKER in text or _old_marker in text
+    if has_marker:
         lines = text.split('\n')
-        lines = [l for l in lines if _PRESENCE_MARKER not in l]
+        lines = [l for l in lines if _PRESENCE_MARKER not in l and _old_marker not in l]
         return line + '\n' + '\n'.join(lines)
     return line + '\n' + text
 
