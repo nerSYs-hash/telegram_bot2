@@ -102,14 +102,29 @@ class CommandHandler:
                 )
                 return
 
-            # 2. Если это обычный юзер, проверяем регистрацию в базе друга
+            # 2. Проверяем q_name в PTB-БД, при отсутствии — fallback в aiogram-БД
             user = await get_user(user_id)
+            q_name = user.get('q_name') if user else None
 
-            if not user or not user.get('q_name'):
+            if not q_name:
+                try:
+                    from registration_system.database import get_user as _get_reg_user
+                    reg_record = await _get_reg_user(user_id)
+                    if reg_record:
+                        q_name = reg_record.get('q_name')
+                        # Подтягиваем статус из aiogram-БД если PTB-запись пустая
+                        if not user:
+                            user = reg_record
+                except Exception as e:
+                    logger.error(f"Fallback aiogram DB check failed for {user_id}: {e}")
+
+            # Пользователь совсем не регистрировался — ни в одной БД нет q_name
+            if not q_name:
                 await update.message.reply_text(
                     "Привет! Ты еще не зарегистрирован. Напиши /register"
                 )
                 return
+
             # Проверяем фактическое нахождение в чате (железобетонная проверка)
             from utils.membership import verify_chat_membership
             is_member = await verify_chat_membership(
@@ -125,50 +140,46 @@ class CommandHandler:
                     logger.error(f"Failed to close apps for {user_id}: {e}")
                 pass  # продолжаем обычный /start
             else:
-                # Пользователь НЕ в чате. Разбираем ситуацию:
-                user_status = user.get('status', '')
+                # Пользователь НЕ в чате, но q_name есть → возвращение
+                tg_status = None
+                try:
+                    cm = await context.bot.get_chat_member(self.target_chat_id, user_id)
+                    tg_status = cm.status
+                except Exception:
+                    pass
 
-                if user_status in ('left', 'approved', 'in_chat', 'registered'):
-                    # Был одобрен ранее — проверяем TG-статус и отправляем одноразовую ссылку
-                    tg_status = None
+                if tg_status == 'kicked':
+                    owner_link = f'<a href="tg://user?id={self.main_admin_id}">владельца чата</a>'
+                    await update.message.reply_text(
+                        f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                        f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
+                        f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения.",
+                        parse_mode="HTML"
+                    )
+                else:
+                    name = q_name or update.effective_user.first_name
                     try:
-                        cm = await context.bot.get_chat_member(self.target_chat_id, user_id)
-                        tg_status = cm.status
-                    except Exception:
-                        pass
-
-                    if tg_status == 'kicked':
-                        owner_link = f'<a href="tg://user?id={self.main_admin_id}">владельца чата</a>'
-                        await update.message.reply_text(
-                            f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
-                            f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
-                            f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения.",
-                            parse_mode="HTML"
+                        from database.db_friend import create_invite_link as _save_invite
+                        invite_obj = await context.bot.create_chat_invite_link(
+                            self.target_chat_id,
+                            member_limit=1,
+                            name=f"ret_{user_id}"[:32],
                         )
-                    else:
-                        name = user.get('q_name') or update.effective_user.first_name
-                        try:
-                            from database.db_friend import create_invite_link as _save_invite
-                            invite_obj = await context.bot.create_chat_invite_link(
-                                self.target_chat_id,
-                                member_limit=1,
-                                name=f"ret_{user_id}"[:32],
-                            )
-                            invite_url = invite_obj.invite_link
-                            sent = await update.message.reply_text(
-                                f"👋 С возвращением, {name}!\n\n"
-                                f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
-                                f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
-                                f"⚠️ Ссылка одноразовая — действует только для тебя и "
-                                f"сгорит сразу после использования."
-                            )
-                            await _save_invite(user_id, invite_url)
-                            logger.info(f"Return invite sent to {user_id}: {invite_url}")
-                        except Exception as e:
-                            logger.error(f"Error creating return invite for {user_id}: {e}")
-                            await update.message.reply_text(
-                                "❌ Не удалось создать ссылку для входа. Обратитесь к администратору."
-                            )
+                        invite_url = invite_obj.invite_link
+                        sent = await update.message.reply_text(
+                            f"👋 С возвращением, {name}!\n\n"
+                            f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                            f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
+                            f"⚠️ Ссылка одноразовая — действует только для тебя и "
+                            f"сгорит сразу после использования."
+                        )
+                        await _save_invite(user_id, invite_url)
+                        logger.info(f"Return invite sent to {user_id}: {invite_url}")
+                    except Exception as e:
+                        logger.error(f"Error creating return invite for {user_id}: {e}")
+                        await update.message.reply_text(
+                            "❌ Не удалось создать ссылку для входа. Обратитесь к администратору."
+                        )
                 else:
                     # Проверяем есть ли активная заявка
                     pending_app = await get_user_pending_application(user_id)
