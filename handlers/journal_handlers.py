@@ -270,19 +270,16 @@ async def log_join(
     invite_link=None,
     joined_at=None,
     is_returning: bool = False,
+    q_name: str = None,
 ) -> None:
     """
     Логирует вход пользователя в чат → канал 3.
-
-    Args:
-        chat: telegram.Chat объект чата
-        tg_user: telegram.User — вступивший пользователь
-        from_user: telegram.User — кто инициировал (admin/bot)
-        invite_link: telegram.ChatInviteLink — ссылка-приглашение
-        joined_at: datetime — время вступления
-        is_returning: True если пользователь возвращается
+    При is_returning=True выводит карточку #Возвращение с историей первой регистрации.
     """
-    lines = ["🆔 #Вход", ""]
+    if is_returning:
+        lines = ["🔄 #Возвращение", ""]
+    else:
+        lines = ["🆔 #Вход", ""]
 
     # ─ Блок Б: пригласительная ссылка (если есть) ─
     invite_display = None
@@ -315,27 +312,34 @@ async def log_join(
         lines.append(f"Инициатор: {_fmt_user_block(initiator, initiator.id, db)}")
         lines.append("")
 
-    # ─ Блок В: пользователь ─
+    # ─ Пользователь ─
     lines.append(f"Пользователь: {_fmt_user_block(tg_user, user_id, db)}")
     lines.append("")
 
-    # ─ Одобрено (кто принял заявку/добавил) ─
-    if initiator:
-        lines.append(f"Одобрено: {_fmt_user_block(initiator, initiator.id, db)}")
+    # ─ Имя из анкеты (при возврате) ─
+    if is_returning and q_name:
+        lines.append(f"Имя в анкете: {q_name}")
         lines.append("")
 
     # ─ Блок Е: время ─
     lines.append(f"🕐 {_fmt_time_msk(joined_at)}")
 
-    # Дата первой регистрации при возврате
-    u_db = db.get_user(user_id)
-    if is_returning and u_db:
-        try:
-            first_seen = u_db['created_at']
-            if first_seen:
-                lines.append(f"📅 Первая регистрация: {first_seen}")
-        except (KeyError, IndexError):
-            pass
+    # ─ История при возврате: первая регистрация + дата выхода ─
+    if is_returning:
+        u_db = db.get_user(user_id)
+        if u_db:
+            try:
+                first_seen = u_db['created_at']
+                if first_seen:
+                    lines.append(f"📅 Первая регистрация: {first_seen}")
+            except (KeyError, IndexError):
+                pass
+            try:
+                freeze_until = u_db['freeze_until']
+                if freeze_until:
+                    lines.append(f"⏳ Баланс заморожен до: {freeze_until}")
+            except (KeyError, IndexError):
+                pass
 
     text = "\n".join(lines)
 

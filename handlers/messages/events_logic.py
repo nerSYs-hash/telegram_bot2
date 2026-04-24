@@ -461,6 +461,16 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             _is_ret = bool(user_data['is_left'])
         except (KeyError, IndexError, TypeError):
             _is_ret = False
+        # Подтягиваем имя из анкеты (регистрационная БД)
+        _q_name = None
+        if _is_ret:
+            try:
+                from database.db_friend import get_user as _get_reg_user
+                _reg = await _get_reg_user(user_id)
+                if _reg:
+                    _q_name = _reg.get('q_name')
+            except Exception:
+                pass
         await log_join(
             context.bot, db, user_id,
             chat=cm.chat,
@@ -469,6 +479,7 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             invite_link=cm.invite_link,
             joined_at=cm.date,
             is_returning=_is_ret,
+            q_name=_q_name,
         )
     except Exception as e:
         logging.error(f"Journal log_join error: {e}")

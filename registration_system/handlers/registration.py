@@ -23,7 +23,11 @@ from utils.keyboards import (
     create_owner_reply_keyboard,
     create_main_menu_keyboard
 )
-from database import get_user, create_user, update_user, create_application, get_all_admins, get_new_applications
+from database import (
+    get_user, create_user, update_user, create_application,
+    get_all_admins, get_new_applications,
+    is_blacklisted, get_blacklist_reason, create_invite_link,
+)
 from utils.formatters import format_application_text
 from config import OWNER_ID, CHAT_ID
 from handlers.reminder import save_questionnaire_state, clear_questionnaire_state
@@ -201,12 +205,14 @@ async def cmd_start(message: Message, state: FSMContext):
             logger.error(f"Error checking blocked status: {e}")
 
     # Проверяем через API, действительно ли пользователь в чате
+    tg_status = None
     is_actually_in_chat = False
     if CHAT_ID:
         try:
             chat_member = await message.bot.get_chat_member(CHAT_ID, user_id)
-            is_actually_in_chat = chat_member.status in ['member', 'administrator', 'creator']
-            logger.info(f"User {user_id} actual chat status: {chat_member.status} -> in_chat: {is_actually_in_chat}")
+            tg_status = chat_member.status
+            is_actually_in_chat = tg_status in ['member', 'administrator', 'creator']
+            logger.info(f"User {user_id} actual chat status: {tg_status} -> in_chat: {is_actually_in_chat}")
         except Exception as e:
             logger.error(f"Error checking chat member for user {user_id}: {e}")
 
@@ -225,6 +231,52 @@ async def cmd_start(message: Message, state: FSMContext):
             Messages.INVITE_FRIENDS.format(name=message.from_user.first_name)
         )
         return
+
+    # ── Проверка чёрного списка ──
+    if await is_blacklisted(user_id):
+        reason = await get_blacklist_reason(user_id)
+        reason_text = f"\n\nПричина: {reason}" if reason else ""
+        await message.answer(
+            f"⛔ Ты находишься в чёрном списке чата и не можешь подать заявку.{reason_text}\n\n"
+            f"Если считаешь это ошибкой — обратись к администратору."
+        )
+        return
+
+    # ── Возвращение: был в чате, анкета заполнена, сейчас не в чате ──
+    if user and user.get('q_name') and not is_actually_in_chat:
+        if tg_status == 'kicked':
+            owner_link = f'<a href="tg://user?id={OWNER_ID}">владельца чата</a>'
+            await message.answer(
+                f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                f"Самостоятельное возвращение невозможно. Если ты считаешь, что блокировка была ошибочной — "
+                f"напиши {owner_link}, чтобы уточнить возможность возвращения.",
+                parse_mode="HTML"
+            )
+            return
+        else:
+            # Пользователь вышел сам — генерируем одноразовую ссылку
+            try:
+                invite_obj = await message.bot.create_chat_invite_link(
+                    CHAT_ID,
+                    member_limit=1,
+                    name=f"ret_{user_id}"[:32],
+                )
+                invite_url = invite_obj.invite_link
+                name = user.get('q_name') or message.from_user.first_name
+                sent = await message.answer(
+                    f"👋 С возвращением, {name}!\n\n"
+                    f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                    f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
+                    f"⚠️ Ссылка одноразовая — действует только для тебя и сгорит сразу после использования."
+                )
+                await create_invite_link(user_id, invite_url, sent.message_id)
+                logger.info(f"Return invite sent to user {user_id}: {invite_url}")
+            except Exception as e:
+                logger.error(f"Error creating return invite for {user_id}: {e}")
+                await message.answer(
+                    "❌ Не удалось создать ссылку для входа. Обратитесь к администратору."
+                )
+            return
 
     # Проверяем, есть ли уже активная заявка у пользователя
     active_applications = await get_new_applications(exclude_locked=True)
