@@ -53,7 +53,7 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
     Сохраняет msg_id в anketa_edits для последующего редактирования.
     """
     from telegram import InlineKeyboardMarkup, InlineKeyboardButton
-    from handlers.anketa_edit_handlers import ensure_anketa_edit_tables, upsert_anketa_edit
+    from handlers.anketa_edit_handlers import ensure_anketa_edit_tables, upsert_anketa_edit, inject_presence
 
     # Добавляем ✏️ к переданной клавиатуре
     try:
@@ -70,6 +70,9 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
 
     if db:
         ensure_anketa_edit_tables(db)
+
+    # Добавляем индикатор присутствия — пользователь только что одобрен, значит в чате
+    dossier_text = inject_presence(dossier_text, in_chat=True)
 
     try:
         photos = await bot.get_user_profile_photos(user_id, limit=3)

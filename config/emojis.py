@@ -147,6 +147,7 @@ ICON_BACK_ARROW = "🔙"
 ICON_FIRE = '<tg-emoji emoji-id="5424972470023104089">🔥</tg-emoji>'
 ICON_WRENCH = "🔧"
 ICON_CRYSTAL_BALL = "🔮"
+ICON_GREEN_CIRCLE = '<tg-emoji emoji-id="5021905410089550576">🟢</tg-emoji>'
 ICON_RED_CIRCLE = '<tg-emoji emoji-id="5411225014148014586">🔴</tg-emoji>'
 ICON_SMALL_ORANGE_DIAMOND = "🔸"
 ICON_ONE_OCLOCK = "🕐"

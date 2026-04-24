@@ -198,6 +198,13 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
     except Exception as e:
         logging.error(f"Journal log_leave error: {e}")
 
+    # ═══ ДОСЬЕ: переключить индикатор на 🔴 Не в чате ═══
+    try:
+        from handlers.anketa_edit_handlers import update_dossier_presence
+        await update_dossier_presence(context.bot, db, user_id, in_chat=False)
+    except Exception as e:
+        logging.error(f"Dossier presence (left) error for {user_id}: {e}")
+
     # ═══ BBS: удалить анкету покинувшего пользователя ═══
     try:
         await on_member_left_cleanup(context.bot, db, user_id, target_chat_id)
@@ -332,15 +339,19 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
     except Exception as e:
         logging.error(f"Error cleaning up invite link for {user_id}: {e}")
 
-    # ═══ ДОСЬЕ: добавить строку "Вернулся" к существующей карточке ═══
+    # ═══ ДОСЬЕ: строка "Вернулся" + переключить индикатор на ✅ В чате ═══
     try:
-        from handlers.anketa_edit_handlers import get_anketa_edit, upsert_anketa_edit
+        from handlers.anketa_edit_handlers import get_anketa_edit, upsert_anketa_edit, inject_presence
         from utils.helpers import get_moscow_time
         row = get_anketa_edit(db, user_id)
         if row and row.get('dossier_msg_id'):
             return_time = get_moscow_time().strftime("%d.%m.%Y %H:%M МСК")
             base_text = row.get('base_text') or ''
-            new_text = base_text + f"\n\n🔁 <b>Вернулся:</b> {return_time}"
+            # Добавляем строку возвращения и переключаем индикатор
+            new_text = inject_presence(
+                base_text + f"\n\n🔁 <b>Вернулся:</b> {return_time}",
+                in_chat=True
+            )
             chat_id  = row.get('dossier_chat_id')
             msg_id   = row['dossier_msg_id']
             is_photo = bool(row.get('dossier_is_photo'))
@@ -356,7 +367,7 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
                         text=new_text, parse_mode="HTML"
                     )
                 upsert_anketa_edit(db, user_id, base_text=new_text)
-                logging.info(f"✅ Dossier updated with return date for user {user_id}")
+                logging.info(f"✅ Dossier updated (return + presence ✅) for user {user_id}")
             except Exception as e:
                 logging.error(f"Failed to edit dossier for {user_id}: {e}")
     except Exception as e:

@@ -29,6 +29,53 @@ logger = logging.getLogger(__name__)
 
 IKB = InlineKeyboardButton
 
+from config.emojis import ICON_GREEN_CIRCLE, ICON_RED_CIRCLE
+_PRESENCE_MARKER  = '<!-- presence -->'
+PRESENCE_IN_CHAT  = f'{ICON_GREEN_CIRCLE} В чате'
+PRESENCE_NOT_CHAT = f'{ICON_RED_CIRCLE} Не в чате'
+
+
+def build_presence_line(in_chat: bool) -> str:
+    emoji = PRESENCE_IN_CHAT if in_chat else PRESENCE_NOT_CHAT
+    return f"{emoji} {_PRESENCE_MARKER}"
+
+
+def inject_presence(text: str, in_chat: bool) -> str:
+    """Вставляет/заменяет строку индикатора в начале текста досье."""
+    line = build_presence_line(in_chat)
+    if _PRESENCE_MARKER in text:
+        lines = text.split('\n')
+        lines = [l for l in lines if _PRESENCE_MARKER not in l]
+        return line + '\n' + '\n'.join(lines)
+    return line + '\n' + text
+
+
+async def update_dossier_presence(bot, db, user_id: int, in_chat: bool) -> None:
+    """Обновляет индикатор присутствия в существующем посте досье (без пересылки)."""
+    try:
+        row = get_anketa_edit(db, user_id)
+        if not row or not row.get('dossier_msg_id'):
+            return
+        base_text = row.get('base_text') or ''
+        new_text  = inject_presence(base_text, in_chat)
+        chat_id   = row.get('dossier_chat_id')
+        msg_id    = row['dossier_msg_id']
+        is_photo  = bool(row.get('dossier_is_photo'))
+        if is_photo:
+            await bot.edit_message_caption(
+                chat_id=chat_id, message_id=msg_id,
+                caption=new_text, parse_mode="HTML"
+            )
+        else:
+            await bot.edit_message_text(
+                chat_id=chat_id, message_id=msg_id,
+                text=new_text, parse_mode="HTML"
+            )
+        upsert_anketa_edit(db, user_id, base_text=new_text)
+        logger.info(f"Presence updated ({'in' if in_chat else 'out'}) for user {user_id}")
+    except Exception as e:
+        logger.error(f"update_dossier_presence({user_id}): {e}")
+
 
 # ─────────────────────────────────────────────
 #  БД
