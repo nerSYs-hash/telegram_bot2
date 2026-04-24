@@ -187,7 +187,6 @@ class MessageHandler:
         if message.chat.id != self.target_chat_id:
             from config import ADMIN_CHAT_ID
             if message.chat.id == ADMIN_CHAT_ID:
-                logging.info(f"🔧 ADMIN_CHAT: user={user.id} thread={message.message_thread_id} text={repr((message.text or '')[:30])}")
                 # Исключение: сообщения из ADMIN_CHAT_ID — обрабатываем кнопки и причину отказа
                 if message.text and context.user_data.get('awaiting_reject_reason'):
                     from handlers.admin_moderation import handle_reject_reason
@@ -229,8 +228,12 @@ class MessageHandler:
                         return
                 # Ветки багов: сообщения от владельца или разработчика → создаём трекер-карточку
                 from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID, DEVELOPER_ID as _DEV_ID
-                logging.info(f"🐛 BUG_CHECK: user={user.id} owner={_OWNER_ID} dev={_DEV_ID} thread={message.message_thread_id} bot_threads=({BUG_THREAD_BOT},{BUG_THREAD_SITE}) reply={bool(message.reply_to_message)}")
-                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not message.reply_to_message:
+                # Ответ на ДРУГОЕ сообщение (не на корень топика) — не создаём карточку
+                _is_real_reply = (
+                    message.reply_to_message is not None and
+                    message.reply_to_message.message_id != message.message_thread_id
+                )
+                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not _is_real_reply:
                     if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
                         from handlers.bug_tracker_handlers import handle_bug_message
                         try:
