@@ -1074,7 +1074,8 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return False
 
     text = update.message.text.strip()
-    context.user_data.pop('panel_awaiting', None)
+    # НЕ сбрасываем panel_awaiting здесь — сбрасываем только при успехе,
+    # чтобы повторный ввод после ошибки валидации продолжал работать
 
     # ─── ДОБАВИТЬ АДМИНА ───
     if awaiting == 'admin_add':
@@ -1083,6 +1084,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
+        context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно изменить роль владельца.")
             return True
@@ -1097,6 +1099,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
+        context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно удалить владельца из списка администраторов.")
             return True
@@ -1112,6 +1115,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
+        context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Владельцу нельзя назначить роль зама.")
             return True
@@ -1152,6 +1156,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
+        context.user_data.pop('panel_awaiting', None)
         if not await is_deputy(target_id):
             await update.message.reply_text("ℹ️ Этот пользователь не является замом.")
             return True
@@ -1176,14 +1181,15 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     elif awaiting == 'bl_add':
         try:
             target_id = int(text)
-            context.user_data['bl_add_id'] = target_id
-            context.user_data['panel_awaiting'] = 'bl_add_reason'
-            await update.message.reply_text(
-                f"📝 Теперь отправьте <b>причину</b> блокировки для <code>{target_id}</code>:",
-                parse_mode="HTML"
-            )
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
+            return True
+        context.user_data['bl_add_id'] = target_id
+        context.user_data['panel_awaiting'] = 'bl_add_reason'
+        await update.message.reply_text(
+            f"📝 Теперь отправьте <b>причину</b> блокировки для <code>{target_id}</code>:",
+            parse_mode="HTML"
+        )
         return True
 
     elif awaiting == 'bl_add_reason':
@@ -1223,6 +1229,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         except ValueError:
             await update.message.reply_text("❌ Введите числовой Telegram ID.")
             return True
+        context.user_data.pop('panel_awaiting', None)
         await remove_from_blacklist(target_id)
         # Разбаниваем в Telegram
         from config import CHAT_ID as _BL_CHAT_ID
