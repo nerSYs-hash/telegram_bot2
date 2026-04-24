@@ -114,7 +114,7 @@ def _build_keyboard(original_msg_id: int, status: str) -> InlineKeyboardMarkup:
 #  Создание карточки при новом сообщении
 # ─────────────────────────────────────────────
 
-async def handle_bug_message(message, db) -> None:
+async def handle_bug_message(message, bot, db) -> None:
     """Вызывается когда OWNER_ID/DEVELOPER_ID пишет в ветку багов."""
     ensure_bug_tables(db)
 
@@ -126,8 +126,6 @@ async def handle_bug_message(message, db) -> None:
     card_text = _build_card_text(original_text, STATUS_NEW, None)
     kb = _build_keyboard(original_msg_id, STATUS_NEW)
 
-    bot = message.get_bot()
-    # Явно передаём chat_id и message_thread_id — reply_text не всегда пробрасывает тред форума
     sent = await bot.send_message(
         chat_id=chat_id,
         message_thread_id=thread_id,
