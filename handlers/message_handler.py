@@ -226,10 +226,10 @@ class MessageHandler:
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input
                     if await handle_anketa_edit_input(message, context, self.db):
                         return
-                # Ветки багов: сообщения от владельца → создаём трекер-карточку
-                from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID
+                # Ветки багов: сообщения от владельца или разработчика → создаём трекер-карточку
+                from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID, DEVELOPER_ID as _DEV_ID
                 if (message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE)
-                        and user.id == _OWNER_ID
+                        and user.id in (_OWNER_ID, _DEV_ID)
                         and not message.reply_to_message):
                     from handlers.bug_tracker_handlers import handle_bug_message
                     await handle_bug_message(message, self.db)
