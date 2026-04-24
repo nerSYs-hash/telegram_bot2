@@ -94,11 +94,11 @@ async def submit_application(message_or_callback, state: FSMContext, data: dict,
         'q_therapy': data.get('therapy'),
         'invite_link': data.get('ref_code')
     }
-    
-    # Добавляем birth_date только если он есть
     if data.get('birth_date'):
         update_data['birth_date'] = data.get('birth_date')
-    
+    if data.get('referred_by'):
+        update_data['referred_by'] = data.get('referred_by')
+
     await update_user(user_id, **update_data)
 
     # Создаем заявку
@@ -557,18 +557,49 @@ async def process_therapy(message: Message, state: FSMContext):
     await state.set_state(RegistrationStates.WAITING_REF_CODE)
 
 
+async def _resolve_referrer(username_input: str) -> int | None:
+    """Ищет user_id по @username в PTB-базе (pulse_bot.db). Возвращает None если не найден."""
+    import aiosqlite, os
+    username = username_input.lstrip('@').strip().lower()
+    if not username:
+        return None
+    ptb_db = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), '..', 'pulse_bot.db')
+    ptb_db = os.path.normpath(ptb_db)
+    try:
+        async with aiosqlite.connect(ptb_db) as db:
+            db.row_factory = aiosqlite.Row
+            async with db.execute(
+                'SELECT user_id FROM users WHERE LOWER(username) = ? LIMIT 1', (username,)
+            ) as cur:
+                row = await cur.fetchone()
+                return row['user_id'] if row else None
+    except Exception as e:
+        logger.error(f"_resolve_referrer error: {e}")
+        return None
+
+
 @router.message(F.chat.type == ChatType.PRIVATE, StateFilter(RegistrationStates.WAITING_REF_CODE))
 async def process_ref_code(message: Message, state: FSMContext):
-    """Обработка реферального кода - сразу отправляем заявку"""
+    """Обработка реферального кода - валидация @username и отправка заявки"""
     logger.info(f"Ref code input from user {message.from_user.id}: {message.text}")
-    
-    # Сохраняем реферальный код
-    await state.update_data(ref_code=message.text.strip())
-    
-    # Получаем все данные
+
+    raw = message.text.strip()
+    referred_by = None
+
+    if raw:
+        referred_by = await _resolve_referrer(raw)
+        if referred_by is None:
+            await message.answer(
+                "❌ Пользователь не найден. Проверь ник и попробуй снова, "
+                "или нажми «Пропустить»."
+            )
+            return
+        if referred_by == message.from_user.id:
+            await message.answer("❌ Нельзя указывать себя в качестве реферера. Введи другой ник или пропусти.")
+            return
+
+    await state.update_data(ref_code=raw, referred_by=referred_by)
     data = await state.get_data()
-    
-    # Отправляем заявку
     await submit_application(message, state, data, is_callback=False)
 
 
