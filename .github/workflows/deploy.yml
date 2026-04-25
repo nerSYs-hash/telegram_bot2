@@ -23,19 +23,17 @@ jobs:
             cd /root/PulsBot
             # ─── БЭКАП БД ───
             mkdir -p /root/db_backup
-            cp -f pulse_bot.db                     /root/db_backup/pulse_bot.db                     2>/dev/null || true
-            cp -f bot_database.db                  /root/db_backup/bot_database.db                  2>/dev/null || true
-            cp -f database.db                      /root/db_backup/database.db                      2>/dev/null || true
-            cp -f registration_system/pulse_bot.db /root/db_backup/registration_system_pulse_bot.db 2>/dev/null || true
-            cp -f Site/backend/pulse_site.db       /root/db_backup/pulse_site.db                    2>/dev/null || true
+            cp -f pulse_bot.db               /root/db_backup/pulse_bot.db        2>/dev/null || true
+            cp -f bot_database.db            /root/db_backup/bot_database.db     2>/dev/null || true
+            cp -f database.db                /root/db_backup/database.db         2>/dev/null || true
+            cp -f Site/backend/pulse_site.db /root/db_backup/pulse_site.db       2>/dev/null || true
             git fetch origin main
             git reset --hard origin/main
             # ─── ВОССТАНОВЛЕНИЕ БД ───
-            cp -f /root/db_backup/pulse_bot.db                     pulse_bot.db                     2>/dev/null || true
-            cp -f /root/db_backup/bot_database.db                  bot_database.db                  2>/dev/null || true
-            cp -f /root/db_backup/database.db                      database.db                      2>/dev/null || true
-            cp -f /root/db_backup/registration_system_pulse_bot.db registration_system/pulse_bot.db 2>/dev/null || true
-            cp -f /root/db_backup/pulse_site.db                    Site/backend/pulse_site.db       2>/dev/null || true
+            cp -f /root/db_backup/pulse_bot.db        pulse_bot.db               2>/dev/null || true
+            cp -f /root/db_backup/bot_database.db     bot_database.db            2>/dev/null || true
+            cp -f /root/db_backup/database.db         database.db                2>/dev/null || true
+            cp -f /root/db_backup/pulse_site.db       Site/backend/pulse_site.db 2>/dev/null || true
             source venv/bin/activate
             pip install -r requirements.txt -q
             systemctl restart pulsbot

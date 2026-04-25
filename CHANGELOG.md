@@ -4,6 +4,29 @@
 
 ---
 
+## 🧹 V1.11.9f — Демонтаж aiogram-бота (25.04.2026)
+
+### 🎯 ЗАЧЕМ
+▪️ Aiogram-бот после интеграции с PTB больше не запускается (`pulsbot.service` — единственный)
+▪️ Его БД (`registration_system/pulse_bot.db`) заморожена с 27.02.2026
+▪️ Все 5 юзеров с заполненной анкетой из этой БД **уже есть** в основной PTB-БД
+▪️ Директория `registration_system/` весит сотни МБ из-за `node_modules`, `venv`, `.venv`
+
+### ✅ КОД (V1.11.9f)
+▪️ Убран fallback `from registration_system.database import get_user as _get_reg_user` из:
+   - `handlers/command_handler.py:start_command`
+   - `handlers/registration_conversation.py:start_reg`
+▪️ `handlers/owner_handlers.py:show_statistics_not_in_chat` (БЗА/НПС панель) переключён на основную PTB-БД (`pulse_bot.db` в корне) вместо устаревшей aiogram-БД — статистика теперь актуальная
+▪️ `run_auto.py`: убран `registration_system` из `IGNORE_DIRS`
+▪️ `.github/workflows/deploy.yml`: убран бэкап/восстановление `registration_system/pulse_bot.db`
+
+### 🗑 К УДАЛЕНИЮ ОТДЕЛЬНЫМ КОММИТОМ
+- Директория `registration_system/` целиком (~сотни МБ)
+- `test_face.py` (тестировал дубль face_detector'а)
+- `script/cleanup_reg.py`, `script/migrate_db.py` (потеряли смысл)
+
+---
+
 ## 🔄 V1.11.9e — Возвращающиеся юзеры не получают анкету повторно (25.04.2026)
 
 ### 🐛 БАГ

@@ -269,23 +269,11 @@ class CommandHandler:
                 )
                 return
 
-            # 2. Проверяем q_name в PTB-БД, при отсутствии — fallback в aiogram-БД
+            # 2. Проверяем q_name в PTB-БД (aiogram-БД больше не используется)
             user = await get_user(user_id)
             q_name = user.get('q_name') if user else None
 
-            if not q_name:
-                try:
-                    from registration_system.database import get_user as _get_reg_user
-                    reg_record = await _get_reg_user(user_id)
-                    if reg_record:
-                        q_name = reg_record.get('q_name')
-                        # Подтягиваем статус из aiogram-БД если PTB-запись пустая
-                        if not user:
-                            user = reg_record
-                except Exception as e:
-                    logger.error(f"Fallback aiogram DB check failed for {user_id}: {e}")
-
-            # Пользователь совсем не регистрировался — ни в одной БД нет q_name
+            # Пользователь совсем не регистрировался — нет q_name
             if not q_name:
                 # Проверяем: может есть pending-заявка или одобренная (q_name слетел при тестах/сбое)
                 pending_app = await get_user_pending_application(user_id)

@@ -913,9 +913,10 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
 
     import sqlite3
 
+    # PTB-БД — источник правды (aiogram-БД больше не используется)
     db_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-        'registration_system', 'pulse_bot.db'
+        'pulse_bot.db'
     )
 
     bza_lines = []

@@ -9,7 +9,7 @@ from watchdog.events import FileSystemEventHandler
 BOT_FILE = "bot.py"  # PTB-бот (основной, единственный)
 
 WATCH_EXTENSIONS = {".py", ".env"}
-IGNORE_DIRS      = {"__pycache__", ".venv", "venv", ".git", "logs", "registration_system"}
+IGNORE_DIRS      = {"__pycache__", ".venv", "venv", ".git", "logs"}
 # -----------------
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))

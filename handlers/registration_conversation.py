@@ -264,19 +264,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # Не прогоняем через анкету заново — генерируем ссылку для входа
     has_q_name = bool(user and user.get('q_name'))
 
-    # Fallback 1: q_name в registration_system DB (старый aiogram бот)
-    if not has_q_name:
-        try:
-            from registration_system.database import get_user as _get_reg_user
-            reg_record = await _get_reg_user(user_id)
-            if reg_record and reg_record.get('q_name'):
-                has_q_name = True
-                if not user:
-                    user = reg_record
-        except Exception as e:
-            logger.error(f"start_reg: registration_system fallback failed for {user_id}: {e}")
-
-    # Fallback 2: одобренная заявка в db_friend.applications
+    # Fallback: одобренная заявка в db_friend.applications (если q_name по какой-то причине пуст)
     has_approved_app = False
     if not has_q_name:
         try:
