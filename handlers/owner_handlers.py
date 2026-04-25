@@ -906,7 +906,7 @@ async def handle_owner_text_input(
 # ═══════════════════════════════════════════════════════════════
 
 async def show_statistics_not_in_chat(query, admin_id: int) -> None:
-    """Статистика 4.5 — пользователи Не в чате (БЗА / НПС)."""
+    """Статистика 4.5 — пользователи Не в чате (БЗА / НПС). Доступ: владелец и замы."""
     import html as _html
 
     # Сразу отвечаем на callback, чтобы у юзера не крутился loader
@@ -915,7 +915,9 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
     except Exception:
         pass
 
-    if query.from_user.id != admin_id:
+    # Доступ: владелец ИЛИ зам владельца
+    from handlers.admin_moderation import _is_owner_or_deputy
+    if not await _is_owner_or_deputy(query.from_user.id):
         try:
             await query.answer("⛔ Нет доступа.", show_alert=True)
         except Exception:
