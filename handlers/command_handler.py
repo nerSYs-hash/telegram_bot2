@@ -216,6 +216,33 @@ class CommandHandler:
             await _start_command(update, context, self.db, self.target_chat_id)
             return
 
+        # ── Deep link реферал ref1_xxx: токен сохраняем В БД сразу,
+        # чтобы он пережил всю регистрационную цепочку (даже если юзер уйдёт и вернётся) ──
+        if context.args and context.args[0].startswith('ref1_'):
+            token = context.args[0]
+            try:
+                referrer_id = self.db.get_referrer_by_token(token)
+                if referrer_id and referrer_id != user_id:
+                    # Сохраняем токен в context (для финализации после регистрации)
+                    context.user_data['pending_ref_token'] = token
+                    context.user_data['pending_ref_referrer_id'] = referrer_id
+
+                    # Если юзер ещё не в db_friend — создадим запись и сразу впишем referred_by
+                    from database.db_friend import get_user as _get_friend_user, create_user, update_user
+                    friend_user = await _get_friend_user(user_id)
+                    if not friend_user:
+                        await create_user(
+                            user_id,
+                            update.effective_user.username or '',
+                            update.effective_user.first_name or '',
+                            update.effective_user.last_name or '',
+                        )
+                    # Записываем referrer_id (integer) — переживёт регистрацию
+                    await update_user(user_id, referred_by=referrer_id)
+                    logger.info(f"🔗 Реф-токен {token}: юзер {user_id} привязан к {referrer_id}")
+            except Exception as e:
+                logger.error(f"Ошибка обработки реф-токена {context.args[0]} для {user_id}: {e}")
+
         user = await get_user(user_id) # Проверяем в базе друга
 
         # Если пользователя нет в базе ИЛИ у него не заполнено имя (q_name)

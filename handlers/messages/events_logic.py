@@ -339,6 +339,53 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
     except Exception as e:
         logging.error(f"Error cleaning up invite link for {user_id}: {e}")
 
+    # ═══ РЕФЕРАЛ: подтверждаем pending-транзакцию (юзер реально вступил в чат) ═══
+    try:
+        from database.db_friend import confirm_referral, get_user as _get_friend_user
+        await confirm_referral(user_id)
+        logging.info(f"✅ Referral confirmed for user {user_id} (если была pending-транзакция)")
+
+        # ═══ ЗАПИСЬ ВСТУПЛЕНИЯ В user_joins (для Excel-экспорта) ═══
+        # Определяем join_method
+        friend_data = await _get_friend_user(user_id)
+        referred_by = friend_data.get('referred_by') if friend_data else None
+        cm = update.chat_member
+        invite_link_obj = cm.invite_link if cm else None
+        from_user_obj = cm.from_user if cm else None
+
+        if referred_by:
+            join_method = 'referral_link'
+            referrer_id_for_join = referred_by
+            referral_token = None
+        elif invite_link_obj:
+            join_method = 'chat_invite_link'
+            referrer_id_for_join = None
+            referral_token = None
+        elif from_user_obj and from_user_obj.id != user_id:
+            join_method = 'direct_invite'
+            referrer_id_for_join = from_user_obj.id
+            referral_token = None
+        else:
+            join_method = 'chat_member_joined'
+            referrer_id_for_join = None
+            referral_token = None
+
+        tg_user = cm.new_chat_member.user if cm else None
+        try:
+            db.record_user_join(
+                user_id=user_id,
+                username=(tg_user.username if tg_user else None),
+                first_name=(tg_user.first_name if tg_user else None),
+                join_method=join_method,
+                referrer_id=referrer_id_for_join,
+                referral_token=referral_token,
+            )
+            logging.info(f"📝 user_joins записан: user={user_id} method={join_method} ref={referrer_id_for_join}")
+        except Exception as e:
+            logging.error(f"record_user_join failed for {user_id}: {e}")
+    except Exception as e:
+        logging.error(f"confirm_referral/record_join failed for {user_id}: {e}")
+
     # ═══ ДОСЬЕ: строка "Вернулся" + переключить индикатор на ✅ В чате ═══
     try:
         from handlers.anketa_edit_handlers import get_anketa_edit, upsert_anketa_edit, inject_presence

@@ -4,6 +4,50 @@
 
 ---
 
+## 🤝 V1.11.9c — Реферальная система: оба пути починены (25.04.2026)
+
+### 🔗 ПУТЬ 1: РУЧНОЙ @username (V1.11.9c)
+▪️ Раньше юзер вводил `@nersys` → строка сохранялась в `referred_by` (INTEGER колонка) → битая ссылка
+▪️ Теперь на шаге REF_CODE: `@`/пробелы стрипаются, ник ищется в `db_friend` и `main_db` (case-insensitive)
+▪️ Если **не найден** — показывается ошибка с возможностью ввести заново или пропустить
+▪️ Если **самого себя** — отказ
+▪️ В БД сохраняется **integer tg_id** реферера, не строка
+▪️ Файл: `handlers/registration_conversation.py`
+
+### 🔗 ПУТЬ 2: DEEP-LINK ref1_xxx (V1.11.9c)
+▪️ Раньше: новый юзер кликает реф-ссылку → бот показывает «📝 Подать заявку» и **`return`** ДО обработки токена → токен терялся
+▪️ Теперь токен обрабатывается **в самом начале** `start_command`:
+   - Поиск referrer_id по токену
+   - Создание записи в `db_friend` (если ещё нет)
+   - Сразу пишется `referred_by=referrer_id` (integer)
+   - Токен сохраняется в `context.user_data` как fallback
+▪️ Deep-link имеет **приоритет** над ручным вводом @username
+▪️ После завершения регистрации токен помечается использованным (`use_referral_link`)
+▪️ Файлы: `handlers/command_handler.py`, `handlers/registration_conversation.py`
+
+### ✅ ОДОБРЕНИЕ: integer-валидация + pending-транзакция (V1.11.9c)
+▪️ При одобрении заявки `referred_by` принудительно приводится к `int()` с защитой от `ValueError`
+▪️ Защита от self-referral на уровне одобрения
+▪️ Создаётся запись в `referral_transactions` со статусом `pending` (через `process_referral`)
+▪️ Файл: `handlers/admin_moderation.py`
+
+### 🎁 НАЧИСЛЕНИЕ: confirm_referral при вступлении (V1.11.9c)
+▪️ Когда юзер реально вступил в чат — `confirm_referral(user_id)` переводит транзакцию из `pending` в `credited`
+▪️ Счётчик рефералов и заработок реферера увеличиваются автоматически
+▪️ Файл: `handlers/messages/events_logic.py`
+
+### 📊 EXCEL-ЭКСПОРТ: user_joins пишется при вступлении (V1.11.9c)
+▪️ Раньше `record_user_join()` вызывался только в `_start_command`, до которого новые юзеры не доходили → лист «👥 ВСТУПЛЕНИЯ В ЧАТ» в Excel был пустым
+▪️ Теперь при реальном входе в чат (`handle_user_returned`) автоматически определяется `join_method`:
+   - `referral_link` — если `referred_by` заполнен
+   - `chat_invite_link` — если вошёл по `invite_link`
+   - `direct_invite` — если был добавлен другим пользователем
+   - `chat_member_joined` — самостоятельное вступление
+▪️ Запись содержит `referrer_id` (integer) для корректного JOIN в экспорте
+▪️ Файл: `handlers/messages/events_logic.py`
+
+---
+
 ## 🔐 V1.11.9b — Безопасность invite-ссылок (25.04.2026)
 
 ### 🛡 УСИЛЕНА ПРОВЕРКА ChatJoinRequest (V1.11.9b)

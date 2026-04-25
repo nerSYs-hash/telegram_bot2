@@ -293,7 +293,21 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         await update_user(target_user_id, status='approved')
 
         # 2. Регистрируем в основной базе (майнинг и т.д.)
-        referrer_id = reg_data.get('referred_by') if reg_data else None
+        # referred_by из db_friend — должен быть integer (tg_id реферера)
+        raw_referrer = reg_data.get('referred_by') if reg_data else None
+        referrer_id = None
+        if raw_referrer is not None:
+            try:
+                referrer_id = int(raw_referrer)
+            except (TypeError, ValueError):
+                logger.warning(
+                    f"⚠️ referred_by для {target_user_id} не int: {raw_referrer!r} — игнорируем"
+                )
+                referrer_id = None
+            # Защита от self-referral
+            if referrer_id == target_user_id:
+                referrer_id = None
+
         if main_db:
             main_db.add_user(
                 target_user_id,
@@ -309,6 +323,17 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
                     )
                     main_db.conn.commit()
                     logger.info(f"✅ Реферал {referrer_id} привязан к {target_user_id}")
+
+                    # Создаём pending-транзакцию для последующего начисления
+                    try:
+                        from database.db_friend import process_referral, get_user as _get_friend_user
+                        ref_user = await _get_friend_user(referrer_id)
+                        ref_code = ref_user.get('referral_code') if ref_user else None
+                        if ref_code:
+                            await process_referral(target_user_id, ref_code)
+                            logger.info(f"📝 Pending referral_transaction создана: {referrer_id} → {target_user_id}")
+                    except Exception as e:
+                        logger.error(f"⚠️ process_referral failed: {e}")
                 except Exception as e:
                     logger.error(f"⚠️ Не удалось привязать реферала: {e}")
 

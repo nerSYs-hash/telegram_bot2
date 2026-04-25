@@ -520,11 +520,79 @@ async def get_therapy(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.effective_user.id
     if _is_button_text(update.message.text):
         await _delete_user_msg(update.message)
         return REF_CODE
     await _delete_user_msg(update.message)
-    return await finish_registration(update, context, update.message.text)
+
+    raw = (update.message.text or '').strip()
+    # Чистим: убираем @, пробелы; сравниваем case-insensitive
+    username_clean = raw.lstrip('@').strip().lower()
+
+    if not username_clean:
+        # Пустой ввод — пропускаем как "без реферала"
+        return await finish_registration(update, context, None)
+
+    # Ищем пользователя по username — сначала в db_friend, потом в основной БД
+    referrer_id = None
+    try:
+        from database.db_friend import get_user_by_username as _get_by_uname
+        ref_user = await _get_by_uname(username_clean)
+        if ref_user:
+            referrer_id = ref_user.get('tg_id')
+    except Exception as e:
+        logger.warning(f"get_ref_code db_friend lookup failed: {e}")
+
+    if not referrer_id:
+        # Fallback — ищем в основной БД
+        try:
+            main_db = context.bot_data.get('db')
+            if main_db:
+                main_db.cursor.execute(
+                    "SELECT user_id FROM users WHERE LOWER(username) = ? LIMIT 1",
+                    (username_clean,)
+                )
+                row = main_db.cursor.fetchone()
+                if row:
+                    referrer_id = row['user_id']
+        except Exception as e:
+            logger.warning(f"get_ref_code main_db lookup failed: {e}")
+
+    if not referrer_id:
+        # Не нашли — даём шанс ввести заново или пропустить
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_ref")]])
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(
+                context, user_id, msg_id,
+                _build_form(
+                    context.user_data,
+                    f"Д. Реф. код (ник пользователя)\n\n"
+                    f"❌ Пользователь @{html.escape(username_clean)} не найден в Pulse 4ever.\n"
+                    f"Введи корректный @username или пропусти."
+                ),
+                keyboard=keyboard,
+            )
+        return REF_CODE
+
+    # Защита: не разрешаем ссылаться на себя
+    if referrer_id == user_id:
+        keyboard = InlineKeyboardMarkup([[InlineKeyboardButton("⏭ Пропустить", callback_data="skip_ref")]])
+        msg_id = context.user_data.get('reg_msg_id')
+        if msg_id:
+            await _edit_form(
+                context, user_id, msg_id,
+                _build_form(
+                    context.user_data,
+                    "Д. Реф. код (ник пользователя)\n\n"
+                    "❌ Нельзя пригласить самого себя. Введи другого пользователя или пропусти."
+                ),
+                keyboard=keyboard,
+            )
+        return REF_CODE
+
+    return await finish_registration(update, context, referrer_id)
 
 
 async def skip_ref_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -534,9 +602,30 @@ async def skip_ref_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE, ref_code):
+    """ref_code теперь — это integer referrer_id (или None)."""
     user_id = update.effective_user.id
     await update_user(user_id, questionnaire_state=None)
     data = context.user_data
+
+    # Приоритет: ref_code из deep-link > ввод на шаге REF_CODE
+    deep_link_referrer = context.user_data.pop('pending_ref_referrer_id', None)
+    pending_token = context.user_data.pop('pending_ref_token', None)
+
+    final_referrer_id = None
+    if deep_link_referrer:
+        # Deep-link имеет приоритет — используем его
+        final_referrer_id = deep_link_referrer
+        # Помечаем токен использованным
+        if pending_token:
+            try:
+                main_db = context.bot_data.get('db')
+                if main_db:
+                    main_db.use_referral_link(pending_token, user_id)
+            except Exception as e:
+                logger.warning(f"use_referral_link failed for {pending_token}: {e}")
+    elif isinstance(ref_code, int):
+        final_referrer_id = ref_code
+    # ref_code строкой больше не приходит — get_ref_code конвертирует
 
     # Берём из context.user_data; если сессия потеряна — подтянем из БД ниже
     reg_name = data.get('reg_name')
@@ -570,11 +659,23 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         q_age=reg_age,
         q_city=reg_city,
         q_therapy=reg_therapy,
-        referred_by=ref_code,
+        referred_by=final_referrer_id,
         status='pending'
     )
 
     app_id = await create_application(user_id)
+
+    # Подтягиваем @username реферера для отображения
+    referrer_display = 'нет'
+    if final_referrer_id:
+        try:
+            ref_user = await get_user(final_referrer_id)
+            if ref_user and ref_user.get('username'):
+                referrer_display = f"@{ref_user['username']}"
+            else:
+                referrer_display = f"ID {final_referrer_id}"
+        except Exception:
+            referrer_display = f"ID {final_referrer_id}"
 
     # Обновляем окно анкеты — итоговое сообщение
     msg_id = context.user_data.get('reg_msg_id')
@@ -584,7 +685,7 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         f"Б. Возраст: <b>{reg_age}</b> ✅\n"
         f"В. Город: <b>{reg_city}</b> ✅\n"
         f"Г. Терапия: <b>{reg_therapy}</b> ✅\n"
-        f"Д. Реф. код: <b>{ref_code or 'нет'}</b> ✅\n\n"
+        f"Д. Реф. код: <b>{referrer_display}</b> ✅\n\n"
         f"✅ <b>Анкета отправлена администраторам!</b>\n"
         f"Ожидай уведомления об одобрении."
     )
