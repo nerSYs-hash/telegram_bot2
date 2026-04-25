@@ -907,8 +907,19 @@ async def handle_owner_text_input(
 
 async def show_statistics_not_in_chat(query, admin_id: int) -> None:
     """Статистика 4.5 — пользователи Не в чате (БЗА / НПС)."""
+    import html as _html
+
+    # Сразу отвечаем на callback, чтобы у юзера не крутился loader
+    try:
+        await query.answer()
+    except Exception:
+        pass
+
     if query.from_user.id != admin_id:
-        await query.answer("⛔", show_alert=True)
+        try:
+            await query.answer("⛔ Нет доступа.", show_alert=True)
+        except Exception:
+            pass
         return
 
     import sqlite3
@@ -935,7 +946,8 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
             fn = (row['first_name'] or '').strip()
             ln = (row['last_name'] or '').strip()
             name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
-            bza_lines.append(f"{name}, #user{row['tg_id']}, БЗА")
+            # HTML-escape — иначе спецсимволы в имени ломают parse_mode='HTML'
+            bza_lines.append(f"{_html.escape(name)}, #user{row['tg_id']}, БЗА")
 
         cur.execute(
             "SELECT tg_id, first_name, last_name, username FROM users "
@@ -945,19 +957,21 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
             fn = (row['first_name'] or '').strip()
             ln = (row['last_name'] or '').strip()
             name = f"{fn} {ln}".strip() or row['username'] or f"ID:{row['tg_id']}"
-            nps_lines.append(f"{name}, #user{row['tg_id']}, НПС")
+            nps_lines.append(f"{_html.escape(name)}, #user{row['tg_id']}, НПС")
 
         conn.close()
     except Exception as e:
         logger.error(f"show_statistics_not_in_chat DB error: {e}")
-        await query.edit_message_text(
-            f"❌ Ошибка чтения базы регистрации:\n<code>{e}</code>\n\n"
-            f"Путь: <code>{db_path}</code>",
-            parse_mode='HTML',
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]
-            ])
-        )
+        try:
+            await query.edit_message_text(
+                f"❌ Ошибка чтения базы:\n<code>{_html.escape(str(e))}</code>",
+                parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]
+                ])
+            )
+        except Exception:
+            await query.answer(f"❌ Ошибка БД: {e}"[:200], show_alert=True)
         return
 
     all_lines = bza_lines + nps_lines
@@ -978,8 +992,18 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
     except Exception as e:
-        if 'not modified' not in str(e).lower():
-            logger.error(f"show_statistics_not_in_chat error: {e}")
+        if 'not modified' in str(e).lower():
+            return
+        logger.error(f"show_statistics_not_in_chat edit error: {e}")
+        # Fallback: отправляем новое сообщение если edit не удался
+        try:
+            await query.message.reply_text(
+                text, parse_mode='HTML',
+                reply_markup=InlineKeyboardMarkup(keyboard)
+            )
+        except Exception as e2:
+            logger.error(f"show_statistics_not_in_chat reply fallback failed: {e2}")
+            await query.answer(f"❌ Ошибка отображения: {e}"[:200], show_alert=True)
 
 
 async def send_database_backup(query, user, db, admin_id: int, context) -> None:
