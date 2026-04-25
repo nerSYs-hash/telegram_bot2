@@ -130,7 +130,20 @@ class CallbackHandler:
 
         # Перезапуск регистрации
         if data in ("restart_registration", "reapply"):
-            from database.db_friend import update_user, cancel_user_applications
+            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user
+            from config import OWNER_ID
+
+            # Защита: если у юзера уже есть q_name — он возвращающийся, не новый
+            # Не стираем его данные, отправляем сразу /register для генерации invite-ссылки
+            existing = await _get_friend_user(user.id)
+            if existing and existing.get('q_name'):
+                await query.answer()
+                await query.edit_message_text(
+                    "✅ Ты уже регистрировался ранее.\n\n"
+                    "Отправь команду /register — бот проверит твой статус и пришлёт ссылку для возвращения в чат."
+                )
+                return
+
             await cancel_user_applications(user.id)
             await update_user(user.id, status='new', questionnaire_state=None)
             await query.answer()

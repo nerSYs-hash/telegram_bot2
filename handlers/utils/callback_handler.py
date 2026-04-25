@@ -169,10 +169,18 @@ class CallbackHandler:
         
         # Перезапуск регистрации (если заявка потерялась)
         if data in ("restart_registration", "reapply"):
-            from database.db_friend import update_user, cancel_user_applications
+            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user
             from handlers.registration_conversation import start_reg
-            await cancel_user_applications(user.id)
-            await update_user(user.id, status='new', questionnaire_state=None)
+
+            # Защита: возвращающемуся (с q_name) не сбрасываем данные —
+            # start_reg сам определит и отправит invite-ссылку
+            existing = await _get_friend_user(user.id)
+            is_returning = bool(existing and existing.get('q_name'))
+
+            if not is_returning:
+                await cancel_user_applications(user.id)
+                await update_user(user.id, status='new', questionnaire_state=None)
+
             await query.answer()
             try:
                 await query.message.delete()

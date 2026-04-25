@@ -260,6 +260,89 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return ConversationHandler.END
 
+    # ═══ ВОЗВРАЩАЮЩИЙСЯ ЮЗЕР: уже есть q_name ИЛИ одобренная заявка ═══
+    # Не прогоняем через анкету заново — генерируем ссылку для входа
+    has_q_name = bool(user and user.get('q_name'))
+
+    # Fallback 1: q_name в registration_system DB (старый aiogram бот)
+    if not has_q_name:
+        try:
+            from registration_system.database import get_user as _get_reg_user
+            reg_record = await _get_reg_user(user_id)
+            if reg_record and reg_record.get('q_name'):
+                has_q_name = True
+                if not user:
+                    user = reg_record
+        except Exception as e:
+            logger.error(f"start_reg: registration_system fallback failed for {user_id}: {e}")
+
+    # Fallback 2: одобренная заявка в db_friend.applications
+    has_approved_app = False
+    if not has_q_name:
+        try:
+            from database.db_friend import db_pool
+            from constants import ApplicationStatus
+            async with db_pool.get_connection() as _db:
+                async with _db.execute(
+                    "SELECT 1 FROM applications WHERE user_id = ? AND status = ? LIMIT 1",
+                    (user_id, ApplicationStatus.APPROVED)
+                ) as _cur:
+                    has_approved_app = bool(await _cur.fetchone())
+        except Exception as e:
+            logger.error(f"approved_app check failed in start_reg for {user_id}: {e}")
+
+    if has_q_name or has_approved_app:
+        # Проверяем не забанен ли в чате
+        tg_status = None
+        try:
+            cm = await context.bot.get_chat_member(CHAT_ID, user_id)
+            tg_status = cm.status
+        except Exception:
+            pass
+
+        if tg_status == 'kicked':
+            owner_link = f'<a href="tg://user?id={OWNER_ID}">владельца чата</a>'
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                    f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
+                    f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения."
+                ),
+                parse_mode="HTML"
+            )
+            return ConversationHandler.END
+
+        # Генерируем одноразовую invite-ссылку для возвращения
+        try:
+            from database.db_friend import create_invite_link as _save_invite
+            display_name = (user.get('q_name') if user else None) or user_name
+            invite_obj = await context.bot.create_chat_invite_link(
+                CHAT_ID,
+                member_limit=1,
+                name=f"ret_{user_id}"[:32],
+            )
+            invite_url = invite_obj.invite_link
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    f"👋 С возвращением, {display_name}!\n\n"
+                    f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                    f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
+                    f"⚠️ Ссылка одноразовая — действует только для тебя и "
+                    f"сгорит сразу после использования."
+                )
+            )
+            await _save_invite(user_id, invite_url)
+            logger.info(f"Return invite sent (start_reg) to {user_id}")
+        except Exception as e:
+            logger.error(f"start_reg: error creating return invite for {user_id}: {e}")
+            await context.bot.send_message(
+                chat_id=user_id,
+                text="❌ Не удалось создать ссылку для входа. Обратись к администратору."
+            )
+        return ConversationHandler.END
+
     # Если уже есть незавершённая анкета — восстанавливаем окно
     if user and user.get('questionnaire_state'):
         state = user['questionnaire_state']

@@ -4,6 +4,24 @@
 
 ---
 
+## 🔄 V1.11.9e — Возвращающиеся юзеры не получают анкету повторно (25.04.2026)
+
+### 🐛 БАГ
+▪️ После выхода из чата юзеру при `/register` (или клике «📝 Подать заявку») бот **снова прогонял через всю анкету**, как нового
+▪️ Причина: `start_reg` в `registration_conversation.py` не проверял что у юзера уже есть `q_name`/одобренная заявка
+▪️ `restart_registration` callback бездумно стирал статус, даже для возвращающихся
+
+### ✅ ИСПРАВЛЕНО (V1.11.9e)
+▪️ В `start_reg` добавлена цепочка проверок «возвращающийся» ДО показа анкеты:
+   1. `q_name` в `db_friend.users`
+   2. `q_name` в `registration_system.database` (старый aiogram-бот)
+   3. Одобренная заявка в `db_friend.applications`
+▪️ Если хотя бы одна проверка True → статус в чате (`getChatMember`); если не `kicked` → генерируется одноразовая invite-ссылка
+▪️ В `restart_registration` callback (оба файла: `callback/callback_router.py` и `utils/callback_handler.py`) добавлена защита: возвращающимся (с `q_name`) данные не стираются
+▪️ Файлы: `handlers/registration_conversation.py`, `handlers/callback/callback_router.py`, `handlers/utils/callback_handler.py`
+
+---
+
 ## 📊 V1.11.9d — Упоминания @ считаются корректно (25.04.2026)
 
 ### 🔧 ИСПРАВЛЕНО: mentions_received начислялся отправителю (V1.11.9d)
