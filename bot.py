@@ -630,21 +630,71 @@ class TelegramBot:
         logger.info("Handlers setup complete")
     
     async def handle_join_request(self, update: Update, context):
-        """Обработка заявок на вступление по одноразовым ссылкам"""
+        """Обработка заявок на вступление по одноразовым ссылкам.
+        Одобряем только тех, кто:
+          - есть в БД регистраций
+          - имеет заполненную анкету (q_name)
+          - не в чёрном списке
+          - не забанен и не отклонён
+          - имеет приемлемый статус (не pending/new/blocked)
+        """
         request = update.chat_join_request
         user_id = request.from_user.id
-        
+
         try:
-            from database.db_friend import get_user as get_reg_user
+            from database.db_friend import get_user as get_reg_user, is_blacklisted
+
             reg_user = await get_reg_user(user_id)
-            # Автоматически одобряем, если пользователь есть в базе и не забанен
-            if reg_user and not reg_user.get('is_banned'):
-                await request.approve()
-                logger.info(f"✅ Авто-одобрена заявка на вступление от пользователя {user_id}")
-            else:
-                # Отклоняем, если пользователя нет в базе (попытка входа по чужой ссылке)
+
+            # 1. Нет в БД регистраций — попытка входа по чужой ссылке
+            if not reg_user:
                 await request.decline()
-                logger.info(f"❌ Отклонена заявка на вступление от неизвестного пользователя {user_id}")
+                logger.warning(f"❌ JoinRequest: user {user_id} not in registration DB — declined")
+                return
+
+            # 2. В чёрном списке
+            if await is_blacklisted(user_id):
+                await request.decline()
+                logger.warning(f"❌ JoinRequest: user {user_id} is blacklisted — declined")
+                return
+
+            # 3. Забанен
+            if reg_user.get('is_banned'):
+                await request.decline()
+                logger.warning(f"❌ JoinRequest: user {user_id} is banned — declined")
+                return
+
+            # 4. Анкета не заполнена
+            if not reg_user.get('q_name'):
+                await request.decline()
+                logger.warning(f"❌ JoinRequest: user {user_id} has no q_name — declined")
+                return
+
+            # 5. Недопустимый статус (не должен попасть в чат напрямую)
+            bad_statuses = {'pending', 'new', 'in_work', 'blocked', 'rejected', 'banned'}
+            current_status = (reg_user.get('status') or '').lower()
+            if current_status in bad_statuses:
+                await request.decline()
+                logger.warning(
+                    f"❌ JoinRequest: user {user_id} has bad status='{current_status}' — declined"
+                )
+                return
+
+            # ✅ Все проверки пройдены — одобряем
+            await request.approve()
+            logger.info(f"✅ JoinRequest: user {user_id} approved (status={current_status})")
+
+            # Синхронизируем основную БД сразу — is_left=0
+            try:
+                main_user = self.db.get_user(user_id)
+                if main_user:
+                    self.db.cursor.execute(
+                        "UPDATE users SET is_left = 0 WHERE user_id = ?", (user_id,)
+                    )
+                    self.db.conn.commit()
+            except Exception as sync_err:
+                logger.warning(f"JoinRequest sync error for {user_id}: {sync_err}")
+
         except Exception as e:
             logger.error(f"Ошибка при обработке заявки на вступление: {e}")
     
