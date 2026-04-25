@@ -624,7 +624,7 @@ class CallbackHandler:
         message += f"• Друг должен пробыть в чате 24 часа\n"
         message += f"• Написать минимум 5 сообщений\n"
         message += f"• ИЛИ получить 3+ реакции\n\n"
-        message += f"🎁 Награда: 500 💎 за каждого друга"
+        message += f"🎁 Награда: 100 💎 за каждого друга"
 
         keyboard = [
             [InlineKeyboardButton("🔄 Обновить ссылку", callback_data="referral_refresh")],

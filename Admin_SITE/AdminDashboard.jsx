@@ -14,7 +14,8 @@ import {
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
-  GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban
+  GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
+  Crown, AtSign, Hash, Plug, LogOut
 } from 'lucide-react';
 
 // ═══════════════════════════════════════════
@@ -4633,6 +4634,104 @@ export default function App() {
           </div>
         );
 
+      case 'profile': {
+        const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
+        return (
+          <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+
+            {/* ─── HERO ─── */}
+            <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm flex flex-col items-center text-center">
+              {authUser.photo_url
+                ? <img src={authUser.photo_url} alt="avatar"
+                       className="w-28 h-28 rounded-3xl border-4 border-white shadow-xl object-cover"/>
+                : <div className="w-28 h-28 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-700
+                                  flex items-center justify-center text-white font-black text-5xl
+                                  border-4 border-white shadow-xl">
+                    {initials}
+                  </div>
+              }
+              <h2 className="text-2xl font-black text-gray-900 mt-5">{authUser.first_name || 'Пользователь'}</h2>
+              {authUser.username && (
+                <p className="text-sm font-bold text-gray-400 mt-1">@{authUser.username}</p>
+              )}
+
+              {/* Бейдж роли — пока заглушка, в V1.12.10b подтянем реальную роль */}
+              <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                              bg-yellow-100 text-yellow-700 text-[11px] font-black uppercase tracking-wide">
+                <Crown size={12}/> Владелец
+              </div>
+            </div>
+
+            {/* ─── TELEGRAM ─── */}
+            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
+              <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                <User className="mr-3 text-blue-500" size={16}/> Telegram
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <Hash size={16} className="text-gray-400"/>
+                    <span className="text-xs font-bold text-gray-400 uppercase">ID</span>
+                  </div>
+                  <span className="font-mono font-black text-sm text-gray-900">{authUser.id}</span>
+                </div>
+                {authUser.username && (
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <AtSign size={16} className="text-gray-400"/>
+                      <span className="text-xs font-bold text-gray-400 uppercase">Username</span>
+                    </div>
+                    <span className="font-black text-sm text-gray-900">@{authUser.username}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* ─── ЧАТ — пока заглушки, реальные данные в V1.12.10b ─── */}
+            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
+              <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                <MessageCircle className="mr-3 text-green-500" size={16}/> Чат
+              </h3>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <Calendar size={16} className="text-gray-400"/>
+                    <span className="text-xs font-bold text-gray-400 uppercase">В чате с</span>
+                  </div>
+                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <Clock size={16} className="text-gray-400"/>
+                    <span className="text-xs font-bold text-gray-400 uppercase">Последнее сообщение</span>
+                  </div>
+                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                </div>
+                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                  <div className="flex items-center gap-3">
+                    <MessageCircle size={16} className="text-gray-400"/>
+                    <span className="text-xs font-bold text-gray-400 uppercase">Сообщений всего</span>
+                  </div>
+                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                </div>
+              </div>
+            </div>
+
+            {/* ─── ДЕЙСТВИЯ ─── */}
+            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
+              <button
+                onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
+                           bg-red-50 text-red-600 font-black text-sm uppercase tracking-wide
+                           hover:bg-red-100 active:scale-[0.98] transition-all">
+                <LogOut size={16}/> Выйти из аккаунта
+              </button>
+            </div>
+
+          </div>
+        );
+      }
+
       default: return null;
     }
   };
@@ -4704,16 +4803,21 @@ export default function App() {
           </div>
           <div className="flex items-center space-x-3">
             <div className="flex items-center gap-2">
-              <div className="text-right hidden sm:block">
-                <p className="text-sm font-black text-gray-900 leading-none">{authUser.first_name}</p>
-                {authUser.username && <p className="text-[10px] font-bold text-gray-400 mt-0.5">@{authUser.username}</p>}
-              </div>
-              {authUser.photo_url
-                ? <img src={authUser.photo_url} alt="avatar" className="w-10 h-10 rounded-2xl border-2 border-white shadow-lg object-cover"/>
-                : <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg border-2 border-white shadow-lg">
-                    {(authUser.first_name||'?')[0]}
-                  </div>
-              }
+              <button
+                onClick={() => navigateTo('profile')}
+                className="flex items-center gap-2 p-1 pr-2 rounded-2xl hover:bg-gray-50 transition-all active:scale-95 cursor-pointer"
+                title="Открыть профиль">
+                <div className="text-right hidden sm:block pl-2">
+                  <p className="text-sm font-black text-gray-900 leading-none">{authUser.first_name}</p>
+                  {authUser.username && <p className="text-[10px] font-bold text-gray-400 mt-0.5">@{authUser.username}</p>}
+                </div>
+                {authUser.photo_url
+                  ? <img src={authUser.photo_url} alt="avatar" className="w-10 h-10 rounded-2xl border-2 border-white shadow-lg object-cover"/>
+                  : <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg border-2 border-white shadow-lg">
+                      {(authUser.first_name||'?')[0]}
+                    </div>
+                }
+              </button>
               <button onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
                 className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90"
                 title="Выйти">
