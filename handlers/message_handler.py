@@ -353,13 +353,35 @@ class MessageHandler:
         if is_reply and message.reply_to_message.from_user:
             is_self_reply = message.reply_to_message.from_user.id == user.id
         
-        # Count mentions
-        mentions_count = 0
-        if message.entities:
-            mentions_count = sum(1 for e in message.entities if e.type == 'mention')
-        
+        # === ПАРСИМ УПОМЯНУТЫХ ПОЛЬЗОВАТЕЛЕЙ ===
+        # Два типа entity:
+        #   - mention (text @username) — нужно искать user_id по username
+        #   - text_mention (тап по имени) — entity.user.id уже есть
+        mentioned_user_ids = set()
+        full_text = message.text or message.caption or ''
+        if message.entities and full_text:
+            for e in message.entities:
+                if e.type == 'text_mention' and getattr(e, 'user', None):
+                    mid = e.user.id
+                    if mid != user.id and not e.user.is_bot:
+                        mentioned_user_ids.add(mid)
+                elif e.type == 'mention':
+                    try:
+                        raw = full_text[e.offset:e.offset + e.length]
+                        username_clean = raw.lstrip('@').strip().lower()
+                        if username_clean:
+                            self.db.cursor.execute(
+                                "SELECT user_id FROM users WHERE LOWER(username) = ? LIMIT 1",
+                                (username_clean,)
+                            )
+                            row = self.db.cursor.fetchone()
+                            if row and row['user_id'] != user.id:
+                                mentioned_user_ids.add(row['user_id'])
+                    except Exception as _me:
+                        logging.debug(f"mention parse error: {_me}")
+
        # === ОБНОВЛЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ ===
-        if not should_ignore:    
+        if not should_ignore:
             _reply_to_real_user = (
                 is_reply and not is_self_reply
                 and message.reply_to_message.from_user
@@ -371,10 +393,10 @@ class MessageHandler:
                 'total_words': word_count,
                 'replies_sent': 1 if _reply_to_real_user else 0,
                 'media_sent': 1 if is_media else 0,
-                'mentions_received': mentions_count,
+                # mentions_received УБРАНО отсюда — это счётчик ПОЛУЧАТЕЛЯ упоминания, не отправителя
                 'other_threads_posts': 1 if thread_id is not None else 0
             }
-            
+
             # Записываем статистику отправителю (event_id = одно сообщение = один счёт)
             msg_eid = f"msg_{user.id}_{message.message_id}"
             self.db.update_user_activity(user.id, today, event_id=msg_eid, **stats_update)
@@ -389,6 +411,25 @@ class MessageHandler:
                     now_msk = get_moscow_time()
                     self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, replies_received=1)
                 except Exception: pass
+
+            # --- ЛОГИКА УПОМИНАНИЙ: начисляем mentions_received КАЖДОМУ упомянутому ---
+            for mentioned_id in mentioned_user_ids:
+                mention_eid = f"mention_recv_{mentioned_id}_{message.message_id}"
+                try:
+                    self.db.update_user_activity(
+                        mentioned_id, today,
+                        event_id=mention_eid,
+                        mentions_received=1,
+                    )
+                    try:
+                        from utils.helpers import get_moscow_time
+                        now_msk = get_moscow_time()
+                        self.db.update_user_activity_hourly(
+                            mentioned_id, today, now_msk.hour, mentions_received=1
+                        )
+                    except Exception: pass
+                except Exception as _ue:
+                    logging.warning(f"mentions_received update error for {mentioned_id}: {_ue}")
             
             # Почасовая статистика для отправителя
             try:
@@ -407,7 +448,8 @@ class MessageHandler:
                     word_count=word_count,
                     is_reply=(is_reply and not is_self_reply),
                     is_media=is_media,
-                    has_mention=(mentions_count > 0),
+                    # has_mention применяется к КАЖДОМУ упомянутому (вес mentions_received)
+                    has_mention=bool(mentioned_user_ids),
                     is_other_thread=(thread_id is not None)
                 )
                 rate_cache.apply_delta(delta)
