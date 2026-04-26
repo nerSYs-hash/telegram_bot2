@@ -4721,6 +4721,58 @@ export default function App() {
               </div>
             </div>
 
+            {/* ─── ВАШИ ДОСТУПЫ ─── */}
+            {profileData?.accesses?.length > 0 && (() => {
+              const ICON_MAP = {
+                ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
+                Settings, ShieldCheck, Ban,
+              };
+              const ACTION_COLORS = {
+                view:   'bg-gray-100 text-gray-600',
+                create: 'bg-blue-100 text-blue-700',
+                edit:   'bg-amber-100 text-amber-700',
+                delete: 'bg-red-100 text-red-700',
+                toggle: 'bg-green-100 text-green-700',
+              };
+              return (
+                <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
+                  <div className="flex items-center justify-between">
+                    <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                      <ShieldCheck className="mr-3 text-indigo-500" size={16}/> Ваши доступы
+                    </h3>
+                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">
+                      {profileData.accesses.length} разделов
+                    </span>
+                  </div>
+                  <div className="space-y-2">
+                    {profileData.accesses.map((res) => {
+                      const Icon = ICON_MAP[res.icon] || ShieldCheck;
+                      return (
+                        <div key={res.key} className="p-4 bg-gray-50 rounded-2xl">
+                          <div className="flex items-center gap-3 mb-2">
+                            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center
+                                            border border-gray-100">
+                              <Icon size={16} className="text-indigo-500"/>
+                            </div>
+                            <span className="font-black text-sm text-gray-900">{res.label}</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 pl-12">
+                            {res.actions.map((a) => (
+                              <span key={a.key}
+                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase
+                                                tracking-wide ${ACTION_COLORS[a.key] || 'bg-gray-100 text-gray-600'}`}>
+                                {a.label}
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
+
             {/* ─── ЧАТ / БЕЗ ЧАТА ─── */}
             {profileData && profileData.has_chat === false ? (
               <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8

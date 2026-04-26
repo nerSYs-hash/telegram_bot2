@@ -53,6 +53,14 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения БД: {e}")
 
+# ── Инициализация permissions (создаёт таблицу role_permissions, сидит дефолты) ──
+try:
+    from permissions import init_permissions_db
+    init_permissions_db()
+    logger.info("✅ permissions: таблица role_permissions готова")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка инициализации permissions: {e}")
+
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
@@ -154,34 +162,15 @@ def _get_user_role_meta(user_id: int) -> dict:
 @app.get("/api/admin/profile/me")
 async def admin_profile_me(authorization: str = Header(default=None)):
     """Полные данные профиля для страницы «Профиль» в админ-панели."""
-    if not authorization or not authorization.startswith("Bearer "):
-        raise HTTPException(status_code=401, detail="Не авторизован")
-    try:
-        payload = _decode_jwt(authorization[7:])
-    except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Токен истёк")
-    except jwt.InvalidTokenError:
-        raise HTTPException(status_code=401, detail="Неверный токен")
-
+    payload = _require_auth(authorization)
     user_id = int(payload.get("user_id", 0))
     if not user_id:
         raise HTTPException(status_code=400, detail="ID не определён")
 
+    from permissions import ROLE_LABELS, normalize_role, get_role_accesses
+    role_raw = normalize_role(_resolve_user_role(user_id))
+    role_label = ROLE_LABELS.get(role_raw, "Без статуса")
     role_meta = _get_user_role_meta(user_id)
-    role_raw = (role_meta.get("role") or "user").lower()
-
-    # Override: если совпадает с MAIN_ADMIN_ID из .env — всегда «owner»
-    main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    if main_admin_id and user_id == main_admin_id:
-        role_raw = "owner"
-
-    role_labels = {
-        "owner":  "Владелец",
-        "deputy": "Зам владельца",
-        "admin":  "Администратор",
-        "user":   "Без статуса",
-    }
-    role_label = role_labels.get(role_raw, "Без статуса")
 
     # Сообщения и последняя активность из bot_database.db.user_stats
     total_messages = 0
@@ -214,6 +203,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         joined_at = role_meta.get("created_at")
 
     has_chat = role_raw in ("owner", "deputy", "admin")
+    accesses = get_role_accesses(role_raw)
 
     return {
         "user_id":        user_id,
@@ -229,7 +219,82 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         "status":         role_meta.get("status") or "unknown",
         "has_chat":       has_chat,
         "bot_username":   _BOT_USERNAME,
+        "accesses":       accesses,
     }
+
+
+def _require_auth(authorization: str) -> dict:
+    """Декодирует JWT и возвращает payload. Бросает HTTPException при ошибке."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    try:
+        return _decode_jwt(authorization[7:])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Токен истёк")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Неверный токен")
+
+
+def _resolve_user_role(user_id: int) -> str:
+    """Возвращает роль пользователя (owner/deputy/admin/user) с учётом MAIN_ADMIN_ID."""
+    main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
+    if main_admin_id and user_id == main_admin_id:
+        return "owner"
+    meta = _get_user_role_meta(user_id)
+    return (meta.get("role") or "user").lower()
+
+
+def _require_owner(authorization: str) -> int:
+    """Проверяет что пользователь — owner. Возвращает user_id или 403."""
+    payload = _require_auth(authorization)
+    user_id = int(payload.get("user_id", 0))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="ID не определён")
+    if _resolve_user_role(user_id) != "owner":
+        raise HTTPException(status_code=403, detail="Доступно только владельцу")
+    return user_id
+
+
+# ── PERMISSIONS API ──
+@app.get("/api/admin/permissions/catalog")
+async def permissions_catalog(authorization: str = Header(default=None)):
+    """Полный каталог: ресурсы, действия, роли. Доступно любому авторизованному."""
+    _require_auth(authorization)
+    from permissions import get_catalog
+    return get_catalog()
+
+
+@app.get("/api/admin/permissions/roles")
+async def permissions_roles(authorization: str = Header(default=None)):
+    """Текущая раскладка прав по всем ролям. Доступно любому авторизованному."""
+    _require_auth(authorization)
+    from permissions import get_all_role_permissions
+    return get_all_role_permissions()
+
+
+class PermissionsUpdate(BaseModel):
+    permissions: list[str]
+
+
+@app.put("/api/admin/permissions/roles/{role}")
+async def permissions_roles_update(
+    role: str,
+    body: PermissionsUpdate,
+    authorization: str = Header(default=None),
+):
+    """Перезаписать список permissions для роли. Только owner."""
+    _require_owner(authorization)
+    from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions
+    if role not in EDITABLE_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Роль '{role}' нельзя редактировать (доступны: {list(EDITABLE_ROLES)})",
+        )
+    try:
+        set_role_permissions(role, body.permissions)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"role": role, "permissions": get_role_permissions(role)}
 
 
 # --- ЭНДПОИНТЫ ДЛЯ AdminDashboard.jsx ---
