@@ -1313,6 +1313,157 @@ async def get_journal():
         logger.error(f"Error in /api/journal: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+# ── Кэш аватаров (user_id -> (bytes, timestamp)) ──────────────
+_avatar_cache: dict = {}
+_AVATAR_TTL = 86400  # 24 часа
+
+
+class JournalActionIn(BaseModel):
+    user_id: int
+    action: str  # ban | kick | mute_forever | unmute | unban
+
+
+@app.post("/api/journal/action")
+async def journal_action(body: JournalActionIn, authorization: str = Header(default=None)):
+    """Действия модерации из записей журнала: ban/kick/mute_forever/unmute/unban."""
+    payload = _require_auth(authorization)
+    caller_id = int(payload.get("user_id", 0))
+    caller_role = _resolve_user_role(caller_id)
+    if caller_role not in ("owner", "deputy", "admin"):
+        raise HTTPException(status_code=403, detail="Нет прав")
+
+    target_chat_id = int(os.getenv("TARGET_CHAT_ID", 0))
+    if not target_chat_id:
+        raise HTTPException(status_code=500, detail="TARGET_CHAT_ID не задан")
+
+    uid = body.user_id
+    action = body.action
+    tg_url = f"https://api.telegram.org/bot{_BOT_TOKEN}"
+
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            if action == "ban":
+                r = await client.post(f"{tg_url}/banChatMember", json={"chat_id": target_chat_id, "user_id": uid})
+            elif action == "kick":
+                r = await client.post(f"{tg_url}/banChatMember", json={"chat_id": target_chat_id, "user_id": uid})
+                if r.json().get("ok"):
+                    await client.post(f"{tg_url}/unbanChatMember", json={"chat_id": target_chat_id, "user_id": uid, "only_if_banned": True})
+            elif action == "mute_forever":
+                r = await client.post(f"{tg_url}/restrictChatMember", json={
+                    "chat_id": target_chat_id, "user_id": uid,
+                    "permissions": {"can_send_messages": False, "can_send_audios": False,
+                                    "can_send_documents": False, "can_send_photos": False,
+                                    "can_send_videos": False, "can_send_video_notes": False,
+                                    "can_send_voice_notes": False, "can_send_polls": False,
+                                    "can_send_other_messages": False, "can_add_web_page_previews": False},
+                })
+            elif action == "unmute":
+                r = await client.post(f"{tg_url}/restrictChatMember", json={
+                    "chat_id": target_chat_id, "user_id": uid,
+                    "permissions": {"can_send_messages": True, "can_send_audios": True,
+                                    "can_send_documents": True, "can_send_photos": True,
+                                    "can_send_videos": True, "can_send_video_notes": True,
+                                    "can_send_voice_notes": True, "can_send_polls": True,
+                                    "can_send_other_messages": True, "can_add_web_page_previews": True},
+                })
+            elif action == "unban":
+                r = await client.post(f"{tg_url}/unbanChatMember", json={"chat_id": target_chat_id, "user_id": uid, "only_if_banned": False})
+            else:
+                raise HTTPException(status_code=400, detail=f"Неизвестное действие: {action}")
+
+        result = r.json()
+        if result.get("ok"):
+            return {"ok": True}
+        else:
+            return {"ok": False, "error": result.get("description", "Ошибка Telegram")}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"journal_action error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/user/{user_id}/avatar")
+async def get_user_avatar(user_id: int):
+    """Прокси-аватар пользователя через TG Bot API. Кэш 24ч."""
+    now = time.time()
+    cached = _avatar_cache.get(user_id)
+    if cached and now - cached[1] < _AVATAR_TTL:
+        from fastapi.responses import Response
+        return Response(content=cached[0], media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
+
+    try:
+        tg_url = f"https://api.telegram.org/bot{_BOT_TOKEN}"
+        async with httpx.AsyncClient(timeout=10) as client:
+            r = await client.get(f"{tg_url}/getUserProfilePhotos", params={"user_id": user_id, "limit": 1})
+            data = r.json()
+            if not data.get("ok") or not data["result"]["total_count"]:
+                from fastapi.responses import Response
+                return Response(status_code=204)
+            file_id = data["result"]["photos"][0][-1]["file_id"]
+
+            r2 = await client.get(f"{tg_url}/getFile", params={"file_id": file_id})
+            file_path = r2.json()["result"]["file_path"]
+
+            r3 = await client.get(f"https://api.telegram.org/file/bot{_BOT_TOKEN}/{file_path}")
+            img_bytes = r3.content
+
+        _avatar_cache[user_id] = (img_bytes, now)
+        from fastapi.responses import Response
+        return Response(content=img_bytes, media_type="image/jpeg",
+                        headers={"Cache-Control": "public, max-age=86400"})
+    except Exception as e:
+        logger.warning(f"get_user_avatar error uid={user_id}: {e}")
+        from fastapi.responses import Response
+        return Response(status_code=204)
+
+
+# ── UI-настройки (цитаты журнала и др.) ───────────────────────
+_UI_SETTINGS_KEYS = {
+    "journal_quote_bg",
+    "journal_quote_stripe_mode",
+    "journal_quote_stripe_color1",
+    "journal_quote_stripe_color2",
+}
+
+@app.get("/api/ui_settings")
+async def get_ui_settings():
+    """Публичные UI-настройки: цвета цитат журнала."""
+    defaults = {
+        "journal_quote_bg": "#fff7ed",
+        "journal_quote_stripe_mode": "solid",
+        "journal_quote_stripe_color1": "#fdba74",
+        "journal_quote_stripe_color2": "#f87171",
+    }
+    if not db:
+        return defaults
+    result = {}
+    for key, default in defaults.items():
+        try:
+            result[key] = db.get_setting(key, default)
+        except Exception:
+            result[key] = default
+    return result
+
+
+@app.post("/api/ui_settings")
+async def save_ui_settings(request: Request, authorization: str = Header(default=None)):
+    """Сохраняет UI-настройки. Только owner."""
+    _require_owner(authorization)
+    body = await request.json()
+    saved = []
+    for key, val in body.items():
+        if key in _UI_SETTINGS_KEYS and isinstance(val, str):
+            try:
+                db.set_setting(key, val)
+                saved.append(key)
+            except Exception as e:
+                logger.warning(f"ui_settings save error {key}: {e}")
+    return {"ok": True, "saved": saved}
+
+
 # --- GEMINI AI ---
 
 GEMINI_KEY = os.environ.get('GEMINI_API_KEY', '')

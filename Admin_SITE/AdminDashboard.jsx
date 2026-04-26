@@ -595,6 +595,12 @@ export default function App() {
   const [logFilter, setLogFilter] = useState('all');
   const [logs, setLogs] = useState([]);
   const [logsLoading, setLogsLoading] = useState(false);
+  const [expandedLogs, setExpandedLogs] = useState(new Set());
+  const toggleLogExpand = (id) => setExpandedLogs(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
 
   const fetchJournal = () => {
     setLogsLoading(true);
@@ -603,7 +609,54 @@ export default function App() {
       .then(data => { setLogs(Array.isArray(data) ? data : []); setLogsLoading(false); })
       .catch(() => setLogsLoading(false));
   };
+
+  const journalAction = async (userId, action) => {
+    try {
+      const r = await fetch('/api/journal/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        body: JSON.stringify({ user_id: userId, action }),
+      });
+      const d = await r.json();
+      if (d.ok) { fetchJournal(); }
+      else { alert(d.error || 'Ошибка при выполнении действия'); }
+    } catch (e) { alert('Ошибка сети'); }
+  };
   
+  // ================= СОСТОЯНИЯ: UI-НАСТРОЙКИ (цитаты) =================
+  const [quoteCfg, setQuoteCfg] = useState({
+    bg: '#fff7ed', stripeMode: 'solid',
+    stripe1: '#fdba74', stripe2: '#f87171',
+  });
+  const [quoteSaving, setQuoteSaving] = useState(false);
+  useEffect(() => {
+    fetch('/api/ui_settings')
+      .then(r => r.json())
+      .then(d => setQuoteCfg({
+        bg:         d.journal_quote_bg         ?? '#fff7ed',
+        stripeMode: d.journal_quote_stripe_mode ?? 'solid',
+        stripe1:    d.journal_quote_stripe_color1 ?? '#fdba74',
+        stripe2:    d.journal_quote_stripe_color2 ?? '#f87171',
+      }))
+      .catch(() => {});
+  }, []);
+  const saveQuoteCfg = async () => {
+    setQuoteSaving(true);
+    try {
+      await fetch('/api/ui_settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        body: JSON.stringify({
+          journal_quote_bg:            quoteCfg.bg,
+          journal_quote_stripe_mode:   quoteCfg.stripeMode,
+          journal_quote_stripe_color1: quoteCfg.stripe1,
+          journal_quote_stripe_color2: quoteCfg.stripe2,
+        }),
+      });
+    } catch (e) { /* silent */ }
+    setQuoteSaving(false);
+  };
+
   // ================= СОСТОЯНИЯ: ФУНКЦИИ БОТА =================
   const [botFeatures, setBotFeatures] = useState([]);
   const [featuresLoading, setFeaturesLoading] = useState(false);
@@ -1040,27 +1093,60 @@ export default function App() {
                 photo:        'bg-pink-50 text-pink-600 border border-pink-200',
               };
               const tagStyle = TAG_STYLE[log.type] || 'bg-blue-50 text-blue-600 border border-blue-200';
+              const isExpanded = expandedLogs.has(log.id);
+              const hasActions = ['join','ban','mute','trigger','blacklist'].includes(log.type);
               return (
-                <div key={log.id} className="bg-white p-5 rounded-[2rem] border border-gray-100 shadow-sm space-y-3 animate-in slide-in-from-bottom-2">
-                  <div className="flex justify-between items-center">
-                    <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
-                    <span className="text-[11px] text-gray-300 font-mono">{log.time?.replace('T',' ')}</span>
-                  </div>
+                <div key={log.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm animate-in slide-in-from-bottom-2 overflow-hidden">
+                  {/* ── Шапка: тег + время + стрелка ── */}
                   <div
-                    className="text-xs text-gray-700 leading-relaxed break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-900 [&_blockquote]:border-l-4 [&_blockquote]:border-orange-300 [&_blockquote]:bg-orange-50 [&_blockquote]:px-3 [&_blockquote]:py-2 [&_blockquote]:my-2 [&_blockquote]:rounded-r-xl [&_blockquote]:text-gray-800 [&_blockquote]:font-medium [&_blockquote]:italic"
-                    dangerouslySetInnerHTML={{ __html: log.text }}
-                  />
-                  <div className="pt-1 space-y-2">
-                    <a href={`tg://user?id=${log.user_id}`} className="flex items-center justify-center space-x-2 bg-blue-600 text-white py-3 rounded-2xl font-black text-[10px] uppercase shadow-md shadow-blue-100 active:scale-[0.98] transition-all">
-                      <MessageCircle size={14}/><span>Написать в ЛС</span>
-                    </a>
-                    <div className="grid grid-cols-2 gap-2">
-                      {log.type === 'mute'    && <button className="flex items-center justify-center space-x-1 bg-green-50 text-green-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-green-200"><UserCheck size={13}/><span>Размутить</span></button>}
-                      {log.type === 'ban'     && <button className="flex items-center justify-center space-x-1 bg-blue-50 text-blue-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-blue-200"><UserCheck size={13}/><span>Разбанить</span></button>}
-                      {log.type === 'trigger' && <button className="flex items-center justify-center space-x-1 bg-orange-50 text-orange-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-orange-200"><Zap size={13}/><span>Амнистия</span></button>}
-                      {log.type === 'join'    && <button className="flex items-center justify-center space-x-1 bg-indigo-50 text-indigo-700 py-2.5 rounded-xl font-black text-[9px] uppercase border border-indigo-200"><UserSearch size={13}/><span>Досье</span></button>}
-                    </div>
+                    className="flex items-center gap-2 px-3 pt-2.5 pb-1 cursor-pointer select-none"
+                    onClick={() => hasActions && toggleLogExpand(log.id)}
+                  >
+                    <span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
+                    <span className="flex-1 min-w-0 text-[10px] text-gray-300 font-mono truncate">{log.time?.replace('T',' ')}</span>
+                    {hasActions && (
+                      <button className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isExpanded ? 'bg-gray-100 text-gray-500' : 'text-gray-300 hover:text-gray-400'}`}>
+                        {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                      </button>
+                    )}
                   </div>
+
+                  {/* ── Тело: текст сообщения ── */}
+                  <div className="px-3 pb-2.5 pr-8"
+                    style={{
+                      '--q-bg':       quoteCfg.bg,
+                      '--q-stripe-1': quoteCfg.stripe1,
+                      '--q-stripe-2': quoteCfg.stripeMode === 'alternating' ? quoteCfg.stripe2 : quoteCfg.stripe1,
+                    }}
+                  >
+                    <div
+                      className="journal-html text-[11px] text-gray-600 leading-snug break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-800"
+                      dangerouslySetInnerHTML={{ __html: log.text }}
+                    />
+                  </div>
+
+                  {/* ── Кнопки действий — только при раскрытии ── */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 space-y-1.5 border-t border-gray-50 pt-2">
+                      <a
+                        href={`tg://user?id=${log.user_id}`}
+                        className="flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2.5 rounded-xl font-black text-[9px] uppercase shadow-sm shadow-blue-100 active:scale-[0.98] transition-all"
+                      >
+                        <MessageCircle size={12}/><span>Написать в ЛС</span>
+                      </a>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')}    className="flex items-center justify-center gap-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[9px] uppercase border border-green-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}     className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 py-2 rounded-xl font-black text-[9px] uppercase border border-blue-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}      className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'join'      && <button className="flex items-center justify-center gap-1 bg-indigo-50 text-indigo-700 py-2 rounded-xl font-black text-[9px] uppercase border border-indigo-200 active:scale-95 transition-all"><UserSearch size={12}/><span>Досье</span></button>}
+                        {log.type === 'trigger'   && <button className="col-span-2 flex items-center justify-center gap-1 bg-orange-50 text-orange-700 py-2 rounded-xl font-black text-[9px] uppercase border border-orange-200 active:scale-95 transition-all"><Zap size={12}/><span>Амнистия</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}      className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -1242,6 +1328,88 @@ export default function App() {
                  </div>
                )}
              </div>
+
+             {/* ─── СТИЛЬ ЦИТАТ ЖУРНАЛА ─── */}
+             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
+               <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                 <ScrollText className="mr-3 text-orange-400" size={16}/> Стиль цитат журнала
+               </h3>
+
+               {/* Превью */}
+               <div
+                 className="text-xs text-gray-700 leading-snug"
+                 style={{
+                   '--q-bg':       quoteCfg.bg,
+                   '--q-stripe-1': quoteCfg.stripe1,
+                   '--q-stripe-2': quoteCfg.stripeMode === 'alternating' ? quoteCfg.stripe2 : quoteCfg.stripe1,
+                 }}
+               >
+                 <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Превью:</p>
+                 <blockquote className="journal-quote-preview border-l-4 px-2 py-1 my-1 italic text-gray-700 font-medium text-[11px]"
+                   style={{
+                     background: 'var(--q-bg)',
+                     borderImage: `repeating-linear-gradient(to bottom, var(--q-stripe-1) 0 8px, var(--q-stripe-2) 8px 16px) 1`,
+                     borderRadius: '0 8px 8px 0',
+                   }}>
+                   Пример текста нарушения от пользователя
+                 </blockquote>
+               </div>
+
+               {/* Цвет фона */}
+               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                 <span className="text-sm font-bold text-gray-700">Фон цитаты</span>
+                 <div className="flex items-center gap-2">
+                   <input type="color" value={quoteCfg.bg} onChange={e => setQuoteCfg(p => ({...p, bg: e.target.value}))}
+                     className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-gray-400">{quoteCfg.bg}</span>
+                 </div>
+               </div>
+
+               {/* Режим полоски */}
+               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                 <span className="text-sm font-bold text-gray-700">Полоска</span>
+                 <div className="flex gap-2">
+                   {['solid', 'alternating'].map(m => (
+                     <button key={m} onClick={() => setQuoteCfg(p => ({...p, stripeMode: m}))}
+                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${quoteCfg.stripeMode === m ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 border border-gray-200'}`}>
+                       {m === 'solid' ? 'Одноцветная' : 'Чередование'}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Цвет 1 */}
+               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                 <span className="text-sm font-bold text-gray-700">{quoteCfg.stripeMode === 'alternating' ? 'Цвет 1' : 'Цвет полоски'}</span>
+                 <div className="flex items-center gap-2">
+                   <input type="color" value={quoteCfg.stripe1} onChange={e => setQuoteCfg(p => ({...p, stripe1: e.target.value}))}
+                     className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-gray-400">{quoteCfg.stripe1}</span>
+                 </div>
+               </div>
+
+               {/* Цвет 2 — только при alternating */}
+               {quoteCfg.stripeMode === 'alternating' && (
+                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+                   <span className="text-sm font-bold text-gray-700">Цвет 2</span>
+                   <div className="flex items-center gap-2">
+                     <input type="color" value={quoteCfg.stripe2} onChange={e => setQuoteCfg(p => ({...p, stripe2: e.target.value}))}
+                       className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
+                     <span className="text-xs font-mono text-gray-400">{quoteCfg.stripe2}</span>
+                   </div>
+                 </div>
+               )}
+
+               <button
+                 onClick={saveQuoteCfg}
+                 disabled={quoteSaving}
+                 className="w-full py-3 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+               >
+                 {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
+                 Сохранить настройки
+               </button>
+             </div>
+
           </div>
         );
 
