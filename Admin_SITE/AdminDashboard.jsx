@@ -298,6 +298,41 @@ export default function App() {
       .finally(() => setProfileLoading(false));
   }, []);
 
+  // ── ПРАВА ДОСТУПА ──
+  const [permCatalog, setPermCatalog]             = useState(null);
+  const [permRoles, setPermRoles]                 = useState(null);
+  const [permLoading, setPermLoading]             = useState(false);
+  const [permActiveRole, setPermActiveRole]       = useState('deputy');
+  const [permLocal, setPermLocal]                 = useState({ deputy: new Set(), admin: new Set() });
+  const [permDirty, setPermDirty]                 = useState(false);
+  const [permSelectedRes, setPermSelectedRes]     = useState(null);
+  const [permSaving, setPermSaving]               = useState(false);
+  const [permToast, setPermToast]                 = useState(null);
+
+  const fetchPermissions = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    setPermLoading(true);
+    Promise.all([
+      fetch('/api/admin/permissions/catalog', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/permissions/roles',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+    ])
+      .then(([catalog, roles]) => {
+        if (catalog) setPermCatalog(catalog);
+        if (roles) {
+          setPermLocal({
+            deputy: new Set(roles.deputy || []),
+            admin:  new Set(roles.admin  || []),
+          });
+          setPermRoles(roles);
+        }
+        setPermDirty(false);
+        if (catalog?.resources?.length) setPermSelectedRes(catalog.resources[0].key);
+      })
+      .catch(() => {})
+      .finally(() => setPermLoading(false));
+  }, []);
+
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
   const navigateTo = (id) => {
     // Если идёт редактирование триггера — показываем подтверждение
@@ -522,6 +557,7 @@ export default function App() {
 
   useEffect(() => { if (activeTab === 'system') fetchStaff(); }, [activeTab]);
   useEffect(() => { if (activeTab === 'profile') fetchProfile(); }, [activeTab, fetchProfile]);
+  useEffect(() => { if (activeTab === 'permissions' && !permCatalog) fetchPermissions(); }, [activeTab, permCatalog, fetchPermissions]);
 
   // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
   const logTags = [
@@ -758,13 +794,14 @@ export default function App() {
   };
 
   const navigation = [
-    { id: 'updates',   name: 'Обновления', icon: Megaphone, group: 'top' },
-    { id: 'statistics', name: 'Статистика', icon: PieChart, group: 'main' },
-    { id: 'journal', name: 'Журнал', icon: ScrollText, group: 'main' },
-    { id: 'triggers', name: 'Триггеры', icon: ShieldAlert, group: 'modules' },
-    { id: 'shipper', name: 'Шиппер', icon: HeartHandshake, group: 'modules' },
-    { id: 'system', name: 'Система', icon: Settings, group: 'main' },
-    { id: 'broadcast', name: 'Рассылка', icon: Send, group: 'features' },
+    { id: 'updates',     name: 'Обновления',    icon: Megaphone,   group: 'top' },
+    { id: 'statistics',  name: 'Статистика',    icon: PieChart,    group: 'main' },
+    { id: 'journal',     name: 'Журнал',        icon: ScrollText,  group: 'main' },
+    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert, group: 'modules' },
+    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules' },
+    { id: 'system',      name: 'Система',       icon: Settings,    group: 'main' },
+    { id: 'broadcast',   name: 'Рассылка',      icon: Send,        group: 'features' },
+    { id: 'permissions', name: 'Права',         icon: ShieldCheck, group: 'features', ownerOnly: true },
   ];
 
   const renderContent = () => {
@@ -4904,6 +4941,252 @@ export default function App() {
         );
       }
 
+      case 'permissions': {
+        if (!authUser?.is_owner) {
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
+              <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center border border-red-100">
+                <ShieldCheck size={36} className="text-red-400"/>
+              </div>
+              <p className="font-black text-gray-900 text-lg">Доступно только владельцу</p>
+              <p className="text-sm text-gray-400 text-center max-w-xs">Этот раздел позволяет изменять права ролей. Только владелец чата имеет доступ.</p>
+            </div>
+          );
+        }
+
+        const PERM_ICON_MAP = {
+          ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
+          Settings, ShieldCheck, Ban, ShieldBan,
+        };
+        const ACTION_BADGE_COLORS = {
+          view:   'bg-gray-100 text-gray-600',
+          create: 'bg-blue-100 text-blue-700',
+          edit:   'bg-amber-100 text-amber-700',
+          delete: 'bg-red-100 text-red-700',
+          toggle: 'bg-green-100 text-green-700',
+          export: 'bg-purple-100 text-purple-700',
+        };
+        const ACTION_DESCRIPTIONS = {
+          view:   'просматривать раздел',
+          create: 'создавать записи',
+          edit:   'редактировать записи',
+          delete: 'удалять записи',
+          toggle: 'включать / выключать',
+          export: 'выгружать данные',
+        };
+
+        const editableRoles = (permCatalog?.roles || []).filter(r => r.editable);
+        const totalPerms = (permCatalog?.resources?.length || 0) * (permCatalog?.actions?.length || 0);
+        const currentSet = permLocal[permActiveRole] || new Set();
+        const selectedResData = permCatalog?.resources?.find(r => r.key === permSelectedRes);
+
+        const togglePerm = (perm) => {
+          setPermLocal(prev => {
+            const next = new Set(prev[permActiveRole]);
+            next.has(perm) ? next.delete(perm) : next.add(perm);
+            return { ...prev, [permActiveRole]: next };
+          });
+          setPermDirty(true);
+        };
+
+        const toggleAllForResource = (resKey, enable) => {
+          setPermLocal(prev => {
+            const next = new Set(prev[permActiveRole]);
+            (permCatalog?.actions || []).forEach(a => {
+              const p = `${resKey}.${a.key}`;
+              enable ? next.add(p) : next.delete(p);
+            });
+            return { ...prev, [permActiveRole]: next };
+          });
+          setPermDirty(true);
+        };
+
+        const savePermissions = () => {
+          const token = localStorage.getItem('auth_token');
+          if (!token) return;
+          setPermSaving(true);
+          fetch(`/api/admin/permissions/roles/${permActiveRole}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ permissions: [...currentSet] }),
+          })
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(() => {
+              setPermDirty(false);
+              setPermToast('Сохранено');
+              setTimeout(() => setPermToast(null), 2500);
+            })
+            .catch(() => {
+              setPermToast('Ошибка сохранения');
+              setTimeout(() => setPermToast(null), 3000);
+            })
+            .finally(() => setPermSaving(false));
+        };
+
+        return (
+          <div className="space-y-4 pb-24 animate-in fade-in duration-500">
+
+            {/* Toast */}
+            {permToast && (
+              <div className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-2xl shadow-2xl font-black text-sm text-white transition-all duration-300 ${permToast.startsWith('Ошибка') ? 'bg-red-500' : 'bg-green-500'}`}>
+                {permToast}
+              </div>
+            )}
+
+            {/* Шапка */}
+            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100 flex-shrink-0">
+                  <ShieldCheck size={18} className="text-indigo-500"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-gray-900 text-base leading-none">Права доступа</p>
+                  <p className="text-xs text-gray-400 font-medium mt-0.5">Роли: зам владельца и администратор</p>
+                </div>
+                <button
+                  onClick={savePermissions}
+                  disabled={!permDirty || permSaving}
+                  className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${
+                    permDirty && !permSaving
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-100 hover:bg-blue-700'
+                      : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                  }`}
+                >
+                  {permSaving ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>}
+                  Сохранить
+                </button>
+              </div>
+            </div>
+
+            {/* Переключатель ролей */}
+            {permLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={28} className="text-blue-400 animate-spin"/>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  {editableRoles.map(role => {
+                    const roleSet = permLocal[role.key] || new Set();
+                    return (
+                      <button
+                        key={role.key}
+                        onClick={() => setPermActiveRole(role.key)}
+                        className={`flex-1 py-3 px-4 rounded-2xl transition-all duration-200 text-left ${
+                          permActiveRole === role.key
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'bg-white text-gray-500 border border-gray-100 hover:border-blue-200'
+                        }`}
+                      >
+                        <p className={`font-black text-sm ${permActiveRole === role.key ? 'text-white' : 'text-gray-900'}`}>{role.label}</p>
+                        <p className={`text-[10px] font-bold mt-0.5 uppercase tracking-wide ${permActiveRole === role.key ? 'text-blue-200' : 'text-gray-400'}`}>
+                          {roleSet.size} из {totalPerms} разрешений
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Два столбика */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+                  {/* Левый: ресурсы */}
+                  <div className="space-y-2">
+                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ресурсы</p>
+                    {(permCatalog?.resources || []).map(res => {
+                      const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
+                      const resPerms = (permCatalog?.actions || []).map(a => `${res.key}.${a.key}`);
+                      const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
+                      const allEnabled  = enabledCount === resPerms.length;
+                      const isSelected  = permSelectedRes === res.key;
+                      return (
+                        <div
+                          key={res.key}
+                          onClick={() => setPermSelectedRes(res.key)}
+                          className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all duration-200 ${
+                            isSelected
+                              ? 'border-blue-300 shadow-md shadow-blue-50 ring-2 ring-blue-100'
+                              : 'border-gray-100 hover:border-gray-200'
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0 ${isSelected ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+                              <ResIcon size={16} className={isSelected ? 'text-blue-500' : 'text-gray-400'}/>
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
+                              <p className="text-[10px] text-gray-400 font-medium mt-0.5">{enabledCount} / {resPerms.length} действий</p>
+                            </div>
+                            <button
+                              onClick={e => { e.stopPropagation(); toggleAllForResource(res.key, !allEnabled); }}
+                              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${
+                                allEnabled
+                                  ? 'bg-red-50 text-red-500 hover:bg-red-100'
+                                  : 'bg-green-50 text-green-600 hover:bg-green-100'
+                              }`}
+                            >
+                              {allEnabled ? 'Выкл все' : 'Вкл все'}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  {/* Правый: действия выбранного ресурса */}
+                  <div>
+                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+                      {selectedResData ? `Действия: ${selectedResData.label}` : 'Действия'}
+                    </p>
+                    {!selectedResData ? (
+                      <div className="bg-white rounded-2xl border border-gray-100 flex flex-col items-center justify-center py-16 text-center">
+                        <ShieldCheck size={28} className="text-gray-200 mb-3"/>
+                        <p className="text-sm font-black text-gray-300">Выберите ресурс слева</p>
+                      </div>
+                    ) : (
+                      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+                        {(permCatalog?.actions || []).map((action, idx) => {
+                          const perm = `${selectedResData.key}.${action.key}`;
+                          const enabled = currentSet.has(perm);
+                          const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
+                          return (
+                            <label
+                              key={action.key}
+                              className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-all duration-150 ${
+                                idx < (permCatalog.actions.length - 1) ? 'border-b border-gray-50' : ''
+                              } ${enabled ? 'bg-blue-50/30 hover:bg-blue-50/50' : 'hover:bg-gray-50'}`}
+                            >
+                              <input
+                                type="checkbox"
+                                checked={enabled}
+                                onChange={() => togglePerm(perm)}
+                                className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer"
+                              />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-0.5">
+                                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide ${badgeCls}`}>
+                                    {action.label}
+                                  </span>
+                                </div>
+                                <p className="text-xs text-gray-400 font-medium">
+                                  {ACTION_DESCRIPTIONS[action.key] || action.label}
+                                </p>
+                              </div>
+                              {enabled && <CheckCircle2 size={14} className="text-blue-500 flex-shrink-0"/>}
+                            </label>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+
+                </div>
+              </>
+            )}
+          </div>
+        );
+      }
+
       default: return null;
     }
   };
@@ -4937,7 +5220,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner)).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
