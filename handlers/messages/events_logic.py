@@ -57,24 +57,78 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
         logging.info(f"🔇 User {user_id} got TEMPORARY BAN until {new_member.until_date} — treating as mute, ignoring")
         return
         
-    # === ПОЛЬЗОВАТЕЛЬ ИСКЛЮЧЁН АДМИНОМ ===
+    # === ПОЛЬЗОВАТЕЛЬ ЗАБАНЕН АДМИНОМ ЧЕРЕЗ TG-КЛИЕНТ (вечный бан) ===
+    # kicked без until_date = вечный бан → синхронизируем в наш ЧС + журнал.
+    # (Временный бан с until_date уже отфильтрован выше как мут.)
     if not is_now_in_chat and was_in_chat and new_status == 'kicked':
         kicker = update.chat_member.from_user
         if kicker and kicker.id != user_id:
-            logging.info(f"🆘 Triggering KICK log for user {user_id} by {kicker.id}")
+            logging.info(f"🚫 Triggering BAN→ЧС sync for user {user_id} by {kicker.id}")
+            # 1. Пишем в основной БД is_blacklisted=1
             try:
-                await log_kick(
+                db.cursor.execute(
+                    'UPDATE users SET is_blacklisted = 1 WHERE user_id = ?',
+                    (user_id,),
+                )
+                db.conn.commit()
+            except Exception as e:
+                logging.error(f"BAN sync: main DB is_blacklisted update error: {e}")
+            # 2. Пишем в reg БД (db_friend.blacklist)
+            try:
+                from database.db_friend import add_to_blacklist
+                await add_to_blacklist(
+                    user_id,
+                    reason='Бан через клиент Telegram',
+                    admin_id=kicker.id,
+                )
+            except Exception as e:
+                logging.error(f"BAN sync: db_friend add_to_blacklist error: {e}")
+            # 3. Журнал — log_blacklist (вечный бан = добавление в ЧС)
+            try:
+                from handlers.journal_handlers import log_blacklist
+                await log_blacklist(
                     context.bot, db,
                     target_id=user_id,
                     admin_id=kicker.id,
-                    chat_id=update.chat_member.chat.id,
-                    chat_title=update.chat_member.chat.title,
-                    kicked_at=update.chat_member.date,
-                    target_user=update.chat_member.new_chat_member.user,
+                    added=True,
+                    reason='Бан через клиент Telegram',
                     admin_user=kicker,
+                    chat=update.chat_member.chat,
                 )
             except Exception as e:
-                logging.error(f"Journal log_kick error: {e}")
+                logging.error(f"Journal log_blacklist (TG ban) error: {e}")
+
+    # === РАЗБАН АДМИНОМ ЧЕРЕЗ TG-КЛИЕНТ (kicked → left/member) ===
+    # Snimaem is_blacklisted и пишем в журнал «Разблокировка».
+    if old_status == 'kicked' and new_status in ('left', 'member', 'restricted'):
+        kicker = update.chat_member.from_user
+        if kicker and kicker.id != user_id:
+            logging.info(f"✅ Triggering UNBAN→ЧС sync for user {user_id} by {kicker.id}")
+            try:
+                db.cursor.execute(
+                    'UPDATE users SET is_blacklisted = 0 WHERE user_id = ?',
+                    (user_id,),
+                )
+                db.conn.commit()
+            except Exception as e:
+                logging.error(f"UNBAN sync: main DB update error: {e}")
+            try:
+                from database.db_friend import remove_from_blacklist
+                await remove_from_blacklist(user_id)
+            except Exception as e:
+                logging.error(f"UNBAN sync: db_friend remove_from_blacklist error: {e}")
+            try:
+                from handlers.journal_handlers import log_blacklist
+                await log_blacklist(
+                    context.bot, db,
+                    target_id=user_id,
+                    admin_id=kicker.id,
+                    added=False,
+                    admin_user=kicker,
+                    chat=update.chat_member.chat,
+                )
+            except Exception as e:
+                logging.error(f"Journal log_blacklist (TG unban) error: {e}")
 
     # === ПОЛЬЗОВАТЕЛЬ УШЁЛ ===
     if not is_now_in_chat and was_in_chat:

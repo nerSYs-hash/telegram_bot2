@@ -975,6 +975,12 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     back_btn = [[InlineKeyboardButton("🔙 Назад", callback_data="panel_main")]]
 
+    # При навигации по меню сбрасываем висящий FSM-флаг ввода,
+    # чтобы случайные сообщения после возврата не интерпретировались как ввод.
+    if data in ("panel_main", "panel_admins", "panel_blacklist"):
+        context.user_data.pop('panel_awaiting', None)
+        context.user_data.pop('bl_add_id', None)
+
     # ─── ГЛАВНАЯ ───
     if data == "panel_main":
         await send_admin_panel(context.bot, query.message.chat.id, is_owner=True)
@@ -1119,16 +1125,40 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return False
 
     text = update.message.text.strip()
-    # НЕ сбрасываем panel_awaiting здесь — сбрасываем только при успехе,
-    # чтобы повторный ввод после ошибки валидации продолжал работать
+
+    # При невалидном вводе ID — сбрасываем panel_awaiting (иначе FSM висит и
+    # каждое следующее сообщение в чате ловится как «попытка ввести ID»).
+    # Витя жаловался: «Ааа», «Ладала», «Аоаовл» — все били в этот хендлер.
+    _RETRY_CALLBACKS = {
+        'admin_add':    'panel_admin_add',
+        'admin_remove': 'panel_admin_remove',
+        'deputy_add':   'panel_deputy_add',
+        'deputy_remove':'panel_deputy_remove',
+        'bl_add':       'panel_bl_add',
+        'bl_remove':    'panel_bl_remove',
+    }
+
+    async def _reject_invalid_id(awaiting_key: str):
+        """Сбрасывает panel_awaiting и предлагает повторить через кнопку."""
+        context.user_data.pop('panel_awaiting', None)
+        context.user_data.pop('bl_add_id', None)
+        cb = _RETRY_CALLBACKS.get(awaiting_key, "panel_main")
+        await update.message.reply_text(
+            "❌ Нужен числовой Telegram ID.\n"
+            "Жми «🔄 Повторить» и пришли только цифры.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔄 Повторить",  callback_data=cb)],
+                [InlineKeyboardButton("🔙 В меню",      callback_data="panel_main")],
+            ]),
+        )
+        return True
 
     # ─── ДОБАВИТЬ АДМИНА ───
     if awaiting == 'admin_add':
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('admin_add')
         context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно изменить роль владельца.")
@@ -1142,8 +1172,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('admin_remove')
         context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно удалить владельца из списка администраторов.")
@@ -1158,8 +1187,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('deputy_add')
         context.user_data.pop('panel_awaiting', None)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Владельцу нельзя назначить роль зама.")
@@ -1199,8 +1227,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('deputy_remove')
         context.user_data.pop('panel_awaiting', None)
         if not await is_deputy(target_id):
             await update.message.reply_text("ℹ️ Этот пользователь не является замом.")
@@ -1227,8 +1254,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('bl_add')
         context.user_data['bl_add_id'] = target_id
         context.user_data['panel_awaiting'] = 'bl_add_reason'
         await update.message.reply_text(
@@ -1238,6 +1264,8 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         return True
 
     elif awaiting == 'bl_add_reason':
+        # Сбрасываем FSM сразу — иначе после причины следующий ввод снова уйдёт сюда
+        context.user_data.pop('panel_awaiting', None)
         target_id = context.user_data.pop('bl_add_id', None)
         if not target_id:
             return True
@@ -1272,8 +1300,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         try:
             target_id = int(text)
         except ValueError:
-            await update.message.reply_text("❌ Введите числовой Telegram ID.")
-            return True
+            return await _reject_invalid_id('bl_remove')
         context.user_data.pop('panel_awaiting', None)
         await remove_from_blacklist(target_id)
         # Разбаниваем в Telegram
