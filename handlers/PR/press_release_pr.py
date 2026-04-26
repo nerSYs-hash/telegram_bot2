@@ -11,14 +11,17 @@ db, admin_id, target_chat_id передаются явно.
 """
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import InputMediaPhoto, InputMediaVideo
 from utils.helpers import get_moscow_time
 
 
 # ═══════════════════════════════════════════════════════════════
-# ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
+# КОНСТАНТЫ И ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ
 # ═══════════════════════════════════════════════════════════════
 
 MSG_LIMIT = 4096
+CAPTION_LIMIT = 1024
+MAX_MEDIA = 5
 
 
 async def _is_pr_privileged(user_id: int, admin_id: int) -> bool:
@@ -34,17 +37,101 @@ async def _send_long_text(bot, chat_id, text, parse_mode='HTML', thread_id=None)
     base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode}
     if thread_id:
         base_kw['message_thread_id'] = thread_id
-    # Разбиваем по \n чтобы не резать посреди строки
     while text:
         if len(text) <= MSG_LIMIT:
             await bot.send_message(**base_kw, text=text)
             break
-        # Ищем последний перенос строки в пределах лимита
         cut = text.rfind('\n', 0, MSG_LIMIT)
         if cut == -1:
             cut = MSG_LIMIT
         await bot.send_message(**base_kw, text=text[:cut])
         text = text[cut:].lstrip('\n')
+
+
+def _parse_media(photo_file_id: str) -> list:
+    """
+    Разбирает поле photo_file_id в список (kind, file_id).
+    Форматы: 'photo:fid', 'video:fid', 'photo:f1|video:f2|...', 'bare_fid' (legacy).
+    """
+    if not photo_file_id:
+        return []
+    items = []
+    for part in photo_file_id.split('|'):
+        part = part.strip()
+        if not part:
+            continue
+        if part.startswith('video:'):
+            items.append(('video', part[6:]))
+        elif part.startswith('photo:'):
+            items.append(('photo', part[6:]))
+        else:
+            items.append(('photo', part))
+    return items
+
+
+def _pack_media(media_list: list) -> str:
+    """Собирает список (kind, file_id) обратно в строку для БД."""
+    return '|'.join(f"{k}:{f}" for k, f in media_list)
+
+
+def _media_icon_summary(media_list: list) -> str:
+    """Возвращает строку вроде '📷×2 🎥×1' или '📷' для 1 фото."""
+    photos = sum(1 for k, _ in media_list if k == 'photo')
+    videos = sum(1 for k, _ in media_list if k == 'video')
+    parts = []
+    if photos:
+        parts.append(f"📷×{photos}" if photos > 1 else "📷")
+    if videos:
+        parts.append(f"🎥×{videos}" if videos > 1 else "🎥")
+    return " ".join(parts)
+
+
+async def _send_pr_media(bot, chat_id, thread_id, media_list: list, text: str):
+    """
+    Отправляет пресс-релиз с учётом количества медиафайлов:
+      0 медиа  → send_message (разбивает по MSG_LIMIT)
+      1 медиа  → send_photo/video (caption ≤1024 или медиа+текст отдельно)
+      2–5 медиа → send_media_group (caption на первом ≤1024, иначе медиа+текст отдельно)
+    """
+    kw = {'chat_id': chat_id}
+    if thread_id:
+        kw['message_thread_id'] = thread_id
+
+    if not media_list:
+        await _send_long_text(bot, chat_id, text, thread_id=thread_id)
+        return
+
+    if len(media_list) == 1:
+        kind, file_id = media_list[0]
+        if len(text) <= CAPTION_LIMIT:
+            send_kw = {**kw, 'parse_mode': 'HTML', 'caption': text}
+            if kind == 'video':
+                await bot.send_video(video=file_id, **send_kw)
+            else:
+                await bot.send_photo(photo=file_id, **send_kw)
+        else:
+            if kind == 'video':
+                await bot.send_video(video=file_id, **kw)
+            else:
+                await bot.send_photo(photo=file_id, **kw)
+            await _send_long_text(bot, chat_id, text, thread_id=thread_id)
+        return
+
+    # 2–5 медиа: send_media_group
+    group = []
+    for i, (kind, file_id) in enumerate(media_list):
+        caption = text if i == 0 and len(text) <= CAPTION_LIMIT else None
+        parse_mode = 'HTML' if caption else None
+        if kind == 'video':
+            group.append(InputMediaVideo(media=file_id, caption=caption, parse_mode=parse_mode))
+        else:
+            group.append(InputMediaPhoto(media=file_id, caption=caption, parse_mode=parse_mode))
+
+    await bot.send_media_group(media=group, **kw)
+
+    if len(text) > CAPTION_LIMIT:
+        await _send_long_text(bot, chat_id, text, thread_id=thread_id)
+
 
 def _resolve_thread_name(db, target_chat_id, thread_id):
     """Получить человекочитаемое имя ветки из БД по thread_id."""
@@ -67,6 +154,25 @@ def _resolve_thread_name(db, target_chat_id, thread_id):
     return f"🧵 Ветка #{thread_id}"
 
 
+def _build_pr_action_keyboard(media_list: list, include_preview=True) -> list:
+    """Строит клавиатуру действий пресс-релиза (публикация/медиа/отмена)."""
+    n = len(media_list)
+    keyboard = []
+    if include_preview:
+        keyboard.append([InlineKeyboardButton("👁 Полный предпросмотр", callback_data="pr_full_preview")])
+    keyboard.append([InlineKeyboardButton("🚀 Опубликовать сейчас", callback_data="pr_publish_now")])
+    keyboard.append([InlineKeyboardButton("⏰ Запланировать", callback_data="pr_schedule")])
+
+    if n < MAX_MEDIA:
+        label = "📷 Добавить медиа" if n == 0 else f"📷 Добавить медиа ({n}/{MAX_MEDIA})"
+        keyboard.append([InlineKeyboardButton(label, callback_data="pr_add_photo")])
+    if n > 0:
+        keyboard.append([InlineKeyboardButton("🗑 Очистить медиа", callback_data="pr_remove_photo")])
+
+    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")])
+    return keyboard
+
+
 # ═══════════════════════════════════════════════════════════════
 # СОЗДАНИЕ ПРЕСС-РЕЛИЗА
 # ═══════════════════════════════════════════════════════════════
@@ -83,9 +189,9 @@ async def start_press_release(query, user, context, db, admin_id):
     await query.edit_message_text(
         "📰 СОЗДАНИЕ ПРЕСС-РЕЛИЗА\n\n"
         "Отправьте текст пресс-релиза.\n"
-        "Можно сразу с фото, видео, картинкой — или добавить его позже кнопкой.\n\n"
+        "Можно сразу с фото или видео — или добавить до 5 медиафайлов позже.\n\n"
         "✍️ После отправки текста вы сможете:\n"
-        "• Добавить/заменить фото\n"
+        "• Добавить до 5 фото/видео\n"
         "• Выбрать куда публиковать (чат / ветка)\n"
         "• Опубликовать сразу или запланировать\n\n"
         "Для отмены: /cancel",
@@ -132,29 +238,16 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
         await query.answer("Неизвестный выбор", show_alert=True)
         return
 
-    # Предпросмотр + выбор времени
+    context.user_data['pr_data'] = pr_data
+
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+    n = len(media_list)
+    summary = _media_icon_summary(media_list)
+    media_line = f"{summary}\n" if summary else ""
+
     preview = pr_data.get('text', '')[:150]
     if len(pr_data.get('text', '')) > 150:
         preview += "..."
-
-    photo_line = ""
-    saved_file_id = pr_data.get('photo_file_id')
-    if saved_file_id:
-        if str(saved_file_id).startswith('video:'):
-            photo_line = "🎥 С видео\n"
-        else:
-            photo_line = "📷 С фото\n"
-
-    keyboard = [
-        [InlineKeyboardButton("� Полный предпросмотр", callback_data="pr_full_preview")],
-        [InlineKeyboardButton("�🚀 Опубликовать сейчас", callback_data="pr_publish_now")],
-        [InlineKeyboardButton("⏰ Запланировать", callback_data="pr_schedule")],
-    ]
-    if pr_data.get('photo_file_id'):
-        keyboard.append([InlineKeyboardButton("🗑 Убрать фото", callback_data="pr_remove_photo")])
-    else:
-        keyboard.append([InlineKeyboardButton("📷 Добавить фото", callback_data="pr_add_photo")])
-    keyboard.append([InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")])
 
     preview_lines = preview.split('\n', 1)
     if len(preview_lines) > 1:
@@ -162,11 +255,13 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
     else:
         preview_formatted = f"<b>{preview_lines[0]}</b>"
 
+    keyboard = _build_pr_action_keyboard(media_list)
+
     await query.edit_message_text(
         f"👁 Предпросмотр:\n\n"
         f"{preview_formatted}\n\n"
         f"<i>© Сообщество Pulse 2026</i>\n\n"
-        f"{photo_line}"
+        f"{media_line}"
         f"🎯 Куда: {thread_name}\n\n"
         f"⏰ Когда опубликовать?",
         parse_mode='HTML',
@@ -175,11 +270,11 @@ async def handle_pr_target_selection(query, data, user, context, db, admin_id, t
 
 
 # ═══════════════════════════════════════════════════════════════
-# ДОБАВИТЬ / УБРАТЬ ФОТО (при создании)
+# ДОБАВИТЬ / УБРАТЬ МЕДИА (при создании)
 # ═══════════════════════════════════════════════════════════════
 
 async def handle_pr_add_photo(query, user, context, db, admin_id):
-    """Кнопка '📷 Добавить фото' — во время создания пресс-релиза"""
+    """Кнопка '📷 Добавить медиа' — во время создания пресс-релиза"""
     if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
@@ -189,11 +284,22 @@ async def handle_pr_add_photo(query, user, context, db, admin_id):
         await query.edit_message_text("❌ Данные пресс-релиза потеряны. Начните заново.")
         return
 
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+    n = len(media_list)
+
+    if n >= MAX_MEDIA:
+        await query.answer(f"⚠️ Уже {MAX_MEDIA}/{MAX_MEDIA} медиафайлов. Сначала очистите.", show_alert=True)
+        return
+
     context.user_data['awaiting_pr_photo'] = True
 
+    summary = _media_icon_summary(media_list)
+    current_info = f"\n📎 Уже прикреплено: {summary} ({n}/{MAX_MEDIA})\n" if n > 0 else ""
+
     await query.edit_message_text(
-        "📷 ДОБАВИТЬ ФОТО\n\n"
-        "Отправьте фото для пресс-релиза.\n\n"
+        f"📷 ДОБАВИТЬ МЕДИА\n"
+        f"{current_info}\n"
+        f"Отправьте фото или видео (до {MAX_MEDIA} файлов всего).\n\n"
         "Для отмены: /cancel",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")]
@@ -202,7 +308,7 @@ async def handle_pr_add_photo(query, user, context, db, admin_id):
 
 
 async def handle_pr_remove_photo(query, user, context, db, admin_id):
-    """Кнопка '🗑 Убрать фото' — убрать прикреплённое фото"""
+    """Кнопка '🗑 Очистить медиа' — убрать все прикреплённые медиафайлы"""
     if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
@@ -215,7 +321,7 @@ async def handle_pr_remove_photo(query, user, context, db, admin_id):
     pr_data['photo_file_id'] = None
     context.user_data['pr_data'] = pr_data
 
-    await query.answer("🗑 Фото убрано!", show_alert=False)
+    await query.answer("🗑 Все медиа удалены!", show_alert=False)
 
     from handlers.messages.admin_logic import build_topic_keyboard
     keyboard = await build_topic_keyboard(context, db, query.message.chat_id)
@@ -228,6 +334,60 @@ async def handle_pr_remove_photo(query, user, context, db, admin_id):
     preview_msg += "\n🎯 Выберите куда опубликовать:"
 
     await query.edit_message_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def handle_pr_media_done(query, user, context, db, admin_id, target_chat_id):
+    """Кнопка '✅ Готово' — завершить добавление медиа и вернуться к выбору публикации"""
+    if not await _is_pr_privileged(user.id, admin_id):
+        await query.answer("У вас нет доступа.", show_alert=True)
+        return
+
+    context.user_data.pop('awaiting_pr_photo', None)
+    pr_data = context.user_data.get('pr_data', {})
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+    n = len(media_list)
+    summary = _media_icon_summary(media_list)
+
+    thread_id = pr_data.get('thread_id')
+
+    if thread_id is not None:
+        thread_name = _resolve_thread_name(db, target_chat_id, thread_id)
+        preview = pr_data.get('text', '')[:150]
+        if len(pr_data.get('text', '')) > 150:
+            preview += '...'
+
+        media_line = f"{summary}\n" if summary else ""
+        preview_lines = preview.split('\n', 1)
+        if len(preview_lines) > 1:
+            preview_formatted = f"<b>{preview_lines[0]}</b>\n{preview_lines[1]}"
+        else:
+            preview_formatted = f"<b>{preview_lines[0]}</b>"
+
+        keyboard = _build_pr_action_keyboard(media_list)
+
+        await query.edit_message_text(
+            f"👁 Предпросмотр:\n\n"
+            f"{preview_formatted}\n\n"
+            f"<i>© Сообщество Pulse 2026</i>\n\n"
+            f"{media_line}"
+            f"🎯 Куда: {thread_name}\n\n"
+            f"⏰ Когда опубликовать?",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard)
+        )
+    else:
+        from handlers.messages.admin_logic import build_topic_keyboard
+        keyboard = await build_topic_keyboard(context, db, target_chat_id)
+        text_preview = pr_data.get('text', '')[:200]
+        if len(pr_data.get('text', '')) > 200:
+            text_preview += '...'
+
+        msg = f"📰 ПРЕДПРОСМОТР ПРЕСС-РЕЛИЗА\n\n{text_preview}\n"
+        if summary:
+            msg += f"\n{summary} прикреплено\n"
+        msg += "\n🎯 Выберите куда опубликовать:"
+
+        await query.edit_message_text(msg, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 # ═══════════════════════════════════════════════════════════════
@@ -246,7 +406,7 @@ async def handle_pr_full_preview(query, user, context, db, admin_id):
         return
 
     text = pr_data.get('text', '')
-    photo_file_id = pr_data.get('photo_file_id')
+    media_list = _parse_media(pr_data.get('photo_file_id'))
     chat_id = query.message.chat.id
 
     lines = text.split('\n', 1)
@@ -263,36 +423,7 @@ async def handle_pr_full_preview(query, user, context, db, admin_id):
     )
 
     try:
-        if photo_file_id:
-            is_video = False
-            raw_file_id = photo_file_id
-
-            if str(photo_file_id).startswith('video:'):
-                is_video = True
-                raw_file_id = photo_file_id.split(':', 1)[1]
-            elif str(photo_file_id).startswith('photo:'):
-                raw_file_id = photo_file_id.split(':', 1)[1]
-
-            if len(press_release) > 1024:
-                if is_video:
-                    await context.bot.send_video(chat_id=chat_id, video=raw_file_id)
-                else:
-                    await context.bot.send_photo(chat_id=chat_id, photo=raw_file_id)
-                await _send_long_text(context.bot, chat_id, press_release)
-            else:
-                if is_video:
-                    await context.bot.send_video(
-                        chat_id=chat_id, video=raw_file_id,
-                        caption=press_release, parse_mode='HTML',
-                    )
-                else:
-                    await context.bot.send_photo(
-                        chat_id=chat_id, photo=raw_file_id,
-                        caption=press_release, parse_mode='HTML',
-                    )
-        else:
-            await _send_long_text(context.bot, chat_id, press_release)
-
+        await _send_pr_media(context.bot, chat_id, None, media_list, press_release)
         await query.answer("👆 Полный предпросмотр отправлен выше")
     except Exception as e:
         await query.answer(f"❌ Ошибка предпросмотра: {e}", show_alert=True)
@@ -314,7 +445,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
         return
 
     text = pr_data.get('text', '')
-    photo_file_id = pr_data.get('photo_file_id')
+    media_list = _parse_media(pr_data.get('photo_file_id'))
     thread_id = pr_data.get('thread_id')
 
     lines = text.split('\n', 1)
@@ -329,44 +460,7 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
     )
 
     try:
-        kwargs = {
-            'chat_id': target_chat_id,
-            'parse_mode': 'HTML',
-        }
-        if thread_id:
-            kwargs['message_thread_id'] = thread_id
-
-        if photo_file_id:
-            is_video = False
-            raw_file_id = photo_file_id
-
-            if str(photo_file_id).startswith('video:'):
-                is_video = True
-                raw_file_id = photo_file_id.split(':', 1)[1]
-            elif str(photo_file_id).startswith('photo:'):
-                raw_file_id = photo_file_id.split(':', 1)[1]
-
-            if len(press_release) > 1024:
-                # Caption > 1024: медиа без подписи + текст отдельно
-                if is_video:
-                    kwargs['video'] = raw_file_id
-                    await context.bot.send_video(**kwargs)
-                else:
-                    kwargs['photo'] = raw_file_id
-                    await context.bot.send_photo(**kwargs)
-                await _send_long_text(context.bot, target_chat_id, press_release, thread_id=thread_id)
-            else:
-                if is_video:
-                    kwargs['video'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_video(**kwargs)
-                else:
-                    kwargs['photo'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_photo(**kwargs)
-        else:
-            await _send_long_text(context.bot, target_chat_id, press_release, thread_id=thread_id)
-
+        await _send_pr_media(context.bot, target_chat_id, thread_id, media_list, press_release)
         context.user_data.pop('pr_data', None)
 
         await query.edit_message_text(
@@ -376,26 +470,10 @@ async def handle_pr_publish_now(query, user, context, db, admin_id, target_chat_
             ]])
         )
     except Exception as e:
-        # Если тред не найден — пробуем без треда
         err_lower = str(e).lower()
         if 'thread not found' in err_lower or 'topic_closed' in err_lower or 'topic closed' in err_lower or 'forum topic' in err_lower:
             try:
-                kwargs.pop('message_thread_id', None)
-                if photo_file_id:
-                    if len(press_release) > 1024:
-                        if 'video' in kwargs:
-                            await context.bot.send_video(**kwargs)
-                        elif 'photo' in kwargs:
-                            await context.bot.send_photo(**kwargs)
-                        await _send_long_text(context.bot, target_chat_id, press_release)
-                    else:
-                        kwargs['caption'] = press_release
-                        if 'video' in kwargs:
-                            await context.bot.send_video(**kwargs)
-                        else:
-                            await context.bot.send_photo(**kwargs)
-                else:
-                    await _send_long_text(context.bot, target_chat_id, press_release)
+                await _send_pr_media(context.bot, target_chat_id, None, media_list, press_release)
                 context.user_data.pop('pr_data', None)
                 await query.edit_message_text(
                     "✅ Пресс-релиз опубликован! (тред не найден — отправлено в основной чат)",
@@ -489,12 +567,9 @@ async def show_scheduled_posts(query, user, context, db, admin_id, target_chat_i
         chat_id_for_topic = (post['target_chat_id'] or target_chat_id)
         thread_name = _resolve_thread_name(db, chat_id_for_topic, post['thread_id'])
 
-        photo_icon = ""
-        if post['photo_file_id']:
-            if str(post['photo_file_id']).startswith('video:'):
-                photo_icon = " 🎥"
-            else:
-                photo_icon = " 📷"
+        media_list = _parse_media(post['photo_file_id'])
+        summary = _media_icon_summary(media_list)
+        photo_icon = f" {summary}" if summary else ""
 
         message += f"🆔 #{post['id']} | 📅 {publish_at}\n"
         message += f"   🎯 {thread_name}{photo_icon}\n"
@@ -554,12 +629,13 @@ async def handle_pr_edit(query, data, user, context, db, admin_id, target_chat_i
     chat_id_for_topic = (post['target_chat_id'] or target_chat_id)
     thread_name = _resolve_thread_name(db, chat_id_for_topic, post['thread_id'])
 
-    photo_status = "📄 Без медиа"
-    if post['photo_file_id']:
-        if str(post['photo_file_id']).startswith('video:'):
-            photo_status = "🎥 Прикреплено видео"
-        else:
-            photo_status = "📷 Прикреплено фото"
+    media_list = _parse_media(post['photo_file_id'])
+    n = len(media_list)
+    if n > 0:
+        summary = _media_icon_summary(media_list)
+        photo_status = f"📎 Прикреплено: {summary} ({n} файл(ов))"
+    else:
+        photo_status = "📄 Без медиа"
 
     message = (
         f"✏️ РЕДАКТИРОВАНИЕ ПОСТА #{post_id}\n\n"
@@ -577,13 +653,13 @@ async def handle_pr_edit(query, data, user, context, db, admin_id, target_chat_i
         [InlineKeyboardButton("🚀 Опубликовать сейчас", callback_data=f"pr_edit_publishnow_{post_id}")]
     ]
 
-    if post['photo_file_id']:
+    if n > 0:
         keyboard.append([
-            InlineKeyboardButton("🔄 Заменить фото", callback_data=f"pr_edit_photo_{post_id}"),
-            InlineKeyboardButton("🗑 Убрать фото", callback_data=f"pr_edit_remove_photo_{post_id}"),
+            InlineKeyboardButton("🔄 Заменить медиа", callback_data=f"pr_edit_photo_{post_id}"),
+            InlineKeyboardButton("🗑 Очистить медиа", callback_data=f"pr_edit_remove_photo_{post_id}"),
         ])
     else:
-        keyboard.append([InlineKeyboardButton("📷 Добавить фото", callback_data=f"pr_edit_photo_{post_id}")])
+        keyboard.append([InlineKeyboardButton("📷 Добавить медиа", callback_data=f"pr_edit_photo_{post_id}")])
 
     keyboard.append([InlineKeyboardButton("🔙 К списку", callback_data="pr_scheduled_list")])
 
@@ -616,7 +692,7 @@ async def handle_pr_edit_text(query, data, user, context, db, admin_id):
 
 
 async def handle_pr_edit_photo(query, data, user, context, db, admin_id):
-    """Start adding/replacing photo of a scheduled post"""
+    """Start adding/replacing media of a scheduled post (accumulative mode)"""
     if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
@@ -629,10 +705,13 @@ async def handle_pr_edit_photo(query, data, user, context, db, admin_id):
         return
 
     context.user_data['awaiting_edit_photo'] = post_id
+    context.user_data['edit_photo_buffer'] = []
 
     await query.edit_message_text(
-        f"📷 ДОБАВИТЬ/ЗАМЕНИТЬ ФОТО (пост #{post_id})\n\n"
-        "Отправьте фото.\n\n"
+        f"📷 ДОБАВИТЬ/ЗАМЕНИТЬ МЕДИА (пост #{post_id})\n\n"
+        f"Отправьте до {MAX_MEDIA} фото/видео.\n"
+        "Они ЗАМЕНЯТ текущее медиа поста.\n"
+        "Нажмите ✅ Готово когда закончите.\n\n"
         "Для отмены: /cancel",
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("❌ Отмена", callback_data=f"pr_edit_{post_id}")]
@@ -641,7 +720,7 @@ async def handle_pr_edit_photo(query, data, user, context, db, admin_id):
 
 
 async def handle_pr_edit_remove_photo(query, data, user, context, db, admin_id, target_chat_id=None):
-    """Remove photo from a scheduled post"""
+    """Remove all media from a scheduled post"""
     if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
         return
@@ -650,9 +729,35 @@ async def handle_pr_edit_remove_photo(query, data, user, context, db, admin_id, 
     updated = db.update_scheduled_post(post_id, photo_file_id=None)
 
     if updated:
-        await query.answer("🗑 Фото убрано!", show_alert=True)
+        await query.answer("🗑 Медиа удалено!", show_alert=True)
     else:
         await query.answer("❌ Не удалось обновить пост.", show_alert=True)
+
+    await handle_pr_edit(query, f"pr_edit_{post_id}", user, context, db, admin_id, target_chat_id)
+
+
+async def handle_pr_edit_media_done(query, data, user, context, db, admin_id, target_chat_id=None):
+    """Кнопка '✅ Готово' при редактировании медиа запланированного поста"""
+    if not await _is_pr_privileged(user.id, admin_id):
+        await query.answer("У вас нет доступа.", show_alert=True)
+        return
+
+    post_id = int(data.replace("pr_edit_media_done_", ""))
+
+    buffer = context.user_data.pop('edit_photo_buffer', [])
+    context.user_data.pop('awaiting_edit_photo', None)
+
+    if buffer:
+        photo_file_id = _pack_media(buffer)
+        updated = db.update_scheduled_post(post_id, photo_file_id=photo_file_id)
+        n = len(buffer)
+        summary = _media_icon_summary(buffer)
+        if updated:
+            await query.answer(f"✅ Медиа обновлено: {summary} ({n} файл(ов))", show_alert=True)
+        else:
+            await query.answer("❌ Не удалось обновить.", show_alert=True)
+    else:
+        await query.answer("⚠️ Медиа не добавлено — пост не изменён.", show_alert=True)
 
     await handle_pr_edit(query, f"pr_edit_{post_id}", user, context, db, admin_id, target_chat_id)
 
@@ -749,11 +854,10 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         return
 
     text = post['text'] or ''
-    photo_file_id = post['photo_file_id']
+    media_list = _parse_media(post['photo_file_id'])
     chat_id_for_topic = post['target_chat_id'] or target_chat_id
     thread_id = post['thread_id']
 
-    # Форматирование: жирная первая строка
     lines = text.split('\n', 1)
     if len(lines) > 1:
         formatted_text = f"<b>{lines[0]}</b>\n{lines[1]}"
@@ -766,43 +870,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
     )
 
     try:
-        kwargs = {
-            'chat_id': chat_id_for_topic,
-            'parse_mode': 'HTML',
-        }
-        if thread_id:
-            kwargs['message_thread_id'] = thread_id
-
-        if photo_file_id:
-            is_video = False
-            raw_file_id = photo_file_id
-
-            if str(photo_file_id).startswith('video:'):
-                is_video = True
-                raw_file_id = photo_file_id.split(':', 1)[1]
-            elif str(photo_file_id).startswith('photo:'):
-                raw_file_id = photo_file_id.split(':', 1)[1]
-
-            if len(press_release) > 1024:
-                if is_video:
-                    kwargs['video'] = raw_file_id
-                    await context.bot.send_video(**kwargs)
-                else:
-                    kwargs['photo'] = raw_file_id
-                    await context.bot.send_photo(**kwargs)
-                await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
-            else:
-                if is_video:
-                    kwargs['video'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_video(**kwargs)
-                else:
-                    kwargs['photo'] = raw_file_id
-                    kwargs['caption'] = press_release
-                    await context.bot.send_photo(**kwargs)
-        else:
-            await _send_long_text(context.bot, chat_id_for_topic, press_release, thread_id=thread_id)
-
+        await _send_pr_media(context.bot, chat_id_for_topic, thread_id, media_list, press_release)
         db.delete_scheduled_post(post_id)
         await query.answer("✅ Пресс-релиз успешно опубликован!", show_alert=True)
         await show_scheduled_posts(query, user, context, db, admin_id, target_chat_id)
@@ -812,22 +880,7 @@ async def handle_pr_edit_publish_now(query, data, user, context, db, admin_id, t
         err_lower = str(e).lower()
         if 'thread not found' in err_lower or 'topic_closed' in err_lower or 'topic closed' in err_lower or 'forum topic' in err_lower:
             try:
-                kwargs.pop('message_thread_id', None)
-                if photo_file_id:
-                    if len(press_release) > 1024:
-                        if 'video' in kwargs:
-                            await context.bot.send_video(**kwargs)
-                        elif 'photo' in kwargs:
-                            await context.bot.send_photo(**kwargs)
-                        await _send_long_text(context.bot, chat_id_for_topic, press_release)
-                    else:
-                        kwargs['caption'] = press_release
-                        if 'video' in kwargs:
-                            await context.bot.send_video(**kwargs)
-                        else:
-                            await context.bot.send_photo(**kwargs)
-                else:
-                    await _send_long_text(context.bot, chat_id_for_topic, press_release)
+                await _send_pr_media(context.bot, chat_id_for_topic, None, media_list, press_release)
                 db.delete_scheduled_post(post_id)
                 await query.answer("✅ Опубликовано в основной чат (тред закрыт/не найден)", show_alert=True)
                 await show_scheduled_posts(query, user, context, db, admin_id, target_chat_id)
@@ -969,6 +1022,7 @@ async def handle_pr_cancel(query, user, context, db, admin_id):
     context.user_data.pop('awaiting_edit_time', None)
     context.user_data.pop('awaiting_edit_target_manual', None)
     context.user_data.pop('editing_post_target', None)
+    context.user_data.pop('edit_photo_buffer', None)
     context.user_data.pop('pr_data', None)
 
     await query.edit_message_text(

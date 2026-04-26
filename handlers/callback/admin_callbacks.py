@@ -19,9 +19,10 @@ from handlers.pr_handlers import (
     handle_pr_publish_now, handle_pr_schedule, show_scheduled_posts,
     handle_pr_delete, handle_pr_cancel,
     handle_pr_edit, handle_pr_edit_text, handle_pr_edit_photo,
-    handle_pr_edit_remove_photo, handle_pr_edit_time, handle_pr_edit_target,
+    handle_pr_edit_remove_photo, handle_pr_edit_media_done,
+    handle_pr_edit_time, handle_pr_edit_target,
     handle_pr_retarget, handle_pr_add_photo, handle_pr_remove_photo,
-    handle_pr_full_preview,
+    handle_pr_media_done, handle_pr_full_preview,
     show_features_management, toggle_feature, handle_pr_edit_publish_now,
     handle_pr_refresh_topics,
 )
@@ -123,6 +124,10 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
         await handle_pr_add_photo(query, user, context, db, eff_admin)
     elif data == "pr_remove_photo":
         await handle_pr_remove_photo(query, user, context, db, eff_admin)
+    elif data == "pr_media_done":
+        await handle_pr_media_done(query, user, context, db, eff_admin, target_chat_id)
+    elif data.startswith("pr_edit_media_done_"):
+        await handle_pr_edit_media_done(query, data, user, context, db, eff_admin, target_chat_id)
     elif data.startswith("pr_edit_text_"):
         await handle_pr_edit_text(query, data, user, context, db, eff_admin)
     elif data.startswith("pr_edit_photo_"):

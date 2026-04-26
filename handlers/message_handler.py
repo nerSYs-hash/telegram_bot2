@@ -998,13 +998,14 @@ class MessageHandler:
             context.user_data.pop('awaiting_bank_transfer', None)
             context.user_data.pop('bt_custom_user_id', None)
             context.user_data.pop('pr_data', None)
-            # Новые состояния редактирования пресс-релизов
+            # Состояния редактирования пресс-релизов
             context.user_data.pop('awaiting_pr_photo', None)
             context.user_data.pop('awaiting_edit_text', None)
             context.user_data.pop('awaiting_edit_photo', None)
             context.user_data.pop('awaiting_edit_time', None)
             context.user_data.pop('awaiting_edit_target_manual', None)
             context.user_data.pop('editing_post_target', None)
+            context.user_data.pop('edit_photo_buffer', None)
             # BBS FSM cleanup
             context.user_data.pop('bbs_state', None)
             context.user_data.pop('bbs_data', None)

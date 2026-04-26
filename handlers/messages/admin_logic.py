@@ -225,47 +225,10 @@ async def publish_press_release(message, context, target_chat_id):
 
 async def publish_press_release_to_target(bot, text, photo_file_id, chat_id, thread_id=None):
     """Publish formatted press release to specific chat/thread (used by scheduler)"""
-    CAPTION_LIMIT = 1024
+    from handlers.PR.press_release_pr import _parse_media, _send_pr_media
     try:
-        kwargs = {'chat_id': chat_id, 'parse_mode': 'HTML'}
-        if thread_id:
-            kwargs['message_thread_id'] = thread_id
-
-        if photo_file_id:
-            is_video = False
-            raw_file_id = photo_file_id
-
-            if str(photo_file_id).startswith('video:'):
-                is_video = True
-                raw_file_id = photo_file_id.split(':', 1)[1]
-            elif str(photo_file_id).startswith('photo:'):
-                raw_file_id = photo_file_id.split(':', 1)[1]
-
-            if len(text) > CAPTION_LIMIT:
-                # Автоматический планировщик — предупреждаем в лог, разбиваем на 2 сообщения
-                logging.warning(
-                    f"Scheduled PR: caption too long ({len(text)} chars), splitting into 2 messages"
-                )
-                media_kwargs = {'chat_id': chat_id, 'message_thread_id': thread_id}
-                if is_video:
-                    await bot.send_video(video=raw_file_id, **media_kwargs)
-                else:
-                    await bot.send_photo(photo=raw_file_id, **media_kwargs)
-                await bot.send_message(chat_id=chat_id, text=text,
-                                       parse_mode='HTML', message_thread_id=thread_id)
-            else:
-                if is_video:
-                    kwargs['video'] = raw_file_id
-                    kwargs['caption'] = text
-                    await bot.send_video(**kwargs)
-                else:
-                    kwargs['photo'] = raw_file_id
-                    kwargs['caption'] = text
-                    await bot.send_photo(**kwargs)
-        else:
-            kwargs['text'] = text
-            await bot.send_message(**kwargs)
-
+        media_list = _parse_media(photo_file_id)
+        await _send_pr_media(bot, chat_id, thread_id, media_list, text)
         return True
     except Exception as e:
         logging.error(f"Error publishing press release to target: {e}")
@@ -851,41 +814,60 @@ async def _handle_awaiting_donate_amount(message, user, context, db, donate_type
 # ═══════════════════════════════════════════════════════════════
 
 async def _handle_awaiting_pr_photo(message, context, db, target_chat_id):
-    """Обработка отправки фото для пресс-релиза (кнопка «📷 Добавить фото»)."""
+    """Обработка отправки медиа для пресс-релиза (накопительный режим, до 5 файлов)."""
     if message.text == '/cancel':
-        context.user_data['awaiting_pr_photo'] = False
-        await message.reply_text("❌ Добавление фото отменено.")
+        context.user_data.pop('awaiting_pr_photo', None)
+        await message.reply_text("❌ Добавление медиа отменено.")
         return
 
     if not message.photo and not message.video:
         await message.reply_text(
-            "❌ Это не медиафайл. Отправьте изображение или видео.\n\n"
+            "❌ Это не медиафайл. Отправьте фото или видео.\n\n"
             "Для отмены: /cancel"
         )
         return
 
-    if message.video:
-        photo_file_id = f"video:{message.video.file_id}"
-    else:
-        photo_file_id = f"photo:{message.photo[-1].file_id}"
-    context.user_data['awaiting_pr_photo'] = False
+    from handlers.PR.press_release_pr import MAX_MEDIA, _parse_media, _pack_media, _media_icon_summary
 
     pr_data = context.user_data.get('pr_data', {})
-    pr_data['photo_file_id'] = photo_file_id
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+
+    if len(media_list) >= MAX_MEDIA:
+        await message.reply_text(
+            f"⚠️ Уже {MAX_MEDIA}/{MAX_MEDIA} медиафайлов. Нажмите ✅ Готово или 🗑 Очистить.",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("✅ Готово", callback_data="pr_media_done")],
+                [InlineKeyboardButton("🗑 Очистить медиа", callback_data="pr_remove_photo")],
+            ])
+        )
+        return
+
+    if message.video:
+        kind, file_id = 'video', message.video.file_id
+    else:
+        kind, file_id = 'photo', message.photo[-1].file_id
+
+    media_list.append((kind, file_id))
+    pr_data['photo_file_id'] = _pack_media(media_list)
     context.user_data['pr_data'] = pr_data
 
-    # Показать выбор ветки с обновлёнными данными
-    keyboard = await build_topic_keyboard(context, db, target_chat_id)
+    n = len(media_list)
+    summary = _media_icon_summary(media_list)
 
-    preview = pr_data.get('text', '')[:200]
-    if len(pr_data.get('text', '')) > 200:
-        preview += "..."
+    keyboard_rows = [
+        [InlineKeyboardButton("✅ Готово", callback_data="pr_media_done")],
+        [InlineKeyboardButton("🗑 Очистить медиа", callback_data="pr_remove_photo")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")],
+    ]
 
-    preview_msg = f"📰 ПРЕДПРОСМОТР ПРЕСС-РЕЛИЗА\n\n{preview}\n"
-    preview_msg += "\n📷 Фото прикреплено ✅\n"
-    preview_msg += "\n🎯 Выберите куда опубликовать:"
+    hint = f"Отправьте ещё или нажмите ✅ Готово." if n < MAX_MEDIA else f"Достигнут лимит {MAX_MEDIA} файлов."
 
-    await message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    await message.reply_text(
+        f"✅ Медиа добавлено!\n\n"
+        f"📎 Прикреплено: {summary} ({n}/{MAX_MEDIA})\n\n"
+        f"{hint}",
+        reply_markup=InlineKeyboardMarkup(keyboard_rows)
+    )
 
 
 async def _handle_awaiting_edit_text(message, context, db):
@@ -934,13 +916,14 @@ async def _handle_awaiting_edit_text(message, context, db):
 
 
 async def _handle_awaiting_edit_photo(message, context, db):
-    """Обработка нового фото для запланированного поста."""
+    """Обработка медиа для запланированного поста (накопительный режим, до 5 файлов)."""
     post_id = context.user_data.get('awaiting_edit_photo')
 
     if message.text == '/cancel':
         context.user_data.pop('awaiting_edit_photo', None)
+        context.user_data.pop('edit_photo_buffer', None)
         await message.reply_text(
-            "❌ Редактирование отменено.",
+            "❌ Редактирование медиа отменено.",
             reply_markup=InlineKeyboardMarkup([[
                 InlineKeyboardButton("🔙 К посту", callback_data=f"pr_edit_{post_id}")
             ]])
@@ -949,33 +932,46 @@ async def _handle_awaiting_edit_photo(message, context, db):
 
     if not message.photo and not message.video:
         await message.reply_text(
-            "❌ Это не медиафайл. Отправьте изображение или видео.\n\n"
+            "❌ Это не медиафайл. Отправьте фото или видео.\n\n"
             "Для отмены: /cancel"
         )
         return
 
-    if message.video:
-        photo_file_id = f"video:{message.video.file_id}"
-    else:
-        photo_file_id = f"photo:{message.photo[-1].file_id}"
-    updated = db.update_scheduled_post(post_id, photo_file_id=photo_file_id)
-    context.user_data.pop('awaiting_edit_photo', None)
+    from handlers.PR.press_release_pr import MAX_MEDIA, _pack_media, _media_icon_summary
 
-    if updated:
+    buffer = context.user_data.get('edit_photo_buffer', [])
+
+    if len(buffer) >= MAX_MEDIA:
         await message.reply_text(
-            f"✅ Фото поста #{post_id} обновлено!",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("✏️ К посту", callback_data=f"pr_edit_{post_id}")],
-                [InlineKeyboardButton("📋 К списку", callback_data="pr_scheduled_list")]
-            ])
-        )
-    else:
-        await message.reply_text(
-            f"❌ Не удалось обновить пост #{post_id}.",
+            f"⚠️ Уже {MAX_MEDIA}/{MAX_MEDIA} файлов. Нажмите ✅ Готово.",
             reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("📋 К списку", callback_data="pr_scheduled_list")
+                InlineKeyboardButton("✅ Готово", callback_data=f"pr_edit_media_done_{post_id}")
             ]])
         )
+        return
+
+    if message.video:
+        kind, file_id = 'video', message.video.file_id
+    else:
+        kind, file_id = 'photo', message.photo[-1].file_id
+
+    buffer.append((kind, file_id))
+    context.user_data['edit_photo_buffer'] = buffer
+
+    n = len(buffer)
+    summary = _media_icon_summary(buffer)
+    hint = f"Отправьте ещё или нажмите ✅ Готово." if n < MAX_MEDIA else f"Достигнут лимит {MAX_MEDIA} файлов."
+
+    await message.reply_text(
+        f"✅ Медиа добавлено!\n\n"
+        f"📎 В буфере: {summary} ({n}/{MAX_MEDIA})\n\n"
+        f"{hint}",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("✅ Готово", callback_data=f"pr_edit_media_done_{post_id}")],
+            [InlineKeyboardButton("❌ Отмена", callback_data=f"pr_edit_{post_id}")],
+        ])
+    )
+
 
 
 async def _handle_awaiting_edit_time(message, context, db, target_chat_id):
