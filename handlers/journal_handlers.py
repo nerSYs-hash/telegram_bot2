@@ -797,8 +797,13 @@ async def log_blacklist(
     reason: str = None,
     admin_user=None,
     chat=None,
+    target_user=None,
 ) -> None:
-    """Логирует добавление/удаление из ЧС → канал 3."""
+    """Логирует добавление/удаление из ЧС → канал 3.
+
+    target_user — telegram.User забаненного, если доступен (например, из chat_member event).
+    Когда юзера нет в нашей БД, без target_user строка получится только из ID.
+    """
     if added:
         lines = ["🚫 #Блокировка", ""]
     else:
@@ -810,7 +815,7 @@ async def log_blacklist(
 
     lines.append(f"Инициатор: {_fmt_user_block(admin_user, admin_id, db)}")
     lines.append("")
-    lines.append(f"Пользователь: {_fmt_user_block(None, target_id, db)}")
+    lines.append(f"Пользователь: {_fmt_user_block(target_user, target_id, db)}")
     lines.append("")
 
     if reason:

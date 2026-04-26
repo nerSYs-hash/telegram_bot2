@@ -94,6 +94,7 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
                     reason='Бан через клиент Telegram',
                     admin_user=kicker,
                     chat=update.chat_member.chat,
+                    target_user=update.chat_member.new_chat_member.user,
                 )
             except Exception as e:
                 logging.error(f"Journal log_blacklist (TG ban) error: {e}")
@@ -126,6 +127,7 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
                     added=False,
                     admin_user=kicker,
                     chat=update.chat_member.chat,
+                    target_user=update.chat_member.new_chat_member.user,
                 )
             except Exception as e:
                 logging.error(f"Journal log_blacklist (TG unban) error: {e}")

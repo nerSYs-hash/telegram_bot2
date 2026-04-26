@@ -41,10 +41,21 @@ def ensure_bug_tables(db) -> None:
             card_msg_id     INTEGER,
             status          TEXT DEFAULT 'new',
             comment         TEXT,
+            original_text   TEXT,
+            is_photo        INTEGER DEFAULT 0,
             created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
+    # Миграция для старых таблиц без новых колонок
+    for col, definition in [
+        ('original_text', 'TEXT'),
+        ('is_photo',      'INTEGER DEFAULT 0'),
+    ]:
+        try:
+            db.cursor.execute(f'ALTER TABLE bug_cards ADD COLUMN {col} {definition}')
+        except Exception:
+            pass
     db.conn.commit()
 
 
@@ -143,7 +154,7 @@ async def handle_bug_message(message, bot, db) -> None:
             parse_mode='HTML',
             reply_markup=kb,
         )
-        is_photo = 1
+        is_photo = 1  # caption-based
     elif video_id:
         sent = await bot.send_video(
             chat_id=chat_id,
@@ -153,7 +164,7 @@ async def handle_bug_message(message, bot, db) -> None:
             parse_mode='HTML',
             reply_markup=kb,
         )
-        is_photo = 0
+        is_photo = 1  # видео тоже caption-based
     else:
         sent = await bot.send_message(
             chat_id=chat_id,
@@ -174,7 +185,9 @@ async def handle_bug_message(message, bot, db) -> None:
                     thread_id=thread_id,
                     card_msg_id=sent.message_id,
                     status=STATUS_NEW,
-                    comment=None)
+                    comment=None,
+                    original_text=original_text or '(без текста)',
+                    is_photo=is_photo)
     logger.info(f"Bug card created: orig={original_msg_id} card={sent.message_id} thread={thread_id}")
 
 
@@ -232,19 +245,13 @@ async def _set_status(query, db, original_msg_id: int, new_status: str) -> None:
         await query.answer("❌ Карточка не найдена.", show_alert=True)
         return
 
-    comment = row.get('comment')
-    # Восстанавливаем оригинальный текст из сообщения на которое отвечала карточка
-    try:
-        orig_msg = query.message.reply_to_message
-        original_text = (orig_msg.text or orig_msg.caption or '(медиа)') if orig_msg else '—'
-    except Exception:
-        original_text = '—'
+    comment       = row.get('comment')
+    original_text = row.get('original_text') or '(без текста)'
 
     new_text = _build_card_text(original_text, new_status, comment)
     kb = _build_keyboard(original_msg_id, new_status)
 
     try:
-        # Карточка может быть фото/видео (caption) или текстом
         if query.message.photo or query.message.video:
             await query.edit_message_caption(new_text, parse_mode='HTML', reply_markup=kb)
         else:
@@ -279,45 +286,28 @@ async def handle_bug_comment_input(message, context, db) -> bool:
     if not comment:
         return True
 
-    status = row.get('status', STATUS_NEW)
-
-    # Получаем оригинальный текст из карточки через API
-    try:
-        orig_chat_msg = await context.bot.forward_message(
-            chat_id=chat_id, from_chat_id=chat_id, message_id=orig_id
-        )
-        original_text = orig_chat_msg.text or orig_chat_msg.caption or '—'
-        await context.bot.delete_message(chat_id=chat_id, message_id=orig_chat_msg.message_id)
-    except Exception:
-        original_text = '—'
+    status        = row.get('status', STATUS_NEW)
+    original_text = row.get('original_text') or '(без текста)'
+    is_photo      = bool(row.get('is_photo'))
 
     new_text = _build_card_text(original_text, status, comment)
     kb = _build_keyboard(orig_id, status)
 
-    # Обновляем карточку (текст или подпись если медиа)
-    try:
-        card_message = await context.bot.copy_message(
-            chat_id=chat_id, from_chat_id=chat_id, message_id=card_msg
-        ) if False else None  # не используем, просто пробуем edit
-    except Exception:
-        pass
-
     updated = False
     try:
-        await context.bot.edit_message_text(
-            chat_id=chat_id, message_id=card_msg,
-            text=new_text, parse_mode='HTML', reply_markup=kb
-        )
-        updated = True
-    except Exception:
-        try:
+        if is_photo:
             await context.bot.edit_message_caption(
                 chat_id=chat_id, message_id=card_msg,
                 caption=new_text, parse_mode='HTML', reply_markup=kb
             )
-            updated = True
-        except Exception as e:
-            logger.error(f"handle_bug_comment_input edit error: {e}")
+        else:
+            await context.bot.edit_message_text(
+                chat_id=chat_id, message_id=card_msg,
+                text=new_text, parse_mode='HTML', reply_markup=kb
+            )
+        updated = True
+    except Exception as e:
+        logger.error(f"handle_bug_comment_input edit error: {e}")
 
     if updated:
         upsert_bug_card(db, orig_id, comment=comment)
