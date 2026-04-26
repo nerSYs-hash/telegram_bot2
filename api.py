@@ -213,6 +213,8 @@ async def admin_profile_me(authorization: str = Header(default=None)):
     if not joined_at:
         joined_at = role_meta.get("created_at")
 
+    has_chat = role_raw in ("owner", "deputy", "admin")
+
     return {
         "user_id":        user_id,
         "username":       payload.get("username", ""),
@@ -225,6 +227,8 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         "total_messages": total_messages,
         "has_q_name":     bool(role_meta.get("q_name")),
         "status":         role_meta.get("status") or "unknown",
+        "has_chat":       has_chat,
+        "bot_username":   _BOT_USERNAME,
     }
 
 

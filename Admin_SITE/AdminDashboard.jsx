@@ -284,8 +284,9 @@ export default function App() {
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
 
   // ── ПРОФИЛЬ ──
-  const [profileData, setProfileData]       = useState(null);
-  const [profileLoading, setProfileLoading] = useState(false);
+  const [profileData, setProfileData]             = useState(null);
+  const [profileLoading, setProfileLoading]       = useState(false);
+  const [showConnectChat, setShowConnectChat]     = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -4720,41 +4721,121 @@ export default function App() {
               </div>
             </div>
 
-            {/* ─── ЧАТ ─── */}
-            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
-              <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                <MessageCircle className="mr-3 text-green-500" size={16}/> Чат
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <Calendar size={16} className="text-gray-400"/>
-                    <span className="text-xs font-bold text-gray-400 uppercase">В чате с</span>
-                  </div>
-                  {fmtDate(profileData?.joined_at)
-                    ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
-                    : placeholderVal}
+            {/* ─── ЧАТ / БЕЗ ЧАТА ─── */}
+            {profileData && profileData.has_chat === false ? (
+              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8
+                              border border-blue-700 shadow-xl text-white text-center space-y-5">
+                <div className="w-20 h-20 mx-auto rounded-3xl bg-white/15 backdrop-blur
+                                flex items-center justify-center border-2 border-white/30">
+                  <Plug size={36} className="text-white"/>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <Clock size={16} className="text-gray-400"/>
-                    <span className="text-xs font-bold text-gray-400 uppercase">Последнее сообщение</span>
-                  </div>
-                  {fmtDate(profileData?.last_message)
-                    ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
-                    : placeholderVal}
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black">Подключите свой чат</h3>
+                  <p className="text-sm font-medium text-blue-100 leading-relaxed max-w-xs mx-auto">
+                    Pulse Bot ещё не работает в вашем чате. Добавьте его, чтобы получить
+                    статистику, журнал событий и админ-инструменты.
+                  </p>
                 </div>
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <MessageCircle size={16} className="text-gray-400"/>
-                    <span className="text-xs font-bold text-gray-400 uppercase">Сообщений всего</span>
+                <button
+                  onClick={() => setShowConnectChat(true)}
+                  className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
+                             bg-white text-blue-700 font-black text-sm uppercase tracking-wide
+                             hover:bg-blue-50 active:scale-[0.98] transition-all shadow-lg">
+                  <Plug size={16}/> Подключить мой чат
+                </button>
+              </div>
+            ) : (
+              <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
+                <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
+                  <MessageCircle className="mr-3 text-green-500" size={16}/> Чат
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <Calendar size={16} className="text-gray-400"/>
+                      <span className="text-xs font-bold text-gray-400 uppercase">В чате с</span>
+                    </div>
+                    {fmtDate(profileData?.joined_at)
+                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
+                      : placeholderVal}
                   </div>
-                  {profileData
-                    ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
-                    : placeholderVal}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <Clock size={16} className="text-gray-400"/>
+                      <span className="text-xs font-bold text-gray-400 uppercase">Последнее сообщение</span>
+                    </div>
+                    {fmtDate(profileData?.last_message)
+                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
+                      : placeholderVal}
+                  </div>
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                    <div className="flex items-center gap-3">
+                      <MessageCircle size={16} className="text-gray-400"/>
+                      <span className="text-xs font-bold text-gray-400 uppercase">Сообщений всего</span>
+                    </div>
+                    {profileData
+                      ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
+                      : placeholderVal}
+                  </div>
                 </div>
               </div>
-            </div>
+            )}
+
+            {/* ─── МОДАЛКА: ИНСТРУКЦИЯ ПОДКЛЮЧЕНИЯ ─── */}
+            {showConnectChat && createPortal(
+              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4
+                              bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+                   onClick={() => setShowConnectChat(false)}>
+                <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6
+                                shadow-2xl animate-in slide-in-from-bottom duration-300"
+                     onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center">
+                        <Plug size={22} className="text-blue-600"/>
+                      </div>
+                      <div>
+                        <h3 className="font-black text-gray-900 text-base">Подключение чата</h3>
+                        <p className="text-xs text-gray-500 font-medium">5 простых шагов</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowConnectChat(false)}
+                            className="p-2 rounded-xl hover:bg-gray-100 active:scale-90 transition-all">
+                      <X size={18} className="text-gray-400"/>
+                    </button>
+                  </div>
+
+                  <ol className="space-y-3 mb-5">
+                    {[
+                      <>Откройте Telegram и найдите бота{' '}
+                        <span className="font-black text-blue-600">@{profileData?.bot_username || 'Pulse_On_bot'}</span></>,
+                      <>Нажмите кнопку <span className="font-black">«Добавить в группу»</span></>,
+                      <>Выберите свой чат из списка</>,
+                      <>Назначьте бота <span className="font-black">администратором</span> с правами:
+                        удаление сообщений, бан пользователей, закрепление сообщений</>,
+                      <>Вернитесь сюда — чат появится в профиле автоматически</>,
+                    ].map((text, i) => (
+                      <li key={i} className="flex gap-3 items-start">
+                        <span className="flex-shrink-0 w-7 h-7 rounded-xl bg-blue-100 text-blue-700
+                                         font-black text-xs flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-gray-700 font-medium leading-relaxed pt-0.5">{text}</span>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <a href={`https://t.me/${profileData?.bot_username || 'Pulse_On_bot'}?startgroup=true`}
+                     target="_blank" rel="noopener noreferrer"
+                     className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
+                                bg-blue-600 text-white font-black text-sm uppercase tracking-wide
+                                hover:bg-blue-700 active:scale-[0.98] transition-all shadow-lg">
+                    <Send size={16}/> Открыть Telegram
+                  </a>
+                </div>
+              </div>,
+              document.body
+            )}
 
             {/* ─── ДЕЙСТВИЯ ─── */}
             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
