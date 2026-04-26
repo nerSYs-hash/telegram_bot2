@@ -74,13 +74,29 @@ def _user_link(user) -> str:
 
 
 async def _is_admin_or_owner(db, user_id: int, main_admin_id: int) -> bool:
-    """Проверяет, является ли user_id админом или владельцем."""
+    """
+    Проверяет, может ли user_id модерировать чат.
+
+    Переходный период (V1.12.10f): обе системы работают параллельно.
+    1) main_admin_id — всегда True
+    2) TG-админство (bot_database.db.users.is_admin/is_owner) — старая модель
+    3) Permissions: moderation.delete (pulse_bot.db.role_permissions) — новая модель
+    Со временем TG-админство уйдёт, останется только permissions.
+    """
     if user_id == main_admin_id:
         return True
     user_data = db.get_user(user_id)
-    if not user_data:
-        return False
-    return bool(user_data['is_admin'] or user_data['is_owner'])
+    if user_data and (user_data['is_admin'] or user_data['is_owner']):
+        return True
+
+    try:
+        from bot_permissions import user_has
+        if await user_has(user_id, "moderation.delete"):
+            return True
+    except Exception:
+        pass
+
+    return False
 
 
 async def _is_target_protected(db, target_id: int, main_admin_id: int) -> bool:

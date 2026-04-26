@@ -929,10 +929,28 @@ async def _show_app_card(query, context, app, reg_data):
 
 
 async def _is_owner_or_deputy(user_id: int) -> bool:
-    """Проверка: владелец или зам владельца."""
+    """
+    Проверка: владелец или зам владельца (доступ к Панели Владельца).
+
+    Логика (V1.12.10f):
+    1) Owner (по config.OWNER_ID) — всегда True
+    2) Динамические права: has_permission(role, "admins.view") — главный признак
+       доступа к Панели Владельца (по умолчанию у deputy есть)
+    3) Фолбэк на старую is_deputy() — если permissions.py вернул False
+       (защита: дефолты не сидились / БД повреждена)
+    """
     from config import OWNER_ID
     if user_id == OWNER_ID:
         return True
+
+    try:
+        from bot_permissions import user_has
+        if await user_has(user_id, "admins.view"):
+            return True
+    except Exception:
+        pass
+
+    # Фолбэк — старая логика (не теряем доступ если permissions недоступны)
     from database.db_friend import is_deputy
     return await is_deputy(user_id)
 
