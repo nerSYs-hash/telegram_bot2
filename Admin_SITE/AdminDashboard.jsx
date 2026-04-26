@@ -283,6 +283,20 @@ export default function App() {
 
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
 
+  // ── ПРОФИЛЬ ──
+  const [profileData, setProfileData]       = useState(null);
+  const [profileLoading, setProfileLoading] = useState(false);
+  const fetchProfile = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    setProfileLoading(true);
+    fetch('/api/admin/profile/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setProfileData(d); })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false));
+  }, []);
+
   const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'statistics');
   const navigateTo = (id) => {
     // Если идёт редактирование триггера — показываем подтверждение
@@ -506,6 +520,7 @@ export default function App() {
   };
 
   useEffect(() => { if (activeTab === 'system') fetchStaff(); }, [activeTab]);
+  useEffect(() => { if (activeTab === 'profile') fetchProfile(); }, [activeTab, fetchProfile]);
 
   // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
   const logTags = [
@@ -4636,6 +4651,25 @@ export default function App() {
 
       case 'profile': {
         const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
+        const fmtDate = (iso) => {
+          if (!iso) return null;
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return null;
+          const months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+          return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+        };
+        const role = profileData?.role || 'user';
+        const roleStyles = {
+          owner:  { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Crown },
+          deputy: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ShieldCheck },
+          admin:  { bg: 'bg-green-100',  text: 'text-green-700',  icon: ShieldCheck },
+          user:   { bg: 'bg-gray-100',   text: 'text-gray-500',   icon: User },
+        };
+        const rs = roleStyles[role] || roleStyles.user;
+        const RoleIcon = rs.icon;
+        const placeholderVal = profileLoading
+          ? <Loader2 size={14} className="animate-spin text-gray-300"/>
+          : <span className="text-xs text-gray-300 font-black uppercase">—</span>;
         return (
           <div className="space-y-6 pb-24 animate-in fade-in duration-500">
 
@@ -4655,10 +4689,9 @@ export default function App() {
                 <p className="text-sm font-bold text-gray-400 mt-1">@{authUser.username}</p>
               )}
 
-              {/* Бейдж роли — пока заглушка, в V1.12.10b подтянем реальную роль */}
-              <div className="mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                              bg-yellow-100 text-yellow-700 text-[11px] font-black uppercase tracking-wide">
-                <Crown size={12}/> Владелец
+              <div className={`mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
+                              ${rs.bg} ${rs.text} text-[11px] font-black uppercase tracking-wide`}>
+                <RoleIcon size={12}/> {profileData?.role_label || 'Загрузка...'}
               </div>
             </div>
 
@@ -4687,7 +4720,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* ─── ЧАТ — пока заглушки, реальные данные в V1.12.10b ─── */}
+            {/* ─── ЧАТ ─── */}
             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
               <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
                 <MessageCircle className="mr-3 text-green-500" size={16}/> Чат
@@ -4698,21 +4731,27 @@ export default function App() {
                     <Calendar size={16} className="text-gray-400"/>
                     <span className="text-xs font-bold text-gray-400 uppercase">В чате с</span>
                   </div>
-                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                  {fmtDate(profileData?.joined_at)
+                    ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
+                    : placeholderVal}
                 </div>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div className="flex items-center gap-3">
                     <Clock size={16} className="text-gray-400"/>
                     <span className="text-xs font-bold text-gray-400 uppercase">Последнее сообщение</span>
                   </div>
-                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                  {fmtDate(profileData?.last_message)
+                    ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
+                    : placeholderVal}
                 </div>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
                   <div className="flex items-center gap-3">
                     <MessageCircle size={16} className="text-gray-400"/>
                     <span className="text-xs font-bold text-gray-400 uppercase">Сообщений всего</span>
                   </div>
-                  <span className="text-xs text-gray-300 font-black uppercase">скоро</span>
+                  {profileData
+                    ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
+                    : placeholderVal}
                 </div>
               </div>
             </div>

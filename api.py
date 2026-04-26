@@ -128,6 +128,106 @@ async def auth_me(authorization: str = Header(default=None)):
         raise HTTPException(status_code=401, detail="Неверный токен")
 
 
+def _get_user_role_meta(user_id: int) -> dict:
+    """Читает роль + регистрационные мета-данные из pulse_bot.db (источник истины по ролям)."""
+    pulse_db_path = os.path.join(current_dir, 'pulse_bot.db')
+    if not os.path.exists(pulse_db_path):
+        return {}
+    try:
+        import sqlite3
+        conn = sqlite3.connect(pulse_db_path)
+        conn.row_factory = sqlite3.Row
+        cur = conn.cursor()
+        cur.execute(
+            "SELECT role, status, q_name, created_at, last_seen, last_activity "
+            "FROM users WHERE tg_id = ?",
+            (user_id,)
+        )
+        row = cur.fetchone()
+        conn.close()
+        return dict(row) if row else {}
+    except Exception as e:
+        logger.warning(f"⚠️ Ошибка чтения pulse_bot.db: {e}")
+        return {}
+
+
+@app.get("/api/admin/profile/me")
+async def admin_profile_me(authorization: str = Header(default=None)):
+    """Полные данные профиля для страницы «Профиль» в админ-панели."""
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Не авторизован")
+    try:
+        payload = _decode_jwt(authorization[7:])
+    except jwt.ExpiredSignatureError:
+        raise HTTPException(status_code=401, detail="Токен истёк")
+    except jwt.InvalidTokenError:
+        raise HTTPException(status_code=401, detail="Неверный токен")
+
+    user_id = int(payload.get("user_id", 0))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="ID не определён")
+
+    role_meta = _get_user_role_meta(user_id)
+    role_raw = (role_meta.get("role") or "user").lower()
+
+    # Override: если совпадает с MAIN_ADMIN_ID из .env — всегда «owner»
+    main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
+    if main_admin_id and user_id == main_admin_id:
+        role_raw = "owner"
+
+    role_labels = {
+        "owner":  "Владелец",
+        "deputy": "Зам владельца",
+        "admin":  "Администратор",
+        "user":   "Без статуса",
+    }
+    role_label = role_labels.get(role_raw, "Без статуса")
+
+    # Сообщения и последняя активность из bot_database.db.user_stats
+    total_messages = 0
+    last_msg_date  = None
+    if db:
+        try:
+            db.cursor.execute(
+                "SELECT COALESCE(SUM(total_messages), 0) AS total, MAX(date) AS last_date "
+                "FROM user_stats WHERE user_id = ?",
+                (user_id,)
+            )
+            r = db.cursor.fetchone()
+            if r:
+                total_messages = int(r['total'])
+                last_msg_date  = r['last_date']
+        except Exception as e:
+            logger.warning(f"⚠️ Ошибка чтения user_stats: {e}")
+
+    # joined_at: bot_database.db.users.joined_at, фолбэк → pulse_bot.db.users.created_at
+    joined_at = None
+    if db:
+        try:
+            db.cursor.execute("SELECT joined_at FROM users WHERE user_id = ?", (user_id,))
+            r = db.cursor.fetchone()
+            if r and r['joined_at']:
+                joined_at = r['joined_at']
+        except Exception:
+            pass
+    if not joined_at:
+        joined_at = role_meta.get("created_at")
+
+    return {
+        "user_id":        user_id,
+        "username":       payload.get("username", ""),
+        "first_name":     payload.get("first_name", ""),
+        "photo_url":      payload.get("photo_url", ""),
+        "role":           role_raw,
+        "role_label":     role_label,
+        "joined_at":      joined_at,
+        "last_message":   last_msg_date,
+        "total_messages": total_messages,
+        "has_q_name":     bool(role_meta.get("q_name")),
+        "status":         role_meta.get("status") or "unknown",
+    }
+
+
 # --- ЭНДПОИНТЫ ДЛЯ AdminDashboard.jsx ---
 
 @app.get("/")
