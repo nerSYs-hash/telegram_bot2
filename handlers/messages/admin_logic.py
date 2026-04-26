@@ -471,15 +471,90 @@ async def _handle_awaiting_schedule_time(message, user, context, db, target_chat
     )
 
 
+async def _pr_show_topic_keyboard(message, context, db, target_chat_id):
+    """Показывает клавиатуру выбора ветки после сбора pr_data."""
+    from handlers.PR.press_release_pr import _parse_media, _media_icon_summary
+    pr_data = context.user_data.get('pr_data', {})
+    keyboard = await build_topic_keyboard(context, db, target_chat_id)
+    text = pr_data.get('text', '')
+    preview = text[:200] + "..." if len(text) > 200 else text
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+    summary = _media_icon_summary(media_list)
+    preview_msg = "📰 ПРЕДПРОСМОТР ПРЕСС-РЕЛИЗА\n\n"
+    if preview:
+        preview_msg += f"{preview}\n"
+    if summary:
+        preview_msg += f"\n{summary}\n"
+    preview_msg += "\n🎯 Выберите куда опубликовать:"
+    await message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
 async def _handle_awaiting_press_release(message, context, db, target_chat_id):
-    """Обработка ввода текста пресс-релиза."""
+    """Обработка ввода текста пресс-релиза. Поддерживает одиночное сообщение и альбомы (media_group)."""
+    import asyncio
+    from handlers.PR.press_release_pr import MAX_MEDIA, _parse_media, _pack_media
+
     if message.text == '/cancel':
         context.user_data['awaiting_press_release'] = False
+        context.user_data.pop('pr_initial_mg_id', None)
+        old_task = context.user_data.pop('pr_mg_task', None)
+        if old_task:
+            old_task.cancel()
         await message.reply_text("Создание пресс-релиза отменено.")
         return
 
-    # Save press release data and show target selection
     text = message.text or message.caption or ""
+    mg_id = getattr(message, 'media_group_id', None)
+
+    # ── Альбом (media_group) — накапливаем все файлы, финализируем с задержкой ──
+    if mg_id:
+        existing_mg = context.user_data.get('pr_initial_mg_id')
+
+        # Новая группа — сбрасываем предыдущие данные
+        if existing_mg != mg_id:
+            context.user_data['pr_initial_mg_id'] = mg_id
+            context.user_data['pr_data'] = {'text': '', 'photo_file_id': None}
+
+        pr_data = context.user_data['pr_data']
+
+        # Текст берём только с первого элемента (у остальных caption пустой)
+        if text and not pr_data.get('text'):
+            pr_data['text'] = text
+
+        # Добавляем медиа (до MAX_MEDIA)
+        media_list = _parse_media(pr_data.get('photo_file_id'))
+        if len(media_list) < MAX_MEDIA:
+            if message.video:
+                media_list.append(('video', message.video.file_id))
+            elif message.photo:
+                media_list.append(('photo', message.photo[-1].file_id))
+            pr_data['photo_file_id'] = _pack_media(media_list) if media_list else None
+
+        context.user_data['pr_data'] = pr_data
+
+        # Отменяем предыдущую задачу финализации, создаём новую с задержкой 1.5с
+        old_task = context.user_data.pop('pr_mg_task', None)
+        if old_task:
+            old_task.cancel()
+
+        async def _finalize_mg():
+            await asyncio.sleep(1.5)
+            if not context.user_data.get('awaiting_press_release'):
+                return
+            context.user_data['awaiting_press_release'] = False
+            context.user_data.pop('pr_initial_mg_id', None)
+            context.user_data.pop('pr_mg_task', None)
+            final_data = context.user_data.get('pr_data', {})
+            if not final_data.get('text') and not final_data.get('photo_file_id'):
+                context.user_data['awaiting_press_release'] = True
+                await message.reply_text("❌ Не удалось получить медиафайлы. Попробуйте снова.")
+                return
+            await _pr_show_topic_keyboard(message, context, db, target_chat_id)
+
+        context.user_data['pr_mg_task'] = asyncio.create_task(_finalize_mg())
+        return
+
+    # ── Одиночное сообщение ──
     media_file_id = None
     if message.video:
         media_file_id = f"video:{message.video.file_id}"
@@ -491,24 +566,13 @@ async def _handle_awaiting_press_release(message, context, db, target_chat_id):
         return
 
     context.user_data['awaiting_press_release'] = False
+    context.user_data.pop('pr_initial_mg_id', None)
     context.user_data['pr_data'] = {
         'text': text,
         'photo_file_id': media_file_id,
     }
 
-    # Build topic keyboard with auto-detection
-    keyboard = await build_topic_keyboard(context, db, target_chat_id)
-
-    preview = text[:200] + "..." if len(text) > 200 else text
-    preview_msg = f"📰 ПРЕДПРОСМОТР ПРЕСС-РЕЛИЗА\n\n{preview}\n"
-    if media_file_id:
-        if str(media_file_id).startswith('video:'):
-            preview_msg += "\n🎥 С видео\n"
-        else:
-            preview_msg += "\n📷 С фото\n"
-    preview_msg += "\n🎯 Выберите куда опубликовать:"
-
-    await message.reply_text(preview_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    await _pr_show_topic_keyboard(message, context, db, target_chat_id)
 
 
 async def _handle_awaiting_pr_current_text_edit(message, context, db, target_chat_id):
@@ -813,10 +877,40 @@ async def _handle_awaiting_donate_amount(message, user, context, db, donate_type
 # ОБРАБОТЧИКИ РЕДАКТИРОВАНИЯ ЗАПЛАНИРОВАННЫХ ПОСТОВ
 # ═══════════════════════════════════════════════════════════════
 
+async def _pr_photo_reply(message, context):
+    """Отправляет одну реплику с текущим счётчиком медиа + кнопками."""
+    from handlers.PR.press_release_pr import MAX_MEDIA, _parse_media, _media_icon_summary
+    pr_data = context.user_data.get('pr_data', {})
+    media_list = _parse_media(pr_data.get('photo_file_id'))
+    n = len(media_list)
+    summary = _media_icon_summary(media_list)
+    hint = f"Отправьте ещё или нажмите ✅ Готово." if n < MAX_MEDIA else f"Достигнут лимит {MAX_MEDIA} файлов."
+    keyboard_rows = [
+        [InlineKeyboardButton("✅ Готово", callback_data="pr_media_done")],
+        [InlineKeyboardButton("🗑 Очистить медиа", callback_data="pr_remove_photo")],
+        [InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")],
+    ]
+    await message.reply_text(
+        f"✅ Медиа добавлено!\n\n"
+        f"📎 Прикреплено: {summary} ({n}/{MAX_MEDIA})\n\n"
+        f"{hint}",
+        reply_markup=InlineKeyboardMarkup(keyboard_rows)
+    )
+
+
 async def _handle_awaiting_pr_photo(message, context, db, target_chat_id):
-    """Обработка отправки медиа для пресс-релиза (накопительный режим, до 5 файлов)."""
+    """Обработка отправки медиа для пресс-релиза (накопительный режим, до 5 файлов).
+    Поддерживает одиночные файлы и альбомы (media_group) — одна реплика на весь альбом.
+    """
+    import asyncio
+    from handlers.PR.press_release_pr import MAX_MEDIA, _parse_media, _pack_media, _media_icon_summary
+
     if message.text == '/cancel':
         context.user_data.pop('awaiting_pr_photo', None)
+        context.user_data.pop('pr_add_mg_id', None)
+        old_task = context.user_data.pop('pr_add_mg_task', None)
+        if old_task:
+            old_task.cancel()
         await message.reply_text("❌ Добавление медиа отменено.")
         return
 
@@ -826,8 +920,6 @@ async def _handle_awaiting_pr_photo(message, context, db, target_chat_id):
             "Для отмены: /cancel"
         )
         return
-
-    from handlers.PR.press_release_pr import MAX_MEDIA, _parse_media, _pack_media, _media_icon_summary
 
     pr_data = context.user_data.get('pr_data', {})
     media_list = _parse_media(pr_data.get('photo_file_id'))
@@ -851,23 +943,25 @@ async def _handle_awaiting_pr_photo(message, context, db, target_chat_id):
     pr_data['photo_file_id'] = _pack_media(media_list)
     context.user_data['pr_data'] = pr_data
 
-    n = len(media_list)
-    summary = _media_icon_summary(media_list)
+    mg_id = getattr(message, 'media_group_id', None)
 
-    keyboard_rows = [
-        [InlineKeyboardButton("✅ Готово", callback_data="pr_media_done")],
-        [InlineKeyboardButton("🗑 Очистить медиа", callback_data="pr_remove_photo")],
-        [InlineKeyboardButton("❌ Отмена", callback_data="pr_cancel")],
-    ]
+    if mg_id:
+        # Альбом: накапливаем тихо, финализируем одной репликой через 1.5с
+        context.user_data['pr_add_mg_id'] = mg_id
+        old_task = context.user_data.pop('pr_add_mg_task', None)
+        if old_task:
+            old_task.cancel()
 
-    hint = f"Отправьте ещё или нажмите ✅ Готово." if n < MAX_MEDIA else f"Достигнут лимит {MAX_MEDIA} файлов."
+        async def _finalize_add():
+            await asyncio.sleep(1.5)
+            context.user_data.pop('pr_add_mg_id', None)
+            context.user_data.pop('pr_add_mg_task', None)
+            await _pr_photo_reply(message, context)
 
-    await message.reply_text(
-        f"✅ Медиа добавлено!\n\n"
-        f"📎 Прикреплено: {summary} ({n}/{MAX_MEDIA})\n\n"
-        f"{hint}",
-        reply_markup=InlineKeyboardMarkup(keyboard_rows)
-    )
+        context.user_data['pr_add_mg_task'] = asyncio.create_task(_finalize_add())
+    else:
+        # Одиночный файл: отвечаем сразу
+        await _pr_photo_reply(message, context)
 
 
 async def _handle_awaiting_edit_text(message, context, db):

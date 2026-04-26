@@ -1023,6 +1023,12 @@ async def handle_pr_cancel(query, user, context, db, admin_id):
     context.user_data.pop('awaiting_edit_target_manual', None)
     context.user_data.pop('editing_post_target', None)
     context.user_data.pop('edit_photo_buffer', None)
+    context.user_data.pop('pr_initial_mg_id', None)
+    context.user_data.pop('pr_add_mg_id', None)
+    for _tk in ('pr_mg_task', 'pr_add_mg_task'):
+        _t = context.user_data.pop(_tk, None)
+        if _t:
+            _t.cancel()
     context.user_data.pop('pr_data', None)
 
     await query.edit_message_text(

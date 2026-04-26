@@ -1006,6 +1006,12 @@ class MessageHandler:
             context.user_data.pop('awaiting_edit_target_manual', None)
             context.user_data.pop('editing_post_target', None)
             context.user_data.pop('edit_photo_buffer', None)
+            context.user_data.pop('pr_initial_mg_id', None)
+            context.user_data.pop('pr_add_mg_id', None)
+            for _tk in ('pr_mg_task', 'pr_add_mg_task'):
+                _t = context.user_data.pop(_tk, None)
+                if _t:
+                    _t.cancel()
             # BBS FSM cleanup
             context.user_data.pop('bbs_state', None)
             context.user_data.pop('bbs_data', None)
