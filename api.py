@@ -1454,13 +1454,26 @@ async def save_ui_settings(request: Request, authorization: str = Header(default
     _require_owner(authorization)
     body = await request.json()
     saved = []
+    errors = []
     for key, val in body.items():
         if key in _UI_SETTINGS_KEYS and isinstance(val, str):
             try:
                 db.set_setting(key, val)
                 saved.append(key)
-            except Exception as e:
-                logger.warning(f"ui_settings save error {key}: {e}")
+            except Exception as e1:
+                # Fallback: INSERT OR REPLACE без updated_at (старые схемы БД)
+                try:
+                    db.cursor.execute(
+                        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                        (key, val)
+                    )
+                    db.conn.commit()
+                    saved.append(key)
+                except Exception as e2:
+                    logger.warning(f"ui_settings save error {key}: {e1} / {e2}")
+                    errors.append(key)
+    if errors:
+        return {"ok": False, "saved": saved, "errors": errors}
     return {"ok": True, "saved": saved}
 
 

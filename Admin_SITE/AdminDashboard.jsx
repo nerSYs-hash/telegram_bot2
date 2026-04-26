@@ -18,6 +18,25 @@ import {
   Crown, AtSign, Hash, Plug, LogOut
 } from 'lucide-react';
 
+const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
+  const [err, setErr] = React.useState(false);
+  const initials = (name || '?').replace(/^@/, '').slice(0, 1).toUpperCase();
+  const px = `${size}px`;
+  if (!userId || err) {
+    return (
+      <div className="rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white font-black flex-shrink-0 select-none"
+           style={{ width: px, height: px, fontSize: Math.round(size * 0.42) }}>
+        {initials}
+      </div>
+    );
+  }
+  return (
+    <img src={`/api/user/${userId}/avatar`} alt="" onError={() => setErr(true)}
+         className="rounded-full object-cover flex-shrink-0 border-2 border-white shadow-sm"
+         style={{ width: px, height: px }}/>
+  );
+});
+
 // ═══════════════════════════════════════════
 //  СПИСОК ОБНОВЛЕНИЙ — добавляй сюда при каждом релизе
 //  type: 'new' | 'fix' | 'improve'
@@ -640,10 +659,12 @@ export default function App() {
       }))
       .catch(() => {});
   }, []);
+  const [quoteSaveMsg, setQuoteSaveMsg] = React.useState('');
   const saveQuoteCfg = async () => {
     setQuoteSaving(true);
+    setQuoteSaveMsg('');
     try {
-      await fetch('/api/ui_settings', {
+      const r = await fetch('/api/ui_settings', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
         body: JSON.stringify({
@@ -653,8 +674,11 @@ export default function App() {
           journal_quote_stripe_color2: quoteCfg.stripe2,
         }),
       });
-    } catch (e) { /* silent */ }
+      const d = await r.json();
+      setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
+    } catch (e) { setQuoteSaveMsg('Ошибка сети'); }
     setQuoteSaving(false);
+    setTimeout(() => setQuoteSaveMsg(''), 3000);
   };
 
   // ================= СОСТОЯНИЯ: ФУНКЦИИ БОТА =================
@@ -1094,25 +1118,30 @@ export default function App() {
               };
               const tagStyle = TAG_STYLE[log.type] || 'bg-blue-50 text-blue-600 border border-blue-200';
               const isExpanded = expandedLogs.has(log.id);
-              const hasActions = ['join','ban','mute','trigger','blacklist'].includes(log.type);
+              const hasActions = ['join','ban','mute','blacklist'].includes(log.type);
               return (
                 <div key={log.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm animate-in slide-in-from-bottom-2 overflow-hidden">
-                  {/* ── Шапка: тег + время + стрелка ── */}
+
+                  {/* ── Шапка: аватар + имя + тег + стрелка ── */}
                   <div
-                    className="flex items-center gap-2 px-3 pt-2.5 pb-1 cursor-pointer select-none"
+                    className="flex items-center gap-2 px-3 pt-2.5 pb-2 cursor-pointer select-none"
                     onClick={() => hasActions && toggleLogExpand(log.id)}
                   >
-                    <span className={`flex-shrink-0 px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
-                    <span className="flex-1 min-w-0 text-[10px] text-gray-300 font-mono truncate">{log.time?.replace('T',' ')}</span>
+                    <UserAvatar userId={log.user_id} name={log.user} size={34}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-black text-[12px] text-gray-900 truncate leading-tight">{log.user || '—'}</div>
+                      <div className="text-[9px] text-gray-400 font-mono">{log.time?.replace('T',' ')}</div>
+                    </div>
+                    <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
                     {hasActions && (
                       <button className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isExpanded ? 'bg-gray-100 text-gray-500' : 'text-gray-300 hover:text-gray-400'}`}>
-                        {isExpanded ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+                        {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
                       </button>
                     )}
                   </div>
 
                   {/* ── Тело: текст сообщения ── */}
-                  <div className="px-3 pb-2.5 pr-8"
+                  <div className="px-3 pb-2.5"
                     style={{
                       '--q-bg':       quoteCfg.bg,
                       '--q-stripe-1': quoteCfg.stripe1,
@@ -1120,7 +1149,7 @@ export default function App() {
                     }}
                   >
                     <div
-                      className="journal-html text-[11px] text-gray-600 leading-snug break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-800"
+                      className="journal-html text-[11.5px] text-gray-600 leading-snug break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-800"
                       dangerouslySetInnerHTML={{ __html: log.text }}
                     />
                   </div>
@@ -1135,15 +1164,14 @@ export default function App() {
                         <MessageCircle size={12}/><span>Написать в ЛС</span>
                       </a>
                       <div className="grid grid-cols-2 gap-1.5">
-                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')}    className="flex items-center justify-center gap-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[9px] uppercase border border-green-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
-                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
-                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}     className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 py-2 rounded-xl font-black text-[9px] uppercase border border-blue-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
-                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}      className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
-                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')} className="flex items-center justify-center gap-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[9px] uppercase border border-green-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}  className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 py-2 rounded-xl font-black text-[9px] uppercase border border-blue-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
                         {log.type === 'join'      && <button className="flex items-center justify-center gap-1 bg-indigo-50 text-indigo-700 py-2 rounded-xl font-black text-[9px] uppercase border border-indigo-200 active:scale-95 transition-all"><UserSearch size={12}/><span>Досье</span></button>}
-                        {log.type === 'trigger'   && <button className="col-span-2 flex items-center justify-center gap-1 bg-orange-50 text-orange-700 py-2 rounded-xl font-black text-[9px] uppercase border border-orange-200 active:scale-95 transition-all"><Zap size={12}/><span>Амнистия</span></button>}
-                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}       className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
-                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}      className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
                       </div>
                     </div>
                   )}
@@ -1336,8 +1364,7 @@ export default function App() {
                </h3>
 
                {/* Превью */}
-               <div
-                 className="text-xs text-gray-700 leading-snug"
+               <div className="journal-html"
                  style={{
                    '--q-bg':       quoteCfg.bg,
                    '--q-stripe-1': quoteCfg.stripe1,
@@ -1345,14 +1372,7 @@ export default function App() {
                  }}
                >
                  <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Превью:</p>
-                 <blockquote className="journal-quote-preview border-l-4 px-2 py-1 my-1 italic text-gray-700 font-medium text-[11px]"
-                   style={{
-                     background: 'var(--q-bg)',
-                     borderImage: `repeating-linear-gradient(to bottom, var(--q-stripe-1) 0 8px, var(--q-stripe-2) 8px 16px) 1`,
-                     borderRadius: '0 8px 8px 0',
-                   }}>
-                   Пример текста нарушения от пользователя
-                 </blockquote>
+                 <blockquote>Пример текста нарушения от пользователя — это цитата сообщения</blockquote>
                </div>
 
                {/* Цвет фона */}
@@ -1408,6 +1428,11 @@ export default function App() {
                  {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
                  Сохранить настройки
                </button>
+               {quoteSaveMsg && (
+                 <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
+                   {quoteSaveMsg}
+                 </p>
+               )}
              </div>
 
           </div>
