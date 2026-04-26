@@ -386,15 +386,34 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
     except Exception as e:
         logging.error(f"confirm_referral/record_join failed for {user_id}: {e}")
 
-    # ═══ ДОСЬЕ: строка "Вернулся" + переключить индикатор на ✅ В чате ═══
+    # ═══ ДОСЬЕ: переключить индикатор на ✅ В чате; "Вернулся" — только если реально уходил ═══
     try:
-        from handlers.anketa_edit_handlers import get_anketa_edit, upsert_anketa_edit, inject_presence
+        from handlers.anketa_edit_handlers import (
+            get_anketa_edit, upsert_anketa_edit, inject_presence, update_dossier_presence,
+        )
         from utils.helpers import get_moscow_time
+
+        # Был ли пользователь раньше в чате и уходил? Проверяем main DB и reg DB
+        was_left_before = False
+        try:
+            existing = db.get_user(user_id)
+            if existing and existing['is_left']:
+                was_left_before = True
+        except Exception:
+            pass
+        if not was_left_before:
+            try:
+                from database.db_friend import get_user as _reg_get_user
+                reg = await _reg_get_user(user_id)
+                if reg and reg.get('last_exit_at'):
+                    was_left_before = True
+            except Exception:
+                pass
+
         row = get_anketa_edit(db, user_id)
-        if row and row.get('dossier_msg_id'):
+        if row and row.get('dossier_msg_id') and was_left_before:
             return_time = get_moscow_time().strftime("%d.%m.%Y %H:%M МСК")
             base_text = row.get('base_text') or ''
-            # Добавляем строку возвращения и переключаем индикатор
             new_text = inject_presence(
                 base_text + f"\n\n🔁 <b>Вернулся:</b> {return_time}",
                 in_chat=True
@@ -402,21 +421,29 @@ async def handle_user_returned(update, context, user_id, db, admin_id, target_ch
             chat_id  = row.get('dossier_chat_id')
             msg_id   = row['dossier_msg_id']
             is_photo = bool(row.get('dossier_is_photo'))
+            from telegram import InlineKeyboardMarkup, InlineKeyboardButton
+            kb = InlineKeyboardMarkup([
+                [InlineKeyboardButton("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
+                 InlineKeyboardButton("✏️ Редактировать", callback_data=f"anketa_edit_{user_id}")],
+            ])
             try:
                 if is_photo:
                     await context.bot.edit_message_caption(
                         chat_id=chat_id, message_id=msg_id,
-                        caption=new_text, parse_mode="HTML"
+                        caption=new_text, parse_mode="HTML", reply_markup=kb,
                     )
                 else:
                     await context.bot.edit_message_text(
                         chat_id=chat_id, message_id=msg_id,
-                        text=new_text, parse_mode="HTML"
+                        text=new_text, parse_mode="HTML", reply_markup=kb,
                     )
                 upsert_anketa_edit(db, user_id, base_text=new_text)
                 logging.info(f"✅ Dossier updated (return + presence ✅) for user {user_id}")
             except Exception as e:
                 logging.error(f"Failed to edit dossier for {user_id}: {e}")
+        else:
+            # Первое вступление или досье ещё нет — только индикатор «В чате», без «Вернулся»
+            await update_dossier_presence(context.bot, db, user_id, in_chat=True)
     except Exception as e:
         logging.error(f"Dossier return update error for {user_id}: {e}")
 

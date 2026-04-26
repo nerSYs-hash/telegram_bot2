@@ -55,7 +55,11 @@ def inject_presence(text: str, in_chat: bool) -> str:
 
 
 async def update_dossier_presence(bot, db, user_id: int, in_chat: bool) -> None:
-    """Обновляет индикатор присутствия в существующем посте досье (без пересылки)."""
+    """Обновляет индикатор присутствия в существующем посте досье (без пересылки).
+
+    Кнопки досье восстанавливаются явно — иначе Telegram сбрасывает клавиатуру
+    при edit_message_text/edit_message_caption без reply_markup.
+    """
     try:
         row = get_anketa_edit(db, user_id)
         if not row or not row.get('dossier_msg_id'):
@@ -65,15 +69,19 @@ async def update_dossier_presence(bot, db, user_id: int, in_chat: bool) -> None:
         chat_id   = row.get('dossier_chat_id')
         msg_id    = row['dossier_msg_id']
         is_photo  = bool(row.get('dossier_is_photo'))
+        kb = InlineKeyboardMarkup([
+            [IKB("✉️ Написать в ЛС", url=f"tg://user?id={user_id}"),
+             IKB("✏️ Редактировать", callback_data=f"anketa_edit_{user_id}")],
+        ])
         if is_photo:
             await bot.edit_message_caption(
                 chat_id=chat_id, message_id=msg_id,
-                caption=new_text, parse_mode="HTML"
+                caption=new_text, parse_mode="HTML", reply_markup=kb,
             )
         else:
             await bot.edit_message_text(
                 chat_id=chat_id, message_id=msg_id,
-                text=new_text, parse_mode="HTML"
+                text=new_text, parse_mode="HTML", reply_markup=kb,
             )
         upsert_anketa_edit(db, user_id, base_text=new_text)
         logger.info(f"Presence updated ({'in' if in_chat else 'out'}) for user {user_id}")
