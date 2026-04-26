@@ -204,6 +204,8 @@ async def admin_profile_me(authorization: str = Header(default=None)):
 
     has_chat = role_raw in ("owner", "deputy", "admin")
     accesses = get_role_accesses(role_raw)
+    from permissions import get_role_permissions
+    permissions_flat = get_role_permissions(role_raw)
 
     return {
         "user_id":        user_id,
@@ -220,6 +222,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         "has_chat":       has_chat,
         "bot_username":   _BOT_USERNAME,
         "accesses":       accesses,
+        "permissions":    permissions_flat,
     }
 
 

@@ -287,6 +287,7 @@ export default function App() {
   const [profileData, setProfileData]             = useState(null);
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
+  const [accessesOpen, setAccessesOpen]           = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
@@ -297,6 +298,19 @@ export default function App() {
       .catch(() => {})
       .finally(() => setProfileLoading(false));
   }, []);
+
+  // Автозагрузка профиля сразу после логина — чтобы permissions были доступны во всех вкладках
+  useEffect(() => { if (authUser && !profileData) fetchProfile(); }, [authUser, profileData, fetchProfile]);
+
+  // ── userCan(perm) — главный хелпер проверки прав на фронте ──
+  const userPermissions = useMemo(
+    () => new Set(profileData?.permissions || []),
+    [profileData]
+  );
+  const userCan = useCallback((perm) => {
+    if (authUser?.is_owner) return true;
+    return userPermissions.has(perm);
+  }, [authUser, userPermissions]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -1489,7 +1503,7 @@ export default function App() {
                       </div>
                     )}
                   </div>
-                  {editingTrigger.id && (
+                  {editingTrigger.id && userCan('triggers.delete') && (
                     <button onClick={() => { deleteTrigger(editingTrigger.id); setEditingTrigger(null); }}
                       className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-xl font-black text-sm shadow-md shadow-red-100 active:scale-95 transition-all">
                       <Trash2 size={15}/> Удалить
@@ -4505,7 +4519,7 @@ export default function App() {
             {/* кнопки */}
             <div className="flex items-center gap-1 ml-2 flex-shrink-0">
               {/* удалить — только неактивные */}
-              {!active && (
+              {!active && userCan('triggers.delete') && (
                 <button
                   onClick={() => deleteTrigger(t.id)}
                   className="p-2 text-red-400 hover:text-red-600 active:scale-90 transition-all"
@@ -4513,29 +4527,33 @@ export default function App() {
                   <Trash2 size={16}/>
                 </button>
               )}
-              {/* копировать */}
-              <button
-                onClick={() => copyTrigger(t.id)}
-                disabled={copyingTrigger === t.id}
-                className="p-2 text-blue-400 hover:text-blue-600 active:scale-90 transition-all disabled:opacity-40"
-              >
-                {copyingTrigger === t.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
-              </button>
+              {/* копировать (создание дубликата) */}
+              {userCan('triggers.create') && (
+                <button
+                  onClick={() => copyTrigger(t.id)}
+                  disabled={copyingTrigger === t.id}
+                  className="p-2 text-blue-400 hover:text-blue-600 active:scale-90 transition-all disabled:opacity-40"
+                >
+                  {copyingTrigger === t.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
+                </button>
+              )}
               {/* пауза (активные) / старт (неактивные) */}
-              <button
-                onClick={() => toggleTrigger(t.id)}
-                disabled={togglingTrigger === t.id}
-                className={`p-0.5 rounded-full active:scale-90 transition-all disabled:opacity-40 ${
-                  active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'
-                }`}
-              >
-                {togglingTrigger === t.id
-                  ? <Loader2 size={22} className="animate-spin"/>
-                  : active
-                    ? <span className="w-6 h-6 rounded-full border-2 border-red-500 flex items-center justify-center"><Square size={8} fill="currentColor"/></span>
-                    : <span className="w-6 h-6 rounded-full border-2 border-green-500 flex items-center justify-center"><Play size={9} fill="currentColor"/></span>
-                }
-              </button>
+              {userCan('triggers.toggle') && (
+                <button
+                  onClick={() => toggleTrigger(t.id)}
+                  disabled={togglingTrigger === t.id}
+                  className={`p-0.5 rounded-full active:scale-90 transition-all disabled:opacity-40 ${
+                    active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'
+                  }`}
+                >
+                  {togglingTrigger === t.id
+                    ? <Loader2 size={22} className="animate-spin"/>
+                    : active
+                      ? <span className="w-6 h-6 rounded-full border-2 border-red-500 flex items-center justify-center"><Square size={8} fill="currentColor"/></span>
+                      : <span className="w-6 h-6 rounded-full border-2 border-green-500 flex items-center justify-center"><Play size={9} fill="currentColor"/></span>
+                  }
+                </button>
+              )}
             </div>
           </div>
         );
@@ -4558,35 +4576,45 @@ export default function App() {
               <button className="flex items-center space-x-2 px-5 py-3 bg-white border border-gray-100 rounded-2xl font-black text-xs text-gray-500 shadow-sm active:scale-95 transition-all">
                 <Activity size={14}/><span>Статистика</span>
               </button>
-              <button
-                onClick={() => openTriggerModal()}
-                className="flex-1 flex items-center justify-center space-x-2 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-md shadow-blue-100 active:scale-95 transition-all"
-              >
-                <PlusCircle size={14}/><span>Создать триггер</span>
-              </button>
-              {/* меню ··· */}
-              <div className="relative">
+              {userCan('triggers.create') && (
                 <button
-                  onClick={() => setShowTriggerMenu(v => !v)}
-                  className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
-                >···</button>
-                {showTriggerMenu && (
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
-                    <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
-                      <Download size={14} className="text-gray-400"/> Импортировать триггеры
-                    </button>
-                    <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
-                      <Clock size={14} className="text-gray-400"/> Восстановить удалённый
-                    </button>
-                    <button
-                      onClick={() => { triggers.forEach(t => t.is_enabled && toggleTrigger(t.id)); }}
-                      className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3"
-                    >
-                      <Power size={14} className="text-gray-400"/> Отключить все триггеры
-                    </button>
-                  </div>
-                )}
-              </div>
+                  onClick={() => openTriggerModal()}
+                  className="flex-1 flex items-center justify-center space-x-2 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-md shadow-blue-100 active:scale-95 transition-all"
+                >
+                  <PlusCircle size={14}/><span>Создать триггер</span>
+                </button>
+              )}
+              {/* меню ··· (показываем только если хоть один пункт доступен) */}
+              {(userCan('triggers.create') || userCan('triggers.toggle')) && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTriggerMenu(v => !v)}
+                    className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
+                  >···</button>
+                  {showTriggerMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
+                      {userCan('triggers.create') && (
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+                          <Download size={14} className="text-gray-400"/> Импортировать триггеры
+                        </button>
+                      )}
+                      {userCan('triggers.create') && (
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
+                          <Clock size={14} className="text-gray-400"/> Восстановить удалённый
+                        </button>
+                      )}
+                      {userCan('triggers.toggle') && (
+                        <button
+                          onClick={() => { triggers.forEach(t => t.is_enabled && toggleTrigger(t.id)); }}
+                          className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                        >
+                          <Power size={14} className="text-gray-400"/> Отключить все триггеры
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {triggersLoading && (
@@ -4708,167 +4736,182 @@ export default function App() {
         const placeholderVal = profileLoading
           ? <Loader2 size={14} className="animate-spin text-gray-300"/>
           : <span className="text-xs text-gray-300 font-black uppercase">—</span>;
-        return (
-          <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+        const ICON_MAP = {
+          ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
+          Settings, ShieldCheck, Ban, ShieldBan,
+        };
+        const ACTION_COLORS = {
+          view:   'bg-gray-100 text-gray-600',
+          create: 'bg-blue-100 text-blue-700',
+          edit:   'bg-amber-100 text-amber-700',
+          delete: 'bg-red-100 text-red-700',
+          toggle: 'bg-green-100 text-green-700',
+          export: 'bg-purple-100 text-purple-700',
+        };
+        const accesses = profileData?.accesses || [];
+        const totalActions = accesses.reduce((sum, r) => sum + r.actions.length, 0);
 
-            {/* ─── HERO ─── */}
-            <div className="bg-white rounded-[2.5rem] p-8 border border-gray-100 shadow-sm flex flex-col items-center text-center">
+        return (
+          <div className="pb-24 animate-in fade-in duration-500 space-y-4">
+
+            {/* ─── HERO (компактный, горизонтальный) ─── */}
+            <div className="bg-white rounded-[2rem] p-5 border border-gray-100 shadow-sm
+                            flex items-center gap-5">
               {authUser.photo_url
                 ? <img src={authUser.photo_url} alt="avatar"
-                       className="w-28 h-28 rounded-3xl border-4 border-white shadow-xl object-cover"/>
-                : <div className="w-28 h-28 rounded-3xl bg-gradient-to-tr from-blue-600 to-indigo-700
-                                  flex items-center justify-center text-white font-black text-5xl
-                                  border-4 border-white shadow-xl">
+                       className="w-20 h-20 rounded-2xl border-2 border-white shadow-lg object-cover flex-shrink-0"/>
+                : <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700
+                                  flex items-center justify-center text-white font-black text-4xl
+                                  border-2 border-white shadow-lg flex-shrink-0">
                     {initials}
                   </div>
               }
-              <h2 className="text-2xl font-black text-gray-900 mt-5">{authUser.first_name || 'Пользователь'}</h2>
-              {authUser.username && (
-                <p className="text-sm font-bold text-gray-400 mt-1">@{authUser.username}</p>
-              )}
-
-              <div className={`mt-4 inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full
-                              ${rs.bg} ${rs.text} text-[11px] font-black uppercase tracking-wide`}>
-                <RoleIcon size={12}/> {profileData?.role_label || 'Загрузка...'}
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-black text-gray-900 truncate">{authUser.first_name || 'Пользователь'}</h2>
+                {authUser.username && (
+                  <p className="text-xs font-bold text-gray-400 truncate">@{authUser.username}</p>
+                )}
+                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
+                                ${rs.bg} ${rs.text} text-[10px] font-black uppercase tracking-wide`}>
+                  <RoleIcon size={11}/> {profileData?.role_label || 'Загрузка...'}
+                </div>
               </div>
             </div>
 
-            {/* ─── TELEGRAM ─── */}
-            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
-              <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                <User className="mr-3 text-blue-500" size={16}/> Telegram
-              </h3>
-              <div className="space-y-2">
-                <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                  <div className="flex items-center gap-3">
-                    <Hash size={16} className="text-gray-400"/>
-                    <span className="text-xs font-bold text-gray-400 uppercase">ID</span>
+            {/* ─── ДВУХКОЛОНОЧНАЯ СЕТКА (на mobile — стек) ─── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+              {/* TELEGRAM */}
+              <div className="bg-white rounded-[2rem] p-5 border border-gray-100 space-y-2">
+                <h3 className="font-black text-gray-900 text-xs uppercase flex items-center mb-2">
+                  <User className="mr-2 text-blue-500" size={14}/> Telegram
+                </h3>
+                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <Hash size={14} className="text-gray-400"/>
+                    <span className="text-[11px] font-bold text-gray-400 uppercase">ID</span>
                   </div>
                   <span className="font-mono font-black text-sm text-gray-900">{authUser.id}</span>
                 </div>
                 {authUser.username && (
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <AtSign size={16} className="text-gray-400"/>
-                      <span className="text-xs font-bold text-gray-400 uppercase">Username</span>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <AtSign size={14} className="text-gray-400"/>
+                      <span className="text-[11px] font-bold text-gray-400 uppercase">Username</span>
                     </div>
                     <span className="font-black text-sm text-gray-900">@{authUser.username}</span>
                   </div>
                 )}
               </div>
-            </div>
 
-            {/* ─── ВАШИ ДОСТУПЫ ─── */}
-            {profileData?.accesses?.length > 0 && (() => {
-              const ICON_MAP = {
-                ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
-                Settings, ShieldCheck, Ban,
-              };
-              const ACTION_COLORS = {
-                view:   'bg-gray-100 text-gray-600',
-                create: 'bg-blue-100 text-blue-700',
-                edit:   'bg-amber-100 text-amber-700',
-                delete: 'bg-red-100 text-red-700',
-                toggle: 'bg-green-100 text-green-700',
-              };
-              return (
-                <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                      <ShieldCheck className="mr-3 text-indigo-500" size={16}/> Ваши доступы
-                    </h3>
-                    <span className="text-[10px] font-black text-gray-400 uppercase tracking-wide">
-                      {profileData.accesses.length} разделов
-                    </span>
+              {/* ЧАТ / БЕЗ ЧАТА */}
+              {profileData && profileData.has_chat === false ? (
+                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-5
+                                border border-blue-700 shadow-md text-white flex flex-col justify-between">
+                  <div className="flex items-start gap-3 mb-4">
+                    <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur
+                                    flex items-center justify-center border border-white/30 flex-shrink-0">
+                      <Plug size={18} className="text-white"/>
+                    </div>
+                    <div className="flex-1">
+                      <h3 className="text-sm font-black uppercase tracking-wide">Без чата</h3>
+                      <p className="text-xs font-medium text-blue-100 mt-1 leading-snug">
+                        Pulse Bot ещё не работает в вашем чате
+                      </p>
+                    </div>
                   </div>
-                  <div className="space-y-2">
-                    {profileData.accesses.map((res) => {
-                      const Icon = ICON_MAP[res.icon] || ShieldCheck;
-                      return (
-                        <div key={res.key} className="p-4 bg-gray-50 rounded-2xl">
-                          <div className="flex items-center gap-3 mb-2">
-                            <div className="w-9 h-9 rounded-xl bg-white flex items-center justify-center
-                                            border border-gray-100">
-                              <Icon size={16} className="text-indigo-500"/>
-                            </div>
-                            <span className="font-black text-sm text-gray-900">{res.label}</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1.5 pl-12">
-                            {res.actions.map((a) => (
-                              <span key={a.key}
-                                    className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase
-                                                tracking-wide ${ACTION_COLORS[a.key] || 'bg-gray-100 text-gray-600'}`}>
-                                {a.label}
-                              </span>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <button
+                    onClick={() => setShowConnectChat(true)}
+                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
+                               bg-white text-blue-700 font-black text-xs uppercase tracking-wide
+                               hover:bg-blue-50 active:scale-[0.98] transition-all shadow">
+                    <Plug size={14}/> Подключить чат
+                  </button>
                 </div>
-              );
-            })()}
-
-            {/* ─── ЧАТ / БЕЗ ЧАТА ─── */}
-            {profileData && profileData.has_chat === false ? (
-              <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2.5rem] p-8
-                              border border-blue-700 shadow-xl text-white text-center space-y-5">
-                <div className="w-20 h-20 mx-auto rounded-3xl bg-white/15 backdrop-blur
-                                flex items-center justify-center border-2 border-white/30">
-                  <Plug size={36} className="text-white"/>
-                </div>
-                <div className="space-y-2">
-                  <h3 className="text-xl font-black">Подключите свой чат</h3>
-                  <p className="text-sm font-medium text-blue-100 leading-relaxed max-w-xs mx-auto">
-                    Pulse Bot ещё не работает в вашем чате. Добавьте его, чтобы получить
-                    статистику, журнал событий и админ-инструменты.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setShowConnectChat(true)}
-                  className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
-                             bg-white text-blue-700 font-black text-sm uppercase tracking-wide
-                             hover:bg-blue-50 active:scale-[0.98] transition-all shadow-lg">
-                  <Plug size={16}/> Подключить мой чат
-                </button>
-              </div>
-            ) : (
-              <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-3">
-                <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                  <MessageCircle className="mr-3 text-green-500" size={16}/> Чат
-                </h3>
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <Calendar size={16} className="text-gray-400"/>
-                      <span className="text-xs font-bold text-gray-400 uppercase">В чате с</span>
+              ) : (
+                <div className="bg-white rounded-[2rem] p-5 border border-gray-100 space-y-2">
+                  <h3 className="font-black text-gray-900 text-xs uppercase flex items-center mb-2">
+                    <MessageCircle className="mr-2 text-green-500" size={14}/> Чат
+                  </h3>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Calendar size={14} className="text-gray-400"/>
+                      <span className="text-[11px] font-bold text-gray-400 uppercase">В чате с</span>
                     </div>
                     {fmtDate(profileData?.joined_at)
                       ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
                       : placeholderVal}
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <Clock size={16} className="text-gray-400"/>
-                      <span className="text-xs font-bold text-gray-400 uppercase">Последнее сообщение</span>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <Clock size={14} className="text-gray-400"/>
+                      <span className="text-[11px] font-bold text-gray-400 uppercase">Последнее</span>
                     </div>
                     {fmtDate(profileData?.last_message)
                       ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
                       : placeholderVal}
                   </div>
-                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-                    <div className="flex items-center gap-3">
-                      <MessageCircle size={16} className="text-gray-400"/>
-                      <span className="text-xs font-bold text-gray-400 uppercase">Сообщений всего</span>
+                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <MessageCircle size={14} className="text-gray-400"/>
+                      <span className="text-[11px] font-bold text-gray-400 uppercase">Сообщений</span>
                     </div>
                     {profileData
                       ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
                       : placeholderVal}
                   </div>
                 </div>
-              </div>
-            )}
+              )}
+
+              {/* ВАШИ ДОСТУПЫ — collapsible, на полную ширину сетки */}
+              {accesses.length > 0 && (
+                <div className="lg:col-span-2 bg-white rounded-[2rem] border border-gray-100 overflow-hidden">
+                  <button
+                    onClick={() => setAccessesOpen(v => !v)}
+                    className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center">
+                        <ShieldCheck size={16} className="text-indigo-600"/>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-black text-gray-900 text-sm uppercase">Ваши доступы</h3>
+                        <p className="text-[11px] font-bold text-gray-400 mt-0.5">
+                          {accesses.length} разделов · {totalActions} действий
+                        </p>
+                      </div>
+                    </div>
+                    {accessesOpen
+                      ? <ChevronUp   size={18} className="text-gray-400"/>
+                      : <ChevronDown size={18} className="text-gray-400"/>}
+                  </button>
+                  {accessesOpen && (
+                    <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {accesses.map((res) => {
+                        const Icon = ICON_MAP[res.icon] || ShieldCheck;
+                        return (
+                          <div key={res.key} className="p-3 bg-gray-50 rounded-xl">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Icon size={14} className="text-indigo-500 flex-shrink-0"/>
+                              <span className="font-black text-xs text-gray-900 uppercase tracking-wide truncate">{res.label}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {res.actions.map((a) => (
+                                <span key={a.key}
+                                      className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase
+                                                  tracking-wide ${ACTION_COLORS[a.key] || 'bg-gray-100 text-gray-600'}`}>
+                                  {a.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
 
             {/* ─── МОДАЛКА: ИНСТРУКЦИЯ ПОДКЛЮЧЕНИЯ ─── */}
             {showConnectChat && createPortal(
