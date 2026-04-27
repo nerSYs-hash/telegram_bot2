@@ -91,7 +91,7 @@ async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs
 
     # Проверить профиль
     profile = _get_profile(db, user.id)
-    has_profile = bool(profile and profile.get('message_ids') and not profile.get('deleted_at'))
+    has_profile = bool(profile and profile.get('published_at') and not profile.get('deleted_at'))
 
     text_lines = ["💎 <b>VIP-услуги для вашей анкеты BBS</b>\n"]
     if not has_profile:
@@ -148,7 +148,7 @@ async def show_vip_family(query, data, user, context, db):
         return
 
     profile = _get_profile(db, user.id)
-    has_profile = bool(profile and profile.get('message_ids') and not profile.get('deleted_at'))
+    has_profile = bool(profile and profile.get('published_at') and not profile.get('deleted_at'))
     profile_id = profile['id'] if has_profile else None
 
     icon, name, desc = FAMILY_META.get(family, ('•', family, ''))
@@ -232,7 +232,7 @@ async def show_vip_confirmation(query, data, user, context, db):
 
     # Профиль
     profile = _get_profile(db, user.id)
-    if not profile or not profile.get('message_ids') or profile.get('deleted_at'):
+    if not profile or not profile.get('published_at') or profile.get('deleted_at'):
         await query.answer("⛔ Опубликуйте анкету сначала.", show_alert=True)
         return
 
@@ -297,7 +297,7 @@ async def process_vip_purchase(query, data, user, context, db, target_chat_id, b
 
     # Профиль
     profile = _get_profile(db, user.id)
-    if not profile or not profile.get('message_ids') or profile.get('deleted_at'):
+    if not profile or not profile.get('published_at') or profile.get('deleted_at'):
         await query.answer("⛔ Опубликуйте анкету сначала.", show_alert=True)
         return
 

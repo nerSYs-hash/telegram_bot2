@@ -137,7 +137,20 @@ def init_bbs_vip_tables(db) -> None:
 
     db.conn.commit()
 
-    # ── Сид дефолтных цен (INSERT OR IGNORE — не трогает уже изменённые) ──
+    # ── Удалить устаревшие SKU (старые коды из прошлой редакции ТЗ) ──
+    _OBSOLETE_CODES = [
+        'BUMP_24', 'BUMP_48', 'BUMP_72', 'BUMP_168',
+        'SILENT_PIN_24', 'SILENT_PIN_48', 'SILENT_PIN_72', 'SILENT_PIN_168',
+        'LOUD_PIN_24', 'LOUD_PIN_48', 'LOUD_PIN_72',
+        'CUSTOM_BUMP_3H', 'CUSTOM_BUMP_6H', 'CUSTOM_BUMP_12H',
+        'BUMP_PIN_24', 'BUMP_PIN_48', 'BUMP_PIN_72',
+        'INSTANT_BUMP',
+    ]
+    for code in _OBSOLETE_CODES:
+        c.execute("DELETE FROM bbs_vip_settings WHERE vip_code=?", (code,))
+    db.conn.commit()
+
+    # ── Сид актуальных цен (INSERT OR IGNORE — не трогает уже изменённые владельцем) ──
     for code, family, title, price, dur, bump, sort in _DEFAULT_SETTINGS:
         c.execute("""
             INSERT OR IGNORE INTO bbs_vip_settings
