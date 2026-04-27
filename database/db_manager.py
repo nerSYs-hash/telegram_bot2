@@ -88,12 +88,28 @@ from database.db_bbs_vip import (
     init_bbs_vip_tables as _init_bbs_vip_tables,
     get_vip_settings as _get_vip_settings,
     set_vip_price as _set_vip_price,
+    toggle_vip_service as _toggle_vip_service,
     calc_pulse_price as _calc_pulse_price,
     get_active_subscriptions as _get_vip_active_subscriptions,
     get_active_by_family as _get_active_by_family,
-    check_purchase_cooldown as _check_purchase_cooldown,
+    has_active_vip as _has_active_vip,
+    get_all_active_bump_subs as _get_all_active_bump_subs,
+    get_expired_subscriptions as _get_expired_vip_subscriptions,
+    get_due_custom_bump_subs as _get_due_custom_bump_subs,
+    expire_subscription as _expire_vip_subscription,
+    update_last_bumped as _update_vip_last_bumped,
+    update_pin_msg_id as _update_vip_pin_msg_id,
+    check_global_cooldown as _check_vip_global_cooldown,
+    release_promo_cooldown_if_deleted as _release_promo_cooldown_if_deleted,
+    get_next_promo_slot as _get_next_promo_slot,
+    mark_promo_slot_posted as _mark_promo_slot_posted,
+    increment_promo_attempts as _increment_promo_attempts,
+    purchase_vip as _purchase_vip,
+    VipPurchaseError,
     count_purchases_stats as _count_vip_purchases_stats,
+    get_vip_stats as _get_vip_stats,
     list_active_subscriptions as _list_active_vip_subscriptions,
+    admin_cancel_subscription as _admin_cancel_vip_subscription,
     get_pin_message_ids_for_profile as _get_pin_message_ids_for_profile,
     cancel_subscriptions_for_profile as _cancel_subscriptions_for_profile,
 )
@@ -918,23 +934,68 @@ class Database:
     def set_vip_price(self, code, price_rub):
         return _set_vip_price(self, code, price_rub)
 
+    def toggle_vip_service(self, code):
+        return _toggle_vip_service(self, code)
+
     def calc_pulse_price(self, rub):
         return _calc_pulse_price(rub, self)
 
     def get_vip_active_subscriptions(self, profile_id):
         return _get_vip_active_subscriptions(self, profile_id)
 
-    def get_active_by_family(self, profile_id, family):
+    def get_active_vip_by_family(self, profile_id, family):
         return _get_active_by_family(self, profile_id, family)
 
-    def check_purchase_cooldown(self, user_id, family):
-        return _check_purchase_cooldown(self, user_id, family)
+    def has_active_vip(self, profile_id):
+        return _has_active_vip(self, profile_id)
+
+    def get_all_active_bump_subs(self):
+        return _get_all_active_bump_subs(self)
+
+    def get_expired_vip_subscriptions(self):
+        return _get_expired_vip_subscriptions(self)
+
+    def get_due_custom_bump_subs(self):
+        return _get_due_custom_bump_subs(self)
+
+    def expire_vip_subscription(self, sub_id):
+        return _expire_vip_subscription(self, sub_id)
+
+    def update_vip_last_bumped(self, sub_id):
+        return _update_vip_last_bumped(self, sub_id)
+
+    def update_vip_pin_msg_id(self, sub_id, family, msg_id):
+        return _update_vip_pin_msg_id(self, sub_id, family, msg_id)
+
+    def check_vip_global_cooldown(self, vip_family):
+        return _check_vip_global_cooldown(self, vip_family)
+
+    def release_promo_cooldown_if_deleted(self):
+        return _release_promo_cooldown_if_deleted(self)
+
+    def get_next_promo_slot(self):
+        return _get_next_promo_slot(self)
+
+    def mark_promo_slot_posted(self, queue_id, sub_id, msg_ids):
+        return _mark_promo_slot_posted(self, queue_id, sub_id, msg_ids)
+
+    def increment_promo_attempts(self, queue_id):
+        return _increment_promo_attempts(self, queue_id)
+
+    def purchase_vip(self, user_id, profile_id, vip_code):
+        return _purchase_vip(self, user_id, profile_id, vip_code)
 
     def count_vip_purchases_stats(self, period_hours=None):
         return _count_vip_purchases_stats(self, period_hours)
 
+    def get_vip_stats(self):
+        return _get_vip_stats(self)
+
     def list_active_vip_subscriptions(self, family=None, limit=100):
         return _list_active_vip_subscriptions(self, family=family, limit=limit)
+
+    def admin_cancel_vip_subscription(self, sub_id):
+        return _admin_cancel_vip_subscription(self, sub_id)
 
     def get_vip_pin_message_ids_for_profile(self, profile_id):
         return _get_pin_message_ids_for_profile(self, profile_id)
