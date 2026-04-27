@@ -839,6 +839,24 @@ class TelegramBot:
             id='weekly_report'
         )
         
+        # ═══ VIP BBS jobs ═══
+        from bbs_tasks import vip_expire_check, vip_bump_tick, promo_chat_dispatcher
+        self.scheduler.add_job(
+            vip_expire_check, 'interval', minutes=5,
+            args=[self.application.bot, self.db, self.target_chat_id],
+            id='vip_expire_check', replace_existing=True,
+        )
+        self.scheduler.add_job(
+            vip_bump_tick, 'interval', minutes=5,
+            args=[self.application.bot, self.db, self.target_chat_id, self.bbs_thread_id],
+            id='vip_bump_tick', replace_existing=True,
+        )
+        self.scheduler.add_job(
+            promo_chat_dispatcher, 'interval', minutes=2,
+            args=[self.application.bot, self.db, self.target_chat_id],
+            id='promo_chat_dispatcher', replace_existing=True,
+        )
+
         self.scheduler.start()
         logger.info("Scheduled jobs setup complete")
     

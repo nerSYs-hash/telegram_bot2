@@ -101,6 +101,16 @@ def init_bbs_vip_tables(db):
                 (code, family, title, price_rub, duration_hours, bump_interval_hours, cooldown_hours, sort_order),
             )
         db.conn.commit()
+
+        # Миграция: колонка attempts для отслеживания неудачных попыток промо
+        try:
+            db.cursor.execute(
+                "ALTER TABLE bbs_promo_chat_queue ADD COLUMN attempts INTEGER DEFAULT 0"
+            )
+            db.conn.commit()
+        except Exception:
+            pass  # колонка уже существует
+
         logger.info("✅ BBS VIP tables initialized")
     except Exception as e:
         logger.error(f"❌ Error initializing BBS VIP tables: {e}")
