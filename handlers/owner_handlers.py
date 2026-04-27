@@ -893,6 +893,17 @@ async def handle_owner_text_input(
             ]),
         )
         return True
+    # ── VIP BBS: изменить цену ──
+    if awaiting and awaiting.startswith('vip_price_edit_'):
+        try:
+            from handlers.bbs_vip_owner import handle_vip_price_input
+            await handle_vip_price_input(message, context, db)
+        except Exception as e:
+            logger.error(f"vip_price_edit FSM error: {e}")
+            context.user_data.pop('owner_awaiting', None)
+            context.user_data.pop('vip_price_edit', None)
+        return True
+
     if awaiting and (awaiting.startswith('journal_connect_') or awaiting.startswith('journal_thread_')):
         return False
 

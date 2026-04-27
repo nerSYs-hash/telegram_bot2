@@ -53,6 +53,14 @@ from handlers.journal_handlers import (
     journal_disconnect, journal_test,
     log_kick, log_ban, log_unban, log_unmute, log_mute,
 )
+from handlers.bbs_vip_owner import (
+    show_vip_root_menu,
+    show_vip_pricelist,
+    start_edit_vip_price,
+    show_vip_stats,
+    show_vip_active_subs,
+    cancel_vip_subscription,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -334,6 +342,26 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
                 logger.error(f"Journal log_mute error: {je}")
         except Exception as e:
             await query.answer(f"❌ {e}", show_alert=True)
+
+    # ── VIP BBS ──
+    elif data == "bbs_vip_root":
+        await show_vip_root_menu(query, user, db, admin_id)
+    elif data == "bbs_vip_pricelist":
+        await show_vip_pricelist(query, user, db, admin_id)
+    elif data == "bbs_vip_stats":
+        await show_vip_stats(query, user, db, admin_id)
+    elif data == "bbs_vip_active_subs":
+        await show_vip_active_subs(query, user, db, admin_id)
+    elif data.startswith("bbs_vip_subs_page_"):
+        try:
+            page = int(data.removeprefix("bbs_vip_subs_page_"))
+        except (ValueError, TypeError):
+            page = 0
+        await show_vip_active_subs(query, user, db, admin_id, page=page)
+    elif data.startswith("bbs_vip_price_edit_"):
+        await start_edit_vip_price(query, data, user, context, db, admin_id)
+    elif data.startswith("bbs_vip_cancel_sub_"):
+        await cancel_vip_subscription(query, data, user, db, admin_id)
 
     # ── Журнал ──
     elif data == "owner_journal":

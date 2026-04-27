@@ -84,6 +84,17 @@ from database.db_stats import (
     register_stat_event as _register_stat_event,
     cleanup_stat_events_log as _cleanup_stat_events_log,
 )
+from database.db_bbs_vip import (
+    init_bbs_vip_tables as _init_bbs_vip_tables,
+    get_vip_settings as _get_vip_settings,
+    set_vip_price as _set_vip_price,
+    calc_pulse_price as _calc_pulse_price,
+    get_active_subscriptions as _get_vip_active_subscriptions,
+    get_active_by_family as _get_active_by_family,
+    check_purchase_cooldown as _check_purchase_cooldown,
+    count_purchases_stats as _count_vip_purchases_stats,
+    list_active_subscriptions as _list_active_vip_subscriptions,
+)
 
 
 class Database:
@@ -528,6 +539,9 @@ class Database:
         from handlers.BBS.database_bbs import init_bbs_tables
         init_bbs_tables(self)
 
+        # Initialize VIP BBS tables
+        _init_bbs_vip_tables(self)
+
         # Run migrations
         _migrate_to_decimal_balances(self)
         _add_telegram_message_id_to_messages(self)
@@ -891,6 +905,34 @@ class Database:
         except Exception as e:
             logging.error(f"add_shipper_resonance_stat error: {e}")
             return None
+
+    # ── VIP BBS ──
+    def init_bbs_vip_tables(self):
+        _init_bbs_vip_tables(self)
+
+    def get_vip_settings(self, code=None, family=None):
+        return _get_vip_settings(self, code=code, family=family)
+
+    def set_vip_price(self, code, price_rub):
+        return _set_vip_price(self, code, price_rub)
+
+    def calc_pulse_price(self, rub):
+        return _calc_pulse_price(rub, self)
+
+    def get_vip_active_subscriptions(self, profile_id):
+        return _get_vip_active_subscriptions(self, profile_id)
+
+    def get_active_by_family(self, profile_id, family):
+        return _get_active_by_family(self, profile_id, family)
+
+    def check_purchase_cooldown(self, user_id, family):
+        return _check_purchase_cooldown(self, user_id, family)
+
+    def count_vip_purchases_stats(self, period_hours=None):
+        return _count_vip_purchases_stats(self, period_hours)
+
+    def list_active_vip_subscriptions(self, family=None, limit=100):
+        return _list_active_vip_subscriptions(self, family=family, limit=limit)
 
     # ── Close ──
     def close(self):
