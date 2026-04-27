@@ -30,21 +30,26 @@ async def show_bbs_menu(update_or_query, context, db):
 
 async def show_dating_menu(query, context, db, user_id):
     profile = get_profile(db, user_id)
+    published = bool(profile and profile.get('published_at') and not profile.get('deleted_at'))
+
     keyboard = [[InlineKeyboardButton("📝 Разместить анкету", callback_data="bbs_create_start")]]
     if profile:
-        if profile.get('published_at') and not profile.get('deleted_at'):
+        if published:
             keyboard.insert(0, [InlineKeyboardButton("👁 Моя анкета", callback_data="bbs_view_profile")])
-            keyboard.append([InlineKeyboardButton("💎 Улучшить анкету (VIP)", callback_data="bbs_vip_storefront")])
         keyboard.append([InlineKeyboardButton("🗑 Удалить анкету", callback_data="bbs_delete_confirm")])
-        if profile.get('published_at') and db.is_feature_enabled('bbs_edit'):
+        if published and db.is_feature_enabled('bbs_edit'):
             edited = get_edited_fields(profile)
             if len(edited) < len(EDITABLE_FIELDS):
                 keyboard.insert(1, [InlineKeyboardButton(
                     "✏️ Редактировать анкету", callback_data="bbs_edit_start"
                 )])
+
+    # VIP-кнопка всегда видна — при попытке купить без анкеты витрина сообщит сама
+    keyboard.append([InlineKeyboardButton("💎 VIP-услуги для анкеты", callback_data="bbs_vip_storefront")])
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="menu_bbs")])
+
     text = "💘 <b>Знакомства</b>\n\n"
-    text += "У вас есть анкета (опубликована).\n" if profile else "У вас пока нет анкеты.\n"
+    text += "У вас есть анкета (опубликована).\n" if published else "У вас пока нет анкеты.\n"
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
@@ -65,6 +70,7 @@ async def handle_bbs_view_profile(query, context, db):
     photos = json.loads(profile.get('photos', '[]')) if isinstance(profile.get('photos'), str) else (profile.get('photos') or [])
 
     keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton("💎 VIP-услуги для анкеты", callback_data="bbs_vip_storefront")],
         [InlineKeyboardButton("🔙 Назад", callback_data="bbs_dating")],
     ])
 
