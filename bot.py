@@ -840,21 +840,27 @@ class TelegramBot:
         )
         
         # ═══ VIP BBS jobs ═══
-        from bbs_tasks import vip_expire_check, vip_bump_tick, promo_chat_dispatcher
+        # VIP1 (BUMP) — событийный, здесь НЕ регистрируется (см. publishing_bbs._trigger_vip1_queue)
+        from bbs_tasks import vip_expire_check, vip_custom_bump_tick, promo_chat_dispatcher, global_cooldown_sync
         self.scheduler.add_job(
             vip_expire_check, 'interval', minutes=5,
-            args=[self.application.bot, self.db, self.target_chat_id],
+            args=[self.application.bot, self.db, self.target_chat_id, self.bbs_thread_id],
             id='vip_expire_check', replace_existing=True,
         )
         self.scheduler.add_job(
-            vip_bump_tick, 'interval', minutes=5,
+            vip_custom_bump_tick, 'interval', minutes=5,
             args=[self.application.bot, self.db, self.target_chat_id, self.bbs_thread_id],
-            id='vip_bump_tick', replace_existing=True,
+            id='vip_custom_bump_tick', replace_existing=True,
         )
         self.scheduler.add_job(
             promo_chat_dispatcher, 'interval', minutes=2,
             args=[self.application.bot, self.db, self.target_chat_id],
             id='promo_chat_dispatcher', replace_existing=True,
+        )
+        self.scheduler.add_job(
+            global_cooldown_sync, 'interval', minutes=10,
+            args=[self.db],
+            id='global_cooldown_sync', replace_existing=True,
         )
 
         self.scheduler.start()
