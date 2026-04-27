@@ -206,14 +206,16 @@ def check_purchase_cooldown(db, user_id, family) -> tuple:
         if not last:
             return (True, None)
 
-        # SQLite datetime modifier корректно принимает дробные часы (0.5 = 30 мин)
+        # Конвертируем часы в минуты: SQLite не поддерживает дробные часы в datetime модификаторе
+        # 0.5 ч = 30 минут, 168 ч = 10080 минут и т.д.
+        cooldown_minutes = int(round(cooldown_hours * 60))
         db.cursor.execute(
             """
             SELECT
-                datetime(?, '+' || ? || ' hours') > datetime('now') AS in_cooldown,
-                datetime(?, '+' || ? || ' hours') AS retry_at
+                datetime(?, '+' || ? || ' minutes') > datetime('now') AS in_cooldown,
+                datetime(?, '+' || ? || ' minutes') AS retry_at
             """,
-            (last['purchased_at'], cooldown_hours, last['purchased_at'], cooldown_hours),
+            (last['purchased_at'], cooldown_minutes, last['purchased_at'], cooldown_minutes),
         )
         check = db.cursor.fetchone()
         if check and check['in_cooldown']:

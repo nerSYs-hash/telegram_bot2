@@ -178,9 +178,21 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
 
     clear_bbs(context)
 
-    # Успешный ответ — safe_answer работает и с фото, и с текстом
+    # Рассчитываем цену INSTANT_BUMP для кнопки (динамически)
+    try:
+        ib_setting = db.get_vip_settings(code='INSTANT_BUMP')
+        ib_rub = float(ib_setting['price_rub']) if ib_setting else 50.0
+        rate_str = db.get_setting('pulse_rate', '1.42') or '1.42'
+        rate = float(rate_str)
+        ib_pulses = round(ib_rub / (rate if rate > 0 else 1.42), 0)
+        instant_label = f"🚀 Поднять анкету сейчас ({ib_pulses:.0f} 💎)"
+    except Exception:
+        instant_label = "🚀 Поднять анкету сейчас"
+
     success_keyboard = InlineKeyboardMarkup([
-        [InlineKeyboardButton("🔙 В меню", callback_data="back_to_menu")]
+        [InlineKeyboardButton("💎 Улучшить анкету (VIP)", callback_data="bbs_vip_storefront")],
+        [InlineKeyboardButton(instant_label, callback_data="bbs_vip_instant_bump")],
+        [InlineKeyboardButton("🔙 В меню", callback_data="back_to_menu")],
     ])
     await safe_answer(
         query,

@@ -28,6 +28,7 @@ from handlers.callback.user_callbacks import dispatch_user
 from handlers.callback.activity_callbacks import dispatch_activity
 from handlers.callback.admin_callbacks import dispatch_admin
 from handlers.callback.owner_callbacks import dispatch_owner
+from handlers.callback.bbs_vip_callbacks import dispatch_bbs_vip
 
 logger = logging.getLogger(__name__)
 
@@ -112,6 +113,11 @@ class CallbackHandler:
         if data.startswith('bbs_report_'):
             from handlers.callback.user_callbacks import show_report_menu
             await show_report_menu(self, query, context, data, user)
+            return
+
+        # ═══ VIP BBS — перехват до общего BBS-блока ═══
+        if data.startswith('bbs_vip_'):
+            await dispatch_bbs_vip(self, query, data, user, context)
             return
 
         if data.startswith('bbs_') or data.startswith('other_') or data == 'menu_bbs':
