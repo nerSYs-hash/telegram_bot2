@@ -94,6 +94,8 @@ from database.db_bbs_vip import (
     check_purchase_cooldown as _check_purchase_cooldown,
     count_purchases_stats as _count_vip_purchases_stats,
     list_active_subscriptions as _list_active_vip_subscriptions,
+    get_pin_message_ids_for_profile as _get_pin_message_ids_for_profile,
+    cancel_subscriptions_for_profile as _cancel_subscriptions_for_profile,
 )
 
 
@@ -933,6 +935,12 @@ class Database:
 
     def list_active_vip_subscriptions(self, family=None, limit=100):
         return _list_active_vip_subscriptions(self, family=family, limit=limit)
+
+    def get_vip_pin_message_ids_for_profile(self, profile_id):
+        return _get_pin_message_ids_for_profile(self, profile_id)
+
+    def cancel_vip_subscriptions_for_profile(self, profile_id):
+        return _cancel_subscriptions_for_profile(self, profile_id)
 
     # ── Close ──
     def close(self):

@@ -258,6 +258,67 @@ def count_purchases_stats(db, period_hours: int = None):
         return None
 
 
+def get_pin_message_ids_for_profile(db, profile_id):
+    """
+    Возвращает список (sub_id, msg_id) всех закреплений активных VIP подписок анкеты.
+    Используется при удалении анкеты, чтобы снять закрепы.
+    """
+    try:
+        db.cursor.execute(
+            """
+            SELECT id, silent_pin_msg_id, loud_pin_msg_id
+            FROM bbs_vip_subscriptions
+            WHERE profile_id = ? AND status = 'active'
+            """,
+            (profile_id,),
+        )
+        rows = db.cursor.fetchall()
+        result = []
+        for r in rows:
+            for col in ('silent_pin_msg_id', 'loud_pin_msg_id'):
+                try:
+                    mid = r[col]
+                except Exception:
+                    mid = None
+                if mid:
+                    result.append((r['id'], int(mid)))
+        return result
+    except Exception as e:
+        logger.error(f"get_pin_message_ids_for_profile error: {e}")
+        return []
+
+
+def cancel_subscriptions_for_profile(db, profile_id):
+    """
+    Отменить все активные VIP подписки анкеты + дропнуть pending промо-слоты.
+    Вызывать при удалении анкеты пользователем/админом/системой.
+    """
+    try:
+        db.cursor.execute(
+            "UPDATE bbs_vip_subscriptions SET status = 'cancelled' "
+            "WHERE profile_id = ? AND status = 'active'",
+            (profile_id,),
+        )
+        cancelled = db.cursor.rowcount
+        # posted=2 — failed/dropped, чтобы dispatcher не пытался публиковать удалённую анкету
+        db.cursor.execute(
+            "UPDATE bbs_promo_chat_queue SET posted = 2 "
+            "WHERE profile_id = ? AND posted = 0",
+            (profile_id,),
+        )
+        dropped = db.cursor.rowcount
+        db.conn.commit()
+        if cancelled or dropped:
+            logger.info(
+                f"VIP cleanup for profile={profile_id}: "
+                f"cancelled={cancelled} subs, dropped={dropped} promo slots"
+            )
+        return cancelled
+    except Exception as e:
+        logger.error(f"cancel_subscriptions_for_profile error: {e}")
+        return 0
+
+
 def list_active_subscriptions(db, family=None, limit=100):
     """Активные подписки с JOIN на bbs_profiles для имени анкеты."""
     try:

@@ -244,21 +244,33 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id):
 async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None, deleted_by: str = 'system'):
     """
     Полное удаление: удаляет сообщения из чата И помечает запись как удалённую.
-    
+
     deleted_by может быть:
-    - 'user': пользователь явно удалил анкету  
+    - 'user': пользователь явно удалил анкету
     - 'system': система удалила при перепубликации или другой процесс
     - 'admin': администратор удалил
-    
+
     При deleted_by='user' — анкета НЕ восстанавливается при restore.
     При других значениях — восстанавливается при восстановлении ветки BBS.
     """
+    # ── VIP cleanup: снять закрепы + отменить подписки ──
+    try:
+        pins = db.get_vip_pin_message_ids_for_profile(profile['id'])
+        for sub_id, msg_id in pins:
+            try:
+                await bot.unpin_chat_message(chat_id=target_chat_id, message_id=msg_id)
+            except Exception as e:
+                logging.warning(f"BBS delete: VIP unpin failed sub={sub_id} msg={msg_id}: {e}")
+        db.cancel_vip_subscriptions_for_profile(profile['id'])
+    except Exception as e:
+        logging.error(f"BBS delete: VIP cleanup error for profile {profile.get('id')}: {e}")
+
     await delete_profile_chat_messages(bot, profile, target_chat_id)
 
     try:
         from utils.helpers import get_moscow_time
         now_iso = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
-        
+
         db.cursor.execute(
             'DELETE FROM bbs_reactions WHERE profile_id = ?', (profile['id'],)
         )
@@ -280,6 +292,13 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
     if not profile:
         logging.warning(f"BBS republish: profile not found for user {user_id}")
         raise ValueError("Анкета не найдена в БД")
+
+    # Сначала удаляем старые сообщения из чата (иначе BUMP/INSTANT_BUMP создаёт дубли).
+    # Графейсли — если сообщения уже удалены или старше 48ч, функция сама обработает.
+    try:
+        await delete_profile_chat_messages(bot, profile, target_chat_id)
+    except Exception as e:
+        logging.warning(f"BBS republish: pre-delete messages failed for user {user_id}: {e}")
 
     # --- ИСПРАВЛЕНИЕ: Парсим JSON из БД, чтобы build_profile_text не падал ---
     parsed_profile = dict(profile)
