@@ -122,8 +122,12 @@ def _json_load(val, default=None):
     return val if val else default
 
 
-def build_profile_text(data: dict) -> str:
+VIP_EMOJI = '<tg-emoji emoji-id="5949775417274536507">👑</tg-emoji>'
+
+
+def build_profile_text(data: dict, vip_active: bool = False) -> str:
     """Собирает текст анкеты для публикации (HTML).
+    vip_active=True добавляет VIP-эмодзи в начало текста.
     Пропущенные шаги не показываются. Названия полей убраны — только значения."""
     lines = []
 
@@ -160,7 +164,10 @@ def build_profile_text(data: dict) -> str:
     if about:
         lines.append(f"\n{about}")
 
-    return '\n'.join(lines)
+    text = '\n'.join(lines)
+    if vip_active:
+        text = VIP_EMOJI + '\n' + text
+    return text
 
 
 def write_button(user_id: int, bot_username: str = None) -> InlineKeyboardMarkup:

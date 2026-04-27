@@ -178,20 +178,14 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
 
     clear_bbs(context)
 
-    # Рассчитываем цену INSTANT_BUMP для кнопки (динамически)
+    # Хук VIP1: первичная публикация тоже считается чужой для других VIP1
     try:
-        ib_setting = db.get_vip_settings(code='INSTANT_BUMP')
-        ib_rub = float(ib_setting['price_rub']) if ib_setting else 50.0
-        rate_str = db.get_setting('pulse_rate', '1.42') or '1.42'
-        rate = float(rate_str)
-        ib_pulses = round(ib_rub / (rate if rate > 0 else 1.42), 0)
-        instant_label = f"🚀 Поднять анкету сейчас ({ib_pulses:.0f} 💎)"
-    except Exception:
-        instant_label = "🚀 Поднять анкету сейчас"
+        await _trigger_vip1_queue(context.bot, db, user.id, target_chat_id, bbs_thread_id)
+    except Exception as e:
+        logging.error(f"VIP1 queue trigger failed after publish user={user.id}: {e}")
 
     success_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("💎 Улучшить анкету (VIP)", callback_data="bbs_vip_storefront")],
-        [InlineKeyboardButton(instant_label, callback_data="bbs_vip_instant_bump")],
         [InlineKeyboardButton("🔙 В меню", callback_data="back_to_menu")],
     ])
     await safe_answer(
@@ -287,7 +281,12 @@ async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_i
 # ПЕРЕПУБЛИКАЦИЯ (после редактирования)
 # ═══════════════════════════════════════════════════════════════
 
-async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
+async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
+                            vip1_trigger: bool = False):
+    """
+    Перепубликует анкету в BBS ветке.
+    vip1_trigger=True — эта перепубликация сама вызвана VIP1: не запускает цепную реакцию.
+    """
     profile = get_profile(db, user_id)
     if not profile:
         logging.warning(f"BBS republish: profile not found for user {user_id}")
@@ -313,11 +312,17 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                 elif field == 'params':
                     parsed_profile[field] = {}
 
-    photos = parsed_profile.get('photos',[])
-    
-    # Теперь текст соберется без ошибок
-    profile_text = build_profile_text(parsed_profile)
-    sent_ids =[]
+    photos = parsed_profile.get('photos', [])
+
+    # VIP-эмодзи: добавляем если есть активная подписка
+    try:
+        from database.db_bbs_vip import has_active_vip
+        _vip_active = has_active_vip(db, profile['id'])
+    except Exception:
+        _vip_active = False
+
+    profile_text = build_profile_text(parsed_profile, vip_active=_vip_active)
+    sent_ids = []
 
     try:
         if len(photos) == 1:
@@ -404,6 +409,32 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
         logging.error(f"BBS: Error updating message_ids: {e}")
         raise e
 
+    # Хук VIP1: если эта перепубликация НЕ вызвана VIP1, запускаем очередь
+    if not vip1_trigger:
+        try:
+            await _trigger_vip1_queue(bot, db, user_id, target_chat_id, bbs_thread_id)
+        except Exception as e:
+            logging.error(f"VIP1 queue trigger failed after republish user={user_id}: {e}")
+
+
+async def _trigger_vip1_queue(bot, db, triggering_user_id: int,
+                               target_chat_id: int, bbs_thread_id: int) -> None:
+    """Мгновенно перепубликует всех активных VIP1 (кроме триггера) в порядке покупки."""
+    from database.db_bbs_vip import get_all_active_bump_subs, update_last_bumped
+    subs = get_all_active_bump_subs(db)
+    for sub in subs:
+        if sub['p_user_id'] == triggering_user_id:
+            continue
+        try:
+            await republish_profile(
+                bot, db, sub['p_user_id'],
+                target_chat_id, bbs_thread_id,
+                vip1_trigger=True,
+            )
+            update_last_bumped(db, sub['id'])
+        except Exception as e:
+            logging.error(f"VIP1 bump failed sub={sub['id']}: {e}")
+
 
 # ═══════════════════════════════════════════════════════════════
 # РЕДАКТИРОВАНИЕ НА МЕСТЕ (без удаления и перемещения)
@@ -431,7 +462,14 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
     photos = parsed.get('photos') or []
     thread_id = profile.get('thread_id')
 
-    profile_text = build_profile_text(parsed)
+    # VIP-эмодзи
+    try:
+        from database.db_bbs_vip import has_active_vip
+        _vip_active = has_active_vip(db, profile['id'])
+    except Exception:
+        _vip_active = False
+
+    profile_text = build_profile_text(parsed, vip_active=_vip_active)
 
     if not msg_ids:
         # Нет сохранённых ID — fallback на republish
