@@ -173,6 +173,19 @@ async def get_chat_invite_link(context, target_chat_id, chat_id=None, user_name=
 
 async def handle_user_left(update, context, user_id, db, admin_id, target_chat_id):
     """Handle user leaving the chat — freeze balance for 30 days"""
+
+    # ═══ ЖУРНАЛ: логируем выход ВСЕГДА, до любых проверок БД ═══
+    try:
+        cm = update.chat_member
+        await log_leave(
+            context.bot, db, user_id,
+            chat=cm.chat,
+            tg_user=cm.new_chat_member.user,
+            left_at=cm.date,
+        )
+    except Exception as e:
+        logging.error(f"Journal log_leave error: {e}")
+
     user_data = db.get_user(user_id)
     if not user_data:
         try:
@@ -241,18 +254,6 @@ async def handle_user_left(update, context, user_id, db, admin_id, target_chat_i
         await update_reg_user(user_id, last_exit_at=datetime.now().isoformat(), status='left')
     except Exception as e:
         logging.error(f"db_friend last_exit_at update error: {e}")
-
-    # ═══ ЖУРНАЛ: логируем выход ═══
-    try:
-        cm = update.chat_member
-        await log_leave(
-            context.bot, db, user_id,
-            chat=cm.chat,
-            tg_user=cm.new_chat_member.user,
-            left_at=cm.date,
-        )
-    except Exception as e:
-        logging.error(f"Journal log_leave error: {e}")
 
     # ═══ ДОСЬЕ: переключить индикатор на 🔴 Не в чате ═══
     try:

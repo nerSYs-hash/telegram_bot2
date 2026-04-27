@@ -193,10 +193,11 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
 # УДАЛЕНИЕ
 # ═══════════════════════════════════════════════════════════════
 
-async def delete_profile_chat_messages(bot, profile, target_chat_id):
+async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=True):
     """
     Удаляет ТОЛЬКО сообщения анкеты из чата. НЕ трогает БД.
-    Используется при редактировании (перед перепубликацией).
+    mark_deleted=True  — при невозможности удалить ставит «Анкета удалена ✓» (явное удаление).
+    mark_deleted=False — при невозможности удалить просто оставляет сообщение (для edit-flow).
     """
     msg_ids = profile.get('message_ids')
     if isinstance(msg_ids, str):
@@ -209,6 +210,9 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id):
         try:
             await bot.delete_message(chat_id=target_chat_id, message_id=mid)
         except Exception:
+            if not mark_deleted:
+                logging.warning(f"BBS: Could not delete msg {mid} (edit-flow, skipping mark)")
+                continue
             # Сообщение старше 48ч — редактируем вместо удаления
             try:
                 await bot.edit_message_text(
@@ -441,7 +445,8 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
             logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
 
     if not edited_in_place:
-        # Fallback: удалить старые и перепубликовать
+        # Fallback: удалить старые и перепубликовать.
+        # mark_deleted=False — при >48ч просто оставляем старое сообщение, не пишем «Анкета удалена»
         logging.info(f"BBS update_in_place: fallback to republish for user {user_id}")
-        await delete_profile_chat_messages(bot, profile, target_chat_id)
+        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=False)
         await republish_profile(bot, db, user_id, target_chat_id, thread_id)
