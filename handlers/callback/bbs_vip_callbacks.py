@@ -3,6 +3,8 @@
 """
 Роутер всех bbs_vip_* callback-ов (пользовательские + владельца).
 Вызывается из callback_router.py до общего BBS-блока.
+
+Редакция: 2026-04-28 (без INSTANT_BUMP, новые VIP1-VIP6).
 """
 
 import logging
@@ -12,7 +14,9 @@ from handlers.bbs_vip_handlers import (
     show_vip_confirmation,
     process_vip_purchase,
     show_topup_stub,
-    process_instant_bump,
+    show_cooldown_info,
+    show_no_profile_info,
+    show_already_active_info,
 )
 from handlers.bbs_vip_owner import (
     show_vip_root_menu,
@@ -29,14 +33,14 @@ logger = logging.getLogger(__name__)
 async def dispatch_bbs_vip(handler, query, data, user, context) -> bool:
     """
     Роутер callback-ов bbs_vip_*.
-    Возвращает True если обработан, False — нет (для fallback-цепи).
+    Возвращает True если обработан, False — нет.
     """
-    db = handler.db
+    db            = handler.db
     target_chat_id = handler.target_chat_id
-    bbs_thread_id = handler.bbs_thread_id
-    admin_id = handler.main_admin_id
+    bbs_thread_id  = handler.bbs_thread_id
+    admin_id       = handler.main_admin_id
 
-    # ── Пользовательские (витрина, покупка) ──
+    # ── Пользовательские ────────────────────────────────────────────
     if data == "bbs_vip_storefront":
         await show_vip_storefront(query, user, context, db, target_chat_id, bbs_thread_id)
 
@@ -52,16 +56,16 @@ async def dispatch_bbs_vip(handler, query, data, user, context) -> bool:
     elif data == "bbs_vip_topup":
         await show_topup_stub(query, user)
 
-    elif data == "bbs_vip_instant_bump":
-        await process_instant_bump(query, user, context, db, target_chat_id, bbs_thread_id)
+    elif data == "bbs_vip_cooldown_info":
+        await show_cooldown_info(query, user)
 
-    elif data in ("bbs_vip_no_profile", "bbs_vip_already_active"):
-        if data == "bbs_vip_no_profile":
-            await query.answer("⛔ Сначала опубликуйте анкету.", show_alert=True)
-        else:
-            await query.answer("✅ Подписка этого типа уже активна.", show_alert=True)
+    elif data == "bbs_vip_no_profile":
+        await show_no_profile_info(query, user)
 
-    # ── Владелец (панель управления VIP BBS) ──
+    elif data == "bbs_vip_already_active":
+        await show_already_active_info(query, user)
+
+    # ── Владелец ─────────────────────────────────────────────────────
     elif data == "bbs_vip_root":
         await show_vip_root_menu(query, user, db, admin_id)
 

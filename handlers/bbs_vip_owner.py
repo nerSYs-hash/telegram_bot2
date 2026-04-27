@@ -7,16 +7,15 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 logger = logging.getLogger(__name__)
 
-FAMILY_ORDER = ['BUMP', 'SILENT_PIN', 'LOUD_PIN', 'CUSTOM_BUMP', 'BUMP_PIN', 'PROMO_CHAT', 'INSTANT_BUMP']
+FAMILY_ORDER = ['BUMP', 'SILENT_PIN', 'LOUD_PIN', 'CUSTOM_BUMP', 'BUMP_PIN', 'PROMO_CHAT']
 
 FAMILY_META = {
-    'BUMP':         ('🚀', 'BUMP (авто-перепубликация, каждые 4ч)'),
-    'SILENT_PIN':   ('📌', 'SILENT PIN (тихий закреп)'),
-    'LOUD_PIN':     ('🔔', 'LOUD PIN (закреп с уведомлением, раз в неделю)'),
-    'CUSTOM_BUMP':  ('⚡', 'CUSTOM BUMP (кастомная частота)'),
-    'BUMP_PIN':     ('🎯', 'BUMP + PIN'),
-    'PROMO_CHAT':   ('📣', 'PROMO CHAT (1×/сутки)'),
-    'INSTANT_BUMP': ('🚀', 'INSTANT BUMP (cooldown 30 мин)'),
+    'BUMP':        ('🚀', 'VIP1 — Перепубликация при чужих публикациях'),
+    'SILENT_PIN':  ('📌', 'VIP2 — Тихий закреп, 24 ч'),
+    'LOUD_PIN':    ('🔔', 'VIP3 — Громкий закреп (global cooldown 7 дней)'),
+    'CUSTOM_BUMP': ('⚡', 'VIP4 — Автопубликация раз в сутки (72/120/168 ч)'),
+    'BUMP_PIN':    ('🎯', 'VIP5 — Автопуб + тихий закреп (72/120/168 ч)'),
+    'PROMO_CHAT':  ('📣', 'VIP6 — Промо в общий чат 10:00/15:00/21:00 МСК'),
 }
 
 

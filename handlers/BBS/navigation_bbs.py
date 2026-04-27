@@ -34,18 +34,7 @@ async def show_dating_menu(query, context, db, user_id):
     if profile:
         if profile.get('published_at') and not profile.get('deleted_at'):
             keyboard.insert(0, [InlineKeyboardButton("👁 Моя анкета", callback_data="bbs_view_profile")])
-            # ── VIP-услуги (доступны только для опубликованной анкеты) ──
-            try:
-                ib = db.get_vip_settings(code='INSTANT_BUMP')
-                rate = float(db.get_setting('pulse_rate', '1.42') or '1.42')
-                if rate <= 0:
-                    rate = 1.42
-                ib_pulses = round(float(ib['price_rub']) / rate, 0) if ib else 35.0
-                instant_label = f"🚀 Поднять анкету сейчас ({ib_pulses:.0f} 💎)"
-            except Exception:
-                instant_label = "🚀 Поднять анкету сейчас"
             keyboard.append([InlineKeyboardButton("💎 Улучшить анкету (VIP)", callback_data="bbs_vip_storefront")])
-            keyboard.append([InlineKeyboardButton(instant_label, callback_data="bbs_vip_instant_bump")])
         keyboard.append([InlineKeyboardButton("🗑 Удалить анкету", callback_data="bbs_delete_confirm")])
         if profile.get('published_at') and db.is_feature_enabled('bbs_edit'):
             edited = get_edited_fields(profile)
