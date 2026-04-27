@@ -131,10 +131,11 @@ def build_profile_text(data: dict, vip_active: bool = False) -> str:
     Пропущенные шаги не показываются. Названия полей убраны — только значения."""
     lines = []
 
-    # Строка 1: 👤 Имя, Возраст  #Город
+    # Строка 1: [👑] 👤 Имя, Возраст  #Город
     city = _json_load(data.get('city'))
     city_str = ' '.join(city) if city else ''
-    name_line = f"👤 <b>{data['name']}, {data['age']}</b>"
+    vip_prefix = f"{VIP_EMOJI} " if vip_active else ""
+    name_line = f"{vip_prefix}👤 <b>{data['name']}, {data['age']}</b>"
     if city_str:
         name_line += f"  {city_str}"
     lines.append(name_line)
@@ -164,10 +165,7 @@ def build_profile_text(data: dict, vip_active: bool = False) -> str:
     if about:
         lines.append(f"\n{about}")
 
-    text = '\n'.join(lines)
-    if vip_active:
-        text = VIP_EMOJI + '\n' + text
-    return text
+    return '\n'.join(lines)
 
 
 def write_button(user_id: int, bot_username: str = None) -> InlineKeyboardMarkup:
