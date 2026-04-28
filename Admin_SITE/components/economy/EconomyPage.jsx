@@ -30,12 +30,11 @@ export default function EconomyPage({ token }) {
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d?.pulse_rate != null) setMetrics(d); })
       .catch(() => {});
-    fetch('/api/auth/me', { headers })
+    fetch('/api/admin/profile/me', { headers })
       .then(r => r.json())
-      .then(u => {
-        setCurrentUser(u);
-        // owner и deputy могут редактировать
-        const role = u?.role || '';
+      .then(profile => {
+        setCurrentUser(profile);
+        const role = profile?.role_raw || '';
         setCanEdit(role === 'owner' || role === 'deputy');
       })
       .catch(() => {});
