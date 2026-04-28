@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 import EconomyMiniChart from './EconomyMiniChart';
 import EconomyEditModal from './EconomyEditModal';
@@ -63,7 +64,7 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
     onRolledBack?.();
   };
 
-  return (
+  return createPortal(
     <>
       <div onClick={onClose} className="fixed inset-0 bg-black/30 z-40" />
       <div className="fixed top-0 right-0 h-full w-full md:w-[420px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
@@ -184,6 +185,7 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
           onSave={(val, comment) => handleRollback(rollbackTarget, comment)}
         />
       )}
-    </>
+    </>,
+    document.body
   );
 }

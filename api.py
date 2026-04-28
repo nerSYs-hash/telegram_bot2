@@ -227,6 +227,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         "first_name":     payload.get("first_name", ""),
         "photo_url":      payload.get("photo_url", ""),
         "role":           role_raw,
+        "role_raw":       role_raw,
         "role_label":     role_label,
         "joined_at":      joined_at,
         "last_message":   last_msg_date,

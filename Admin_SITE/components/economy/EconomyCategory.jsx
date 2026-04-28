@@ -73,10 +73,9 @@ export default function EconomyCategory({
         <div className="flex items-center">
           <button
             onClick={onToggle}
-            className="flex-1 flex items-center gap-4 p-6 hover:bg-gray-50 transition text-left">
-            <span className="text-2xl">{_categoryEmoji(category.key)}</span>
+            className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition text-left">
             <div className="flex-1 min-w-0">
-              <div className="text-base font-black text-gray-900">{category.label}</div>
+              <div className="text-sm font-black text-gray-900">{category.label}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">
                 {category.rows_count} параметров
                 {!sectionEnabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
@@ -93,10 +92,10 @@ export default function EconomyCategory({
             onClick={() => canEdit ? setMasterModal(true) : null}
             disabled={!canEdit}
             title={canEdit ? (sectionEnabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
-            className={`mr-5 w-14 h-8 rounded-full relative transition-colors shrink-0 ${
+            className={`mr-4 w-12 h-7 rounded-full relative transition-colors shrink-0 ${
               sectionEnabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <div className={`w-6 h-6 bg-white rounded-full shadow absolute top-1 transition-all ${
+            <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-1 transition-all ${
               sectionEnabled ? 'right-1' : 'left-1'
             }`} />
           </button>
@@ -104,7 +103,7 @@ export default function EconomyCategory({
 
         {/* Тело */}
         {isExpanded && (
-          <div className="border-t border-gray-100 p-6 space-y-5">
+          <div className="border-t border-gray-100 px-5 py-4 space-y-4">
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
