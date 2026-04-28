@@ -352,9 +352,9 @@ export default function App() {
     [profileData]
   );
   const userCan = useCallback((perm) => {
-    if (authUser?.is_owner) return true;
+    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
-  }, [authUser, userPermissions]);
+  }, [authUser, userPermissions, profileData]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -4945,10 +4945,11 @@ export default function App() {
         };
         const role = profileData?.role || 'user';
         const roleStyles = {
-          owner:  { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Crown },
-          deputy: { bg: 'bg-purple-100', text: 'text-purple-700', icon: ShieldCheck },
-          admin:  { bg: 'bg-green-100',  text: 'text-green-700',  icon: ShieldCheck },
-          user:   { bg: 'bg-gray-100',   text: 'text-gray-500',   icon: User },
+          owner:     { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Crown },
+          developer: { bg: 'bg-orange-100', text: 'text-orange-700', icon: ShieldCheck },
+          deputy:    { bg: 'bg-purple-100', text: 'text-purple-700', icon: ShieldCheck },
+          admin:     { bg: 'bg-green-100',  text: 'text-green-700',  icon: ShieldCheck },
+          user:      { bg: 'bg-gray-100',   text: 'text-gray-500',   icon: User },
         };
         const rs = roleStyles[role] || roleStyles.user;
         const RoleIcon = rs.icon;
@@ -5204,7 +5205,7 @@ export default function App() {
       }
 
       case 'permissions': {
-        if (!authUser?.is_owner) {
+        if (!authUser?.is_owner && profileData?.role_raw !== 'developer') {
           return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
               <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center border border-red-100">
@@ -5489,7 +5490,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner)).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer')).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}

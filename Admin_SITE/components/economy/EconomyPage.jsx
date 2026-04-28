@@ -35,7 +35,7 @@ export default function EconomyPage({ token }) {
       .then(profile => {
         setCurrentUser(profile);
         const role = profile?.role_raw || '';
-        setCanEdit(role === 'owner' || role === 'deputy');
+        setCanEdit(role === 'owner' || role === 'developer' || role === 'deputy');
       })
       .catch(() => {});
   }, [token]);

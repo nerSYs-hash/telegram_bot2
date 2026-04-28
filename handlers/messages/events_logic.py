@@ -723,7 +723,7 @@ async def handle_reaction(update, context, db, target_chat_id):
     # 3. НАЧИСЛЕНИЕ НАГРАД (Только за добавление!)
     try:
         # Награда тому, кто поставил
-        rg_reward = calculate_reaction_given_reward()
+        rg_reward = calculate_reaction_given_reward(db=db)
         if rg_reward > 0:
             if db.get_bank_balance() >= rg_reward:
                 db.update_user_balance(user.id, rg_reward, 'add')
@@ -733,7 +733,7 @@ async def handle_reaction(update, context, db, target_chat_id):
         # Награда автору поста
         if result and result['user_id'] != user.id:
             author_id = result['user_id']
-            rr_reward = calculate_reaction_received_reward()
+            rr_reward = calculate_reaction_received_reward(db=db)
             if rr_reward > 0:
                 if db.get_bank_balance() >= rr_reward:
                     db.update_user_balance(author_id, rr_reward, 'add')
@@ -749,11 +749,19 @@ async def handle_reaction(update, context, db, target_chat_id):
                 FROM user_stats WHERE user_id = ? AND date = ?
             ''', (author_id, today))
             stats_row = db.cursor.fetchone()
-            
+
+            _econ_rate = db.get_econ('mining.global_rate', None)
+            _combo_coeffs = {
+                name: db.get_econ(f'combo.{name}', None)
+                for name in ('sharp_tongue', 'viral_post', 'hit_post', 'legend_post')
+            }
+            _combo_coeffs = {k: v for k, v in _combo_coeffs.items() if v is not None} or None
             combo_reward, new_combos = calculate_social_combos(
                 reply_count=stats_row['rep'] if stats_row else 0,
                 reaction_count=stats_row['rr'] if stats_row else 0,
                 completed_today=list(claimed_combos.keys()),
+                coeff_overrides=_combo_coeffs,
+                rate_override=float(_econ_rate) if _econ_rate is not None else None,
             )
 
             if combo_reward > 0 and new_combos:

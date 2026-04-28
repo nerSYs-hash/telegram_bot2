@@ -22,6 +22,7 @@ const ACTION_LABELS = {
 
 export default function EconomyHistoryPanel({ settingKey, label, token, onClose, canEdit, onRolledBack }) {
   const [data, setData]           = useState(null);
+  const [loadErr, setLoadErr]     = useState(null);
   const [loading, setLoading]     = useState(true);
   const [page, setPage]           = useState(0);
   const [rollbackTarget, setRollbackTarget] = useState(null); // entry
@@ -29,12 +30,20 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
 
   const loadData = () => {
     setLoading(true);
+    setLoadErr(null);
     fetch(`/api/economy/settings/${settingKey}/history?limit=${PER_PAGE}&offset=${page * PER_PAGE}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
-      .then(r => r.json())
-      .then(d => { setData(d); setLoading(false); })
-      .catch(() => setLoading(false));
+      .then(r => {
+        if (!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.json();
+      })
+      .then(d => {
+        if (!d || !Array.isArray(d.entries)) throw new Error('Неверный формат ответа');
+        setData(d);
+        setLoading(false);
+      })
+      .catch(e => { setLoadErr(e.message); setLoading(false); });
   };
 
   useEffect(() => { loadData(); }, [settingKey, page]);
@@ -78,7 +87,18 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
             </div>
           )}
 
-          {!loading && data && (
+          {!loading && loadErr && (
+            <div className="text-center py-12">
+              <div className="text-3xl mb-3">⚠️</div>
+              <div className="text-sm font-black text-gray-500">Не удалось загрузить историю</div>
+              <div className="text-[11px] text-gray-400 mt-1">{loadErr}</div>
+              <button onClick={loadData} className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black">
+                Повторить
+              </button>
+            </div>
+          )}
+
+          {!loading && !loadErr && data && (
             <>
               {data.chart_data?.length > 1 && (
                 <EconomyMiniChart data={data.chart_data} />

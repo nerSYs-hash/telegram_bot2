@@ -26,19 +26,21 @@ import time
 from typing import Optional
 
 # ── РОЛИ ──
-ROLE_OWNER  = "owner"
-ROLE_DEPUTY = "deputy"
-ROLE_ADMIN  = "admin"
-ROLE_USER   = "user"
+ROLE_OWNER     = "owner"
+ROLE_DEVELOPER = "developer"
+ROLE_DEPUTY    = "deputy"
+ROLE_ADMIN     = "admin"
+ROLE_USER      = "user"
 
-ROLES = (ROLE_OWNER, ROLE_DEPUTY, ROLE_ADMIN, ROLE_USER)
-EDITABLE_ROLES = (ROLE_DEPUTY, ROLE_ADMIN)  # owner/user не редактируются
+ROLES = (ROLE_OWNER, ROLE_DEVELOPER, ROLE_DEPUTY, ROLE_ADMIN, ROLE_USER)
+EDITABLE_ROLES = (ROLE_DEPUTY, ROLE_ADMIN)  # owner/developer/user не редактируются
 
 ROLE_LABELS = {
-    ROLE_OWNER:  "Владелец",
-    ROLE_DEPUTY: "Зам владельца",
-    ROLE_ADMIN:  "Администратор",
-    ROLE_USER:   "Без статуса",
+    ROLE_OWNER:     "Владелец",
+    ROLE_DEVELOPER: "Разработчик",
+    ROLE_DEPUTY:    "Зам владельца",
+    ROLE_ADMIN:     "Администратор",
+    ROLE_USER:      "Без статуса",
 }
 
 # ── РЕСУРСЫ (каталог) ──
@@ -189,9 +191,9 @@ def normalize_role(role) -> str:
 
 
 def has_permission(role, permission: str) -> bool:
-    """Главная проверка. Owner всегда True, user всегда False."""
+    """Главная проверка. Owner и Developer всегда True, user всегда False."""
     role = normalize_role(role)
-    if role == ROLE_OWNER:
+    if role in (ROLE_OWNER, ROLE_DEVELOPER):
         return True
     if role == ROLE_USER:
         return False
@@ -199,9 +201,9 @@ def has_permission(role, permission: str) -> bool:
 
 
 def get_role_permissions(role) -> list:
-    """Плоский список permissions для роли (для owner — раскрывает '*')."""
+    """Плоский список permissions для роли (для owner/developer — раскрывает '*')."""
     role = normalize_role(role)
-    if role == ROLE_OWNER:
+    if role in (ROLE_OWNER, ROLE_DEVELOPER):
         return all_permissions()
     if role == ROLE_USER:
         return []
