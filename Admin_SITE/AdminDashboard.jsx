@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import EconomyPage from './components/economy/EconomyPage';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -888,8 +889,9 @@ export default function App() {
     { id: 'updates',     name: 'Обновления',    icon: Megaphone,   group: 'top' },
     { id: 'statistics',  name: 'Статистика',    icon: PieChart,    group: 'main' },
     { id: 'journal',     name: 'Журнал',        icon: ScrollText,  group: 'main' },
-    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert, group: 'modules' },
+    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules' },
     { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules' },
+    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules' },
     { id: 'system',      name: 'Система',       icon: Settings,    group: 'main' },
     { id: 'broadcast',   name: 'Рассылка',      icon: Send,        group: 'features' },
     { id: 'permissions', name: 'Права',         icon: ShieldCheck, group: 'features', ownerOnly: true },
@@ -5192,7 +5194,7 @@ export default function App() {
 
         const PERM_ICON_MAP = {
           ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
-          Settings, ShieldCheck, Ban, ShieldBan,
+          Settings, ShieldCheck, Ban, ShieldBan, Coins,
         };
         const ACTION_BADGE_COLORS = {
           view:   'bg-gray-100 text-gray-600',
@@ -5422,6 +5424,9 @@ export default function App() {
           </div>
         );
       }
+
+      case 'economy':
+        return <EconomyPage token={localStorage.getItem('auth_token')} />;
 
       default: return null;
     }

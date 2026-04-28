@@ -1,0 +1,143 @@
+import { useState, useEffect, useCallback } from 'react';
+import EconomyHeader from './EconomyHeader';
+import EconomyCategory from './EconomyCategory';
+import EconomyHistoryPanel from './EconomyHistoryPanel';
+import { useEconomyWS } from './useEconomyWS';
+
+export default function EconomyPage({ token }) {
+  const [categories, setCategories]       = useState([]);
+  const [metrics, setMetrics]             = useState(null);
+  const [expandedSections, setExpanded]   = useState(new Set());
+  const [historyPanel, setHistoryPanel]   = useState(null); // {settingKey, label}
+  const [recentlyChanged, setRecently]    = useState(new Set());
+  const [liveBanner, setLiveBanner]       = useState(null);
+  const [currentUser, setCurrentUser]     = useState(null);
+
+  const wsEvents = useEconomyWS(token);
+
+  // Загрузка категорий и метрик
+  useEffect(() => {
+    const headers = { Authorization: `Bearer ${token}` };
+
+    fetch('/api/economy/categories', { headers })
+      .then(r => r.json()).then(setCategories).catch(() => {});
+
+    fetch('/api/economy/metrics', { headers })
+      .then(r => r.json()).then(setMetrics).catch(() => {});
+
+    fetch('/api/auth/me', { headers })
+      .then(r => r.json()).then(setCurrentUser).catch(() => {});
+  }, [token]);
+
+  // REST-фоллбэк: обновляем метрики каждые 30 сек если WS недоступен
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetch('/api/economy/metrics', { headers: { Authorization: `Bearer ${token}` } })
+        .then(r => r.json()).then(setMetrics).catch(() => {});
+    }, 30_000);
+    return () => clearInterval(id);
+  }, [token]);
+
+  // WS события
+  useEffect(() => {
+    const ev = wsEvents.last;
+    if (!ev) return;
+
+    if (ev.event === 'metrics_update') {
+      setMetrics(ev);
+      return;
+    }
+
+    // Не показываем баннер для собственных изменений
+    const myName = currentUser?.username || currentUser?.first_name;
+    const isMine = ev.by && myName && ev.by === myName;
+
+    if (!isMine && ['setting_changed', 'rollback', 'section_toggled'].includes(ev.event)) {
+      setLiveBanner(ev);
+      setTimeout(() => setLiveBanner(null), 8000);
+    }
+
+    // Бейдж «Изменено» на 60 сек
+    if (ev.key && ['setting_changed', 'rollback'].includes(ev.event)) {
+      setRecently(prev => {
+        const next = new Set(prev);
+        next.add(ev.key);
+        setTimeout(() => {
+          setRecently(p => { const n = new Set(p); n.delete(ev.key); return n; });
+        }, 60_000);
+        return next;
+      });
+    }
+  }, [wsEvents.last]);
+
+  const toggleSection = useCallback((key) => {
+    setExpanded(prev => {
+      const next = new Set(prev);
+      next.has(key) ? next.delete(key) : next.add(key);
+      return next;
+    });
+  }, []);
+
+  return (
+    <div className="space-y-4 pb-32 animate-in fade-in duration-500">
+      {/* Live-шапка */}
+      <EconomyHeader metrics={metrics} />
+
+      {/* Категории */}
+      {categories.map(cat => (
+        <EconomyCategory
+          key={cat.key}
+          category={cat}
+          isExpanded={expandedSections.has(cat.key)}
+          onToggle={() => toggleSection(cat.key)}
+          onOpenHistory={(key, label) => setHistoryPanel({ settingKey: key, label })}
+          token={token}
+          recentlyChanged={recentlyChanged}
+        />
+      ))}
+
+      {categories.length === 0 && (
+        <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center text-gray-400">
+          <div className="text-4xl mb-3">💰</div>
+          <div className="font-black text-gray-600">Загрузка экономики...</div>
+        </div>
+      )}
+
+      {/* Панель истории */}
+      {historyPanel && (
+        <EconomyHistoryPanel
+          settingKey={historyPanel.settingKey}
+          label={historyPanel.label}
+          token={token}
+          onClose={() => setHistoryPanel(null)}
+        />
+      )}
+
+      {/* Live-баннер WS */}
+      {liveBanner && <LiveBanner event={liveBanner} />}
+    </div>
+  );
+}
+
+function LiveBanner({ event }) {
+  const text = event.event === 'setting_changed'
+    ? `${event.by} изменил параметр: ${event.old_value} → ${event.new_value}`
+    : event.event === 'section_toggled'
+    ? `${event.by} ${event.enabled ? 'включил' : 'выключил'} раздел`
+    : `${event.by} откатил параметр к ${event.to_value}`;
+
+  return (
+    <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-4
+                    animate-in slide-in-from-right duration-300">
+      <div className="flex items-start gap-3">
+        <span className="text-xl">🔔</span>
+        <div className="flex-1 min-w-0">
+          <div className="text-xs font-black text-amber-800">{text}</div>
+          {event.comment && (
+            <div className="text-[11px] text-amber-700 italic mt-1">💬 {event.comment}</div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

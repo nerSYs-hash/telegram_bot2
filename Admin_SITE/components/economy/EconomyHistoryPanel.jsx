@@ -1,0 +1,124 @@
+import { useState, useEffect } from 'react';
+import { X } from 'lucide-react';
+import EconomyMiniChart from './EconomyMiniChart';
+
+function formatDate(str) {
+  if (!str) return '';
+  try {
+    return new Date(str).toLocaleString('ru-RU', {
+      day: '2-digit', month: '2-digit', year: 'numeric',
+      hour: '2-digit', minute: '2-digit',
+    });
+  } catch { return str; }
+}
+
+const ACTION_LABELS = {
+  edit:     { label: 'Изменено',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  toggle:   { label: 'Тумблер',  cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  rollback: { label: 'Откат',    cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+  create:   { label: 'Создано',  cls: 'bg-green-50 text-green-700 border-green-200' },
+};
+
+export default function EconomyHistoryPanel({ settingKey, label, token, onClose }) {
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [page, setPage] = useState(0);
+  const PER_PAGE = 20;
+
+  useEffect(() => {
+    setLoading(true);
+    fetch(`/api/economy/settings/${settingKey}/history?limit=${PER_PAGE}&offset=${page * PER_PAGE}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then(r => r.json())
+      .then(d => { setData(d); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, [settingKey, page]);
+
+  return (
+    <>
+      <div onClick={onClose} className="fixed inset-0 bg-black/30 z-40" />
+      <div className="fixed top-0 right-0 h-full w-full md:w-[420px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+
+        {/* Шапка */}
+        <div className="shrink-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">История изменений</div>
+            <h2 className="text-base font-black text-gray-900 leading-tight">{label}</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition active:scale-90">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Тело */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">
+          {loading && (
+            <div className="flex items-center justify-center py-12">
+              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+            </div>
+          )}
+
+          {!loading && data && (
+            <>
+              {data.chart_data?.length > 1 && (
+                <EconomyMiniChart data={data.chart_data} />
+              )}
+
+              {data.entries.length === 0 && (
+                <div className="text-center text-gray-400 py-12 text-sm">
+                  Нет истории изменений
+                </div>
+              )}
+
+              {data.entries.map(e => {
+                const meta = ACTION_LABELS[e.action] || { label: e.action, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                return (
+                  <div key={e.id} className={`bg-white border border-gray-100 rounded-2xl p-4 ${e.is_rolled_back ? 'opacity-50' : ''}`}>
+                    <div className="flex items-center justify-between mb-2">
+                      <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${meta.cls}`}>
+                        {meta.label}
+                      </span>
+                      <span className="text-[10px] text-gray-400 font-bold">{formatDate(e.changed_at)}</span>
+                    </div>
+
+                    {e.action !== 'toggle' && e.old_value != null && (
+                      <div className="flex items-center gap-2 text-sm font-bold mb-2">
+                        <span className="line-through text-gray-400">{e.old_value}</span>
+                        <span className="text-gray-300">→</span>
+                        <span className="text-blue-600">{e.new_value}</span>
+                      </div>
+                    )}
+                    {e.action === 'toggle' && (
+                      <div className="text-sm font-bold mb-2 text-gray-700">
+                        {e.new_enabled ? '🟢 Включено' : '⚫ Выключено'}
+                      </div>
+                    )}
+
+                    <div className="text-xs text-gray-600 italic mb-1">💬 {e.comment}</div>
+                    <div className="text-[10px] text-gray-400">
+                      {e.changed_by?.username ? `@${e.changed_by.username}` : e.changed_by?.name || ''}
+                      {' '}({e.changed_by?.role})
+                    </div>
+
+                    {e.is_rolled_back && (
+                      <div className="mt-2 text-[9px] font-black text-orange-500 uppercase">↩ Откатили</div>
+                    )}
+                  </div>
+                );
+              })}
+
+              {data.entries.length === PER_PAGE && (
+                <button
+                  onClick={() => setPage(p => p + 1)}
+                  className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest hover:bg-blue-50 rounded-2xl transition">
+                  ↓ Загрузить ещё ↓
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
+    </>
+  );
+}
