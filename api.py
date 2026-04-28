@@ -216,7 +216,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
     if not joined_at:
         joined_at = role_meta.get("created_at")
 
-    has_chat = role_raw in ("owner", "deputy", "admin")
+    has_chat = role_raw in ("owner", "developer", "deputy", "admin")
     accesses = get_role_accesses(role_raw)
     from permissions import get_role_permissions
     permissions_flat = get_role_permissions(role_raw)
