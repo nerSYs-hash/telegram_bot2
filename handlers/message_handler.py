@@ -254,20 +254,6 @@ class MessageHandler:
                             except Exception:
                                 pass
                         return
-                    else:
-                        try:
-                            await context.bot.send_message(
-                                chat_id=user.id,
-                                text=(
-                                    f"⚙️ <b>BUG TRACKER: thread_id не совпал</b>\n\n"
-                                    f"Эта ветка: <code>{message.message_thread_id}</code>\n"
-                                    f"BUG_THREAD_BOT: <code>{BUG_THREAD_BOT}</code>\n"
-                                    f"BUG_THREAD_SITE: <code>{BUG_THREAD_SITE}</code>"
-                                ),
-                                parse_mode="HTML"
-                            )
-                        except Exception:
-                            pass
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return

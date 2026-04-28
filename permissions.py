@@ -26,19 +26,21 @@ import time
 from typing import Optional
 
 # ── РОЛИ ──
-ROLE_OWNER  = "owner"
-ROLE_DEPUTY = "deputy"
-ROLE_ADMIN  = "admin"
-ROLE_USER   = "user"
+ROLE_OWNER     = "owner"
+ROLE_DEVELOPER = "developer"
+ROLE_DEPUTY    = "deputy"
+ROLE_ADMIN     = "admin"
+ROLE_USER      = "user"
 
-ROLES = (ROLE_OWNER, ROLE_DEPUTY, ROLE_ADMIN, ROLE_USER)
-EDITABLE_ROLES = (ROLE_DEPUTY, ROLE_ADMIN)  # owner/user не редактируются
+ROLES = (ROLE_OWNER, ROLE_DEVELOPER, ROLE_DEPUTY, ROLE_ADMIN, ROLE_USER)
+EDITABLE_ROLES = (ROLE_DEPUTY, ROLE_ADMIN)  # owner/developer/user не редактируются
 
 ROLE_LABELS = {
-    ROLE_OWNER:  "Владелец",
-    ROLE_DEPUTY: "Зам владельца",
-    ROLE_ADMIN:  "Администратор",
-    ROLE_USER:   "Без статуса",
+    ROLE_OWNER:     "Владелец",
+    ROLE_DEVELOPER: "Разработчик",
+    ROLE_DEPUTY:    "Зам владельца",
+    ROLE_ADMIN:     "Администратор",
+    ROLE_USER:      "Без статуса",
 }
 
 # ── РЕСУРСЫ (каталог) ──
@@ -52,16 +54,19 @@ RESOURCES = {
     "admins":     {"label": "Управление админами","icon": "ShieldCheck"},
     "blacklist":  {"label": "Чёрный список",      "icon": "Ban"},
     "moderation": {"label": "Модерация чата",     "icon": "ShieldBan"},
+    "economy":    {"label": "Экономика",          "icon": "Coins"},
 }
 
 # ── ДЕЙСТВИЯ (каталог) ──
 ACTION_LABELS = {
-    "view":   "просмотр",
-    "create": "создание",
-    "edit":   "редактирование",
-    "delete": "удаление",
-    "toggle": "вкл/выкл",
-    "export": "выгрузка",
+    "view":     "просмотр",
+    "create":   "создание",
+    "edit":     "редактирование",
+    "delete":   "удаление",
+    "toggle":   "вкл/выкл",
+    "export":   "выгрузка",
+    "rollback": "откат изменений",
+    "cancel":   "отмена выплат",
 }
 
 # ── ВСЕ ВОЗМОЖНЫЕ permissions (плоский список) ──
@@ -81,6 +86,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "admins.view",
         "blacklist.view",  "blacklist.create","blacklist.delete",
         "moderation.delete", "moderation.edit", "moderation.toggle",
+        "economy.view",    "economy.edit",   "economy.toggle", "economy.rollback",
     ],
     ROLE_ADMIN: [
         "triggers.view",
@@ -89,6 +95,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "journal.view",
         "statistics.view",
         "moderation.delete",
+        "economy.view",
     ],
 }
 
@@ -117,15 +124,13 @@ def init_permissions_db(db_path: Optional[str] = None) -> None:
             "  PRIMARY KEY (role, permission)"
             ")"
         )
-        # Сидинг — только если таблица пустая
-        cur = conn.execute("SELECT COUNT(*) FROM role_permissions")
-        if cur.fetchone()[0] == 0:
-            for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
-                for perm in perms:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)",
-                        (role, perm),
-                    )
+        # INSERT OR IGNORE — безопасно добавляет новые разрешения не трогая существующие
+        for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
+            for perm in perms:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)",
+                    (role, perm),
+                )
         conn.commit()
     finally:
         conn.close()
@@ -186,9 +191,9 @@ def normalize_role(role) -> str:
 
 
 def has_permission(role, permission: str) -> bool:
-    """Главная проверка. Owner всегда True, user всегда False."""
+    """Главная проверка. Owner и Developer всегда True, user всегда False."""
     role = normalize_role(role)
-    if role == ROLE_OWNER:
+    if role in (ROLE_OWNER, ROLE_DEVELOPER):
         return True
     if role == ROLE_USER:
         return False
@@ -196,9 +201,9 @@ def has_permission(role, permission: str) -> bool:
 
 
 def get_role_permissions(role) -> list:
-    """Плоский список permissions для роли (для owner — раскрывает '*')."""
+    """Плоский список permissions для роли (для owner/developer — раскрывает '*')."""
     role = normalize_role(role)
-    if role == ROLE_OWNER:
+    if role in (ROLE_OWNER, ROLE_DEVELOPER):
         return all_permissions()
     if role == ROLE_USER:
         return []

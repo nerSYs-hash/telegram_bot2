@@ -350,7 +350,7 @@ async def handle_pr_media_done(query, user, context, db, admin_id, target_chat_i
 
     thread_id = pr_data.get('thread_id')
 
-    if thread_id is not None:
+    if 'thread_id' in pr_data:
         thread_name = _resolve_thread_name(db, target_chat_id, thread_id)
         preview = pr_data.get('text', '')[:150]
         if len(pr_data.get('text', '')) > 150:

@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request
+from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, FileResponse
 import io
 import re
@@ -60,6 +60,17 @@ try:
     logger.info("✅ permissions: таблица role_permissions готова")
 except Exception as e:
     logger.warning(f"⚠️ Ошибка инициализации permissions: {e}")
+
+# ── Economy: WebSocket + роутер ──
+try:
+    from api.economy_ws import manager as _economy_ws_manager
+    from api.economy_routes import router as economy_router, _setup as _economy_setup
+    _economy_setup(db, lambda auth: _require_auth(auth), lambda uid: _resolve_user_role(uid), _economy_ws_manager)
+    app.include_router(economy_router)
+    logger.info("✅ economy: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения economy router: {e}")
+    _economy_ws_manager = None
 
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
@@ -1454,13 +1465,26 @@ async def save_ui_settings(request: Request, authorization: str = Header(default
     _require_owner(authorization)
     body = await request.json()
     saved = []
+    errors = []
     for key, val in body.items():
         if key in _UI_SETTINGS_KEYS and isinstance(val, str):
             try:
                 db.set_setting(key, val)
                 saved.append(key)
-            except Exception as e:
-                logger.warning(f"ui_settings save error {key}: {e}")
+            except Exception as e1:
+                # Fallback: INSERT OR REPLACE без updated_at (старые схемы БД)
+                try:
+                    db.cursor.execute(
+                        'INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)',
+                        (key, val)
+                    )
+                    db.conn.commit()
+                    saved.append(key)
+                except Exception as e2:
+                    logger.warning(f"ui_settings save error {key}: {e1} / {e2}")
+                    errors.append(key)
+    if errors:
+        return {"ok": False, "saved": saved, "errors": errors}
     return {"ok": True, "saved": saved}
 
 
@@ -1810,6 +1834,59 @@ async def remove_staff(user_id: int):
     except Exception as e:
         logger.error(f"remove_staff error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# ── Economy WebSocket ──────────────────────────────────────────────────────────
+
+@app.websocket("/api/ws/economy")
+async def ws_economy(websocket: WebSocket, token: str = Query(...)):
+    try:
+        payload = _decode_jwt(token)
+    except Exception:
+        await websocket.close(code=4003)
+        return
+
+    user_id = int(payload.get("user_id", 0))
+    role = _resolve_user_role(user_id)
+    from permissions import has_permission
+    if not has_permission(role, "economy.view"):
+        await websocket.close(code=4003)
+        return
+
+    if _economy_ws_manager is None:
+        await websocket.close(code=4503)
+        return
+
+    await _economy_ws_manager.connect(websocket)
+    try:
+        while True:
+            try:
+                await websocket.receive_text()
+            except WebSocketDisconnect:
+                break
+    finally:
+        await _economy_ws_manager.disconnect(websocket)
+
+
+async def _metrics_broadcaster():
+    """Раз в 30 сек рассылает live-метрики всем подключённым клиентам."""
+    import asyncio
+    while True:
+        await asyncio.sleep(30)
+        try:
+            if _economy_ws_manager and db:
+                from database.db_economy import get_economy_metrics
+                metrics = get_economy_metrics(db)
+                await _economy_ws_manager.broadcast({"event": "metrics_update", **metrics})
+        except Exception as e:
+            logger.error(f"_metrics_broadcaster error: {e}")
+
+
+@app.on_event("startup")
+async def _on_startup():
+    import asyncio
+    asyncio.create_task(_metrics_broadcaster())
+    logger.info("✅ economy metrics broadcaster запущен")
 
 
 # --- ЗАПУСК ---

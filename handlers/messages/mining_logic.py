@@ -267,13 +267,16 @@ def calculate_instant_combos(
     has_video: bool = False,
     has_playlist_link: bool = False,
     completed_today: Optional[list[str]] = None,
+    coeff_overrides: Optional[dict] = None,
 ) -> tuple[int, list[str]]:
     """
     Проверяет instant-комбо: writer, illustrator, reviewer, dj.
     Каждое — макс. 1 раз в сутки.
 
     Возвращает (сумма_коэффициентов, список_новых_комбо).
+    coeff_overrides — значения из economy_settings (если None — используем COMBO_COEFFICIENTS).
     """
+    coeffs = coeff_overrides or COMBO_COEFFICIENTS
     done: set[str] = set(completed_today or [])
     new: list[str] = []
     total: int = 0
@@ -287,13 +290,13 @@ def calculate_instant_combos(
         has_playlist_link = _is_playlist_link(clean)
 
     if char_count > 50 and 'writer' not in done:
-        new.append('writer');       total += COMBO_COEFFICIENTS['writer']
+        new.append('writer');       total += coeffs.get('writer', COMBO_COEFFICIENTS['writer'])
     if char_count > 50 and has_photo and 'illustrator' not in done:
-        new.append('illustrator');  total += COMBO_COEFFICIENTS['illustrator']
+        new.append('illustrator');  total += coeffs.get('illustrator', COMBO_COEFFICIENTS['illustrator'])
     if has_video and word_count > 100 and 'reviewer' not in done:
-        new.append('reviewer');     total += COMBO_COEFFICIENTS['reviewer']
+        new.append('reviewer');     total += coeffs.get('reviewer', COMBO_COEFFICIENTS['reviewer'])
     if has_playlist_link and 'dj' not in done:
-        new.append('dj');           total += COMBO_COEFFICIENTS['dj']
+        new.append('dj');           total += coeffs.get('dj', COMBO_COEFFICIENTS['dj'])
 
     return total, new
 
@@ -306,27 +309,32 @@ def calculate_social_combos(
     reply_count: int = 0,
     reaction_count: int = 0,
     completed_today: Optional[list[str]] = None,
+    coeff_overrides: Optional[dict] = None,
+    rate_override: Optional[float] = None,
 ) -> tuple[float, list[str]]:
     """
     Проверяет social-комбо: sharp_tongue, viral, hit, legend.
     Лайковые комбо НЕ исключают друг друга.
 
     Возвращает (награда_в_Пульсах, список_новых_комбо).
+    coeff_overrides/rate_override — значения из economy_settings (если None — используем константы).
     """
+    coeffs = coeff_overrides or COMBO_COEFFICIENTS
+    rate = rate_override if rate_override is not None else GLOBAL_BASE_RATE
     done: set[str] = set(completed_today or [])
     new: list[str] = []
     total: int = 0
 
     if reply_count > 2 and 'sharp_tongue' not in done:
-        new.append('sharp_tongue'); total += COMBO_COEFFICIENTS['sharp_tongue']
+        new.append('sharp_tongue'); total += coeffs.get('sharp_tongue', COMBO_COEFFICIENTS['sharp_tongue'])
     if reaction_count > 2 and 'viral_post' not in done:
-        new.append('viral_post');   total += COMBO_COEFFICIENTS['viral_post']
+        new.append('viral_post');   total += coeffs.get('viral_post', COMBO_COEFFICIENTS['viral_post'])
     if reaction_count >= 4 and 'hit_post' not in done:
-        new.append('hit_post');     total += COMBO_COEFFICIENTS['hit_post']
+        new.append('hit_post');     total += coeffs.get('hit_post', COMBO_COEFFICIENTS['hit_post'])
     if reaction_count >= 6 and 'legend_post' not in done:
-        new.append('legend_post');  total += COMBO_COEFFICIENTS['legend_post']
+        new.append('legend_post');  total += coeffs.get('legend_post', COMBO_COEFFICIENTS['legend_post'])
 
-    reward = round(total * GLOBAL_BASE_RATE, 4)
+    reward = round(total * rate, 4)
     if new:
         logger.info(f"🏆 SOCIAL COMBO: {reward} | new={new}")
     return reward, new
@@ -336,16 +344,28 @@ def calculate_social_combos(
 #  СОЦИАЛЬНЫЕ ХЕЛПЕРЫ (вызываются из handle_reaction / handle_message)
 # ══════════════════════════════════════════════════════════════════════════════
 
-def calculate_reply_received_reward() -> float:
+def calculate_reply_received_reward(db=None) -> float:
     """Награда автору поста, на который кто-то ответил."""
+    if db is not None:
+        val = db.get_econ('mining.per_reply', None)
+        if val is not None:
+            return round(float(val), 4)
     return round(BASE_COEFFICIENTS['reply_received'] * GLOBAL_BASE_RATE, 4)
 
-def calculate_reaction_given_reward() -> float:
+def calculate_reaction_given_reward(db=None) -> float:
     """Награда тому, кто поставил реакцию."""
+    if db is not None:
+        val = db.get_econ('mining.per_reaction_given', None)
+        if val is not None:
+            return round(float(val), 4)
     return round(BASE_COEFFICIENTS['reaction_given'] * GLOBAL_BASE_RATE, 4)
 
-def calculate_reaction_received_reward() -> float:
+def calculate_reaction_received_reward(db=None) -> float:
     """Награда автору поста, который лайкнули."""
+    if db is not None:
+        val = db.get_econ('mining.per_reaction_received', None)
+        if val is not None:
+            return round(float(val), 4)
     return round(BASE_COEFFICIENTS['reaction_received'] * GLOBAL_BASE_RATE, 4)
 
 
@@ -368,12 +388,14 @@ def check_completed_sprints(
     metrics_24h: dict[str, int],
     current_thread_id: Optional[int] = None,
     already_claimed: Optional[list[str]] = None,
+    sprint_config_overrides: Optional[dict] = None,
 ) -> tuple[int, list[str]]:
     """
     Проверяет, какие спринты завершены прямо сейчас.
     НЕ делает SQL — принимает готовые метрики.
 
     Возвращает (сумма_коэффициентов, список_новых_спринтов).
+    sprint_config_overrides — {name: coeff} из economy_settings; структура (metric/hours/target) берётся из SPRINTS_CONFIG.
     """
     claimed: set[str] = set(already_claimed or [])
     by_hours = {1: metrics_1h, 12: metrics_12h, 24: metrics_24h}
@@ -389,7 +411,8 @@ def check_completed_sprints(
         metrics = by_hours.get(cfg['hours'], {})
         if metrics.get(cfg['metric'], 0) >= cfg['target']:
             new.append(name)
-            total += cfg['coeff']
+            coeff = sprint_config_overrides.get(name, cfg['coeff']) if sprint_config_overrides else cfg['coeff']
+            total += coeff
 
     return total, new
 
@@ -920,6 +943,19 @@ def process_mining_reward(
         today_str  = str(today)
 
         # ══════════════════════════════════════════════════════════════════
+        #  ЧТЕНИЕ НАСТРОЕК ЭКОНОМИКИ ИЗ БД
+        # ══════════════════════════════════════════════════════════════════
+        _econ_rate = db.get_econ('mining.global_rate', GLOBAL_BASE_RATE) or GLOBAL_BASE_RATE
+        _combo_coeffs = {
+            name: (db.get_econ(f'combo.{name}', COMBO_COEFFICIENTS[name]) or COMBO_COEFFICIENTS[name])
+            for name in COMBO_COEFFICIENTS
+        }
+        _sprint_coeffs = {
+            name: (db.get_econ(f'sprint.{name}', cfg['coeff']) or cfg['coeff'])
+            for name, cfg in SPRINTS_CONFIG.items()
+        }
+
+        # ══════════════════════════════════════════════════════════════════
         #  БЛОК 1: БАЗА
         # ══════════════════════════════════════════════════════════════════
 
@@ -951,6 +987,7 @@ def process_mining_reward(
             text=text, char_count=char_count, word_count=word_count,
             has_photo=has_photo, has_video=has_video,
             completed_today=list(claimed_combos.keys()),
+            coeff_overrides=_combo_coeffs,
         )
 
         # ══════════════════════════════════════════════════════════════════
@@ -963,6 +1000,7 @@ def process_mining_reward(
         sprint_coeff, new_sprints = check_completed_sprints(
             metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
             current_thread_id=thread_id, already_claimed=claimed_sprints,
+            sprint_config_overrides=_sprint_coeffs,
         )
 
         # ══════════════════════════════════════════════════════════════════
@@ -979,16 +1017,16 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
 
         # ── БАЗА (всегда) ─────────────────────────────────────────────────
-        base_rw_log = round(base_coeff * GLOBAL_BASE_RATE, 4)
+        base_rw_log = round(base_coeff * _econ_rate, 4)
         logger.info(
             f"💰 БАЗА | user={user_id} | "
-            f"{' + '.join(base_triggered)} = {base_coeff}×{GLOBAL_BASE_RATE} = {base_rw_log} 💎"
+            f"{' + '.join(base_triggered)} = {base_coeff}×{_econ_rate} = {base_rw_log} 💎"
         )
 
         # ── КОМБО ─────────────────────────────────────────────────────────
         if new_combos:
-            combo_rw_log = round(combo_coeff * GLOBAL_BASE_RATE, 4)
-            combo_names = [f"{COMBO_LABELS.get(c, c)} ({COMBO_COEFFICIENTS[c]}x)" for c in new_combos]
+            combo_rw_log = round(combo_coeff * _econ_rate, 4)
+            combo_names = [f"{COMBO_LABELS.get(c, c)} ({_combo_coeffs.get(c, COMBO_COEFFICIENTS.get(c, '?'))}x)" for c in new_combos]
             logger.info(
                 f"🎭 КОМБО ВЫПОЛНЕНО | user={user_id} | "
                 f"{', '.join(combo_names)} = +{combo_rw_log} 💎"
@@ -1006,9 +1044,9 @@ def process_mining_reward(
 
         # ── СПРИНТЫ ───────────────────────────────────────────────────────
         if new_sprints:
-            sprint_rw_log = round(sprint_coeff * GLOBAL_BASE_RATE, 4)
+            sprint_rw_log = round(sprint_coeff * _econ_rate, 4)
             sprint_names = [
-                f"{SPRINTS_CONFIG[s]['label']} ({SPRINTS_CONFIG[s]['coeff']}x)"
+                f"{SPRINTS_CONFIG[s]['label']} ({_sprint_coeffs.get(s, SPRINTS_CONFIG[s]['coeff'])}x)"
                 for s in new_sprints
             ]
             logger.info(
@@ -1043,10 +1081,10 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
 
         # Считаем награды по блокам (каждая ≥ 0)
-        base_rw   = round(max(base_coeff * GLOBAL_BASE_RATE, 0.0), 4)
-        combo_rw  = round(combo_coeff * GLOBAL_BASE_RATE, 4) if new_combos else 0.0
-        sprint_rw = round(sprint_coeff * GLOBAL_BASE_RATE, 4) if new_sprints else 0.0
-        penalty_rw = round(abs(penalty_coeff) * GLOBAL_BASE_RATE, 4) if penalties else 0.0
+        base_rw   = round(max(base_coeff * _econ_rate, 0.0), 4)
+        combo_rw  = round(combo_coeff * _econ_rate, 4) if new_combos else 0.0
+        sprint_rw = round(sprint_coeff * _econ_rate, 4) if new_sprints else 0.0
+        penalty_rw = round(abs(penalty_coeff) * _econ_rate, 4) if penalties else 0.0
 
         # ══════════════════════════════════════════════════════════════════
         #  ПРИМЕНЕНИЕ БАФФА (Дефибриллятор и др.)

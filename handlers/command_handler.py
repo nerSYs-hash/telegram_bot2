@@ -111,9 +111,15 @@ class CommandHandler:
             + (f"\n🔁 Первое вступление: {_fmt_date(reg_data.get('created_at'))}" if is_returning else "")
         )
 
-        # Добавляем индикатор присутствия
+        # Добавляем индикатор присутствия — проверяем реальный статус в TG
+        _in_chat = False
         try:
-            card_text = inject_presence(card_text, in_chat=True)
+            _cm = await context.bot.get_chat_member(CHAT_ID, target_id)
+            _in_chat = _cm.status not in ('left', 'kicked', 'banned')
+        except Exception as e:
+            logger.warning(f"resend_dossier get_chat_member error: {e}")
+        try:
+            card_text = inject_presence(card_text, in_chat=_in_chat)
         except Exception as e:
             logger.warning(f"resend_dossier inject_presence error: {e}")
 
