@@ -303,8 +303,11 @@ async def permissions_roles_update(
     body: PermissionsUpdate,
     authorization: str = Header(default=None),
 ):
-    """Перезаписать список permissions для роли. Только owner."""
-    _require_owner(authorization)
+    """Перезаписать список permissions для роли. Только owner или developer."""
+    payload = _require_auth(authorization)
+    caller_id = int(payload.get("user_id", 0))
+    if _resolve_user_role(caller_id) not in ("owner", "developer"):
+        raise HTTPException(status_code=403, detail="Доступно только владельцу или разработчику")
     from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions
     if role not in EDITABLE_ROLES:
         raise HTTPException(
