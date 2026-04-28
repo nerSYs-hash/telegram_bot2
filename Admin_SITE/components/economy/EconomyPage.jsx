@@ -19,11 +19,17 @@ export default function EconomyPage({ token }) {
   const headers = { Authorization: `Bearer ${token}` };
 
   const loadCategories = () =>
-    fetch('/api/economy/categories', { headers }).then(r => r.json()).then(setCategories).catch(() => {});
+    fetch('/api/economy/categories', { headers })
+      .then(r => r.json())
+      .then(d => { if (Array.isArray(d)) setCategories(d); })
+      .catch(() => {});
 
   useEffect(() => {
     loadCategories();
-    fetch('/api/economy/metrics', { headers }).then(r => r.json()).then(setMetrics).catch(() => {});
+    fetch('/api/economy/metrics', { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d?.pulse_rate != null) setMetrics(d); })
+      .catch(() => {});
     fetch('/api/auth/me', { headers })
       .then(r => r.json())
       .then(u => {
@@ -38,7 +44,10 @@ export default function EconomyPage({ token }) {
   // REST-фоллбэк метрик каждые 30 сек
   useEffect(() => {
     const id = setInterval(() => {
-      fetch('/api/economy/metrics', { headers }).then(r => r.json()).then(setMetrics).catch(() => {});
+      fetch('/api/economy/metrics', { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(d => { if (d?.pulse_rate != null) setMetrics(d); })
+        .catch(() => {});
     }, 30_000);
     return () => clearInterval(id);
   }, [token]);

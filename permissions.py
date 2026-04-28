@@ -122,15 +122,13 @@ def init_permissions_db(db_path: Optional[str] = None) -> None:
             "  PRIMARY KEY (role, permission)"
             ")"
         )
-        # Сидинг — только если таблица пустая
-        cur = conn.execute("SELECT COUNT(*) FROM role_permissions")
-        if cur.fetchone()[0] == 0:
-            for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
-                for perm in perms:
-                    conn.execute(
-                        "INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)",
-                        (role, perm),
-                    )
+        # INSERT OR IGNORE — безопасно добавляет новые разрешения не трогая существующие
+        for role, perms in DEFAULT_ROLE_PERMISSIONS.items():
+            for perm in perms:
+                conn.execute(
+                    "INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)",
+                    (role, perm),
+                )
         conn.commit()
     finally:
         conn.close()
