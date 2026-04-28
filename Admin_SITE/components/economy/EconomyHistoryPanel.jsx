@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import EconomyMiniChart from './EconomyMiniChart';
+import EconomyEditModal from './EconomyEditModal';
 
 function formatDate(str) {
   if (!str) return '';
@@ -19,13 +20,14 @@ const ACTION_LABELS = {
   create:   { label: 'Создано',  cls: 'bg-green-50 text-green-700 border-green-200' },
 };
 
-export default function EconomyHistoryPanel({ settingKey, label, token, onClose }) {
-  const [data, setData] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [page, setPage] = useState(0);
+export default function EconomyHistoryPanel({ settingKey, label, token, onClose, canEdit, onRolledBack }) {
+  const [data, setData]           = useState(null);
+  const [loading, setLoading]     = useState(true);
+  const [page, setPage]           = useState(0);
+  const [rollbackTarget, setRollbackTarget] = useState(null); // entry
   const PER_PAGE = 20;
 
-  useEffect(() => {
+  const loadData = () => {
     setLoading(true);
     fetch(`/api/economy/settings/${settingKey}/history?limit=${PER_PAGE}&offset=${page * PER_PAGE}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -33,7 +35,24 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose 
       .then(r => r.json())
       .then(d => { setData(d); setLoading(false); })
       .catch(() => setLoading(false));
-  }, [settingKey, page]);
+  };
+
+  useEffect(() => { loadData(); }, [settingKey, page]);
+
+  const handleRollback = async (entry, comment) => {
+    const res = await fetch(`/api/economy/settings/${settingKey}/rollback/${entry.id}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ comment }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || 'Ошибка отката');
+    }
+    setPage(0);
+    loadData();
+    onRolledBack?.();
+  };
 
   return (
     <>
@@ -66,9 +85,7 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose 
               )}
 
               {data.entries.length === 0 && (
-                <div className="text-center text-gray-400 py-12 text-sm">
-                  Нет истории изменений
-                </div>
+                <div className="text-center text-gray-400 py-12 text-sm">Нет истории изменений</div>
               )}
 
               {data.entries.map(e => {
@@ -96,13 +113,24 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose 
                     )}
 
                     <div className="text-xs text-gray-600 italic mb-1">💬 {e.comment}</div>
-                    <div className="text-[10px] text-gray-400">
+                    <div className="text-[10px] text-gray-400 mb-2">
                       {e.changed_by?.username ? `@${e.changed_by.username}` : e.changed_by?.name || ''}
                       {' '}({e.changed_by?.role})
                     </div>
 
                     {e.is_rolled_back && (
-                      <div className="mt-2 text-[9px] font-black text-orange-500 uppercase">↩ Откатили</div>
+                      <div className="text-[9px] font-black text-orange-500 uppercase">↩ Откатили</div>
+                    )}
+
+                    {/* Кнопка Откатить */}
+                    {canEdit && e.can_rollback && !e.is_rolled_back && e.action !== 'toggle' && (
+                      <button
+                        onClick={() => setRollbackTarget(e)}
+                        className="mt-2 px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200
+                                   rounded-xl text-[10px] font-black uppercase
+                                   hover:bg-orange-100 active:scale-95 transition">
+                        ↩ Откатить к {e.old_value}
+                      </button>
                     )}
                   </div>
                 );
@@ -111,7 +139,8 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose 
               {data.entries.length === PER_PAGE && (
                 <button
                   onClick={() => setPage(p => p + 1)}
-                  className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest hover:bg-blue-50 rounded-2xl transition">
+                  className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest
+                             hover:bg-blue-50 rounded-2xl transition">
                   ↓ Загрузить ещё ↓
                 </button>
               )}
@@ -119,6 +148,22 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose 
           )}
         </div>
       </div>
+
+      {/* Модалка отката */}
+      {rollbackTarget && (
+        <EconomyEditModal
+          row={{
+            label: `Откат: ${label}`,
+            value: rollbackTarget.new_value,
+            unit: '',
+            min_value: null,
+            max_value: null,
+          }}
+          forceValue={rollbackTarget.old_value}
+          onClose={() => setRollbackTarget(null)}
+          onSave={(val, comment) => handleRollback(rollbackTarget, comment)}
+        />
+      )}
     </>
   );
 }

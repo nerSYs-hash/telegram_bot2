@@ -9,7 +9,7 @@ const SUBCATEGORY_LABELS = {
   defib:   '📑 Дефибриллятор',
 };
 
-export default function EconomySubTable({ subcategory, rows, onOpenHistory, recentlyChanged }) {
+export default function EconomySubTable({ subcategory, rows, onOpenHistory, onRowUpdated, recentlyChanged, token, canEdit }) {
   const label = SUBCATEGORY_LABELS[subcategory] || `📑 ${subcategory}`;
 
   return (
@@ -24,7 +24,10 @@ export default function EconomySubTable({ subcategory, rows, onOpenHistory, rece
             key={row.key}
             row={row}
             onOpenHistory={onOpenHistory}
+            onUpdated={onRowUpdated}
             recentlyChanged={recentlyChanged}
+            token={token}
+            canEdit={canEdit}
           />
         ))}
       </div>

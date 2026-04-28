@@ -5,35 +5,40 @@ import EconomyHistoryPanel from './EconomyHistoryPanel';
 import { useEconomyWS } from './useEconomyWS';
 
 export default function EconomyPage({ token }) {
-  const [categories, setCategories]       = useState([]);
-  const [metrics, setMetrics]             = useState(null);
-  const [expandedSections, setExpanded]   = useState(new Set());
-  const [historyPanel, setHistoryPanel]   = useState(null); // {settingKey, label}
-  const [recentlyChanged, setRecently]    = useState(new Set());
-  const [liveBanner, setLiveBanner]       = useState(null);
-  const [currentUser, setCurrentUser]     = useState(null);
+  const [categories, setCategories]     = useState([]);
+  const [metrics, setMetrics]           = useState(null);
+  const [expandedSections, setExpanded] = useState(new Set());
+  const [historyPanel, setHistoryPanel] = useState(null); // {settingKey, label}
+  const [recentlyChanged, setRecently]  = useState(new Set());
+  const [liveBanner, setLiveBanner]     = useState(null);
+  const [currentUser, setCurrentUser]   = useState(null);
+  const [canEdit, setCanEdit]           = useState(false);
 
   const wsEvents = useEconomyWS(token);
 
-  // Загрузка категорий и метрик
+  const headers = { Authorization: `Bearer ${token}` };
+
+  const loadCategories = () =>
+    fetch('/api/economy/categories', { headers }).then(r => r.json()).then(setCategories).catch(() => {});
+
   useEffect(() => {
-    const headers = { Authorization: `Bearer ${token}` };
-
-    fetch('/api/economy/categories', { headers })
-      .then(r => r.json()).then(setCategories).catch(() => {});
-
-    fetch('/api/economy/metrics', { headers })
-      .then(r => r.json()).then(setMetrics).catch(() => {});
-
+    loadCategories();
+    fetch('/api/economy/metrics', { headers }).then(r => r.json()).then(setMetrics).catch(() => {});
     fetch('/api/auth/me', { headers })
-      .then(r => r.json()).then(setCurrentUser).catch(() => {});
+      .then(r => r.json())
+      .then(u => {
+        setCurrentUser(u);
+        // owner и deputy могут редактировать
+        const role = u?.role || '';
+        setCanEdit(role === 'owner' || role === 'deputy');
+      })
+      .catch(() => {});
   }, [token]);
 
-  // REST-фоллбэк: обновляем метрики каждые 30 сек если WS недоступен
+  // REST-фоллбэк метрик каждые 30 сек
   useEffect(() => {
     const id = setInterval(() => {
-      fetch('/api/economy/metrics', { headers: { Authorization: `Bearer ${token}` } })
-        .then(r => r.json()).then(setMetrics).catch(() => {});
+      fetch('/api/economy/metrics', { headers }).then(r => r.json()).then(setMetrics).catch(() => {});
     }, 30_000);
     return () => clearInterval(id);
   }, [token]);
@@ -43,12 +48,8 @@ export default function EconomyPage({ token }) {
     const ev = wsEvents.last;
     if (!ev) return;
 
-    if (ev.event === 'metrics_update') {
-      setMetrics(ev);
-      return;
-    }
+    if (ev.event === 'metrics_update') { setMetrics(ev); return; }
 
-    // Не показываем баннер для собственных изменений
     const myName = currentUser?.username || currentUser?.first_name;
     const isMine = ev.by && myName && ev.by === myName;
 
@@ -57,7 +58,6 @@ export default function EconomyPage({ token }) {
       setTimeout(() => setLiveBanner(null), 8000);
     }
 
-    // Бейдж «Изменено» на 60 сек
     if (ev.key && ['setting_changed', 'rollback'].includes(ev.event)) {
       setRecently(prev => {
         const next = new Set(prev);
@@ -80,10 +80,8 @@ export default function EconomyPage({ token }) {
 
   return (
     <div className="space-y-4 pb-32 animate-in fade-in duration-500">
-      {/* Live-шапка */}
       <EconomyHeader metrics={metrics} />
 
-      {/* Категории */}
       {categories.map(cat => (
         <EconomyCategory
           key={cat.key}
@@ -93,6 +91,7 @@ export default function EconomyPage({ token }) {
           onOpenHistory={(key, label) => setHistoryPanel({ settingKey: key, label })}
           token={token}
           recentlyChanged={recentlyChanged}
+          canEdit={canEdit}
         />
       ))}
 
@@ -103,17 +102,26 @@ export default function EconomyPage({ token }) {
         </div>
       )}
 
-      {/* Панель истории */}
       {historyPanel && (
         <EconomyHistoryPanel
           settingKey={historyPanel.settingKey}
           label={historyPanel.label}
           token={token}
           onClose={() => setHistoryPanel(null)}
+          canEdit={canEdit}
+          onRolledBack={() => {
+            setRecently(prev => {
+              const next = new Set(prev);
+              next.add(historyPanel.settingKey);
+              setTimeout(() => {
+                setRecently(p => { const n = new Set(p); n.delete(historyPanel.settingKey); return n; });
+              }, 60_000);
+              return next;
+            });
+          }}
         />
       )}
 
-      {/* Live-баннер WS */}
       {liveBanner && <LiveBanner event={liveBanner} />}
     </div>
   );
@@ -121,18 +129,18 @@ export default function EconomyPage({ token }) {
 
 function LiveBanner({ event }) {
   const text = event.event === 'setting_changed'
-    ? `${event.by} изменил параметр: ${event.old_value} → ${event.new_value}`
+    ? `${event.by} изменил: ${event.old_value} → ${event.new_value}`
     : event.event === 'section_toggled'
     ? `${event.by} ${event.enabled ? 'включил' : 'выключил'} раздел`
-    : `${event.by} откатил параметр к ${event.to_value}`;
+    : `${event.by} откатил к ${event.to_value}`;
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-4
                     animate-in slide-in-from-right duration-300">
       <div className="flex items-start gap-3">
-        <span className="text-xl">🔔</span>
+        <span className="text-xl shrink-0">🔔</span>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-black text-amber-800">{text}</div>
+          <div className="text-xs font-black text-amber-800 break-words">{text}</div>
           {event.comment && (
             <div className="text-[11px] text-amber-700 italic mt-1">💬 {event.comment}</div>
           )}
