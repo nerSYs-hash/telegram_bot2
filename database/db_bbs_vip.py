@@ -795,7 +795,8 @@ def list_active_subscriptions(db, family: str = None, limit: int = 100) -> list:
     try:
         if family:
             rows = db.cursor.execute("""
-                SELECT s.*, p.name AS profile_name, p.user_id AS profile_user_id
+                SELECT s.*, p.name AS profile_name, p.user_id AS profile_user_id,
+                       p.username AS profile_username
                 FROM bbs_vip_subscriptions s
                 JOIN bbs_profiles p ON p.id = s.profile_id
                 WHERE s.status='active' AND s.vip_family=?
@@ -803,7 +804,8 @@ def list_active_subscriptions(db, family: str = None, limit: int = 100) -> list:
             """, (family, limit)).fetchall()
         else:
             rows = db.cursor.execute("""
-                SELECT s.*, p.name AS profile_name, p.user_id AS profile_user_id
+                SELECT s.*, p.name AS profile_name, p.user_id AS profile_user_id,
+                       p.username AS profile_username
                 FROM bbs_vip_subscriptions s
                 JOIN bbs_profiles p ON p.id = s.profile_id
                 WHERE s.status='active'

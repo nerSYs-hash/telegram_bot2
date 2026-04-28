@@ -264,9 +264,12 @@ async def show_vip_active_subs(query, user, db, admin_id, page: int = 0):
 
     lines = [f"📜 <b>Активные подписки VIP</b> (стр. {page + 1}, всего {total}):\n"]
     for s in page_subs:
-        name = s['profile_name'] or f"ID:{s['profile_user_id']}"
+        uid = s['profile_user_id']
+        username = s.get('profile_username')
+        display = f"@{username}" if username else (s['profile_name'] or f"ID:{uid}")
+        user_link = f'<a href="tg://user?id={uid}">{display}</a>'
         expires = s['expires_at'][:16] if s['expires_at'] else 'разовая'
-        lines.append(f"• <b>{s['vip_code']}</b> | {name} | до {expires} | {s['price_rub_paid']:.0f}₽")
+        lines.append(f"• <b>{s['vip_code']}</b> | {user_link} | до {expires} | {s['price_rub_paid']:.0f}₽")
 
     text = "\n".join(lines)
     if len(text) > 4000:

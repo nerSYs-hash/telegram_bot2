@@ -136,7 +136,8 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 city=excluded.city, goals=excluded.goals, about=excluded.about,
                 message_ids=excluded.message_ids, thread_id=excluded.thread_id,
                 published_at=excluded.published_at, edited=0, edited_fields='{}',
-                reaction_count=0, updated_at=excluded.updated_at
+                reaction_count=0, updated_at=excluded.updated_at,
+                deleted_at=NULL, deleted_by=NULL
         '''
     save_args = (
             user.id, user.username,
@@ -287,7 +288,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
     Перепубликует анкету в BBS ветке.
     vip1_trigger=True — эта перепубликация сама вызвана VIP1: не запускает цепную реакцию.
     """
-    profile = get_profile(db, user_id)
+    profile = get_profile(db, user_id, include_deleted=True)
     if not profile:
         logging.warning(f"BBS republish: profile not found for user {user_id}")
         raise ValueError("Анкета не найдена в БД")
@@ -398,10 +399,11 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
         # --- ИСПРАВЛЕНИЕ: Обязательно вызываем raise, чтобы родитель узнал об ошибке ---
         raise e
 
-    # Обновляем message_ids в БД
+    # Обновляем message_ids в БД, снимаем метки удаления если были
     try:
         db.cursor.execute(
-            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ? WHERE user_id = ?',
+            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ?, '
+            'deleted_at = NULL, deleted_by = NULL WHERE user_id = ?',
             (json.dumps(sent_ids), bbs_thread_id, user_id),
         )
         db.conn.commit()
