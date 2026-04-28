@@ -139,10 +139,16 @@ def init_bbs_tables(db):
         logging.error(f"❌ Error initializing BBS tables: {e}")
 
 
-def get_profile(db, user_id) -> dict | None:
-    """Получить анкету из БД."""
+def get_profile(db, user_id, include_deleted: bool = False) -> dict | None:
+    """Получить активную анкету из БД.
+    include_deleted=True — использовать только в restore-flow."""
     try:
-        db.cursor.execute('SELECT * FROM bbs_profiles WHERE user_id = ?', (user_id,))
+        if include_deleted:
+            db.cursor.execute('SELECT * FROM bbs_profiles WHERE user_id = ?', (user_id,))
+        else:
+            db.cursor.execute(
+                'SELECT * FROM bbs_profiles WHERE user_id = ? AND deleted_at IS NULL', (user_id,)
+            )
         row = db.cursor.fetchone()
         return dict(row) if row else None
     except Exception as e:

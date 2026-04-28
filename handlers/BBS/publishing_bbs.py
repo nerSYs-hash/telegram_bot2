@@ -268,7 +268,7 @@ async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_i
 # ═══════════════════════════════════════════════════════════════
 
 async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
-    profile = get_profile(db, user_id)
+    profile = get_profile(db, user_id, include_deleted=True)
     if not profile:
         logging.warning(f"BBS republish: profile not found for user {user_id}")
         raise ValueError("Анкета не найдена в БД")
@@ -366,10 +366,10 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
         # --- ИСПРАВЛЕНИЕ: Обязательно вызываем raise, чтобы родитель узнал об ошибке ---
         raise e
 
-    # Обновляем message_ids в БД
+    # Обновляем message_ids и снимаем метку удаления (профиль активен снова)
     try:
         db.cursor.execute(
-            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ? WHERE user_id = ?',
+            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ?, deleted_at = NULL, deleted_by = NULL WHERE user_id = ?',
             (json.dumps(sent_ids), bbs_thread_id, user_id),
         )
         db.conn.commit()
