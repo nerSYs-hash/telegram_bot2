@@ -5350,99 +5350,74 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Два столбика */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                  {/* Левый: ресурсы */}
-                  <div className="space-y-2">
-                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ресурсы</p>
-                    {(permCatalog?.resources || []).map(res => {
-                      const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
-                      const resPerms = (permCatalog?.actions || []).map(a => `${res.key}.${a.key}`);
-                      const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
-                      const allEnabled  = enabledCount === resPerms.length;
-                      const isSelected  = permSelectedRes === res.key;
-                      return (
+                {/* Аккордеон: каждый ресурс — раскрывающаяся карточка */}
+                <div className="space-y-2">
+                  {(permCatalog?.resources || []).map(res => {
+                    const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
+                    const resPerms = (permCatalog?.actions || []).map(a => `${res.key}.${a.key}`);
+                    const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
+                    const allEnabled = enabledCount === resPerms.length;
+                    const isExpanded = permSelectedRes === res.key;
+                    return (
+                      <div key={res.key} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        {/* Заголовок — клик раскрывает/закрывает */}
                         <div
-                          key={res.key}
-                          onClick={() => setPermSelectedRes(res.key)}
-                          className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all duration-200 ${
-                            isSelected
-                              ? 'border-blue-300 shadow-md shadow-blue-50 ring-2 ring-blue-100'
-                              : 'border-gray-100 hover:border-gray-200'
-                          }`}
+                          onClick={() => setPermSelectedRes(isExpanded ? null : res.key)}
+                          className={`flex items-center gap-3 p-4 cursor-pointer transition-all hover:bg-gray-50 ${isExpanded ? 'border-b border-gray-100' : ''}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0 ${isSelected ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
-                              <ResIcon size={16} className={isSelected ? 'text-blue-500' : 'text-gray-400'}/>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
-                              <p className="text-[10px] text-gray-400 font-medium mt-0.5">{enabledCount} / {resPerms.length} действий</p>
-                            </div>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border flex-shrink-0 transition-colors ${isExpanded ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+                            <ResIcon size={15} className={isExpanded ? 'text-blue-500' : 'text-gray-400'}/>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
+                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                              {enabledCount === 0 ? 'Нет доступа' : `${enabledCount} из ${resPerms.length} действий`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                               onClick={e => { e.stopPropagation(); toggleAllForResource(res.key, !allEnabled); }}
-                              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${
-                                allEnabled
-                                  ? 'bg-red-50 text-red-500 hover:bg-red-100'
-                                  : 'bg-green-50 text-green-600 hover:bg-green-100'
-                              }`}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${allEnabled ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
                             >
-                              {allEnabled ? 'Выкл все' : 'Вкл все'}
+                              {allEnabled ? 'Выкл' : 'Вкл'}
                             </button>
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Правый: действия выбранного ресурса */}
-                  <div>
-                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
-                      {selectedResData ? `Действия: ${selectedResData.label}` : 'Действия'}
-                    </p>
-                    {!selectedResData ? (
-                      <div className="bg-white rounded-2xl border border-gray-100 flex flex-col items-center justify-center py-16 text-center">
-                        <ShieldCheck size={28} className="text-gray-200 mb-3"/>
-                        <p className="text-sm font-black text-gray-300">Выберите ресурс слева</p>
+                        {/* Раскрытая панель: 2 колонки действий */}
+                        {isExpanded && (
+                          <div className="grid grid-cols-2 gap-2 p-4">
+                            {(permCatalog?.actions || []).map(action => {
+                              const perm = `${res.key}.${action.key}`;
+                              const enabled = currentSet.has(perm);
+                              const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
+                              return (
+                                <label
+                                  key={action.key}
+                                  className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all active:scale-95 ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={enabled}
+                                    onChange={() => togglePerm(perm)}
+                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className={`block text-[10px] font-black uppercase tracking-wide leading-none ${badgeCls.split(' ').slice(1).join(' ')}`}>
+                                      {action.label}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 font-medium mt-0.5 block leading-tight">
+                                      {ACTION_DESCRIPTIONS[action.key] || action.label}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        {(permCatalog?.actions || []).map((action, idx) => {
-                          const perm = `${selectedResData.key}.${action.key}`;
-                          const enabled = currentSet.has(perm);
-                          const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
-                          return (
-                            <label
-                              key={action.key}
-                              className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-all duration-150 ${
-                                idx < (permCatalog.actions.length - 1) ? 'border-b border-gray-50' : ''
-                              } ${enabled ? 'bg-blue-50/30 hover:bg-blue-50/50' : 'hover:bg-gray-50'}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={enabled}
-                                onChange={() => togglePerm(perm)}
-                                className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide ${badgeCls}`}>
-                                    {action.label}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-gray-400 font-medium">
-                                  {ACTION_DESCRIPTIONS[action.key] || action.label}
-                                </p>
-                              </div>
-                              {enabled && <CheckCircle2 size={14} className="text-blue-500 flex-shrink-0"/>}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
+                    );
+                  })}
                 </div>
               </>
             )}

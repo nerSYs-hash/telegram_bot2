@@ -35,9 +35,11 @@ async def get_user_role(user_id: int) -> str:
     3) Если записи нет → 'user'
     """
     try:
-        from config import OWNER_ID
+        from config import OWNER_ID, DEVELOPER_ID
         if user_id == OWNER_ID:
             return "owner"
+        if DEVELOPER_ID and user_id == DEVELOPER_ID:
+            return "developer"
     except Exception:
         pass
 

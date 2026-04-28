@@ -100,12 +100,29 @@ def upsert_bug_card(db, original_msg_id: int, **kwargs) -> None:
 #  Построение карточки
 # ─────────────────────────────────────────────
 
+def _parse_comments(comment_data: str) -> list:
+    import json as _json
+    try:
+        parsed = _json.loads(comment_data)
+        if isinstance(parsed, list):
+            return [str(c) for c in parsed if c]
+    except (ValueError, TypeError):
+        pass
+    return [comment_data] if comment_data and comment_data.strip() else []
+
+
 def _build_card_text(original_text: str, status: str, comment: str | None) -> str:
+    import html
     status_line = _STATUS_ICON.get(status, '')
     text = f"{status_line}🐛 <b>Баг:</b>\n{original_text}"
     if comment:
-        import html
-        text += f"\n\n💬 <b>Комментарий:</b> {html.escape(comment)}"
+        comments = _parse_comments(comment)
+        if len(comments) == 1:
+            text += f"\n\n💬 <b>Комментарий:</b> {html.escape(comments[0])}"
+        elif len(comments) > 1:
+            text += "\n\n💬 <b>Комментарии:</b>"
+            for i, c in enumerate(comments, 1):
+                text += f"\n{i}. {html.escape(c)}"
     return text
 
 
@@ -286,11 +303,17 @@ async def handle_bug_comment_input(message, context, db) -> bool:
     if not comment:
         return True
 
+    import json as _json
     status        = row.get('status', STATUS_NEW)
     original_text = row.get('original_text') or '(без текста)'
     is_photo      = bool(row.get('is_photo'))
 
-    new_text = _build_card_text(original_text, status, comment)
+    existing = row.get('comment') or ''
+    existing_comments = _parse_comments(existing) if existing else []
+    existing_comments.append(comment)
+    comment_data = _json.dumps(existing_comments, ensure_ascii=False)
+
+    new_text = _build_card_text(original_text, status, comment_data)
     kb = _build_keyboard(orig_id, status)
 
     updated = False
@@ -310,7 +333,7 @@ async def handle_bug_comment_input(message, context, db) -> bool:
         logger.error(f"handle_bug_comment_input edit error: {e}")
 
     if updated:
-        upsert_bug_card(db, orig_id, comment=comment)
+        upsert_bug_card(db, orig_id, comment=comment_data)
 
     # Удаляем: промпт, сообщение с комментарием — через 2 сек
     import asyncio

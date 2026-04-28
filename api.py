@@ -121,9 +121,12 @@ async def auth_telegram(request: Request):
     if time.time() - int(data.get("auth_date", 0)) > 86400:
         raise HTTPException(status_code=401, detail="Данные авторизации устарели")
     user_id = int(data["id"])
+    _main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
+    _developer_id  = int(os.getenv('DEVELOPER_ID', 0))
     udata = db.get_user(user_id) if db else None
-    is_admin = bool(udata and (udata["is_admin"] or udata["is_owner"]))
-    is_owner = bool(udata and udata["is_owner"])
+    is_owner    = bool((udata and udata["is_owner"]) or (_main_admin_id and user_id == _main_admin_id))
+    is_developer = bool(_developer_id and user_id == _developer_id)
+    is_admin    = bool(is_owner or is_developer or (udata and udata["is_admin"]))
     token = _make_jwt({
         "user_id":    user_id,
         "username":   data.get("username", ""),
@@ -250,10 +253,13 @@ def _require_auth(authorization: str) -> dict:
 
 
 def _resolve_user_role(user_id: int) -> str:
-    """Возвращает роль пользователя (owner/deputy/admin/user) с учётом MAIN_ADMIN_ID."""
+    """Возвращает роль пользователя (owner/developer/deputy/admin/user)."""
     main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
     if main_admin_id and user_id == main_admin_id:
         return "owner"
+    developer_id = int(os.getenv('DEVELOPER_ID', 0))
+    if developer_id and user_id == developer_id:
+        return "developer"
     meta = _get_user_role_meta(user_id)
     return (meta.get("role") or "user").lower()
 
