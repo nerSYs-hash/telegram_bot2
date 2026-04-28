@@ -28,6 +28,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
+# Загружаем .env (MAIN_ADMIN_ID, DEVELOPER_ID, BOT_TOKEN и др.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(current_dir, '.env'))
+except ImportError:
+    logger.warning("⚠️ python-dotenv не установлен — .env не загружен")
+
 app = FastAPI(
     title="Pulse Pro API",
     description="Backend API для панели управления (из корня бота)",

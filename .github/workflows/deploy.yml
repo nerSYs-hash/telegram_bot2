@@ -37,4 +37,5 @@ jobs:
             source venv/bin/activate
             pip install -r requirements.txt -q
             systemctl restart pulsbot
-            echo "✅ Bot deployed!"
+            systemctl restart pulsapi
+            echo "✅ Bot + API deployed!"
