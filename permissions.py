@@ -52,16 +52,19 @@ RESOURCES = {
     "admins":     {"label": "Управление админами","icon": "ShieldCheck"},
     "blacklist":  {"label": "Чёрный список",      "icon": "Ban"},
     "moderation": {"label": "Модерация чата",     "icon": "ShieldBan"},
+    "economy":    {"label": "Экономика",          "icon": "Coins"},
 }
 
 # ── ДЕЙСТВИЯ (каталог) ──
 ACTION_LABELS = {
-    "view":   "просмотр",
-    "create": "создание",
-    "edit":   "редактирование",
-    "delete": "удаление",
-    "toggle": "вкл/выкл",
-    "export": "выгрузка",
+    "view":     "просмотр",
+    "create":   "создание",
+    "edit":     "редактирование",
+    "delete":   "удаление",
+    "toggle":   "вкл/выкл",
+    "export":   "выгрузка",
+    "rollback": "откат изменений",
+    "cancel":   "отмена выплат",
 }
 
 # ── ВСЕ ВОЗМОЖНЫЕ permissions (плоский список) ──
@@ -81,6 +84,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "admins.view",
         "blacklist.view",  "blacklist.create","blacklist.delete",
         "moderation.delete", "moderation.edit", "moderation.toggle",
+        "economy.view",    "economy.edit",   "economy.toggle", "economy.rollback",
     ],
     ROLE_ADMIN: [
         "triggers.view",
@@ -89,6 +93,7 @@ DEFAULT_ROLE_PERMISSIONS = {
         "journal.view",
         "statistics.view",
         "moderation.delete",
+        "economy.view",
     ],
 }
 

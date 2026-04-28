@@ -74,6 +74,25 @@ from database.db_scheduled import (
     get_scheduled_posts_list as _get_scheduled_posts_list,
     delete_scheduled_post as _delete_scheduled_post,
 )
+from database.db_economy import (
+    init_economy_tables as _init_economy_tables,
+    get_econ as _get_econ,
+    set_econ as _set_econ,
+    toggle_econ as _toggle_econ,
+    toggle_section as _toggle_econ_section,
+    is_section_enabled as _is_econ_section_enabled,
+    get_econ_categories as _get_econ_categories,
+    get_econ_settings as _get_econ_settings,
+    rollback_econ as _rollback_econ,
+    cancel_pointwise as _cancel_pointwise,
+    cancel_mass as _cancel_mass,
+    get_cancellations as _get_economy_cancellations,
+    get_economy_metrics as _get_economy_metrics,
+)
+from database.db_economy_history import (
+    get_history_for_key as _get_econ_history,
+    get_history_chart_data as _get_econ_chart_data,
+)
 from database.db_migrations import (
     migrate_to_decimal_balances as _migrate_to_decimal_balances,
     add_telegram_message_id_to_messages as _add_telegram_message_id_to_messages,
@@ -542,6 +561,52 @@ class Database:
             pass  # Column already exists
 
         self.seed_shipper_phrases_if_empty()
+
+        # Initialize economy tables
+        _init_economy_tables(self)
+
+    # ── Economy ──
+    def get_econ(self, key, default=None, value_type='float'):
+        return _get_econ(self, key, default, value_type)
+
+    def set_econ(self, key, value, comment, changed_by, changed_by_role):
+        return _set_econ(self, key, value, comment, changed_by, changed_by_role)
+
+    def toggle_econ(self, key, comment, changed_by, changed_by_role):
+        return _toggle_econ(self, key, comment, changed_by, changed_by_role)
+
+    def toggle_econ_section(self, category, comment, changed_by, changed_by_role):
+        return _toggle_econ_section(self, category, comment, changed_by, changed_by_role)
+
+    def is_econ_section_enabled(self, category):
+        return _is_econ_section_enabled(self, category)
+
+    def get_econ_categories(self):
+        return _get_econ_categories(self)
+
+    def get_econ_settings(self, category=None, subcategory=None):
+        return _get_econ_settings(self, category=category, subcategory=subcategory)
+
+    def rollback_econ(self, history_id, comment, changed_by, changed_by_role):
+        return _rollback_econ(self, history_id, comment, changed_by, changed_by_role)
+
+    def get_econ_history(self, key, limit=20, offset=0):
+        return _get_econ_history(self, key, limit=limit, offset=offset)
+
+    def get_econ_chart_data(self, key):
+        return _get_econ_chart_data(self, key)
+
+    def cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role):
+        return _cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role)
+
+    def cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role):
+        return _cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role)
+
+    def get_economy_cancellations(self, limit=50, offset=0):
+        return _get_economy_cancellations(self, limit=limit, offset=offset)
+
+    def get_economy_metrics(self):
+        return _get_economy_metrics(self)
 
     # ── Settings ──
     def get_setting(self, key, default=None):
