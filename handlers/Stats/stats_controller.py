@@ -1266,9 +1266,8 @@ async def show_top5_rich(query, user, db, context=None):
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
-            crown = f" {ICON_MONEY_BAG_GREEN}" if idx == 0 else ''
             bag = ICON_MONEY_BAG_GREEN if idx == 0 else '💰'
-            message += f"{emojis[idx]} @{username}{crown}\n   {bag} Баланс: {format_number(u_data['balance'])} 💎\n\n"
+            message += f"{emojis[idx]} @{username}\n   {bag} Баланс: {format_number(u_data['balance'])} 💎\n\n"
     else:
         message += "Пока нет данных."
 
