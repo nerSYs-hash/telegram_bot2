@@ -356,6 +356,12 @@ export default function App() {
     return userPermissions.has(perm);
   }, [authUser, userPermissions, profileData]);
 
+  const userCanAny = useCallback((resourceKey) => {
+    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (!profileData) return true;
+    return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
+  }, [authUser, userPermissions, profileData]);
+
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
   const [permRoles, setPermRoles]                 = useState(null);
@@ -910,15 +916,15 @@ export default function App() {
   };
 
   const navigation = [
-    { id: 'updates',     name: 'Обновления',    icon: Megaphone,   group: 'top' },
-    { id: 'statistics',  name: 'Статистика',    icon: PieChart,    group: 'main' },
-    { id: 'journal',     name: 'Журнал',        icon: ScrollText,  group: 'main' },
-    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules' },
-    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules' },
-    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules' },
-    { id: 'system',      name: 'Система',       icon: Settings,    group: 'main' },
-    { id: 'broadcast',   name: 'Рассылка',      icon: Send,        group: 'features' },
-    { id: 'permissions', name: 'Права',         icon: ShieldCheck, group: 'features', ownerOnly: true },
+    { id: 'updates',     name: 'Обновления',    icon: Megaphone,      group: 'top' },
+    { id: 'statistics',  name: 'Статистика',    icon: PieChart,       group: 'main',     resource: 'statistics' },
+    { id: 'journal',     name: 'Журнал',        icon: ScrollText,     group: 'main',     resource: 'journal' },
+    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
+    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
+    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules',  resource: 'economy' },
+    { id: 'system',      name: 'Система',       icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'broadcast',   name: 'Рассылка',      icon: Send,           group: 'features', resource: 'broadcast' },
+    { id: 'permissions', name: 'Права',         icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
   const renderContent = () => {
@@ -5239,7 +5245,7 @@ export default function App() {
         };
 
         const editableRoles = (permCatalog?.roles || []).filter(r => r.editable);
-        const totalPerms = (permCatalog?.resources?.length || 0) * (permCatalog?.actions?.length || 0);
+        const totalPerms = (permCatalog?.resources || []).reduce((sum, r) => sum + (r.actions?.length || 0), 0);
         const currentSet = permLocal[permActiveRole] || new Set();
         const selectedResData = permCatalog?.resources?.find(r => r.key === permSelectedRes);
 
@@ -5255,8 +5261,10 @@ export default function App() {
         const toggleAllForResource = (resKey, enable) => {
           setPermLocal(prev => {
             const next = new Set(prev[permActiveRole]);
-            (permCatalog?.actions || []).forEach(a => {
+            const resData = permCatalog?.resources?.find(r => r.key === resKey);
+            (resData?.actions || []).forEach(a => {
               const p = `${resKey}.${a.key}`;
+              if (permCatalog?.owner_level?.includes(p)) return;
               enable ? next.add(p) : next.delete(p);
             });
             return { ...prev, [permActiveRole]: next };
@@ -5354,9 +5362,9 @@ export default function App() {
                 <div className="space-y-2">
                   {(permCatalog?.resources || []).map(res => {
                     const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
-                    const resPerms = (permCatalog?.actions || []).map(a => `${res.key}.${a.key}`);
+                    const resPerms = (res.actions || []).map(a => `${res.key}.${a.key}`).filter(p => !(permCatalog?.owner_level || []).includes(p));
                     const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
-                    const allEnabled = enabledCount === resPerms.length;
+                    const allEnabled = resPerms.length > 0 && enabledCount === resPerms.length;
                     const isExpanded = permSelectedRes === res.key;
                     return (
                       <div key={res.key} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
@@ -5387,27 +5395,34 @@ export default function App() {
                         {/* Раскрытая панель: 2 колонки действий */}
                         {isExpanded && (
                           <div className="grid grid-cols-2 gap-2 p-4">
-                            {(permCatalog?.actions || []).map(action => {
+                            {(res.actions || []).map(action => {
                               const perm = `${res.key}.${action.key}`;
+                              const isOwnerLevel = (permCatalog?.owner_level || []).includes(perm);
                               const enabled = currentSet.has(perm);
                               const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
                               return (
                                 <label
                                   key={action.key}
-                                  className={`flex items-center gap-2.5 p-3 rounded-xl border cursor-pointer transition-all active:scale-95 ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`}
+                                  title={isOwnerLevel ? 'Доступно только владельцу' : ''}
+                                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
+                                    isOwnerLevel
+                                      ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+                                      : `cursor-pointer active:scale-95 ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`
+                                  }`}
                                 >
                                   <input
                                     type="checkbox"
-                                    checked={enabled}
-                                    onChange={() => togglePerm(perm)}
-                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer"
+                                    checked={isOwnerLevel ? false : enabled}
+                                    disabled={isOwnerLevel}
+                                    onChange={() => !isOwnerLevel && togglePerm(perm)}
+                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer disabled:cursor-not-allowed"
                                   />
                                   <div className="min-w-0">
                                     <span className={`block text-[10px] font-black uppercase tracking-wide leading-none ${badgeCls.split(' ').slice(1).join(' ')}`}>
                                       {action.label}
                                     </span>
                                     <span className="text-[9px] text-gray-400 font-medium mt-0.5 block leading-tight">
-                                      {ACTION_DESCRIPTIONS[action.key] || action.label}
+                                      {isOwnerLevel ? 'только владелец' : (ACTION_DESCRIPTIONS[action.key] || action.label)}
                                     </span>
                                   </div>
                                 </label>
@@ -5465,7 +5480,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer')).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer') && (!n.resource || userCanAny(n.resource))).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}

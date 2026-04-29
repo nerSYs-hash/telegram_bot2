@@ -315,11 +315,17 @@ async def permissions_roles_update(
     caller_id = int(payload.get("user_id", 0))
     if _resolve_user_role(caller_id) not in ("owner", "developer"):
         raise HTTPException(status_code=403, detail="Доступно только владельцу или разработчику")
-    from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions
+    from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions, OWNER_LEVEL_PERMISSIONS
     if role not in EDITABLE_ROLES:
         raise HTTPException(
             status_code=400,
             detail=f"Роль '{role}' нельзя редактировать (доступны: {list(EDITABLE_ROLES)})",
+        )
+    forbidden = [p for p in body.permissions if p in OWNER_LEVEL_PERMISSIONS]
+    if forbidden:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Эти права доступны только владельцу и не могут быть выданы: {', '.join(forbidden)}",
         )
     try:
         set_role_permissions(role, body.permissions)
