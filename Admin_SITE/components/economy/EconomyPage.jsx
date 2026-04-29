@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Ban } from 'lucide-react';
 import EconomyHeader from './EconomyHeader';
 import EconomyCategory from './EconomyCategory';
 import EconomyHistoryPanel from './EconomyHistoryPanel';
+import EconomyCancellationsPanel from './EconomyCancellationsPanel';
 import { useEconomyWS } from './useEconomyWS';
 
 export default function EconomyPage({ token }) {
@@ -9,10 +11,12 @@ export default function EconomyPage({ token }) {
   const [metrics, setMetrics]           = useState(null);
   const [expandedSections, setExpanded] = useState(new Set());
   const [historyPanel, setHistoryPanel] = useState(null); // {settingKey, label}
+  const [cancellationsOpen, setCancellationsOpen] = useState(false);
   const [recentlyChanged, setRecently]  = useState(new Set());
   const [liveBanner, setLiveBanner]     = useState(null);
   const [currentUser, setCurrentUser]   = useState(null);
   const [canEdit, setCanEdit]           = useState(false);
+  const [canCancel, setCanCancel]       = useState(false);
 
   const wsEvents = useEconomyWS(token);
 
@@ -36,6 +40,8 @@ export default function EconomyPage({ token }) {
         setCurrentUser(profile);
         const role = profile?.role_raw || '';
         setCanEdit(role === 'owner' || role === 'developer' || role === 'deputy');
+        // Отмены выплат — только владелец (бэк требует economy.cancel)
+        setCanCancel(role === 'owner');
       })
       .catch(() => {});
   }, [token]);
@@ -61,7 +67,7 @@ export default function EconomyPage({ token }) {
     const myName = currentUser?.username || currentUser?.first_name;
     const isMine = ev.by && myName && ev.by === myName;
 
-    if (!isMine && ['setting_changed', 'rollback', 'section_toggled'].includes(ev.event)) {
+    if (!isMine && ['setting_changed', 'rollback', 'section_toggled', 'cancellation'].includes(ev.event)) {
       setLiveBanner(ev);
       setTimeout(() => setLiveBanner(null), 8000);
     }
@@ -89,6 +95,18 @@ export default function EconomyPage({ token }) {
   return (
     <div className="space-y-4 pb-32 animate-in fade-in duration-500">
       <EconomyHeader metrics={metrics} />
+
+      {canCancel && (
+        <div className="flex justify-end">
+          <button
+            onClick={() => setCancellationsOpen(true)}
+            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-red-200
+                       text-red-600 rounded-2xl text-xs font-black uppercase tracking-widest
+                       hover:bg-red-50 active:scale-95 transition shadow-sm">
+            <Ban size={14} /> Отмены выплат
+          </button>
+        </div>
+      )}
 
       {categories.map(cat => (
         <EconomyCategory
@@ -130,17 +148,32 @@ export default function EconomyPage({ token }) {
         />
       )}
 
+      {cancellationsOpen && (
+        <EconomyCancellationsPanel
+          token={token}
+          canCancel={canCancel}
+          onClose={() => setCancellationsOpen(false)}
+        />
+      )}
+
       {liveBanner && <LiveBanner event={liveBanner} />}
     </div>
   );
 }
 
 function LiveBanner({ event }) {
-  const text = event.event === 'setting_changed'
-    ? `${event.by} изменил: ${event.old_value} → ${event.new_value}`
-    : event.event === 'section_toggled'
-    ? `${event.by} ${event.enabled ? 'включил' : 'выключил'} раздел`
-    : `${event.by} откатил к ${event.to_value}`;
+  let text;
+  if (event.event === 'setting_changed') {
+    text = `${event.by} изменил: ${event.old_value} → ${event.new_value}`;
+  } else if (event.event === 'section_toggled') {
+    text = `${event.by} ${event.enabled ? 'включил' : 'выключил'} раздел`;
+  } else if (event.event === 'cancellation') {
+    text = event.type === 'pointwise'
+      ? `${event.by} отменил выплату #${event.tx_id} (${event.mode})`
+      : `${event.by} зафиксировал массовую отмену: ${event.affected_users} юзеров на ${event.total} 💎`;
+  } else {
+    text = `${event.by} откатил к ${event.to_value}`;
+  }
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-4
