@@ -51,8 +51,9 @@ async def show_top_rich(message, context, db):
             username = user['username'] or user['first_name'] or 'Unknown'
             balance = format_number(user['balance'])
             crown = f" {ICON_MONEY_BAG_GREEN}" if idx == 0 else ''
+            bag = ICON_MONEY_BAG_GREEN if idx == 0 else '💰'
             response += f"{emojis[idx]} @{username}{crown}\n"
-            response += f"   💰 Баланс: {balance} 💎\n\n"
+            response += f"   {bag} Баланс: {balance} 💎\n\n"
 
         await context.bot.send_message(
             chat_id=message.chat.id,
