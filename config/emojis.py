@@ -102,6 +102,7 @@ ICON_SWEAT_DROPLETS = "💦"
 ICON_FLEXED_BICEPS = "💪"
 ICON_SPEECH_BALLOON = "💬"
 ICON_MONEY_BAG = '<tg-emoji emoji-id="5278467510604160626">💰</tg-emoji>'
+ICON_MONEY_BAG_GREEN = '<tg-emoji emoji-id="5224257782013769471">💰</tg-emoji>'  # анимированный зелёный мешок для 1-го места ТОП Богачей
 ICON_CURRENCY_EXCHANGE = "💱"
 ICON_DOLLAR_BANKNOTE = "💵"
 ICON_MONEY_WITH_WINGS = "💸"

@@ -164,13 +164,22 @@ async def show_top5_rich(query, user, db, context=None):
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, excluded_ids, db, limit=5)
 
+    from config.emojis import ICON_MONEY_BAG_GREEN
     message = "💰 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
     if top_users:
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
         for idx, u_data in enumerate(top_users):
             username = u_data['username'] or u_data['first_name'] or 'Unknown'
-            message += f"{emojis[idx]} @{username}\n   💰 Баланс: {format_number(u_data['balance'])} 💎\n   ⛏ Добыто сегодня: {format_number(u_data['pulses_today'])} 💎\n\n"
+            crown = f" {ICON_MONEY_BAG_GREEN}" if idx == 0 else ''
+            message += f"{emojis[idx]} @{username}{crown}\n   💰 Баланс: {format_number(u_data['balance'])} 💎\n\n"
     else:
         message += "Пока нет данных."
 
-    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],[InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]]))
+    await query.edit_message_text(
+        message,
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔙 Назад к ТОП-5", callback_data="menu_top5")],
+            [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]
+        ])
+    )
