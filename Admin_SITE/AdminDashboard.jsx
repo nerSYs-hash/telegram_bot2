@@ -5543,7 +5543,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
-          <div className={activeTab === 'triggers' && editingTrigger ? 'w-full' : 'max-w-3xl mx-auto'}>
+          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' ? 'w-full' : 'max-w-3xl mx-auto'}>
             {renderContent()}
           </div>
         </div>

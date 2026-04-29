@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import EconomySubTable from './EconomySubTable';
-import EconomyToggleModal from './EconomyToggleModal';
+import EconomyToggleForm from './EconomyToggleForm';
 
 function groupBy(arr, key) {
   return arr.reduce((acc, item) => {
@@ -87,19 +87,33 @@ export default function EconomyCategory({
             />
           </button>
 
-          {/* Мастер-свич */}
+          {/* Мастер-свич — единый стиль с строками */}
           <button
-            onClick={() => canEdit ? setMasterModal(true) : null}
+            onClick={() => canEdit ? setMasterModal(v => !v) : null}
             disabled={!canEdit}
             title={canEdit ? (sectionEnabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
-            className={`mr-4 w-12 h-7 rounded-full relative transition-colors shrink-0 ${
+            className={`mr-4 relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
               sectionEnabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-1 transition-all ${
-              sectionEnabled ? 'right-1' : 'left-1'
+            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+              sectionEnabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
         </div>
+
+        {/* Inline форма мастер-тумблера */}
+        {masterModal && (
+          <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+            <EconomyToggleForm
+              label={category.label}
+              currentEnabled={sectionEnabled}
+              rowCount={category.rows_count}
+              isMaster={true}
+              onCancel={() => setMasterModal(false)}
+              onSave={async (c) => { await handleMasterToggle(c); setMasterModal(false); }}
+            />
+          </div>
+        )}
 
         {/* Тело */}
         {isExpanded && (
@@ -127,17 +141,6 @@ export default function EconomyCategory({
           </div>
         )}
       </div>
-
-      {masterModal && (
-        <EconomyToggleModal
-          label={category.label}
-          currentEnabled={sectionEnabled}
-          rowCount={category.rows_count}
-          isMaster={true}
-          onClose={() => setMasterModal(false)}
-          onSave={handleMasterToggle}
-        />
-      )}
     </>
   );
 }
