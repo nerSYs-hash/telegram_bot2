@@ -435,6 +435,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("course", self.command_handler.course_command))
         self.application.add_handler(CommandHandler("give_pulse", self.command_handler.give_pulse_command))
         self.application.add_handler(CommandHandler("pay", self.command_handler.pay_command))
+        self.application.add_handler(CommandHandler("tip", self.command_handler.tip_command))
         self.application.add_handler(CommandHandler("donate", self.command_handler.donate_command))
         self.application.add_handler(CommandHandler("help", self.command_handler.help_command))
         self.application.add_handler(CommandHandler("recalc", lambda u, c: recalc_rate_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))

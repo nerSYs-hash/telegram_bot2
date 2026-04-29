@@ -8,6 +8,7 @@ from handlers.donate_handlers import (
     donate_user_amount, donate_user_custom, donate_user_confirm,
     donate_to_bank_start, donate_bank_custom, donate_bank_amount,
     donate_bank_confirm, donate_show_history,
+    donate_cat_recent, donate_cat_activists, donate_cat_poor, donate_cat_manual,
 )
 from handlers.bank_handlers import start_bank_transfer, select_transfer_amount, execute_bank_transfer
 from handlers.banner_utils import show_banner, enter_banner
@@ -57,6 +58,14 @@ async def dispatch_activity(handler, query, data, user, context) -> bool:
         await show_donate_menu(query, user, db)
     elif data == "donate_to_user_start":
         await donate_to_user_start(query, user, context, db)
+    elif data == "donate_cat_recent":
+        await donate_cat_recent(query, user, context, db)
+    elif data == "donate_cat_activists":
+        await donate_cat_activists(query, user, context, db)
+    elif data == "donate_cat_poor":
+        await donate_cat_poor(query, user, context, db)
+    elif data == "donate_cat_manual":
+        await donate_cat_manual(query, user, context, db)
     elif data.startswith("donate_pick_user_"):
         await donate_pick_user(query, data, user, context, db)
     elif data.startswith("donate_user_amount_"):

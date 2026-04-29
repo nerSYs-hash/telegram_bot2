@@ -17,7 +17,7 @@
 """
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-from utils.helpers import format_number
+from utils.helpers import format_number, get_today_date_msk
 
 
 def safe_name(user_data):
@@ -62,39 +62,263 @@ async def show_donate_menu(query, user, db):
 # ─── Донат пользователю ───
 
 async def donate_to_user_start(query, user, context, db):
-    """Список пользователей для доната"""
+    """Умное меню переводов — выбор категории получателя"""
     user_data = db.get_user(user.id)
     if not user_data:
         await query.edit_message_text("Сначала используй /start")
         return
-    
-    db.cursor.execute('''
-        SELECT user_id, username, first_name, is_admin, is_owner
-        FROM users WHERE user_id != ?
-        ORDER BY last_active DESC LIMIT 20
-    ''', (user.id,))
-    users_list = db.cursor.fetchall()
-    
-    if not users_list:
-        await query.edit_message_text("😕 Нет пользователей.", reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔙 Назад", callback_data="donate_menu")]
-        ]))
-        return
-    
-    message = f"🎁 ДОНАТ ПОЛЬЗОВАТЕЛЮ\n\n💰 Баланс: {format_number(user_data['balance'])} 💎\n\nВыберите получателя:"
-    
-    keyboard = []
-    for u in users_list:
-        name = safe_name(u)
-        label = f"@{name}"
-        if u['is_owner']:
-            label += " 👑"
-        elif u['is_admin']:
-            label += " ⭐"
-        keyboard.append([InlineKeyboardButton(label, callback_data=f"donate_pick_user_{u['user_id']}")])
-    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="donate_menu")])
-    
+
+    # Сбрасываем возможный «висящий» FSM ручного ввода
+    context.user_data.pop('awaiting_donate_manual_user', None)
+
+    message = (
+        f"💸 КОМУ ОТПРАВИТЬ ДОНАТ?\n\n"
+        f"💰 Ваш баланс: {format_number(user_data['balance'])} 💎\n\n"
+        f"Выберите, как найти получателя:"
+    )
+    keyboard = [
+        [InlineKeyboardButton("🔄 Недавние переводы", callback_data="donate_cat_recent")],
+        [InlineKeyboardButton("🌟 Топ Активистов (сегодня)", callback_data="donate_cat_activists")],
+        [InlineKeyboardButton("🆘 Помощь малоимущим", callback_data="donate_cat_poor")],
+        [InlineKeyboardButton("✍️ Ввести ник/ID вручную", callback_data="donate_cat_manual")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="donate_menu")],
+    ]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def donate_cat_recent(query, user, context, db):
+    """Категория: последние 5 уникальных получателей моих донатов."""
+    user_data = db.get_user(user.id)
+    if not user_data:
+        await query.edit_message_text("Сначала используй /start")
+        return
+
+    db.cursor.execute('''
+        SELECT u.user_id, u.username, u.first_name, u.is_admin, u.is_owner,
+               MAX(t.timestamp) AS last_ts
+        FROM transactions t
+        JOIN users u ON u.user_id = t.to_user_id
+        WHERE t.from_user_id = ?
+          AND t.transaction_type = 'donate_to_user'
+          AND t.to_user_id IS NOT NULL
+          AND t.to_user_id != ?
+        GROUP BY u.user_id
+        ORDER BY last_ts DESC
+        LIMIT 5
+    ''', (user.id, user.id))
+    rows = db.cursor.fetchall()
+
+    keyboard = []
+    if not rows:
+        message = (
+            f"🔄 НЕДАВНИЕ ПЕРЕВОДЫ\n\n"
+            f"Вы ещё никому не отправляли донаты.\n"
+            f"Выберите другую категорию или введите ник вручную."
+        )
+    else:
+        message = (
+            f"🔄 НЕДАВНИЕ ПЕРЕВОДЫ\n\n"
+            f"💰 Баланс: {format_number(user_data['balance'])} 💎\n\n"
+            f"Кому вы отправляли последний раз:"
+        )
+        for u in rows:
+            name = safe_name(u)
+            label = f"@{name}"
+            if u['is_owner']:
+                label += " 👑"
+            elif u['is_admin']:
+                label += " ⭐"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"donate_pick_user_{u['user_id']}")])
+
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="donate_to_user_start")])
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def donate_cat_activists(query, user, context, db):
+    """Категория: Топ-5 активистов сегодня."""
+    user_data = db.get_user(user.id)
+    if not user_data:
+        await query.edit_message_text("Сначала используй /start")
+        return
+
+    today = get_today_date_msk()
+    db.cursor.execute('''
+        SELECT u.user_id, u.username, u.first_name, u.is_admin, u.is_owner,
+               us.total_messages, us.activity_score
+        FROM user_stats us
+        JOIN users u ON u.user_id = us.user_id
+        WHERE us.date = ?
+          AND us.total_messages > 0
+          AND u.is_left = 0
+          AND u.user_id != ?
+        ORDER BY us.activity_score DESC, us.total_messages DESC
+        LIMIT 5
+    ''', (today, user.id))
+    rows = db.cursor.fetchall()
+
+    keyboard = []
+    if not rows:
+        message = (
+            f"🌟 ТОП АКТИВИСТОВ (сегодня)\n\n"
+            f"Сегодня ещё никто активно не писал в чат."
+        )
+    else:
+        message = (
+            f"🌟 ТОП АКТИВИСТОВ ЗА СЕГОДНЯ\n\n"
+            f"💰 Баланс: {format_number(user_data['balance'])} 💎\n\n"
+            f"Поощри тех, кто двигает чат:"
+        )
+        for u in rows:
+            name = safe_name(u)
+            msgs = int(u['total_messages']) if u['total_messages'] else 0
+            label = f"🌟 @{name} · {msgs} 💬"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"donate_pick_user_{u['user_id']}")])
+
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="donate_to_user_start")])
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def donate_cat_poor(query, user, context, db):
+    """Категория: Топ-5 малоимущих (без админов, активные за 7 дней)."""
+    user_data = db.get_user(user.id)
+    if not user_data:
+        await query.edit_message_text("Сначала используй /start")
+        return
+
+    db.cursor.execute('''
+        SELECT user_id, username, first_name, balance
+        FROM users
+        WHERE is_admin = 0
+          AND is_owner = 0
+          AND is_left = 0
+          AND user_id != ?
+          AND last_active >= datetime('now', '-7 days')
+        ORDER BY balance ASC
+        LIMIT 5
+    ''', (user.id,))
+    rows = db.cursor.fetchall()
+
+    keyboard = []
+    if not rows:
+        message = (
+            f"🆘 ПОМОЩЬ МАЛОИМУЩИМ\n\n"
+            f"Не нашлось подходящих получателей (нужны активные за 7 дней)."
+        )
+    else:
+        message = (
+            f"🆘 ПОМОЩЬ МАЛОИМУЩИМ\n\n"
+            f"💰 Ваш баланс: {format_number(user_data['balance'])} 💎\n\n"
+            f"Поделись пульсами с теми, у кого их меньше всего:"
+        )
+        for u in rows:
+            name = safe_name(u)
+            bal = float(u['balance']) if u['balance'] is not None else 0.0
+            label = f"🆘 @{name} · {format_number(bal)} 💎"
+            keyboard.append([InlineKeyboardButton(label, callback_data=f"donate_pick_user_{u['user_id']}")])
+
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="donate_to_user_start")])
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def donate_cat_manual(query, user, context, db):
+    """Категория: ручной ввод @username или ID."""
+    user_data = db.get_user(user.id)
+    if not user_data:
+        await query.edit_message_text("Сначала используй /start")
+        return
+
+    context.user_data['awaiting_donate_manual_user'] = True
+    # На всякий случай чистим возможный остаток FSM суммы
+    context.user_data.pop('awaiting_donate_amount', None)
+    context.user_data.pop('donate_custom_target_id', None)
+
+    message = (
+        f"✍️ ВВЕДИТЕ ПОЛУЧАТЕЛЯ\n\n"
+        f"Отправьте сообщением:\n"
+        f"  • @username  (например: @ivan)\n"
+        f"  • или ID пользователя (только цифры)\n\n"
+        f"Для отмены — /cancel."
+    )
+    keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="donate_to_user_start")]]
+    await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def handle_manual_donate_user(message, context, db):
+    """Обработка ручного ввода @username или ID для доната.
+
+    Возвращает True, если ввод обработан (успешно или с понятной ошибкой),
+    и False, если FSM-флаг уже не активен (на всякий случай).
+    """
+    if not context.user_data.get('awaiting_donate_manual_user'):
+        return False
+
+    text = (message.text or '').strip()
+
+    if text == '/cancel':
+        context.user_data.pop('awaiting_donate_manual_user', None)
+        await message.reply_text("Поиск получателя отменён.")
+        return True
+
+    if not text:
+        await message.reply_text("Пусто. Введите @username или ID, либо /cancel.")
+        return True
+
+    target = None
+    if text.startswith('@') or not text.lstrip('-').isdigit():
+        # Поиск по username (без @, без учёта регистра)
+        clean = text.lstrip('@').lower()
+        db.cursor.execute('SELECT * FROM users WHERE LOWER(username) = ?', (clean,))
+        target = db.cursor.fetchone()
+    else:
+        try:
+            uid = int(text)
+            target = db.get_user(uid)
+        except ValueError:
+            target = None
+
+    if not target:
+        await message.reply_text(
+            "❌ Пользователь не найден.\n"
+            "Попробуйте ещё раз или нажмите /cancel."
+        )
+        return True
+
+    # tg-объект Row → dict-подобный; user_id и username доступны как [..]
+    target_user_id = target['user_id'] if hasattr(target, '__getitem__') else target.get('user_id')
+    if target_user_id == message.from_user.id:
+        await message.reply_text("Нельзя донатить самому себе. Введите другого получателя или /cancel.")
+        return True
+
+    context.user_data.pop('awaiting_donate_manual_user', None)
+
+    user_data = db.get_user(message.from_user.id)
+    target_name = safe_name(target)
+    balance = float(user_data['balance']) if user_data else 0.0
+
+    text_msg = (
+        f"🎁 ДОНАТ ДЛЯ @{target_name}\n\n"
+        f"💰 Баланс: {format_number(balance)} 💎\n\n"
+        f"Выберите сумму:"
+    )
+    amounts = [10, 25, 50, 100, 250, 500, 1000]
+    keyboard = []
+    row = []
+    for amt in amounts:
+        if balance >= amt:
+            row.append(InlineKeyboardButton(
+                f"{format_number(amt)} 💎",
+                callback_data=f"donate_user_amount_{target_user_id}_{amt}"
+            ))
+            if len(row) == 3:
+                keyboard.append(row)
+                row = []
+    if row:
+        keyboard.append(row)
+    keyboard.append([InlineKeyboardButton("✏️ Своя сумма", callback_data=f"donate_user_custom_{target_user_id}")])
+    keyboard.append([InlineKeyboardButton("🔙 К меню донатов", callback_data="donate_to_user_start")])
+
+    await message.reply_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard))
+    return True
 
 async def donate_pick_user(query, data, user, context, db):
     """Выбор суммы для доната пользователю"""

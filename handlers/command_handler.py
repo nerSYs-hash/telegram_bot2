@@ -4,7 +4,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from handlers.commands.economy_commands import (
-    safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
+    safe_name, balance_command, pay_command, tip_command, give_pulse_command, wipe_balances_command
 )
 from utils.ai_core import ask_ai
 from database.db_friend import get_user, get_user_pending_application, is_blacklisted, get_blacklist_reason
@@ -432,6 +432,10 @@ class CommandHandler:
     async def pay_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /pay command — delegates to economy_commands"""
         await pay_command(update, context, self.db)
+
+    async def tip_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /tip <amount> — quick reply tip; delegates to economy_commands"""
+        await tip_command(update, context, self.db)
 
     async def donate_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /donate command — delegates to donation_commands"""

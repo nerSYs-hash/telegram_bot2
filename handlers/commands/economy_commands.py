@@ -14,6 +14,8 @@ db, admin_id передаются явно.
     )
 """
 
+import asyncio
+
 from telegram import Update
 from telegram.ext import ContextTypes
 from utils.helpers import format_number
@@ -193,26 +195,144 @@ async def pay_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
             'Прямой перевод'
         )
 
-        await update.message.reply_text(
+        sender_name = f"@{user.username}" if user.username else user.first_name
+        receiver_name = f"@{target_username}"
+
+        sent_msg = await update.message.reply_text(
             f"✅ Перевод выполнен!\n\n"
-            f"💸 @{target_username} получил {format_number(amount)} 💎 Пульсов\n"
+            f"👤 От: {sender_name} → {receiver_name}\n"
+            f"💸 Сумма: {format_number(amount)} 💎 Пульсов\n"
             f"💰 Ваш баланс: {format_number(user_data['balance'] - amount)} 💎"
         )
+
+        # Delete command message and bot reply after 10 seconds
+        async def _cleanup():
+            await asyncio.sleep(10)
+            try:
+                await update.message.delete()
+            except Exception:
+                pass
+            try:
+                await sent_msg.delete()
+            except Exception:
+                pass
+        asyncio.create_task(_cleanup())
 
         # Notify recipient
         try:
             await context.bot.send_message(
                 chat_id=target_user['user_id'],
-                text=f"💰 @{user.username or user.first_name} перевел вам "
-                     f"{format_number(amount)} 💎 Пульсов!"
+                text=f"💰 Вам перевели Пульсы!\n\n"
+                     f"👤 От: {sender_name} → {receiver_name}\n"
+                     f"💸 Сумма: {format_number(amount)} 💎 Пульсов"
             )
-        except:
+        except Exception:
             pass
 
     except ValueError:
         await update.message.reply_text("Неверный формат суммы.")
     except Exception as e:
         await update.message.reply_text(f"Ошибка: {str(e)}")
+
+
+async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
+    """Handle /tip <amount> — быстрые чаевые по reply на сообщение."""
+    user = update.effective_user
+    message = update.message
+    if not message:
+        return
+
+    user_data = db.get_user(user.id)
+    if not user_data:
+        await message.reply_text("Сначала используй /start")
+        return
+
+    # Только в ответ на чужое сообщение
+    if not message.reply_to_message or not message.reply_to_message.from_user:
+        await message.reply_text(
+            "💡 Использование: ответь (Reply) на сообщение пользователя командой /tip <сумма>\n"
+            "Пример: /tip 50"
+        )
+        return
+
+    target_tg = message.reply_to_message.from_user
+    if target_tg.is_bot:
+        await message.reply_text("Боты не принимают чаевые 🤖")
+        return
+    if target_tg.id == user.id:
+        await message.reply_text("Нельзя давать чаевые самому себе 🙃")
+        return
+
+    if not context.args:
+        await message.reply_text("Укажи сумму: /tip <число>\nПример: /tip 50")
+        return
+
+    try:
+        amount = round(float(str(context.args[0]).replace(',', '.')), 2)
+    except ValueError:
+        await message.reply_text("Неверный формат суммы. Пример: /tip 50")
+        return
+
+    if amount <= 0:
+        await message.reply_text("Сумма должна быть положительной.")
+        return
+
+    target_user = db.get_user(target_tg.id)
+    if not target_user:
+        # Регистрируем минимально, чтобы не терять перевод
+        db.add_user(
+            target_tg.id,
+            target_tg.username,
+            target_tg.first_name,
+            target_tg.last_name or '',
+        )
+        target_user = db.get_user(target_tg.id)
+        if not target_user:
+            await message.reply_text("Не удалось найти получателя в базе.")
+            return
+
+    if float(user_data['balance']) < amount:
+        await message.reply_text(
+            f"❌ Недостаточно средств.\n"
+            f"Баланс: {format_number(user_data['balance'])} 💎"
+        )
+        return
+
+    try:
+        db.update_user_balance(user.id, amount, 'subtract')
+        db.update_user_balance(target_tg.id, amount, 'add')
+
+        sender_name = f"@{user.username}" if user.username else (user.first_name or f"ID:{user.id}")
+        target_name = f"@{target_tg.username}" if target_tg.username else (target_tg.first_name or f"ID:{target_tg.id}")
+
+        db.add_transaction(
+            user.id,
+            target_tg.id,
+            amount,
+            'donate_to_user',
+            f'Чаевые (tip) для {target_name}'
+        )
+
+        await message.reply_text(
+            f"💸 {sender_name} подкинул {format_number(amount)} 💎 чаевых "
+            f"{target_name} за это сообщение!"
+        )
+
+        # Уведомление получателю в личку
+        try:
+            await context.bot.send_message(
+                chat_id=target_tg.id,
+                text=(
+                    f"💸 Вам пришли чаевые!\n\n"
+                    f"👤 От: {sender_name} → {target_name}\n"
+                    f"💎 Сумма: {format_number(amount)} Пульсов"
+                )
+            )
+        except Exception:
+            pass
+    except Exception as e:
+        await message.reply_text(f"Ошибка: {str(e)}")
+
 
 async def wipe_balances_command(update, context, db, admin_id):
     """

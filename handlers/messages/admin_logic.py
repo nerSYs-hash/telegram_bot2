@@ -319,6 +319,12 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
         await _handle_awaiting_bank_transfer(message, user, context, db)
         return True
 
+    # === ОБРАБОТКА РУЧНОГО ВВОДА ПОЛУЧАТЕЛЯ ДОНАТА (@username / ID) ===
+    if context.user_data.get('awaiting_donate_manual_user'):
+        from handlers.donate_handlers import handle_manual_donate_user
+        if await handle_manual_donate_user(message, context, db):
+            return True
+
     # === ОБРАБОТКА ВВОДА СУММЫ ДОНАТА ===
     donate_type = context.user_data.get('awaiting_donate_amount')
     if donate_type:
