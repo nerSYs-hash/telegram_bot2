@@ -21,9 +21,10 @@ JOURNAL_CHANNEL_ID: Optional[str] = os.getenv("JOURNAL_CHANNEL_ID")  # Уста�
 
 # Проверка обязательных параметров
 if not BOT_TOKEN:
-    # Для демонстрации в AI Studio, если токен не задан, мы не будем падать сразу, 
-    # но в реальной работе он обязателен.
-    BOT_TOKEN = "8594974597:AAG7w-wl9lTcG1QfJTVkS4PYW47UI3VvIqE" 
+    raise RuntimeError(
+        "BOT_TOKEN не задан. Положи его в .env (BOT_TOKEN=...) — "
+        "никогда не хардкодь токен в коде/документации, иначе бот будет угнан."
+    )
 
 if not OWNER_ID:
     OWNER_ID = 7536752126

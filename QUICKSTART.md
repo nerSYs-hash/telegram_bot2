@@ -199,14 +199,16 @@ telegram_bot/
 
 ## 🔧 Настройки в .env
 
-Текущие настройки:
+Пример `.env` (никогда не коммитим в репо!):
 ```env
-BOT_TOKEN=8594974597:AAG7w-wl9lTcG1QfJTVkS4PYW47UI3VvIqE
-MAIN_ADMIN_ID=7536752126
-TARGET_CHAT_ID=-1003890785443
+BOT_TOKEN=<получи у @BotFather и положи СЮДА — НЕ В КОД>
+MAIN_ADMIN_ID=<твой telegram id>
+TARGET_CHAT_ID=<id основного чата>
 INITIAL_BANK_BALANCE=10000000
 INITIAL_DIFFICULTY_K=5.0
 ```
+
+⚠️ `BOT_TOKEN` храним только в `.env` на сервере. Любой токен в коде/доке = угон бота за минуты.
 
 Можно изменить:
 - `INITIAL_BANK_BALANCE` - стартовый баланс банка
