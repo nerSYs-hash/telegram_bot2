@@ -878,6 +878,13 @@ registration_conv = ConversationHandler(
             CallbackQueryHandler(skip_ref_callback, pattern="^skip_ref$")
         ],
     },
-    fallbacks=[CommandHandler("cancel", cancel)],
+    fallbacks=[
+        CommandHandler("cancel", cancel),
+        # /register и /start работают как «жёсткий рестарт» из любого state —
+        # иначе застрявший в анкете юзер не может выйти, и его команды уходят
+        # в общий message_handler без эффекта.
+        CommandHandler("register", start_reg),
+        CommandHandler("start", start_reg),
+    ],
     per_message=False
 )
