@@ -989,6 +989,13 @@ def process_mining_reward(
         logger.warning(f"⚠️ No user_data for {user_id}")
         return 0.0, None
 
+    # Master-switch раздела «💰 Майнинг» — выключает все начисления (база/комбо/спринты/дефиб)
+    try:
+        if not db.is_econ_section_enabled('mining'):
+            return 0.0, None
+    except Exception:
+        pass
+
     try:
         # ══════════════════════════════════════════════════════════════════
         #  ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ telegram.Message

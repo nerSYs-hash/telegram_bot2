@@ -487,6 +487,13 @@ class LotteryHandler:
         if self._is_owner_user(user):
             await query.answer("⚠️ Админ не может покупать!", show_alert=True); return
 
+        # Master-switch раздела «🎰 Лотерея»
+        try:
+            if not self.db.is_econ_section_enabled('lottery'):
+                await query.answer("⏸ Лотерея временно отключена", show_alert=True); return
+        except Exception:
+            pass
+
         ud = self.db.get_user(user.id)
         if not ud:
             await query.answer("❌ /start", show_alert=True); return

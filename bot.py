@@ -298,9 +298,21 @@ class TelegramBot:
                     self.db.cursor.execute('''
                         UPDATE users SET is_qualified = 1 WHERE user_id = ?
                     ''', (user_id,))
-                    
-                    # Award referrer
-                    reward = int(os.getenv('REFERRAL_REWARD', 500))
+
+                    # Master-switch раздела «👥 Реферальная программа»
+                    try:
+                        if not self.db.is_econ_section_enabled('referral'):
+                            self.db.conn.commit()
+                            continue
+                    except Exception:
+                        pass
+
+                    # Award referrer (размер берём из economy_settings, fallback — старый ENV)
+                    try:
+                        reward = int(self.db.get_econ('referral.qualified_reward',
+                                                     int(os.getenv('REFERRAL_REWARD', 500))) or 500)
+                    except Exception:
+                        reward = int(os.getenv('REFERRAL_REWARD', 500))
                     self.db.update_user_balance(referrer_id, reward, 'add')
                     self.db.add_transaction(
                         None,
