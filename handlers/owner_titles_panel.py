@@ -27,6 +27,7 @@ from handlers.titles_handlers import (
     apply_title_purchase, validate_title_text,
     _get_db, _get_target_chat_id, _get_main_admin_id,
     _format_number, _fmt_duration, _get_rename_price, _get_request_ttl_hours,
+    _get_current_rate, _rate_hint,
     CB_REQ_APPROVE_PRE, CB_REQ_REJECT_PRE,
     UD_REJECT_REQ_ID,
     STATE_AWAIT_REJECT_RSN,
@@ -157,14 +158,16 @@ async def cb_pkg_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
 
 
-def _build_pkg_card(pkg: dict) -> tuple[str, InlineKeyboardMarkup]:
+def _build_pkg_card(pkg: dict, rate: float = 0.0) -> tuple[str, InlineKeyboardMarkup]:
     rub = f"{_format_number(pkg['price_rub'])} ₽" if pkg['price_rub'] else 'не продаётся'
+    hint = _rate_hint(int(pkg['price_pulses']), int(pkg.get('price_rub') or 0), rate)
     text = (
         f"📦 <b>«{pkg['label']}»</b>\n"
         f"Срок: {_fmt_duration(pkg['duration_days'])}\n"
         f"💎 Пульсы: {_format_number(pkg['price_pulses'])}\n"
         f"💳 Рубли: {rub}\n"
-        f"Состояние: {'🟢 включён' if pkg['is_enabled'] else '⚪ выключен'}"
+        + (hint + '\n' if hint else '')
+        + f"Состояние: {'🟢 включён' if pkg['is_enabled'] else '⚪ выключен'}"
     )
     pid = pkg['id']
     kb = InlineKeyboardMarkup([
@@ -192,7 +195,7 @@ async def cb_pkg_card(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not pkg:
         await query.answer('❌ Пакет не найден', show_alert=True); return
     await query.answer()
-    text, kb = _build_pkg_card(pkg)
+    text, kb = _build_pkg_card(pkg, _get_current_rate(db))
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
 
 
@@ -210,7 +213,7 @@ async def cb_pkg_toggle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer('❌ Пакет не найден', show_alert=True); return
     await query.answer('🟢 Включён' if new_val else '⚪ Выключен')
     pkg = db.get_title_package(pid)
-    text, kb = _build_pkg_card(pkg)
+    text, kb = _build_pkg_card(pkg, _get_current_rate(db))
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
 
 
@@ -284,9 +287,12 @@ async def fsm_pkg_pulses(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.message.reply_text('❌ Целое > 0. Попробуй ещё или /cancel.')
         return ST_PKG_ADD_PULSES
     context.user_data[UD_NEW_PKG]['price_pulses'] = v
+    db = _get_db(context)
+    rate = _get_current_rate(db)
+    rub_line = f"\n💱 {_format_number(v)} 💎 ≈ {v * rate:.2f} ₽ по текущему курсу" if rate > 0 else ''
     await update.message.reply_text(
-        '<b>4/4</b> — цена в Рублях (целое ≥ 0).\n'
-        '<code>0</code> = пакет не продаётся за рубли.',
+        f'<b>4/4</b> — цена в Рублях (целое ≥ 0).{rub_line}\n'
+        f'<code>0</code> = пакет не продаётся за рубли.',
         parse_mode='HTML',
     )
     return ST_PKG_ADD_RUB
@@ -312,11 +318,15 @@ async def fsm_pkg_rub(update: Update, context: ContextTypes.DEFAULT_TYPE):
         price_rub=rub,
     )
     context.user_data.pop(UD_NEW_PKG, None)
-    await update.message.reply_text(
-        f"✅ Пакет #{pid} создан.",
-    )
-    text, kb = _build_pkg_list(db)
-    await update.message.reply_text(text, parse_mode='HTML', reply_markup=kb)
+    pkg = db.get_title_package(pid)
+    rate = _get_current_rate(db)
+    card_text, card_kb = _build_pkg_card(pkg, rate) if pkg else ('✅ Пакет создан.', None)
+    await update.message.reply_text(f"✅ Пакет #{pid} создан.")
+    if pkg:
+        await update.message.reply_text(card_text, parse_mode='HTML', reply_markup=card_kb)
+    else:
+        text, kb = _build_pkg_list(db)
+        await update.message.reply_text(text, parse_mode='HTML', reply_markup=kb)
     return ConversationHandler.END
 
 
@@ -339,14 +349,17 @@ async def cb_pkg_edit_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data[UD_EDIT_FIELD] = field
     await query.answer()
 
+    db = _get_db(context)
+    rate = _get_current_rate(db)
+    rate_note = f"\n\n💱 Текущий курс: 1 💎 = {rate:.4f} ₽" if (field in ('price_pulses', 'price_rub') and rate > 0) else ''
     prompts = {
         'label': 'Новое название (1–30 символов).',
         'duration_days': 'Новый срок в днях (целое > 0). 0/- = бессрочно.',
-        'price_pulses': 'Новая цена в Пульсах (целое > 0).',
-        'price_rub': 'Новая цена в Рублях (целое ≥ 0). 0 = не продаётся за рубли.',
+        'price_pulses': f'Новая цена в Пульсах (целое > 0).',
+        'price_rub': f'Новая цена в Рублях (целое ≥ 0). 0 = не продаётся за рубли.',
     }
     await query.edit_message_text(
-        f"✏️ Изменение поля <b>{field}</b>.\n\n{prompts[field]}",
+        f"✏️ Изменение поля <b>{field}</b>.\n\n{prompts[field]}{rate_note}",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_EDIT)
@@ -404,7 +417,7 @@ async def fsm_pkg_edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE)
     await update.message.reply_text('✅ Сохранено.')
     pkg = db.get_title_package(pid)
     if pkg:
-        text, kb = _build_pkg_card(pkg)
+        text, kb = _build_pkg_card(pkg, _get_current_rate(db))
         await update.message.reply_text(text, parse_mode='HTML', reply_markup=kb)
     return ConversationHandler.END
 

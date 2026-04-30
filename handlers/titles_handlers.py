@@ -308,6 +308,37 @@ def _format_number(n) -> str:
         return str(n)
 
 
+def _get_current_rate(db=None) -> float:
+    """Текущий курс: 1 💎 = X ₽. Использует rate_cache, fallback — БД."""
+    try:
+        from utils.exchange_rate import rate_cache
+        if rate_cache.initialized:
+            return rate_cache.current_rate
+    except Exception:
+        pass
+    if db is not None:
+        try:
+            return float(db.get_exchange_rate() or 0)
+        except Exception:
+            pass
+    return 0.0
+
+
+def _rate_hint(pulses: int = 0, rub: int = 0, rate: float = 0.0) -> str:
+    """Строки-конвертер (для вставки в сообщение). Пустая строка если rate=0."""
+    if rate <= 0:
+        return ''
+    parts = []
+    if pulses > 0:
+        parts.append(f"💎 {_format_number(pulses)} Пульсов ≈ <b>{pulses * rate:.2f} ₽</b>")
+    if rub > 0:
+        equiv = int(round(rub / rate))
+        parts.append(f"💳 {_format_number(rub)} ₽ ≈ <b>{_format_number(equiv)} 💎</b>")
+    if parts:
+        parts.append(f"<i>💱 Курс: 1 💎 = {rate:.4f} ₽</i>")
+    return '\n'.join(parts)
+
+
 def _fmt_duration(days) -> str:
     if days is None:
         return 'Бессрочно'
@@ -466,10 +497,13 @@ async def cb_titles_pkg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer('❌ Пакет недоступен', show_alert=True)
         return
 
+    rate = _get_current_rate(db)
+    hint = _rate_hint(int(pkg['price_pulses']), int(pkg.get('price_rub') or 0), rate)
     text = (
         f"📦 <b>{pkg['label']}</b>\n"
         f"Срок: {_fmt_duration(pkg['duration_days'])}\n\n"
-        f"Выбери валюту:"
+        + (hint + '\n\n' if hint else '')
+        + "Выбери валюту:"
     )
     await query.edit_message_text(text, parse_mode='HTML',
                                   reply_markup=_build_currency_keyboard(pkg))
