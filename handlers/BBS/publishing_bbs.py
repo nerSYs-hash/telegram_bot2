@@ -136,7 +136,8 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 city=excluded.city, goals=excluded.goals, about=excluded.about,
                 message_ids=excluded.message_ids, thread_id=excluded.thread_id,
                 published_at=excluded.published_at, edited=0, edited_fields='{}',
-                reaction_count=0, updated_at=excluded.updated_at
+                reaction_count=0, updated_at=excluded.updated_at,
+                deleted_at=NULL, deleted_by=NULL
         '''
     save_args = (
             user.id, user.username,
@@ -443,7 +444,13 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
             edited_in_place = True
             logging.info(f"BBS update_in_place: caption edited for user {user_id}")
         except Exception as e:
-            logging.warning(f"BBS update_in_place: edit_message_caption failed: {e}")
+            err = str(e).lower()
+            if 'not modified' in err:
+                # Текст не изменился — считаем успехом, перепубликация не нужна
+                edited_in_place = True
+                logging.info(f"BBS update_in_place: caption not modified (unchanged) for user {user_id}")
+            else:
+                logging.warning(f"BBS update_in_place: edit_message_caption failed: {e}")
     else:
         # Текстовое сообщение
         try:
@@ -457,11 +464,16 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
             edited_in_place = True
             logging.info(f"BBS update_in_place: text edited for user {user_id}")
         except Exception as e:
-            logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
+            err = str(e).lower()
+            if 'not modified' in err:
+                edited_in_place = True
+                logging.info(f"BBS update_in_place: text not modified (unchanged) for user {user_id}")
+            else:
+                logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
 
     if not edited_in_place:
         # Fallback: удалить старые и перепубликовать.
-        # mark_deleted=False — при >48ч просто оставляем старое сообщение, не пишем «Анкета удалена»
+        # mark_deleted=True — при неудаче удаления хотя бы убираем кнопки и помечаем caption
         logging.info(f"BBS update_in_place: fallback to republish for user {user_id}")
-        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=False)
+        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=True)
         await republish_profile(bot, db, user_id, target_chat_id, thread_id)
