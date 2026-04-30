@@ -189,6 +189,10 @@ class TelegramBot:
         except Exception as _e:
             logger.warning(f"TOP-5% warmup failed: {_e}")
 
+        # ── Auto-delete: патчим бота для chain-delete в главном чате ──
+        from utils.auto_delete import patch_bot_for_autodelete
+        patch_bot_for_autodelete(application.bot, application, self.target_chat_id)
+
         # ── Уведомление о версии при старте ──
         await self._notify_version(bot)
 
@@ -647,6 +651,16 @@ class TelegramBot:
         )
         register_owner_titles(self.application)
         logger.info("✅ Titles (V1.16.0) handlers registered: /titles + menu_balance")
+
+        # Удаление команд пользователей из главного чата (group -1, до всех остальных)
+        from utils.auto_delete import delete_user_command_in_main_chat
+        self.application.add_handler(
+            MessageHandler(
+                filters.COMMAND & filters.Chat(chat_id=self.target_chat_id),
+                delete_user_command_in_main_chat
+            ),
+            group=-1
+        )
 
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)

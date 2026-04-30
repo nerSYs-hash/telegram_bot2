@@ -693,19 +693,21 @@ class MessageHandler:
             # === ВЫПОЛНЕНИЕ ТРИГГЕРА ===
             if triggered:
                 # Сначала отвечаем, потом удаляем триггер
+                from utils.auto_delete import trigger_scope
                 bot_msg = None
-                if trigger_type in ('rich', 'activist') and self.db.is_feature_enabled('top_commands'):
-                    if trigger_type == 'rich':
-                        logging.info(f"✅ TRIGGER ACTIVATED: 'богач' by {message.from_user.id}")
-                        bot_msg = await show_top_rich(message, context, self.db)
-                    elif trigger_type == 'activist':
-                        logging.info(f"✅ TRIGGER ACTIVATED: 'активист' by {message.from_user.id}")
-                        bot_msg = await show_top_activists(message, context, self.db)
-                elif trigger_type == 'course':
-                    logging.info(f"✅ TRIGGER ACTIVATED: 'курс' by {message.from_user.id}")
-                    bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
+                async with trigger_scope():
+                    if trigger_type in ('rich', 'activist') and self.db.is_feature_enabled('top_commands'):
+                        if trigger_type == 'rich':
+                            logging.info(f"✅ TRIGGER ACTIVATED: 'богач' by {message.from_user.id}")
+                            bot_msg = await show_top_rich(message, context, self.db)
+                        elif trigger_type == 'activist':
+                            logging.info(f"✅ TRIGGER ACTIVATED: 'активист' by {message.from_user.id}")
+                            bot_msg = await show_top_activists(message, context, self.db)
+                    elif trigger_type == 'course':
+                        logging.info(f"✅ TRIGGER ACTIVATED: 'курс' by {message.from_user.id}")
+                        bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
 
-                # Удаляем ответ бота через 60 секунд
+                # Удаляем ответ бота через 60 секунд (своя система, не chain-delete)
                 if bot_msg:
                     _schedule_auto_delete(context, bot_msg.chat.id, bot_msg.message_id, delay=60)
 
@@ -724,7 +726,10 @@ class MessageHandler:
         # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ (fix V1.8.1c) ===
         if message.text:
             from handlers.triggers_handlers import process_triggers
-            if await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id):
+            from utils.auto_delete import trigger_scope as _tscope
+            async with _tscope():
+                _trigger_handled = await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id)
+            if _trigger_handled:
                 return
 
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
