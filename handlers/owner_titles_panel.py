@@ -49,6 +49,12 @@ CB_RENAME_PRICE       = 'owner_titles_rename_price'
 CB_TTL                = 'owner_titles_ttl'
 CB_REQUESTS           = 'owner_titles_requests'
 
+# Кнопки «Отмена» из FSM-экранов владельца
+CB_CANCEL_ADD    = 'owner_titles_cancel_add'    # → список пакетов
+CB_CANCEL_EDIT   = 'owner_titles_cancel_edit'   # → карточка пакета
+CB_CANCEL_PREFS  = 'owner_titles_cancel_prefs'  # → главное меню
+CB_CANCEL_REJECT = 'owner_titles_cancel_reject' # → список заявок
+
 # FSM states
 ST_PKG_ADD_LABEL    = 'OT_PKG_ADD_LABEL'
 ST_PKG_ADD_DAYS     = 'OT_PKG_ADD_DAYS'
@@ -220,6 +226,9 @@ async def cb_pkg_add_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         '➕ <b>Новый пакет — 1/4</b>\n\n'
         'Введи название (например: «1 месяц», «Навсегда»).',
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_ADD)
+        ]])
     )
     return ST_PKG_ADD_LABEL
 
@@ -337,8 +346,11 @@ async def cb_pkg_edit_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'price_rub': 'Новая цена в Рублях (целое ≥ 0). 0 = не продаётся за рубли.',
     }
     await query.edit_message_text(
-        f"✏️ Изменение поля <b>{field}</b>.\n\n{prompts[field]}\n\n/cancel — отмена.",
+        f"✏️ Изменение поля <b>{field}</b>.\n\n{prompts[field]}",
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_EDIT)
+        ]])
     )
     return ST_PKG_EDIT_VALUE
 
@@ -410,8 +422,11 @@ async def cb_rename_price_entry(update: Update, context: ContextTypes.DEFAULT_TY
     cur = _get_rename_price(db)
     await query.edit_message_text(
         f"💸 <b>Цена переименования титула</b>\n\nТекущее: {cur}💎\n\n"
-        f"Введи новое значение (целое ≥ 0). 0 = бесплатно.\n/cancel — отмена.",
+        f"Введи новое значение (целое ≥ 0). 0 = бесплатно.",
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_PREFS)
+        ]])
     )
     return ST_RENAME_PRICE_VAL
 
@@ -447,8 +462,11 @@ async def cb_ttl_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.edit_message_text(
         f"⏱ <b>TTL pending-заявок (часы)</b>\n\nТекущее: {cur} ч\n\n"
         f"Введи новое значение (целое > 0).\n"
-        f"Через столько часов неподтверждённая заявка авто-помечается expired.\n/cancel — отмена.",
+        f"Через столько часов неподтверждённая заявка авто-помечается expired.",
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_PREFS)
+        ]])
     )
     return ST_TTL_VAL
 
@@ -622,9 +640,11 @@ async def cb_request_reject_entry(update: Update, context: ContextTypes.DEFAULT_
     await query.edit_message_text(
         f"❌ Отклонить заявку #{rid}?\n\n"
         f"🏷 «{req['title_text']}» · {_format_number(req['price_rub'])} ₽\n\n"
-        f"Введи причину (видна юзеру) или /skip без причины.\n"
-        f"/cancel — оставить pending.",
+        f"Введи причину (видна юзеру) или /skip без причины.",
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_REJECT)
+        ]])
     )
     return STATE_AWAIT_REJECT_RSN
 
@@ -675,12 +695,90 @@ async def fsm_reject_skip(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 # ════════════════════════════════════════════════════════════════════════════════
+#  КНОПКИ «ОТМЕНА» ИЗ FSM-ЭКРАНОВ ВЛАДЕЛЬЦА
+# ════════════════════════════════════════════════════════════════════════════════
+
+def _clear_owner_fsm(context):
+    for k in (UD_NEW_PKG, UD_EDIT_PKG_ID, UD_EDIT_FIELD, UD_REJECT_REQ_ID):
+        context.user_data.pop(k, None)
+
+
+async def fsm_cancel_add_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена создания пакета — возврат к списку пакетов."""
+    query = update.callback_query
+    await query.answer()
+    _clear_owner_fsm(context)
+    db = _get_db(context)
+    text, kb = _build_pkg_list(db)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+    return ConversationHandler.END
+
+
+async def fsm_cancel_edit_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена редактирования поля — возврат к карточке пакета."""
+    query = update.callback_query
+    await query.answer()
+    pid = context.user_data.get(UD_EDIT_PKG_ID)
+    _clear_owner_fsm(context)
+    db = _get_db(context)
+    if pid is not None:
+        pkg = db.get_title_package(pid)
+        if pkg:
+            text, kb = _build_pkg_card(pkg)
+            await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+            return ConversationHandler.END
+    # Пакет не найден — падаем в главное меню
+    text, kb = _build_owner_menu(db)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+    return ConversationHandler.END
+
+
+async def fsm_cancel_prefs_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена настройки (цена/TTL) — возврат в главное меню Владельца."""
+    query = update.callback_query
+    await query.answer()
+    _clear_owner_fsm(context)
+    db = _get_db(context)
+    text, kb = _build_owner_menu(db)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+    return ConversationHandler.END
+
+
+async def fsm_cancel_reject_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Отмена отклонения заявки — возврат к списку заявок."""
+    query = update.callback_query
+    await query.answer()
+    _clear_owner_fsm(context)
+    db = _get_db(context)
+    rows = db.list_title_requests(limit=20)
+
+    text = '📨 <b>ЗАЯВКИ НА ОПЛАТУ</b>\n\n'
+    if not rows:
+        text += '— заявок пока нет —'
+    else:
+        text += '\n'.join(_format_request_row(r) for r in rows)
+
+    kb_rows = []
+    for r in rows:
+        if r['status'] == 'pending':
+            kb_rows.append([
+                InlineKeyboardButton(f'✅ #{r["id"]}',
+                                     callback_data=CB_REQ_APPROVE_PRE + str(r['id'])),
+                InlineKeyboardButton(f'❌ #{r["id"]}',
+                                     callback_data=CB_REQ_REJECT_PRE + str(r['id'])),
+            ])
+    kb_rows.append([InlineKeyboardButton('🔙 Назад', callback_data=CB_OWNER_MENU)])
+    await query.edit_message_text(text, parse_mode='HTML',
+                                  reply_markup=InlineKeyboardMarkup(kb_rows))
+    return ConversationHandler.END
+
+
+# ════════════════════════════════════════════════════════════════════════════════
 #  УНИВЕРСАЛЬНЫЙ /cancel ДЛЯ FSM ПАНЕЛИ
 # ════════════════════════════════════════════════════════════════════════════════
 
 async def fsm_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    for k in (UD_NEW_PKG, UD_EDIT_PKG_ID, UD_EDIT_FIELD, UD_REJECT_REQ_ID):
-        context.user_data.pop(k, None)
+    _clear_owner_fsm(context)
     if update.message:
         await update.message.reply_text('❌ Действие отменено.')
     return ConversationHandler.END
@@ -698,7 +796,10 @@ owner_titles_pkg_add_conv = ConversationHandler(
         ST_PKG_ADD_PULSES: [MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_pkg_pulses)],
         ST_PKG_ADD_RUB:    [MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_pkg_rub)],
     },
-    fallbacks=[CommandHandler('cancel', fsm_cancel)],
+    fallbacks=[
+        CallbackQueryHandler(fsm_cancel_add_cb, pattern=f'^{CB_CANCEL_ADD}$'),
+        CommandHandler('cancel', fsm_cancel),
+    ],
     per_message=False,
     name='owner_titles_pkg_add',
 )
@@ -709,7 +810,10 @@ owner_titles_pkg_edit_conv = ConversationHandler(
     states={
         ST_PKG_EDIT_VALUE: [MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_pkg_edit_value)],
     },
-    fallbacks=[CommandHandler('cancel', fsm_cancel)],
+    fallbacks=[
+        CallbackQueryHandler(fsm_cancel_edit_cb, pattern=f'^{CB_CANCEL_EDIT}$'),
+        CommandHandler('cancel', fsm_cancel),
+    ],
     per_message=False,
     name='owner_titles_pkg_edit',
 )
@@ -719,7 +823,10 @@ owner_titles_rename_price_conv = ConversationHandler(
     states={
         ST_RENAME_PRICE_VAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_rename_price)],
     },
-    fallbacks=[CommandHandler('cancel', fsm_cancel)],
+    fallbacks=[
+        CallbackQueryHandler(fsm_cancel_prefs_cb, pattern=f'^{CB_CANCEL_PREFS}$'),
+        CommandHandler('cancel', fsm_cancel),
+    ],
     per_message=False,
     name='owner_titles_rename_price',
 )
@@ -729,7 +836,10 @@ owner_titles_ttl_conv = ConversationHandler(
     states={
         ST_TTL_VAL: [MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_ttl)],
     },
-    fallbacks=[CommandHandler('cancel', fsm_cancel)],
+    fallbacks=[
+        CallbackQueryHandler(fsm_cancel_prefs_cb, pattern=f'^{CB_CANCEL_PREFS}$'),
+        CommandHandler('cancel', fsm_cancel),
+    ],
     per_message=False,
     name='owner_titles_ttl',
 )
@@ -743,7 +853,10 @@ owner_titles_reject_conv = ConversationHandler(
             MessageHandler(filters.TEXT & ~filters.COMMAND, fsm_reject_reason),
         ],
     },
-    fallbacks=[CommandHandler('cancel', fsm_cancel)],
+    fallbacks=[
+        CallbackQueryHandler(fsm_cancel_reject_cb, pattern=f'^{CB_CANCEL_REJECT}$'),
+        CommandHandler('cancel', fsm_cancel),
+    ],
     per_message=False,
     name='owner_titles_reject',
 )

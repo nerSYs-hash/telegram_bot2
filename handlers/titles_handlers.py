@@ -49,6 +49,7 @@ CB_RENAME          = 'titles_rename'
 CB_CANCEL_REQ_PRE  = 'titles_cancel_req_'    # titles_cancel_req_<request_id>
 CB_REQ_APPROVE_PRE = 'titles_req_approve_'   # titles_req_approve_<request_id>
 CB_REQ_REJECT_PRE  = 'titles_req_reject_'    # titles_req_reject_<request_id>
+CB_CANCEL_FSM      = 'titles_fsm_cancel'     # кнопка «Отмена» из FSM-экранов
 
 # FSM-состояния (используются в ConversationHandler в bot.py)
 STATE_AWAIT_TEXT_PULSES = 'TITLE_AWAIT_TEXT_PULSES'
@@ -527,9 +528,11 @@ async def cb_buy_pulses_entry(update: Update, context: ContextTypes.DEFAULT_TYPE
     await query.edit_message_text(
         f"📦 <b>{pkg['label']}</b> · 💎 {_format_number(price)}\n\n"
         f"✏️ Введи текст титула (от {MIN_TITLE_LEN} до {MAX_TITLE_LEN} символов).\n"
-        f"Разрешены буквы, цифры, пробел и знаки <code>- _ . , ! ?</code>\n\n"
-        f"Для отмены — /cancel.",
-        parse_mode='HTML'
+        f"Разрешены буквы, цифры, пробел и знаки <code>- _ . , ! ?</code>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_FSM)
+        ]])
     )
     return STATE_AWAIT_TEXT_PULSES
 
@@ -669,9 +672,11 @@ async def cb_buy_rub_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"📦 <b>{pkg['label']}</b> · 💳 {_format_number(pkg['price_rub'])} ₽\n\n"
         f"✏️ Введи текст титула (от {MIN_TITLE_LEN} до {MAX_TITLE_LEN} символов).\n"
         f"Разрешены буквы, цифры, пробел и знаки <code>- _ . , ! ?</code>\n\n"
-        f"После ввода придёт инструкция как написать Владельцу для оплаты.\n"
-        f"Для отмены — /cancel.",
-        parse_mode='HTML'
+        f"После ввода придёт инструкция как написать Владельцу для оплаты.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_FSM)
+        ]])
     )
     return STATE_AWAIT_TEXT_RUB
 
@@ -847,9 +852,11 @@ async def cb_rename_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Текущий: «{active['content']}»\n"
         f"Стоимость смены: "
         f"{_format_number(price) + '💎' if price > 0 else 'бесплатно'}\n\n"
-        f"Введи новый текст ({MIN_TITLE_LEN}–{MAX_TITLE_LEN} символов).\n"
-        f"Для отмены — /cancel.",
+        f"Введи новый текст ({MIN_TITLE_LEN}–{MAX_TITLE_LEN} символов).",
         parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_FSM)
+        ]])
     )
     return STATE_AWAIT_RENAME
 
@@ -940,6 +947,18 @@ async def fsm_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     return ConversationHandler.END
 
 
+async def fsm_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Кнопка «🔙 Отмена» из FSM-экранов пользователя — возврат в меню Титулов."""
+    query = update.callback_query
+    await query.answer()
+    context.user_data.pop(UD_PKG_ID, None)
+    context.user_data.pop(UD_REJECT_REQ_ID, None)
+    db = _get_db(context)
+    text, kb = _build_titles_menu_text(db, query.from_user.id)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+    return ConversationHandler.END
+
+
 # ════════════════════════════════════════════════════════════════════════════════
 #  ВСПОМОГАТЕЛЬНОЕ
 # ════════════════════════════════════════════════════════════════════════════════
@@ -984,8 +1003,8 @@ titles_conv = ConversationHandler(
         ],
     },
     fallbacks=[
+        CallbackQueryHandler(fsm_cancel_cb, pattern=f'^{CB_CANCEL_FSM}$'),
         CommandHandler('cancel', fsm_cancel),
-        # /titles, /start как «жёсткий рестарт» из любого состояния
         CommandHandler('titles', fsm_cancel),
         CommandHandler('start',  fsm_cancel),
     ],
