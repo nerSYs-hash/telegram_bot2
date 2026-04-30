@@ -1039,12 +1039,13 @@ def register_titles(application, db, target_chat_id: int, main_admin_id: int) ->
     # Команда
     application.add_handler(CommandHandler('titles', cmd_titles))
 
-    # Главный экран и навигация — НЕ через ConversationHandler
-    application.add_handler(CallbackQueryHandler(cb_titles_menu, pattern=f'^{CB_USER_MENU}$'))
-    application.add_handler(CallbackQueryHandler(cb_titles_pkg,  pattern=f'^{CB_PKG_PREFIX}'))
+    # Главный экран и навигация — группа 1, чтобы не конкурировать
+    # с catch-all CallbackQueryHandler (группа 0) в callback_router.py.
+    application.add_handler(CallbackQueryHandler(cb_titles_menu, pattern=f'^{CB_USER_MENU}$'), 1)
+    application.add_handler(CallbackQueryHandler(cb_titles_pkg,  pattern=f'^{CB_PKG_PREFIX}'), 1)
     application.add_handler(CallbackQueryHandler(cb_user_cancel_request,
-                                                 pattern=f'^{CB_CANCEL_REQ_PRE}\\d+$'))
+                                                 pattern=f'^{CB_CANCEL_REQ_PRE}\\d+$'), 1)
 
-    # FSM (покупки + переименование)
-    application.add_handler(titles_conv)
+    # FSM (покупки + переименование) — тоже группа 1
+    application.add_handler(titles_conv, 1)
 

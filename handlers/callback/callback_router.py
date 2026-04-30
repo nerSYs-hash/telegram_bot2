@@ -58,6 +58,11 @@ class CallbackHandler:
         if not data:
             return
 
+        # V1.16.0: titles_* и owner_titles_* обрабатываются выделенными
+        # хэндлерами в группе 1 — не перехватываем здесь.
+        if data.startswith('titles_') or data.startswith('owner_titles_'):
+            return
+
         try:
             await query.answer()
         except Exception:

@@ -751,17 +751,18 @@ owner_titles_reject_conv = ConversationHandler(
 
 def register_owner_titles(application) -> None:
     """Зарегистрировать панель Владельца + обработку заявок."""
-    application.add_handler(CallbackQueryHandler(cb_owner_menu,    pattern=f'^{CB_OWNER_MENU}$'))
-    application.add_handler(CallbackQueryHandler(cb_pkg_list,      pattern=f'^{CB_PKG_LIST}$'))
-    application.add_handler(CallbackQueryHandler(cb_pkg_card,      pattern=f'^{CB_PKG_CARD_PRE}\\d+$'))
-    application.add_handler(CallbackQueryHandler(cb_pkg_toggle,    pattern=f'^{CB_PKG_TOGGLE_PRE}\\d+$'))
-    application.add_handler(CallbackQueryHandler(cb_requests_list, pattern=f'^{CB_REQUESTS}$'))
+    # Группа 1 — не конкурируем с catch-all (группа 0) в callback_router.py.
+    application.add_handler(CallbackQueryHandler(cb_owner_menu,    pattern=f'^{CB_OWNER_MENU}$'), 1)
+    application.add_handler(CallbackQueryHandler(cb_pkg_list,      pattern=f'^{CB_PKG_LIST}$'), 1)
+    application.add_handler(CallbackQueryHandler(cb_pkg_card,      pattern=f'^{CB_PKG_CARD_PRE}\\d+$'), 1)
+    application.add_handler(CallbackQueryHandler(cb_pkg_toggle,    pattern=f'^{CB_PKG_TOGGLE_PRE}\\d+$'), 1)
+    application.add_handler(CallbackQueryHandler(cb_requests_list, pattern=f'^{CB_REQUESTS}$'), 1)
     application.add_handler(CallbackQueryHandler(cb_request_approve,
-                                                 pattern=f'^{CB_REQ_APPROVE_PRE}\\d+$'))
+                                                 pattern=f'^{CB_REQ_APPROVE_PRE}\\d+$'), 1)
 
-    # FSM-конверсейшны
-    application.add_handler(owner_titles_pkg_add_conv)
-    application.add_handler(owner_titles_pkg_edit_conv)
-    application.add_handler(owner_titles_rename_price_conv)
-    application.add_handler(owner_titles_ttl_conv)
-    application.add_handler(owner_titles_reject_conv)
+    # FSM-конверсейшны — тоже группа 1
+    application.add_handler(owner_titles_pkg_add_conv, 1)
+    application.add_handler(owner_titles_pkg_edit_conv, 1)
+    application.add_handler(owner_titles_rename_price_conv, 1)
+    application.add_handler(owner_titles_ttl_conv, 1)
+    application.add_handler(owner_titles_reject_conv, 1)
