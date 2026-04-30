@@ -968,6 +968,38 @@ titles_conv = ConversationHandler(
 )
 
 
+async def cleanup_expired_title_requests(context: ContextTypes.DEFAULT_TYPE):
+    """
+    Job: раз в час перевести pending-заявки старше TTL в 'expired' и
+    отредактировать карточки у Владельца (убрать кнопки + пометить статус).
+    """
+    try:
+        db = context.bot_data.get('db')
+        if db is None:
+            return
+        ttl_hours = _get_request_ttl_hours(db)
+        expired = db.expire_old_title_requests(ttl_hours)
+        if not expired:
+            return
+        logger.info('🏷 Авто-expired %d заявок на титул', len(expired))
+        for req in expired:
+            chat_id = req.get('owner_chat_id')
+            msg_id = req.get('owner_msg_id')
+            if not chat_id or not msg_id:
+                continue
+            try:
+                await context.bot.edit_message_text(
+                    chat_id=chat_id, message_id=msg_id,
+                    text=(f"📨 ЗАЯВКА #{req['id']} — ⌛ ИСТЕКЛА (TTL {ttl_hours} ч)\n\n"
+                          f"🏷 «{req['title_text']}» · {_format_number(req['price_rub'])} ₽"),
+                    parse_mode='HTML',
+                )
+            except Exception as e:
+                logger.debug('cleanup edit failed for req #%s: %s', req['id'], e)
+    except Exception as e:
+        logger.error('cleanup_expired_title_requests: %s', e)
+
+
 def register_titles(application, db, target_chat_id: int, main_admin_id: int) -> None:
     """
     Зарегистрировать всю систему титулов в PTB Application.

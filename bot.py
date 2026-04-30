@@ -636,10 +636,23 @@ class TelegramBot:
         # Заявки на вступление (ChatJoinRequest)
         from telegram.ext import ChatJoinRequestHandler
         self.application.add_handler(ChatJoinRequestHandler(self.handle_join_request))
-        
+
+        # Кастомные титулы (V1.16.0): UI юзера + панель Владельца
+        try:
+            from handlers.titles_handlers import register_titles
+            from handlers.owner_titles_panel import register_owner_titles
+            register_titles(
+                self.application, self.db,
+                self.target_chat_id, self.main_admin_id
+            )
+            register_owner_titles(self.application)
+            logger.info("Titles (V1.16.0) handlers registered")
+        except Exception as e:
+            logger.error(f"Failed to register titles handlers: {e}")
+
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
-        
+
         logger.info("Handlers setup complete")
     
     async def handle_join_request(self, update: Update, context):
@@ -722,6 +735,33 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in check_inactive_users: {e}")
 
+    async def cleanup_title_requests_job(self):
+        """Scheduled: авто-expire pending заявок на титулы (V1.16.0)."""
+        try:
+            from handlers.titles_handlers import _get_request_ttl_hours, _format_number
+            ttl_hours = _get_request_ttl_hours(self.db)
+            expired = self.db.expire_old_title_requests(ttl_hours)
+            if not expired:
+                return
+            logger.info(f"🏷 Title requests auto-expired: {len(expired)}")
+            for req in expired:
+                chat_id = req.get('owner_chat_id')
+                msg_id = req.get('owner_msg_id')
+                if not chat_id or not msg_id:
+                    continue
+                try:
+                    await self.application.bot.edit_message_text(
+                        chat_id=chat_id, message_id=msg_id,
+                        text=(f"📨 ЗАЯВКА #{req['id']} — ⌛ ИСТЕКЛА (TTL {ttl_hours} ч)\n\n"
+                              f"🏷 «{req['title_text']}» · "
+                              f"{_format_number(req['price_rub'])} ₽"),
+                        parse_mode='HTML',
+                    )
+                except Exception as e:
+                    logger.debug(f"Title cleanup edit failed for #{req['id']}: {e}")
+        except Exception as e:
+            logger.error(f"cleanup_title_requests_job: {e}")
+
     async def send_weekly_report_job(self):
         """Scheduled: еженедельный отчёт владельцу"""
         try:
@@ -752,6 +792,14 @@ class TelegramBot:
             'interval',
             hours=1,
             id='check_qualifications'
+        )
+
+        # V1.16.0: cleanup истёкших pending-заявок на титулы (раз в час)
+        self.scheduler.add_job(
+            self.cleanup_title_requests_job,
+            'interval',
+            hours=1,
+            id='cleanup_title_requests'
         )
         
         # Check lottery endings every minute
