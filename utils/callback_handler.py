@@ -602,10 +602,11 @@ class CallbackHandler:
         
         keyboard = [
             [InlineKeyboardButton("💎 Начисления Пульса", callback_data="my_accruals")],
+            [InlineKeyboardButton("🏷 Титулы", callback_data="titles_menu")],
             [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await query.edit_message_text(message, reply_markup=reply_markup)
     
     # ═══════════════════════════════════════════
