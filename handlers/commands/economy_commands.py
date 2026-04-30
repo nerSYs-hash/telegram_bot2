@@ -16,7 +16,7 @@ db, admin_id передаются явно.
 
 import asyncio
 
-from telegram import Update
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from utils.helpers import format_number
 
@@ -57,7 +57,18 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
         message += f"\n\n{title['emoji']} Титул: {title['title_name']}"
         message += f"\n⚡ Множитель: x{title['multiplier']}"
 
-    await update.message.reply_text(message)
+    # V1.16.0e — inline-меню с кнопкой Титулы
+    keyboard = [
+        [InlineKeyboardButton("💎 Начисления Пульса", callback_data="my_accruals")],
+    ]
+    try:
+        if db.is_feature_enabled('titles'):
+            keyboard.append([InlineKeyboardButton("🏷 Титулы", callback_data="titles_menu")])
+    except Exception:
+        keyboard.append([InlineKeyboardButton("🏷 Титулы", callback_data="titles_menu")])
+    keyboard.append([InlineKeyboardButton("🏠 Главное меню", callback_data="back_to_menu")])
+
+    await update.message.reply_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
 async def give_pulse_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, admin_id):

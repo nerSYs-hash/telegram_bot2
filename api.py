@@ -1729,6 +1729,7 @@ FEATURES_LIST = [
     {'id': 'bbs',           'name': '❣️ Pulse BBS'},
     {'id': 'bbs_other',     'name': '📦 BBS: Другое'},
     {'id': 'bbs_edit',      'name': '✏️ Редактирование анкет BBS'},
+    {'id': 'titles',        'name': '🏷 Кастомные титулы'},
     {'id': 'registration',  'name': '📝 Регистрация новых участников'},
 ]
 

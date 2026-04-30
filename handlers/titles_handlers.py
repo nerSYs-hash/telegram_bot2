@@ -393,9 +393,21 @@ def _build_currency_keyboard(pkg: dict) -> InlineKeyboardMarkup:
 #  КОМАНДА И CALLBACK ВХОДА
 # ════════════════════════════════════════════════════════════════════════════════
 
+def _titles_feature_on(db) -> bool:
+    try:
+        return db.is_feature_enabled('titles')
+    except Exception:
+        return True
+
+
 async def cmd_titles(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Команда /titles — показать главный экран."""
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await update.effective_message.reply_text(
+            '🏷 Раздел «Кастомные титулы» сейчас отключён.'
+        )
+        return
     user_id = update.effective_user.id
     text, kb = _build_titles_menu_text(db, user_id)
     await update.effective_message.reply_text(text, parse_mode='HTML', reply_markup=kb)
@@ -406,6 +418,9 @@ async def cb_titles_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await query.edit_message_text('🏷 Раздел «Кастомные титулы» сейчас отключён.')
+        return
     text, kb = _build_titles_menu_text(db, query.from_user.id)
     try:
         await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
@@ -419,6 +434,9 @@ async def cb_titles_pkg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     await query.answer()
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await query.edit_message_text('🏷 Раздел отключён.')
+        return
     data = query.data[len(CB_PKG_PREFIX):]
 
     if data == 'list':
@@ -464,6 +482,9 @@ async def cb_buy_pulses_entry(update: Update, context: ContextTypes.DEFAULT_TYPE
     """Старт покупки за Пульсы: проверяем баланс, спрашиваем текст."""
     query = update.callback_query
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await query.answer('⏸ Раздел отключён', show_alert=True)
+        return ConversationHandler.END
     user_id = query.from_user.id
 
     pkg_id_raw = query.data[len(CB_BUY_PULSES_PRE):]
@@ -612,6 +633,9 @@ async def cb_buy_rub_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Старт заявки за Рубли: спрашиваем текст."""
     query = update.callback_query
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await query.answer('⏸ Раздел отключён', show_alert=True)
+        return ConversationHandler.END
     user_id = query.from_user.id
 
     pkg_id_raw = query.data[len(CB_BUY_RUB_PRE):]
@@ -799,6 +823,9 @@ async def cb_user_cancel_request(update: Update, context: ContextTypes.DEFAULT_T
 async def cb_rename_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     db = _get_db(context)
+    if not _titles_feature_on(db):
+        await query.answer('⏸ Раздел отключён', show_alert=True)
+        return ConversationHandler.END
     user_id = query.from_user.id
 
     active = get_active_title_row(db, user_id)

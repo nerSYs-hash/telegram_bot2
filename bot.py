@@ -637,18 +637,16 @@ class TelegramBot:
         from telegram.ext import ChatJoinRequestHandler
         self.application.add_handler(ChatJoinRequestHandler(self.handle_join_request))
 
-        # Кастомные титулы (V1.16.0): UI юзера + панель Владельца
-        try:
-            from handlers.titles_handlers import register_titles
-            from handlers.owner_titles_panel import register_owner_titles
-            register_titles(
-                self.application, self.db,
-                self.target_chat_id, self.main_admin_id
-            )
-            register_owner_titles(self.application)
-            logger.info("Titles (V1.16.0) handlers registered")
-        except Exception as e:
-            logger.error(f"Failed to register titles handlers: {e}")
+        # Кастомные титулы (V1.16.0): UI юзера + панель Владельца.
+        # НЕ оборачиваем в try/except — если упадёт, лучше увидеть это сразу при старте.
+        from handlers.titles_handlers import register_titles
+        from handlers.owner_titles_panel import register_owner_titles
+        register_titles(
+            self.application, self.db,
+            self.target_chat_id, self.main_admin_id
+        )
+        register_owner_titles(self.application)
+        logger.info("✅ Titles (V1.16.0) handlers registered: /titles + menu_balance")
 
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
