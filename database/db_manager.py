@@ -375,6 +375,7 @@ class Database:
                 content TEXT,
                 start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 end_time TIMESTAMP,
+                expires_at REAL,
                 status TEXT DEFAULT 'active',
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
@@ -584,6 +585,15 @@ class Database:
         # Initialize titles tables (V1.16.0)
         _init_titles_tables(self)
         _seed_title_packages(self)
+
+        # Migration V1.16.0: добавить expires_at в marketplace_services
+        try:
+            self.cursor.execute(
+                "ALTER TABLE marketplace_services ADD COLUMN expires_at REAL"
+            )
+            self.conn.commit()
+        except Exception:
+            pass  # Колонка уже существует
 
     # ── Economy ──
     def get_econ(self, key, default=None, value_type='float'):
