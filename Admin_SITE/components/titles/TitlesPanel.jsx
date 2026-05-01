@@ -174,7 +174,12 @@ export default function TitlesPanel({ token, canEdit }) {
   };
 
   const handleApprove = async (id) => {
-    await API(`/api/titles/requests/${id}/approve`, token, { method: 'POST' });
+    const res = await API(`/api/titles/requests/${id}/approve`, token, { method: 'POST' });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      alert('Ошибка применения титула: ' + (err.detail || 'неизвестная ошибка'));
+      return;
+    }
     loadRequests(reqTab);
     load();
   };

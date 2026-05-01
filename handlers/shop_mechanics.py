@@ -36,7 +36,7 @@ async def apply_title_to_user(context, chat_id: int, user_id: int, title_text: s
             can_invite_users=False,
             can_pin_messages=False,
             can_manage_video_chats=False,
-            can_manage_chat=False
+            can_manage_chat=True,   # was False — must be True so Telegram accepts a custom title
         )
         
         # Устанавливаем кастомный титул (после выдачи прав)

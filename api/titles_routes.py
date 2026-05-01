@@ -4,8 +4,11 @@
 """
 
 import logging
+import os
+import time as _time
 from typing import Optional
 
+import httpx
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
@@ -48,6 +51,123 @@ def _auth(authorization: str) -> dict:
 
 def _can_edit(role: str) -> bool:
     return role in ("owner", "developer", "deputy")
+
+
+# ── Telegram helpers ─────────────────────────────────────────────────────────
+
+async def _apply_title_telegram(user_id: int, title_text: str) -> tuple[bool, str]:
+    """Promote user + set custom title via Telegram Bot API (httpx, no PTB context).
+    Returns (ok, error_description).
+    """
+    bot_token = os.getenv("BOT_TOKEN", "")
+    chat_id_str = os.getenv("TARGET_CHAT_ID", "0")
+    if not bot_token or chat_id_str == "0":
+        return False, "BOT_TOKEN или TARGET_CHAT_ID не заданы"
+    chat_id = int(chat_id_str)
+    tg_url = f"https://api.telegram.org/bot{bot_token}"
+    try:
+        async with httpx.AsyncClient(timeout=10) as client:
+            r1 = await client.post(f"{tg_url}/promoteChatMember", json={
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "can_manage_chat": True,
+                "can_post_messages": False,
+                "can_edit_messages": False,
+                "can_delete_messages": False,
+                "can_restrict_members": False,
+                "can_promote_members": False,
+                "can_change_info": False,
+                "can_invite_users": False,
+                "can_pin_messages": False,
+                "can_manage_video_chats": False,
+            })
+            data1 = r1.json()
+            if not data1.get("ok"):
+                return False, data1.get("description", "Ошибка promoteChatMember")
+
+            r2 = await client.post(f"{tg_url}/setChatAdministratorCustomTitle", json={
+                "chat_id": chat_id,
+                "user_id": user_id,
+                "custom_title": title_text,
+            })
+            data2 = r2.json()
+            if not data2.get("ok"):
+                return False, data2.get("description", "Ошибка setChatAdministratorCustomTitle")
+
+        return True, ""
+    except Exception as e:
+        return False, str(e)
+
+
+def _write_marketplace_service(db, user_id: int, title_text: str, duration_days) -> str:
+    """Create or extend active title record in marketplace_services.
+    Returns 'created' | 'extended' | 'already_permanent'.
+    duration_days: int or None (None = permanent).
+    """
+    now_ts = _time.time()
+
+    db.cursor.execute(
+        "SELECT id, expires_at FROM marketplace_services "
+        "WHERE user_id = ? AND service_type = 'title' AND status = 'active' "
+        "LIMIT 1",
+        (user_id,)
+    )
+    existing = db.cursor.fetchone()
+
+    if existing:
+        try:
+            exp = existing["expires_at"]
+        except (TypeError, KeyError):
+            exp = existing[1]
+
+        is_permanent = exp is None
+        if not is_permanent:
+            try:
+                is_permanent = float(exp) < now_ts  # already expired → treat as no existing
+                if not is_permanent:
+                    pass  # still active timed title
+            except Exception:
+                is_permanent = True
+
+        if is_permanent and exp is None:
+            return "already_permanent"
+
+        # Extend (or replace expired record)
+        if exp is not None:
+            try:
+                if float(exp) < now_ts:
+                    # Expired — update to new window
+                    new_expires = (now_ts + duration_days * 86400) if duration_days else None
+                else:
+                    base = float(exp)
+                    new_expires = (base + duration_days * 86400) if duration_days else None
+            except Exception:
+                new_expires = (now_ts + duration_days * 86400) if duration_days else None
+        else:
+            new_expires = None  # upgrade to permanent not applicable here
+
+        try:
+            row_id = existing["id"]
+        except (TypeError, KeyError):
+            row_id = existing[0]
+
+        db.cursor.execute(
+            "UPDATE marketplace_services SET expires_at = ? WHERE id = ?",
+            (new_expires, row_id)
+        )
+        db.conn.commit()
+        return "extended"
+
+    # No existing record — insert new
+    new_expires = (now_ts + duration_days * 86400) if duration_days else None
+    db.cursor.execute(
+        "INSERT INTO marketplace_services "
+        "(user_id, service_type, status, content, expires_at, start_time) "
+        "VALUES (?, 'title', 'active', ?, ?, ?)",
+        (user_id, title_text, new_expires, now_ts)
+    )
+    db.conn.commit()
+    return "created"
 
 
 # ── Packages ──────────────────────────────────────────────────────────────────
@@ -175,10 +295,31 @@ async def approve_request(req_id: int, authorization: str = Header(default=None)
     role = _resolve_role_fn(caller_id)
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
+
     from database.db_titles import transition_title_request, get_title_request
     ok = transition_title_request(_db, req_id, "approved", decided_by=caller_id)
     if not ok:
         raise HTTPException(status_code=409, detail="Уже обработана")
+
+    req = get_title_request(_db, req_id)
+    if not req:
+        raise HTTPException(status_code=404, detail="Заявка не найдена")
+
+    tg_ok, tg_err = await _apply_title_telegram(req["user_id"], req["title_text"])
+    if not tg_ok:
+        # Rollback status so admin can retry
+        _db.cursor.execute(
+            "UPDATE title_rub_requests SET status='pending', decided_at=NULL, decided_by=NULL "
+            "WHERE id=?",
+            (req_id,)
+        )
+        _db.conn.commit()
+        raise HTTPException(status_code=400, detail=f"Telegram: {tg_err}")
+
+    _write_marketplace_service(
+        _db, req["user_id"], req["title_text"], req.get("duration_days")
+    )
+
     return get_title_request(_db, req_id)
 
 
