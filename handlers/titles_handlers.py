@@ -415,7 +415,7 @@ def _build_currency_keyboard(pkg: dict) -> InlineKeyboardMarkup:
     rub = pkg.get('price_rub')
     if rub and int(rub) > 0:
         rows.append([InlineKeyboardButton(
-            f"💳 {_format_number(rub)} ₽ — оплата у Вити",
+            "💳 Оплата через Администратора",
             callback_data=CB_BUY_RUB_PRE + str(pkg['id']))])
     rows.append([InlineKeyboardButton('🔙 К пакетам', callback_data=CB_PKG_PREFIX + 'list')])
     return InlineKeyboardMarkup(rows)
