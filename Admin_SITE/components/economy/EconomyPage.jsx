@@ -5,6 +5,7 @@ import EconomyCategory from './EconomyCategory';
 import EconomyHistoryPanel from './EconomyHistoryPanel';
 import EconomyCancellationsPanel from './EconomyCancellationsPanel';
 import { useEconomyWS } from './useEconomyWS';
+import TitlesPanel from '../titles/TitlesPanel';
 
 export default function EconomyPage({ token }) {
   const [categories, setCategories]     = useState([]);
@@ -109,16 +110,22 @@ export default function EconomyPage({ token }) {
       )}
 
       {categories.map(cat => (
-        <EconomyCategory
-          key={cat.key}
-          category={cat}
-          isExpanded={expandedSections.has(cat.key)}
-          onToggle={() => toggleSection(cat.key)}
-          onOpenHistory={(key, label) => setHistoryPanel({ settingKey: key, label })}
-          token={token}
-          recentlyChanged={recentlyChanged}
-          canEdit={canEdit}
-        />
+        <div key={cat.key}>
+          <EconomyCategory
+            category={cat}
+            isExpanded={expandedSections.has(cat.key)}
+            onToggle={() => toggleSection(cat.key)}
+            onOpenHistory={(key, label) => setHistoryPanel({ settingKey: key, label })}
+            token={token}
+            recentlyChanged={recentlyChanged}
+            canEdit={canEdit}
+          />
+          {cat.key === 'vip_bbs' && (
+            <div className="mt-4">
+              <TitlesPanel token={token} canEdit={canEdit} />
+            </div>
+          )}
+        </div>
       ))}
 
       {categories.length === 0 && (

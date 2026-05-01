@@ -80,6 +80,14 @@ except Exception as e:
     _economy_ws_manager = None
 
 try:
+    from api.titles_routes import router as titles_router, _setup as _titles_setup
+    _titles_setup(db, lambda auth: _require_auth(auth), lambda uid: _resolve_user_role(uid))
+    app.include_router(titles_router)
+    logger.info("✅ titles: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения titles router: {e}")
+
+try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
         import stats_calculators
