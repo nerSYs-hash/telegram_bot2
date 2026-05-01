@@ -234,23 +234,19 @@ def transition_title_request(db, request_id: int, new_status: str,
     Атомарный переход статуса заявки.
     Возвращает True если переход выполнен, False — если статус не совпал
     с only_from (защита от двойных нажатий).
+    Атомарность даёт сам UPDATE с условием WHERE status = ?.
     """
-    db.conn.execute('BEGIN IMMEDIATE')
-    try:
-        db.cursor.execute(
-            'UPDATE title_rub_requests '
-            "SET status = ?, decided_at = datetime('now'), "
-            '    decided_by = COALESCE(?, decided_by), '
-            '    reject_reason = COALESCE(?, reject_reason) '
-            'WHERE id = ? AND status = ?',
-            (new_status, decided_by, reject_reason, request_id, only_from)
-        )
-        changed = db.cursor.rowcount
-        db.conn.commit()
-        return changed > 0
-    except Exception:
-        db.conn.rollback()
-        raise
+    db.cursor.execute(
+        'UPDATE title_rub_requests '
+        "SET status = ?, decided_at = datetime('now'), "
+        '    decided_by = COALESCE(?, decided_by), '
+        '    reject_reason = COALESCE(?, reject_reason) '
+        'WHERE id = ? AND status = ?',
+        (new_status, decided_by, reject_reason, request_id, only_from)
+    )
+    changed = db.cursor.rowcount
+    db.conn.commit()
+    return changed > 0
 
 
 def expire_old_title_requests(db, ttl_hours: int) -> list[dict]:
