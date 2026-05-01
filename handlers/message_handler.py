@@ -1028,6 +1028,11 @@ class MessageHandler:
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
 
+        # Пропускаем catch-all если юзер внутри FSM-флоу (titles и др.)
+        if (context.user_data.get('_titles_pkg_id') is not None
+                or context.user_data.get('_titles_rename_active')):
+            return
+
         # Default: suggest using menu
         await message.reply_text(
             "📱 Используйте /menu для навигации.\n\n"

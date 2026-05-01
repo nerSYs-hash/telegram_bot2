@@ -60,6 +60,7 @@ STATE_AWAIT_REJECT_RSN  = 'TITLE_AWAIT_REJECT_REASON'
 # user_data ключи (для прокидки контекста между шагами FSM)
 UD_PKG_ID         = '_titles_pkg_id'
 UD_REJECT_REQ_ID  = '_titles_reject_req_id'
+UD_RENAME_ACTIVE  = '_titles_rename_active'
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -877,6 +878,7 @@ async def cb_rename_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return ConversationHandler.END
 
     await query.answer()
+    context.user_data[UD_RENAME_ACTIVE] = True
     await query.edit_message_text(
         f"✏️ <b>Смена текста титула</b>\n\n"
         f"Текущий: «{active['content']}»\n"
@@ -958,6 +960,7 @@ async def fsm_rename(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         logger.error('rename: update marketplace_services: %s', e)
 
+    context.user_data.pop(UD_RENAME_ACTIVE, None)
     suffix = f"\nСписано: {_format_number(price)}💎" if price > 0 else ''
     await update.message.reply_text(
         f"✅ Титул сменён на «{new_text}».{suffix}"
@@ -972,6 +975,7 @@ async def fsm_rename(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def fsm_cancel(update: Update, context: ContextTypes.DEFAULT_TYPE):
     context.user_data.pop(UD_PKG_ID, None)
     context.user_data.pop(UD_REJECT_REQ_ID, None)
+    context.user_data.pop(UD_RENAME_ACTIVE, None)
     if update.message:
         await update.message.reply_text('❌ Действие отменено.')
     return ConversationHandler.END
@@ -983,6 +987,7 @@ async def fsm_cancel_cb(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await query.answer()
     context.user_data.pop(UD_PKG_ID, None)
     context.user_data.pop(UD_REJECT_REQ_ID, None)
+    context.user_data.pop(UD_RENAME_ACTIVE, None)
     db = _get_db(context)
     text, kb = _build_titles_menu_text(db, query.from_user.id)
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
