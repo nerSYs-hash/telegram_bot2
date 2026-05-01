@@ -264,7 +264,11 @@ async def show_horoscope_thread_picker(query, user, context, db, admin_id, targe
 
     topics = db.get_all_topics(target_chat_id)
     for topic in topics:
-        if topic.get('is_main_thread') or not topic['thread_id']:
+        try:
+            is_main = topic['is_main_thread']
+        except (KeyError, IndexError):
+            is_main = False
+        if is_main or not topic['thread_id']:
             continue
         name = (topic['thread_name'] or '').strip()
         tid = topic['thread_id']
