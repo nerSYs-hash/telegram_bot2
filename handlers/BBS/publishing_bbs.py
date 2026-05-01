@@ -83,6 +83,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 caption=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(msg.message_id)
         elif len(photos) > 1:
@@ -102,6 +103,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 text=" 👆<b>Понравился ?</b>",
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(btn_msg.message_id)
         else:
@@ -112,6 +114,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 text=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(msg.message_id)
     except Exception as e:
@@ -317,6 +320,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                 caption=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user_id, bot.username),
+                _no_chain=True,
             )
             sent_ids.append(msg.message_id)
         elif len(photos) > 1:
@@ -330,6 +334,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                     text=profile_text,
                     parse_mode='HTML',
                     reply_markup=write_button(user_id, bot.username),
+                    _no_chain=True,
                 )
                 sent_ids.append(msg.message_id)
             elif len(valid_photos) == 1:
@@ -341,6 +346,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                     caption=profile_text,
                     parse_mode='HTML',
                     reply_markup=write_button(user_id, bot.username),
+                    _no_chain=True,
                 )
                 sent_ids.append(msg.message_id)
             else:
@@ -362,6 +368,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                         text=" 👆<b>Понравился ?</b>",
                         parse_mode='HTML',
                         reply_markup=write_button(user_id, bot.username),
+                        _no_chain=True,
                     )
                     sent_ids.append(btn_msg.message_id)
                 except Exception as btn_err:
@@ -374,6 +381,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
                 text=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user_id, bot.username),
+                _no_chain=True,
             )
             sent_ids.append(msg.message_id)
             
