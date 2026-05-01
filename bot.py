@@ -644,6 +644,8 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("unfreeze", self.command_handler.unfreeze_command))
         # Восстановить все анкеты BBS (только для владельца)
         self.application.add_handler(CommandHandler("restore_bbs", self.command_handler.restore_bbs_command))
+        # Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)
+        self.application.add_handler(CommandHandler("restore_last_bbs", self.command_handler.restore_last_bbs_command))
         # Восстановить все посты НьюзON (только для владельца)
         self.application.add_handler(CommandHandler("restore_news", self.command_handler.restore_news_command))
         self.application.add_handler(CommandHandler("resend_dossier", self.command_handler.resend_dossier_command))

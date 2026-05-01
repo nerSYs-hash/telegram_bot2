@@ -1060,6 +1060,7 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
     )
     keyboard = [
         [InlineKeyboardButton("♻️ Восстановить BBS", callback_data="owner_restore_bbs")],
+        [InlineKeyboardButton("⏮️ Восстановить последнюю анкету", callback_data="owner_restore_last_bbs")],
         [InlineKeyboardButton("📰 Восстановить НьюзON", callback_data="owner_restore_news")],
         [InlineKeyboardButton("🎁 Компенсация BBS", callback_data="owner_compensate_bbs")],
         [InlineKeyboardButton(f"📦 Восстановить «Другое» ({other_count} шт.)", callback_data="owner_recovery_other_confirm")],
@@ -1154,6 +1155,71 @@ async def restore_bbs_execute(query, context, db, admin_id: int) -> None:
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def restore_last_bbs_execute(query, context, db, admin_id: int) -> None:
+    """Восстанавливает только ПОСЛЕДНЮЮ удаленную анкету BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    from handlers.BBS.publishing_bbs import republish_profile
+
+    await query.edit_message_text("⏳ Восстанавливаю последнюю анкету...", parse_mode='HTML')
+
+    try:
+        # Получаем только ПОСЛЕДНЮЮ удаленную анкету
+        db.cursor.execute('''
+            SELECT bp.user_id
+            FROM bbs_profiles bp
+            JOIN users u ON u.user_id = bp.user_id
+            WHERE bp.published_at IS NOT NULL
+              AND bp.deleted_at IS NOT NULL
+              AND (bp.deleted_by IS NULL OR bp.deleted_by NOT IN ('user'))
+              AND (u.is_left = 0 OR u.is_left IS NULL)
+            ORDER BY bp.deleted_at DESC
+            LIMIT 1
+        ''')
+        row = db.cursor.fetchone()
+    except Exception as e:
+        logger.error(f"restore_last_bbs_execute DB error: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка при чтении БД: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    if not row:
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            "ℹ️ Нет удаленных анкет для восстановления.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    try:
+        await republish_profile(
+            context.bot, db, row['user_id'],
+            _RECOVERY_CHAT_ID, _BBS_THREAD_ID,
+        )
+        keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"✅ <b>Последняя анкета восстановлена!</b>\n\n"
+            f"User ID: <b>{row['user_id']}</b>",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+    except Exception as e:
+        logger.error(f"restore_last_bbs_execute: failed user_id={row['user_id']}: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка восстановления: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
 
 
 async def restore_news_confirm(query, db, admin_id: int) -> None:

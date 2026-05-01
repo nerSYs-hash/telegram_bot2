@@ -203,6 +203,24 @@ class CommandHandler:
                 await self.message.reply_text(text, **kwargs)
         dummy_query = DummyQuery(update.message)
         await restore_bbs_execute(dummy_query, context, self.db, self.main_admin_id)
+
+    async def restore_last_bbs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)."""
+        if update.effective_user.id != self.main_admin_id:
+            await update.message.reply_text("⛔ Нет доступа.")
+            return
+        from handlers.owner_handlers import restore_last_bbs_execute
+        # Эмулируем query для совместимости с restore_last_bbs_execute
+        class DummyQuery:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+            async def answer(self, *a, **kw):
+                pass
+            async def edit_message_text(self, text, **kwargs):
+                await self.message.reply_text(text, **kwargs)
+        dummy_query = DummyQuery(update.message)
+        await restore_last_bbs_execute(dummy_query, context, self.db, self.main_admin_id)
     def __init__(self, db, target_chat_id, main_admin_id, bot_username=None):
         self.db = db
         self.target_chat_id = target_chat_id

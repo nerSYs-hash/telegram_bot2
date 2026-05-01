@@ -13,6 +13,7 @@ from handlers.owner_handlers import (
     send_database_backup,
     show_statistics_not_in_chat,
     show_recovery_menu, restore_bbs_confirm, restore_bbs_execute,
+    restore_last_bbs_execute,
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
 )
@@ -191,6 +192,8 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await restore_bbs_confirm(query, db, admin_id)
     elif data == "owner_restore_bbs_confirm":
         await restore_bbs_execute(query, context, db, admin_id)
+    elif data == "owner_restore_last_bbs":
+        await restore_last_bbs_execute(query, context, db, admin_id)
     elif data == "owner_restore_news":
         await restore_news_confirm(query, db, admin_id)
     elif data == "owner_restore_news_confirm":
