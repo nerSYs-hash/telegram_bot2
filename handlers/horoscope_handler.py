@@ -98,7 +98,7 @@ def build_single_message(horoscopes: dict, cache: dict) -> str:
     now = get_moscow_time()
     date_str = now.strftime('%d.%m.%Y')
     
-    header = f"<b>🔮 © Сообщество Pulse 2026 • ГОРОСКОП • {date_str}</b>\n"
+    header = f"<b>🔮 ГОРОСКОП • {date_str}</b>\n"
     footer = "\n<i>© Сообщество Pulse 2026</i>"
     
     # Считаем бюджет видимых символов

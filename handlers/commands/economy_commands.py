@@ -253,14 +253,21 @@ async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     if not message:
         return
 
+    async def _send(text: str):
+        """reply_text с fallback на send_message — на случай авто-удаления команды."""
+        try:
+            await message.reply_text(text)
+        except Exception:
+            await context.bot.send_message(chat_id=message.chat_id, text=text)
+
     user_data = db.get_user(user.id)
     if not user_data:
-        await message.reply_text("Сначала используй /start")
+        await _send("Сначала используй /start")
         return
 
     # Только в ответ на чужое сообщение
     if not message.reply_to_message or not message.reply_to_message.from_user:
-        await message.reply_text(
+        await _send(
             "💡 Использование: ответь (Reply) на сообщение пользователя командой /tip <сумма>\n"
             "Пример: /tip 50"
         )
@@ -268,24 +275,24 @@ async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
 
     target_tg = message.reply_to_message.from_user
     if target_tg.is_bot:
-        await message.reply_text("Боты не принимают чаевые 🤖")
+        await _send("Боты не принимают чаевые 🤖")
         return
     if target_tg.id == user.id:
-        await message.reply_text("Нельзя давать чаевые самому себе 🙃")
+        await _send("Нельзя давать чаевые самому себе 🙃")
         return
 
     if not context.args:
-        await message.reply_text("Укажи сумму: /tip <число>\nПример: /tip 50")
+        await _send("Укажи сумму: /tip <число>\nПример: /tip 50")
         return
 
     try:
         amount = round(float(str(context.args[0]).replace(',', '.')), 2)
     except ValueError:
-        await message.reply_text("Неверный формат суммы. Пример: /tip 50")
+        await _send("Неверный формат суммы. Пример: /tip 50")
         return
 
     if amount <= 0:
-        await message.reply_text("Сумма должна быть положительной.")
+        await _send("Сумма должна быть положительной.")
         return
 
     target_user = db.get_user(target_tg.id)
@@ -299,11 +306,11 @@ async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
         )
         target_user = db.get_user(target_tg.id)
         if not target_user:
-            await message.reply_text("Не удалось найти получателя в базе.")
+            await _send("Не удалось найти получателя в базе.")
             return
 
     if float(user_data['balance']) < amount:
-        await message.reply_text(
+        await _send(
             f"❌ Недостаточно средств.\n"
             f"Баланс: {format_number(user_data['balance'])} 💎"
         )
@@ -324,7 +331,7 @@ async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
             f'Чаевые (tip) для {target_name}'
         )
 
-        await message.reply_text(
+        await _send(
             f"💸 {sender_name} подкинул {format_number(amount)} 💎 чаевых "
             f"{target_name} за это сообщение!"
         )
@@ -342,7 +349,7 @@ async def tip_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
         except Exception:
             pass
     except Exception as e:
-        await message.reply_text(f"Ошибка: {str(e)}")
+        await _send(f"Ошибка: {str(e)}")
 
 
 async def wipe_balances_command(update, context, db, admin_id):

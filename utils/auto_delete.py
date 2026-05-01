@@ -26,6 +26,11 @@ logger = logging.getLogger(__name__)
 # ── Сколько секунд ждать перед удалением последнего бот-сообщения ────────────
 AUTODEL_DELAY = 60
 
+# ── Команды с отложенным удалением: команда → задержка в секундах ─────────────
+_DELAYED_CMDS: dict[str, int] = {
+    '/tip': 5,
+}
+
 # ── Ключ в bot_data для хранения текущего отслеживаемого сообщения ───────────
 _CHAIN_KEY = '_autodel_chain_bot'
 
@@ -65,11 +70,32 @@ async def delete_user_command_in_main_chat(update, context) -> None:
     """
     Обработчик группы -1.
     Удаляет сообщение-команду пользователя (/balance, /top …) из главного чата.
+    Команды из _DELAYED_CMDS удаляются с заданной задержкой, остальные — мгновенно.
     """
+    msg = update.message
+    if not msg:
+        return
+
+    text = (msg.text or '').split()[0].split('@')[0].lower()
+    delay = _DELAYED_CMDS.get(text)
+
+    if delay:
+        try:
+            context.application.job_queue.run_once(
+                _do_delete_job,
+                when=delay,
+                data={'chat_id': msg.chat_id, 'msg_id': msg.message_id},
+                name=f'cmd_del_{msg.message_id}',
+            )
+            logger.debug(f'auto_delete: scheduled command {text} deletion in {delay}s')
+        except Exception as e:
+            logger.debug(f'auto_delete: delayed command delete schedule failed: {e}')
+        return
+
     try:
-        await update.message.delete()
+        await msg.delete()
         logger.debug(
-            f'auto_delete: deleted command /{update.message.text} '
+            f'auto_delete: deleted command {text} '
             f'from user {update.effective_user.id}'
         )
     except Exception as e:

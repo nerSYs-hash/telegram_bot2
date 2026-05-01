@@ -196,23 +196,27 @@ async def publish_press_release(message, context, target_chat_id):
                     chat_id=target_chat_id,
                     photo=photo.file_id,
                     caption=press_release,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    _no_chain=True,
                 )
             else:
                 await context.bot.send_photo(
                     chat_id=target_chat_id,
                     photo=photo.file_id,
+                    _no_chain=True,
                 )
                 await context.bot.send_message(
                     chat_id=target_chat_id,
                     text=press_release,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    _no_chain=True,
                 )
         else:
             await context.bot.send_message(
                 chat_id=target_chat_id,
                 text=press_release,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                _no_chain=True,
             )
 
         # Confirm to owner
