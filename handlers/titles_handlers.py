@@ -497,13 +497,10 @@ async def cb_titles_pkg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.answer('❌ Пакет недоступен', show_alert=True)
         return
 
-    rate = _get_current_rate(db)
-    hint = _rate_hint(int(pkg['price_pulses']), int(pkg.get('price_rub') or 0), rate)
     text = (
         f"📦 <b>{pkg['label']}</b>\n"
         f"Срок: {_fmt_duration(pkg['duration_days'])}\n\n"
-        + (hint + '\n\n' if hint else '')
-        + "Выбери валюту:"
+        "Выбери валюту:"
     )
     await query.edit_message_text(text, parse_mode='HTML',
                                   reply_markup=_build_currency_keyboard(pkg))
