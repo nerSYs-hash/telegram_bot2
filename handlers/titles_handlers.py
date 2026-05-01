@@ -700,10 +700,10 @@ async def cb_buy_rub_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return await _create_rub_request(query, context, db, user_id, pkg, active['content'])
 
     await query.edit_message_text(
-        f"📦 <b>{pkg['label']}</b> · 💳 {_format_number(pkg['price_rub'])} ₽\n\n"
+        f"📦 <b>{pkg['label']}</b>\n\n"
         f"✏️ Введи текст титула (от {MIN_TITLE_LEN} до {MAX_TITLE_LEN} символов).\n"
         f"Разрешены буквы, цифры, пробел и знаки <code>- _ . , ! ?</code>\n\n"
-        f"После ввода придёт инструкция как написать Владельцу для оплаты.",
+        f"После ввода придёт инструкция как написать Администратору для оплаты.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
             InlineKeyboardButton('🔙 Отмена', callback_data=CB_CANCEL_FSM)
@@ -785,9 +785,8 @@ async def _create_rub_request(target, context, db, user_id: int, pkg: dict,
     deep_link = f"tg://user?id={main_admin_id}"
     user_text = (
         f"📨 <b>Заявка #{request_id} создана</b>\n\n"
-        f"📦 {pkg['label']} · 🏷 «{title_text}»\n"
-        f"💳 Сумма: {_format_number(price_rub)} ₽\n\n"
-        f"Напиши Владельцу для оплаты — он подтвердит, и титул применится автоматически.\n"
+        f"📦 {pkg['label']} · 🏷 «{title_text}»\n\n"
+        f"Напиши Администратору для оплаты — он подтвердит, и титул применится автоматически.\n"
         f"Заявка истечёт через {ttl} ч если не будет подтверждена."
     )
     user_kb = InlineKeyboardMarkup([
