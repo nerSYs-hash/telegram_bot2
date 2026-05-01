@@ -133,9 +133,19 @@ class Database:
 
     def connect(self):
         """Connect to SQLite database"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # timeout=30 — ждём блокировку до 30с вместо мгновенного "database is locked".
+        # WAL — многопроцессный доступ (бот + api.py) без взаимных блокировок чтения/записи.
+        self.conn = sqlite3.connect(
+            self.db_path, check_same_thread=False, timeout=30.0
+        )
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
+        try:
+            self.cursor.execute('PRAGMA journal_mode=WAL')
+            self.cursor.execute('PRAGMA busy_timeout=30000')
+            self.cursor.execute('PRAGMA synchronous=NORMAL')
+        except Exception:
+            pass
 
     def create_tables(self):
         """Create all necessary tables"""
