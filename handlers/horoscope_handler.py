@@ -89,15 +89,17 @@ def _sign_header(sign_name, sign_emoji, cache):
 
 # --- ЛОГИКА СООБЩЕНИЯ ---
 
-def build_single_message(horoscopes: dict, cache: dict) -> str:
+def build_single_message(horoscopes: dict, cache: dict, target_date=None) -> str:
     """Собирает 1 сообщение: максимум текста на знак, не выходя за лимит TG.
-    
+
+    target_date — объект datetime для шапки (None = сегодня МСК).
     Лимит Telegram = 4096 видимых символов после парсинга HTML.
     Теги <tg-emoji> и <b> не считаются к лимиту.
     """
-    now = get_moscow_time()
-    date_str = now.strftime('%d.%m.%Y')
-    
+    if target_date is None:
+        target_date = get_moscow_time()
+    date_str = target_date.strftime('%d.%m.%Y')
+
     header = f"<b>🔮 ГОРОСКОП • {date_str}</b>\n"
     footer = "\n<i>© Сообщество Pulse 2026</i>"
     
@@ -152,6 +154,7 @@ async def show_horoscope_menu(query, user, db, admin_id):
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🚀 Опубликовать в чат", callback_data="horoscope_publish")],
             [InlineKeyboardButton("👁 Превью в ЛС", callback_data="horoscope_preview")],
+            [InlineKeyboardButton("⏰ Расписание", callback_data="horoscope_sched_menu")],
             [InlineKeyboardButton("🔙 Назад", callback_data="menu_settings")]
         ])
     )
@@ -163,7 +166,8 @@ async def publish_horoscope_today(query, user, context, db, admin_id, target_cha
         cache = await _load_custom_emoji(context.bot)
         data = await get_all_horoscopes(ZODIAC_SIGNS)
         msg_text = build_single_message(data, cache)
-        await context.bot.send_message(chat_id=target_chat_id, text=msg_text, parse_mode='HTML')
+        await context.bot.send_message(chat_id=target_chat_id, text=msg_text,
+                                       parse_mode='HTML', _no_chain=True)
         await query.edit_message_text(f"✅ <b>Гороскоп опубликован!</b>", parse_mode='HTML',
                                       reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Меню", callback_data="horoscope_menu")]]))
     except Exception as e:
@@ -184,3 +188,127 @@ async def preview_horoscope(query, user, context, db, admin_id):
 async def diagnose_emoji(query, user, context, db, admin_id):
     if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.answer("Плитки в порядке!", show_alert=True)
+
+
+# ═══════════════════════════════════════════════════════════════
+# РАСПИСАНИЕ ГОРОСКОПА
+# ═══════════════════════════════════════════════════════════════
+
+def _build_schedule_menu_text_kb(db, target_chat_id: int):
+    """Собирает текст + клавиатуру экрана расписания."""
+    from handlers.PR.press_release_pr import _resolve_thread_name
+
+    enabled = db.get_setting('horoscope_schedule_enabled', '0') == '1'
+    time_str = db.get_setting('horoscope_schedule_time', '09:00')
+    mode = db.get_setting('horoscope_schedule_mode', 'today')
+    thread_id_str = db.get_setting('horoscope_schedule_thread_id', '') or ''
+
+    if thread_id_str:
+        try:
+            thread_name = _resolve_thread_name(db, target_chat_id, int(thread_id_str))
+        except Exception:
+            thread_name = f"🧵 Ветка #{thread_id_str}"
+    else:
+        thread_name = "💬 Основной чат"
+
+    status_icon = "🟢 Включено" if enabled else "🔴 Выключено"
+    mode_text = "на завтра" if mode == 'tomorrow' else "на сегодня"
+
+    text = (
+        f"⏰ <b>Авторасписание гороскопа</b>\n\n"
+        f"Статус: {status_icon}\n"
+        f"Ветка: {thread_name}\n"
+        f"Время: {time_str} МСК\n"
+        f"Режим: Гороскоп {mode_text}"
+    )
+    toggle_label = "🔴 Выключить" if enabled else "🟢 Включить"
+    mode_toggle_label = "🔄 Режим: на завтра" if mode == 'today' else "🔄 Режим: на сегодня"
+
+    keyboard = InlineKeyboardMarkup([
+        [InlineKeyboardButton(toggle_label, callback_data="horoscope_sched_toggle")],
+        [InlineKeyboardButton("📍 Выбрать ветку", callback_data="horoscope_sched_thread_pick")],
+        [InlineKeyboardButton("🕐 Изменить время", callback_data="horoscope_sched_set_time")],
+        [InlineKeyboardButton(mode_toggle_label, callback_data="horoscope_sched_toggle_mode")],
+        [InlineKeyboardButton("🔙 Назад", callback_data="horoscope_menu")],
+    ])
+    return text, keyboard
+
+
+async def show_horoscope_schedule_menu(query, user, db, admin_id, target_chat_id):
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+    text, kb = _build_schedule_menu_text_kb(db, target_chat_id)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def toggle_horoscope_schedule(query, user, db, admin_id, target_chat_id):
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+    current = db.get_setting('horoscope_schedule_enabled', '0')
+    db.set_setting('horoscope_schedule_enabled', '0' if current == '1' else '1')
+    text, kb = _build_schedule_menu_text_kb(db, target_chat_id)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def toggle_horoscope_mode(query, user, db, admin_id, target_chat_id):
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+    current = db.get_setting('horoscope_schedule_mode', 'today')
+    db.set_setting('horoscope_schedule_mode', 'tomorrow' if current == 'today' else 'today')
+    text, kb = _build_schedule_menu_text_kb(db, target_chat_id)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def show_horoscope_thread_picker(query, user, context, db, admin_id, target_chat_id):
+    """Выбор ветки для расписания гороскопа."""
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+
+    keyboard = [[InlineKeyboardButton("💬 Основной чат", callback_data="horoscope_sched_thread_main")]]
+
+    topics = db.get_all_topics(target_chat_id)
+    for topic in topics:
+        if topic.get('is_main_thread') or not topic['thread_id']:
+            continue
+        name = (topic['thread_name'] or '').strip()
+        tid = topic['thread_id']
+        label = f"🧵 {name}" if (name and name not in (f'Ветка #{tid}', f'Ветка {tid}')) \
+                else f"❓ Ветка #{tid}"
+        keyboard.append([InlineKeyboardButton(label,
+                          callback_data=f"horoscope_sched_thread_{tid}")])
+
+    keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="horoscope_sched_menu")])
+    await query.edit_message_text(
+        "📍 <b>Выбери ветку для публикации гороскопа:</b>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
+    )
+
+
+async def handle_horoscope_sched_thread(query, data, user, db, admin_id, target_chat_id):
+    """Сохраняет выбранную ветку и возвращает в меню расписания."""
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+
+    if data == "horoscope_sched_thread_main":
+        db.set_setting('horoscope_schedule_thread_id', '')
+    else:
+        try:
+            tid = int(data.replace("horoscope_sched_thread_", ""))
+            db.set_setting('horoscope_schedule_thread_id', str(tid))
+        except ValueError:
+            await query.answer("❌ Неверный ID ветки", show_alert=True)
+            return
+
+    text, kb = _build_schedule_menu_text_kb(db, target_chat_id)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def prompt_horoscope_schedule_time(query, user, context, db, admin_id):
+    """Запрашивает новое время через FSM."""
+    if not await _is_horoscope_privileged(user.id, admin_id): return
+    context.user_data['awaiting_horoscope_sched_time'] = True
+    await query.edit_message_text(
+        "🕐 <b>Введи время публикации гороскопа</b>\n\n"
+        "Формат: <code>ЧЧ:ММ</code>, например <code>09:00</code> или <code>21:30</code>\n"
+        "Время по МСК.",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 Отмена", callback_data="horoscope_sched_menu")
+        ]])
+    )

@@ -29,6 +29,9 @@ from handlers.pr_handlers import (
 from handlers.horoscope_handler import (
     show_horoscope_menu, publish_horoscope_today,
     preview_horoscope, diagnose_emoji,
+    show_horoscope_schedule_menu, toggle_horoscope_schedule,
+    toggle_horoscope_mode, show_horoscope_thread_picker,
+    handle_horoscope_sched_thread, prompt_horoscope_schedule_time,
 )
 
 logger = logging.getLogger(__name__)
@@ -162,6 +165,20 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
         await preview_horoscope(query, user, db, eff_admin)
     elif data == "horoscope_diagnose":
         await diagnose_emoji(query, user, db, eff_admin)
+
+    # ── Расписание гороскопа ──
+    elif data == "horoscope_sched_menu":
+        await show_horoscope_schedule_menu(query, user, db, eff_admin, target_chat_id)
+    elif data == "horoscope_sched_toggle":
+        await toggle_horoscope_schedule(query, user, db, eff_admin, target_chat_id)
+    elif data == "horoscope_sched_toggle_mode":
+        await toggle_horoscope_mode(query, user, db, eff_admin, target_chat_id)
+    elif data == "horoscope_sched_thread_pick":
+        await show_horoscope_thread_picker(query, user, context, db, eff_admin, target_chat_id)
+    elif data == "horoscope_sched_set_time":
+        await prompt_horoscope_schedule_time(query, user, context, db, eff_admin)
+    elif data.startswith("horoscope_sched_thread_"):
+        await handle_horoscope_sched_thread(query, data, user, db, eff_admin, target_chat_id)
 
     else:
         return False

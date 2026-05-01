@@ -346,6 +346,55 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error checking qualifications: {e}")
     
+    async def check_horoscope_schedule(self):
+        """Ежеминутная проверка расписания автопубликации гороскопа."""
+        try:
+            if self.db.get_setting('horoscope_schedule_enabled', '0') != '1':
+                return
+
+            from utils.helpers import get_moscow_time
+            now = get_moscow_time()
+            current_time = now.strftime('%H:%M')
+            scheduled_time = self.db.get_setting('horoscope_schedule_time', '09:00')
+            if current_time != scheduled_time:
+                return
+
+            # Защита от двойной публикации в один день
+            today_str = now.strftime('%Y-%m-%d')
+            if self.db.get_setting('horoscope_last_published_date', '') == today_str:
+                return
+
+            mode = self.db.get_setting('horoscope_schedule_mode', 'today')
+            thread_id_str = self.db.get_setting('horoscope_schedule_thread_id', '') or ''
+            thread_id = int(thread_id_str) if thread_id_str else None
+
+            from datetime import timedelta
+            from handlers.horoscope_handler import _load_custom_emoji, build_single_message, ZODIAC_SIGNS
+            from utils.horoscope_parser import get_all_horoscopes
+
+            tomorrow_mode = (mode == 'tomorrow')
+            target_date = now + timedelta(days=1) if tomorrow_mode else now
+
+            cache = await _load_custom_emoji(self.application.bot)
+            data = await get_all_horoscopes(ZODIAC_SIGNS, tomorrow=tomorrow_mode)
+            msg_text = build_single_message(data, cache, target_date=target_date)
+
+            send_kwargs = {
+                'chat_id': self.target_chat_id,
+                'text': msg_text,
+                'parse_mode': 'HTML',
+                '_no_chain': True,
+            }
+            if thread_id:
+                send_kwargs['message_thread_id'] = thread_id
+
+            await self.application.bot.send_message(**send_kwargs)
+            self.db.set_setting('horoscope_last_published_date', today_str)
+            logger.info(f"✅ Авто-гороскоп опубликован (режим={mode}, дата={target_date.strftime('%d.%m.%Y')})")
+
+        except Exception as e:
+            logger.error(f"check_horoscope_schedule error: {e}", exc_info=True)
+
     async def check_scheduled_posts(self):
         """Check and publish scheduled posts"""
         try:
@@ -844,6 +893,14 @@ class TelegramBot:
             'interval',
             seconds=30,
             id='check_scheduled_posts'
+        )
+
+        # Авто-публикация гороскопа — проверка каждую минуту
+        self.scheduler.add_job(
+            self.check_horoscope_schedule,
+            'interval',
+            minutes=1,
+            id='check_horoscope_schedule'
         )
         
         # Cleanup dead BBS profiles every 12 hours
