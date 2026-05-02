@@ -113,11 +113,12 @@ export default function EconomyPage({ token }) {
 
       {/* Сетка карточек категорий */}
       {categories.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3">
           {categories.map(cat => (
             <EconomyCategoryCard
               key={cat.key}
               category={cat}
+              token={token}
               onOpenDetails={(key) => {
                 setSelectedCategory(cat);
                 setExpanded(prev => {
