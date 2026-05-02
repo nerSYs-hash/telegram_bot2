@@ -18,14 +18,16 @@ function _categoryEmoji(key) {
 
 export default function EconomyCategory({
   category, isExpanded, onToggle, onOpenHistory,
-  token, recentlyChanged, canEdit,
+  token, recentlyChanged, canEdit, sectionEnabled,
 }) {
   const [settings, setSettings]     = useState(null);
   const [loading, setLoading]       = useState(false);
-  const [sectionEnabled, setEnabled] = useState(category.is_enabled);
+  const [enabled, setEnabled]       = useState(sectionEnabled ?? category.is_enabled);
   const [masterModal, setMasterModal] = useState(false);
 
-  useEffect(() => { setEnabled(category.is_enabled); }, [category.is_enabled]);
+  useEffect(() => {
+    setEnabled(sectionEnabled ?? category.is_enabled);
+  }, [sectionEnabled, category.is_enabled]);
 
   useEffect(() => {
     if (!isExpanded || settings) return;
@@ -78,7 +80,7 @@ export default function EconomyCategory({
               <div className="text-sm font-black text-gray-900">{category.label}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">
                 {category.rows_count} параметров
-                {!sectionEnabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
+                {!enabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
               </div>
             </div>
             <ChevronDown
@@ -91,12 +93,12 @@ export default function EconomyCategory({
           <button
             onClick={() => canEdit ? setMasterModal(v => !v) : null}
             disabled={!canEdit}
-            title={canEdit ? (sectionEnabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
+            title={canEdit ? (enabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
             className={`mr-4 relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
-              sectionEnabled ? 'bg-green-500' : 'bg-gray-200'
+              enabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
             <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
-              sectionEnabled ? 'translate-x-6' : 'translate-x-1'
+              enabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
         </div>
@@ -106,7 +108,7 @@ export default function EconomyCategory({
           <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
             <EconomyToggleForm
               label={category.label}
-              currentEnabled={sectionEnabled}
+              currentEnabled={enabled}
               rowCount={category.rows_count}
               isMaster={true}
               onCancel={() => setMasterModal(false)}

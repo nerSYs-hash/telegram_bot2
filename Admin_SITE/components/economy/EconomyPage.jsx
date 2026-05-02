@@ -1,7 +1,8 @@
-import { useState, useEffect, useCallback } from 'react';
-import { Ban } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Ban, X } from 'lucide-react';
 import EconomyHeader from './EconomyHeader';
 import EconomyCategory from './EconomyCategory';
+import EconomyCategoryCard from './EconomyCategoryCard';
 import EconomyHistoryPanel from './EconomyHistoryPanel';
 import EconomyCancellationsPanel from './EconomyCancellationsPanel';
 import { useEconomyWS } from './useEconomyWS';
@@ -18,6 +19,8 @@ export default function EconomyPage({ token }) {
   const [currentUser, setCurrentUser]   = useState(null);
   const [canEdit, setCanEdit]           = useState(false);
   const [canCancel, setCanCancel]       = useState(false);
+  const [selectedCategory, setSelectedCategory] = useState(null); // {key, is_enabled}
+  const [categoryEnabledStates, setCategoryEnabledStates] = useState({});
 
   const wsEvents = useEconomyWS(token);
 
@@ -26,7 +29,14 @@ export default function EconomyPage({ token }) {
   const loadCategories = () =>
     fetch('/api/economy/categories', { headers })
       .then(r => r.json())
-      .then(d => { if (Array.isArray(d)) setCategories(d); })
+      .then(d => { 
+        if (Array.isArray(d)) {
+          setCategories(d);
+          const states = {};
+          d.forEach(cat => { states[cat.key] = cat.is_enabled; });
+          setCategoryEnabledStates(states);
+        }
+      })
       .catch(() => {});
 
   useEffect(() => {
@@ -85,14 +95,6 @@ export default function EconomyPage({ token }) {
     }
   }, [wsEvents.last]);
 
-  const toggleSection = useCallback((key) => {
-    setExpanded(prev => {
-      const next = new Set(prev);
-      next.has(key) ? next.delete(key) : next.add(key);
-      return next;
-    });
-  }, []);
-
   return (
     <div className="space-y-4 pb-32 animate-in fade-in duration-500">
       <EconomyHeader metrics={metrics} />
@@ -109,24 +111,71 @@ export default function EconomyPage({ token }) {
         </div>
       )}
 
-      {categories.map(cat => (
-        <div key={cat.key}>
-          <EconomyCategory
-            category={cat}
-            isExpanded={expandedSections.has(cat.key)}
-            onToggle={() => toggleSection(cat.key)}
-            onOpenHistory={(key, label) => setHistoryPanel({ settingKey: key, label })}
-            token={token}
-            recentlyChanged={recentlyChanged}
-            canEdit={canEdit}
-          />
-          {cat.key === 'vip_bbs' && (
-            <div className="mt-4">
-              <TitlesPanel token={token} canEdit={canEdit} />
-            </div>
-          )}
+      {/* Сетка карточек категорий */}
+      {categories.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {categories.map(cat => (
+            <EconomyCategoryCard
+              key={cat.key}
+              category={cat}
+              onOpenDetails={(key) => {
+                setSelectedCategory(cat);
+                setExpanded(prev => {
+                  const next = new Set(prev);
+                  next.add(key);
+                  return next;
+                });
+              }}
+              onMasterToggle={async (comment) => {
+                const res = await fetch(
+                  `/api/economy/categories/${cat.key}/toggle`,
+                  {
+                    method: 'PATCH',
+                    headers: {
+                      'Content-Type': 'application/json',
+                      Authorization: `Bearer ${token}`,
+                    },
+                    body: JSON.stringify({ comment }),
+                  }
+                );
+                if (!res.ok) {
+                  const d = await res.json().catch(() => ({}));
+                  throw new Error(d.detail || 'Ошибка');
+                }
+                setCategoryEnabledStates(prev => ({
+                  ...prev,
+                  [cat.key]: !prev[cat.key],
+                }));
+              }}
+              sectionEnabled={categoryEnabledStates[cat.key] ?? cat.is_enabled}
+              canEdit={canEdit}
+            />
+          ))}
         </div>
-      ))}
+      )}
+
+      {/* Модальное окно с деталями категории */}
+      {selectedCategory && (
+        <CategoryDetailModal
+          category={selectedCategory}
+          isExpanded={expandedSections.has(selectedCategory.key)}
+          onClose={() => {
+            setSelectedCategory(null);
+            setExpanded(prev => {
+              const next = new Set(prev);
+              next.delete(selectedCategory.key);
+              return next;
+            });
+          }}
+          onOpenHistory={(key, label) =>
+            setHistoryPanel({ settingKey: key, label })
+          }
+          token={token}
+          recentlyChanged={recentlyChanged}
+          canEdit={canEdit}
+          sectionEnabled={categoryEnabledStates[selectedCategory.key] ?? selectedCategory.is_enabled}
+        />
+      )}
 
       {categories.length === 0 && (
         <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center text-gray-400">
@@ -147,7 +196,11 @@ export default function EconomyPage({ token }) {
               const next = new Set(prev);
               next.add(historyPanel.settingKey);
               setTimeout(() => {
-                setRecently(p => { const n = new Set(p); n.delete(historyPanel.settingKey); return n; });
+                setRecently(p => {
+                  const n = new Set(p);
+                  n.delete(historyPanel.settingKey);
+                  return n;
+                });
               }, 60_000);
               return next;
             });
@@ -164,6 +217,60 @@ export default function EconomyPage({ token }) {
       )}
 
       {liveBanner && <LiveBanner event={liveBanner} />}
+    </div>
+  );
+}
+
+function CategoryDetailModal({
+  category,
+  isExpanded,
+  onClose,
+  onOpenHistory,
+  token,
+  recentlyChanged,
+  canEdit,
+  sectionEnabled,
+}) {
+  return (
+    <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
+      <div className="fixed inset-0 overflow-y-auto">
+        <div className="flex min-h-full items-start justify-end">
+          <div className="w-full max-w-2xl bg-white rounded-l-3xl shadow-2xl animate-in slide-in-from-right duration-300">
+            {/* Шапка с кнопкой закрытия */}
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
+              <h2 className="text-lg font-black text-gray-900">
+                {category.label}
+              </h2>
+              <button
+                onClick={onClose}
+                className="p-2 hover:bg-gray-100 rounded-lg transition"
+              >
+                <X size={20} className="text-gray-600" />
+              </button>
+            </div>
+
+            {/* Содержимое */}
+            <div className="p-6 space-y-4">
+              <EconomyCategory
+                category={category}
+                isExpanded={true}
+                onToggle={() => {}}
+                onOpenHistory={onOpenHistory}
+                token={token}
+                recentlyChanged={recentlyChanged}
+                canEdit={canEdit}
+                sectionEnabled={sectionEnabled}
+              />
+
+              {category.key === 'vip_bbs' && (
+                <div className="mt-6 pt-6 border-t border-gray-100">
+                  <TitlesPanel token={token} canEdit={canEdit} />
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
