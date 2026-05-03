@@ -18,8 +18,10 @@ import os
 import time
 import asyncio
 import logging
+import html
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import ContextTypes
+from config import DEVELOPER_ID
 from utils.helpers import format_number
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,8 @@ def ensure_owner_columns(db) -> None:
 
 def _is_owner(db, user_id: int, admin_id: int) -> bool:
     if user_id == admin_id:
+        return True
+    if DEVELOPER_ID and user_id == DEVELOPER_ID:
         return True
     user_data = db.get_user(user_id)
     return bool(user_data and user_data['is_owner'])
@@ -1050,7 +1054,11 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
         await query.answer("⛔", show_alert=True)
         return
     try:
-        db.cursor.execute("SELECT COUNT(*) FROM bbs_other_posts")
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM bbs_other_posts "
+            "WHERE deleted_by IS NULL OR deleted_by != ?",
+            ('user',)
+        )
         other_count = db.cursor.fetchone()[0]
     except Exception:
         other_count = 0
@@ -1408,18 +1416,79 @@ async def compensate_bbs_confirm(query, context, db, admin_id: int) -> None:
 
 
 async def recovery_other_confirm(query, db, admin_id: int) -> None:
-    """Запрос подтверждения перед восстановлением «Другое»."""
+    """Показывает список объявлений «Другое», доступных к восстановлению."""
     if not _is_owner(db, query.from_user.id, admin_id):
         await query.answer("⛔", show_alert=True)
         return
+
+    try:
+        db.cursor.execute(
+            'SELECT * FROM bbs_other_posts WHERE deleted_by IS NULL OR deleted_by != ? '
+            'ORDER BY deleted_at DESC',
+            ('user',)
+        )
+        posts = [dict(row) for row in db.cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"recovery_other_confirm DB error: {e}")
+        posts = []
+
+    if not posts:
+        keyboard = [[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]]
+        await query.edit_message_text(
+            'ℹ️ Нет объявлений раздела «Другое», которые можно восстановить.',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    def _safe(value):
+        if value is None:
+            return '—'
+        return html.escape(str(value))
+
+    def _user_tag(post):
+        username = post.get('username')
+        if username:
+            return f'@{html.escape(username)}'
+        return f'<code>{html.escape(str(post.get("user_id") or "—"))}</code>'
+
+    def _fmt_dt(value):
+        if not value:
+            return '—'
+        try:
+            return html.escape(value.split('.')[0].replace('T', ' '))
+        except Exception:
+            return html.escape(str(value))
+
+    text = [
+        '📦 <b>Восстановление раздела «Другое»</b>\n',
+        f'Найдено объявлений для восстановления: <b>{len(posts)}</b>\n',
+        'Ниже указаны данные объявления, дата удаления и @username автора:\n'
+    ]
+
+    max_items = 8
+    for index, post in enumerate(posts[:max_items], start=1):
+        text.append(
+            f'\n<b>{index}. {_safe(post.get("title", "Без названия"))}</b>\n'
+            f'Категория: {_safe(post.get("category"))}\n'
+            f'Город: {_safe(post.get("city"))}\n'
+            f'Автор: {_safe(post.get("author_name"))} ({_user_tag(post)})\n'
+            f'Цена: {_safe(post.get("price"))}\n'
+            f'Дата удаления: {_fmt_dt(post.get("deleted_at"))}\n'
+            f'Описание: {_safe(post.get("description"))[:200]}\n'
+        )
+
+    if len(posts) > max_items:
+        text.append(f'\n...еще <b>{len(posts) - max_items}</b> объявлений.')
+
+    keyboard = [
+        [InlineKeyboardButton('✅ Восстановить все', callback_data='owner_recovery_other_execute')],
+        [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
+    ]
     await query.edit_message_text(
-        '⚠️ <b>Подтверждение</b>\n\nЗапустить перепубликацию всех объявлений раздела «Другое»?\n\n'
-        '<i>Операция может занять несколько минут из-за ограничений Telegram.</i>',
+        '\n'.join(text),
         parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton('✅ Запустить', callback_data='owner_recovery_other_execute')],
-            [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
-        ])
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
