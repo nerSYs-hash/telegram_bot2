@@ -1201,10 +1201,10 @@ async def republish_other_post(bot, db, post: dict, target_chat_id: int, bbs_thr
         )
         sent_ids.append(msg.message_id)
 
-    # Обновляем message_ids в БД
+    # Обновляем message_ids и сбрасываем флаги удаления в БД
     try:
         db.cursor.execute(
-            'UPDATE bbs_other_posts SET message_ids = ?, thread_id = ? WHERE user_id = ?',
+            'UPDATE bbs_other_posts SET message_ids = ?, thread_id = ?, deleted_by = NULL, deleted_at = NULL WHERE user_id = ?',
             (json.dumps(sent_ids), bbs_thread_id, user_id),
         )
         db.conn.commit()
