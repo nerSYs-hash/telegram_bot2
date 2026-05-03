@@ -1467,6 +1467,7 @@ async def recovery_other_confirm(query, db, admin_id: int) -> None:
     ]
 
     max_items = 8
+    keyboard = []
     for index, post in enumerate(posts[:max_items], start=1):
         text.append(
             f'\n<b>{index}. {_safe(post.get("title", "Без названия"))}</b>\n'
@@ -1477,14 +1478,18 @@ async def recovery_other_confirm(query, db, admin_id: int) -> None:
             f'Дата удаления: {_fmt_dt(post.get("deleted_at"))}\n'
             f'Описание: {_safe(post.get("description"))[:200]}\n'
         )
+        keyboard.append([
+            InlineKeyboardButton(
+                f'Восстановить #{post.get("id")}',
+                callback_data=f'owner_recovery_other_execute_{post.get("id")}'
+            )
+        ])
 
     if len(posts) > max_items:
         text.append(f'\n...еще <b>{len(posts) - max_items}</b> объявлений.')
 
-    keyboard = [
-        [InlineKeyboardButton('✅ Восстановить все', callback_data='owner_recovery_other_execute')],
-        [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
-    ]
+    keyboard.append([InlineKeyboardButton('✅ Восстановить все', callback_data='owner_recovery_other_execute_all')])
+    keyboard.append([InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')])
     await query.edit_message_text(
         '\n'.join(text),
         parse_mode='HTML',
@@ -1492,16 +1497,54 @@ async def recovery_other_confirm(query, db, admin_id: int) -> None:
     )
 
 
-async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int) -> None:
-    """Запускает перепубликацию всех объявлений «Другое»."""
+async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int, post_id: int | str = None) -> None:
+    """Запускает перепубликацию объявлений «Другое» из БД."""
     if not _is_owner(db, query.from_user.id, admin_id):
         await query.answer("⛔", show_alert=True)
         return
-    await query.edit_message_text('⏳ Восстановление запущено...', parse_mode='HTML')
-    from handlers.BBS.fsm_other import restore_all_other_posts
-    ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
-    await query.edit_message_text(
-        f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
-    )
+
+    if post_id is None or post_id == 'all':
+        await query.edit_message_text('⏳ Восстановление всех объявлений запущено...', parse_mode='HTML')
+        from handlers.BBS.fsm_other import restore_all_other_posts
+        ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
+        await query.edit_message_text(
+            f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+        return
+
+    await query.edit_message_text('⏳ Восстановление выбранного объявления запущено...', parse_mode='HTML')
+    from handlers.BBS.fsm_other import republish_other_post
+    try:
+        db.cursor.execute(
+            'SELECT * FROM bbs_other_posts WHERE id = ? AND (deleted_by IS NULL OR deleted_by != ?) ',
+            (post_id, 'user')
+        )
+        post = db.cursor.fetchone()
+    except Exception as e:
+        post = None
+        logger.error(f'recovery_other_execute DB error: {e}')
+
+    if not post:
+        await query.edit_message_text(
+            '❌ Объявление не найдено или восстановление уже недоступно.',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+        return
+
+    try:
+        await republish_other_post(context.bot, db, dict(post), target_chat_id, bbs_thread_id)
+        await query.edit_message_text(
+            '✅ <b>Объявление восстановлено.</b>',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+    except Exception as exc:
+        logger.error(f'recovery_other_execute failed id={post_id}: {exc}')
+        await query.edit_message_text(
+            f'❌ Ошибка восстановления объявления: {html.escape(str(exc))}',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )

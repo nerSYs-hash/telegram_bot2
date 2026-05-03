@@ -175,9 +175,17 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await show_recovery_menu(query, db, admin_id)
     elif data == "owner_recovery_other_confirm":
         await recovery_other_confirm(query, db, admin_id)
-    elif data == "owner_recovery_other_execute":
+    elif data.startswith("owner_recovery_other_execute"):
         bbs_thread_id = handler.bbs_thread_id
-        await recovery_other_execute(query, db, admin_id, context, target_chat_id, bbs_thread_id)
+        post_id = None
+        if data == "owner_recovery_other_execute_all":
+            post_id = 'all'
+        elif data != "owner_recovery_other_execute":
+            try:
+                post_id = int(data.rsplit("_", 1)[1])
+            except Exception:
+                post_id = None
+        await recovery_other_execute(query, db, admin_id, context, target_chat_id, bbs_thread_id, post_id)
 
     # ── Старая panel_* система (маршрутизация через panel_callback) ──
     elif data.startswith("panel_"):
