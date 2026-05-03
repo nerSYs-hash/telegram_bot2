@@ -16,6 +16,7 @@ from handlers.owner_handlers import (
     restore_last_bbs_execute,
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
+    recovery_other_confirm, recovery_other_execute,
 )
 from handlers.placeholder_handlers import (
     show_placeholder_menu,
