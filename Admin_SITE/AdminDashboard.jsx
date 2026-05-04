@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
+import PromptTranslator from './components/PromptTranslator';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -921,6 +922,7 @@ export default function App() {
     { id: 'journal',     name: 'Журнал',        icon: ScrollText,     group: 'main',     resource: 'journal' },
     { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
     { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
+    { id: 'prompt',      name: 'AI-помощник',   icon: Bot,           group: 'modules' },
     { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules',  resource: 'economy' },
     { id: 'system',      name: 'Система',       icon: Settings,       group: 'main',     resource: 'system' },
     { id: 'broadcast',   name: 'Рассылка',      icon: Send,           group: 'features', resource: 'broadcast' },
@@ -929,6 +931,12 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'prompt':
+        return (
+          <div className="space-y-4 pb-24">
+            <PromptTranslator />
+          </div>
+        );
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
