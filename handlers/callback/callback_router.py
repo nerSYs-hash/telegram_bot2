@@ -141,13 +141,29 @@ class CallbackHandler:
 
         # Перезапуск регистрации
         if data in ("restart_registration", "reapply"):
-            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user
+            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user, db_pool
+            from constants import ApplicationStatus
             from config import OWNER_ID
 
-            # Защита: если у юзера уже есть q_name — он возвращающийся, не новый
-            # Не стираем его данные, отправляем сразу /register для генерации invite-ссылки
+            # Защита: если юзер УЖЕ регистрировался (есть q_name)
+            # ИЛИ был ранее одобрен (есть запись APPROVED в applications) —
+            # это возвращающийся, его данные стирать нельзя.
             existing = await _get_friend_user(user.id)
-            if existing and existing.get('q_name'):
+            has_q_name = bool(existing and existing.get('q_name'))
+
+            has_approved_app = False
+            if not has_q_name:
+                try:
+                    async with db_pool.get_connection() as _db:
+                        async with _db.execute(
+                            "SELECT 1 FROM applications WHERE user_id = ? AND status = ? LIMIT 1",
+                            (user.id, ApplicationStatus.APPROVED)
+                        ) as _cur:
+                            has_approved_app = bool(await _cur.fetchone())
+                except Exception as e:
+                    logger.error(f"restart_registration: approved_app check failed for {user.id}: {e}")
+
+            if has_q_name or has_approved_app:
                 await query.answer()
                 await query.edit_message_text(
                     "✅ Ты уже регистрировался ранее.\n\n"
