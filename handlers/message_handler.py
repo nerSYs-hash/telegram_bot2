@@ -227,14 +227,30 @@ class MessageHandler:
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input
                     if await handle_anketa_edit_input(message, context, self.db):
                         return
-                # Ветки багов: сообщения от владельца или разработчика → создаём трекер-карточку
+                # 1. Проверяем, является ли сообщение ответом (не на корень топика)
                 from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID, DEVELOPER_ID as _DEV_ID
                 # Ответ на ДРУГОЕ сообщение (не на корень топика) — не создаём карточку
                 _is_real_reply = (
                     message.reply_to_message is not None and
                     message.reply_to_message.message_id != message.message_thread_id
                 )
-                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not _is_real_reply:
+                
+                # 2. Проверяем, отвечает ли юзер на сообщение НАШЕГО бота (например, ввод комментария)
+                _is_reply_to_bot = (
+                    message.reply_to_message is not None and
+                    message.reply_to_message.from_user.id == context.bot.id
+                )
+                
+                # 3. ЗАЩИТА ОТ МНОЖЕСТВЕННЫХ МЕДИА (Альбомы)
+                # Если прислали сразу 5 фото, Telegram шлет их как 5 сообщений с одним media_group_id.
+                # Чтобы не создавать 5 карточек багов, мы пропускаем только первое фото, а остальные глушим.
+                if message.media_group_id:
+                    if context.user_data.get(f'mg_{message.media_group_id}'):
+                         return  # Этот альбом мы уже начали обрабатывать, остальное пропускаем
+                    context.user_data[f'mg_{message.media_group_id}'] = True
+                # 4. Пропускаем сообщение в баг-трекер, ЕСЛИ это не ответ другому юзеру, 
+                # ЛИБО если это ответ нашему боту (чтобы работали комментарии)
+                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and (not _is_real_reply or _is_reply_to_bot):
                     if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
                         from handlers.bug_tracker_handlers import handle_bug_message
                         try:
