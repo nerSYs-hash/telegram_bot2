@@ -342,26 +342,31 @@ def _build_preview_text(row: dict) -> str:
 
     return preview
 
-async def show_card_preview(context, db, orig_id: int, query_to_delete=None) -> None:
+async def show_card_preview(context, db, orig_id: int, query_to_delete=None, chat_id=None) -> None:
     """Удаляет старое сообщение (меню) и присылает полноценный предпросмотр (с фото, если есть)"""
     row = get_bug_card_by_original(db, orig_id)
     if not row:
         return
 
-    chat_id = context.bot_data.get('target_chat_id') or ADMIN_CHAT_ID # или берем из query
     thread_id = row['thread_id']
     old_card_msg_id = row['card_msg_id']
     
     # 1. Если передали query, берем chat_id оттуда
     if query_to_delete:
         chat_id = query_to_delete.message.chat.id
-        # Пытаемся удалить старое меню
         try:
             await query_to_delete.message.delete()
         except Exception:
             pass
+    # Если чат не передан и query нет (вызов после редактирования текста)
     else:
-        # Если query нет (вызов после редактирования текста)
+        if not chat_id:
+            try:
+                from config import ADMIN_CHAT_ID
+                chat_id = context.bot_data.get('target_chat_id') or ADMIN_CHAT_ID
+            except ImportError:
+                pass
+                
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=old_card_msg_id)
         except Exception:
@@ -370,7 +375,9 @@ async def show_card_preview(context, db, orig_id: int, query_to_delete=None) -> 
     # 2. Собираем текст и кнопки предпросмотра
     text = _build_preview_text(row)
     
-    keyboard = [[InlineKeyboardButton("✅ Отправить разработчикам", callback_data=f"bug_publish_{orig_id}")],[InlineKeyboardButton("✏️ Редактировать", callback_data=f"bug_edit_{orig_id}"),
+    keyboard = [
+        [InlineKeyboardButton("✅ Отправить разработчикам", callback_data=f"bug_publish_{orig_id}")],
+        [InlineKeyboardButton("✏️ Редактировать", callback_data=f"bug_edit_{orig_id}"),
          InlineKeyboardButton("❌ Отмена", callback_data=f"bug_cancel_{orig_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
@@ -381,13 +388,11 @@ async def show_card_preview(context, db, orig_id: int, query_to_delete=None) -> 
     
     try:
         if media_file_id and is_photo:
-            # Пытаемся отправить как фото
             sent = await context.bot.send_photo(
                 chat_id=chat_id, message_thread_id=thread_id,
                 photo=media_file_id, caption=text, parse_mode='HTML', reply_markup=reply_markup
             )
         else:
-            # Отправляем как текст
             sent = await context.bot.send_message(
                 chat_id=chat_id, message_thread_id=thread_id,
                 text=text, parse_mode='HTML', reply_markup=reply_markup
@@ -424,12 +429,13 @@ async def handle_cancel_card(query, data: str, context, db) -> bool:
     """Кнопка 'Отмена' или 'Удалить'. Сносит карточку из БД и удаляет сообщение."""
     orig_id = int(data.replace("bug_cancel_", ""))
     
-    # 1. Проверяем, можно ли удалять (Защита от удаления Критикалов)
+    # 1. Проверяем, можно ли удалять
     row = get_bug_card_by_original(db, orig_id)
     if row:
-        # Запрещаем удаление, если это Критикал (независимо от статуса)
-        if row.get('priority') == PRIORITY_CRITICAL:
-            await query.answer("☄️ Критические ошибки удалять нельзя вообще!", show_alert=True)
+        # Разрешаем отменять черновик (когда мы еще в мастере создания).
+        # Запрещаем удаление только для УЖЕ ОПУБЛИКОВАННЫХ критических ошибок.
+        if row.get('status') != STATUS_DRAFT and row.get('priority') == PRIORITY_CRITICAL:
+            await query.answer("☄️ Критические ошибки удалять нельзя!", show_alert=True)
             return True
 
     try:
@@ -438,7 +444,6 @@ async def handle_cancel_card(query, data: str, context, db) -> bool:
         pass
         
     try:
-        # Удаляем из БД (каскадное удаление черновика или бага)
         db.cursor.execute('DELETE FROM bug_cards WHERE original_msg_id = ?', (orig_id,))
         db.conn.commit()
     except Exception as e:
@@ -451,31 +456,31 @@ async def handle_cancel_card(query, data: str, context, db) -> bool:
 #  ШАГ 5: ПУБЛИКАЦИЯ (Перевод из Draft в New)
 # ─────────────────────────────────────────────
 
-def _build_published_keyboard(orig_id: int, original_text: str, status: str) -> InlineKeyboardMarkup:
+def _build_published_keyboard(orig_id: int, original_text: str, status: str, priority: str) -> InlineKeyboardMarkup:
     """Клавиатура для УЖЕ ОПУБЛИКОВАННОЙ карточки (9 кнопок)"""
     # 1 ряд: Редактировать | (Удалить) | Комментировать
-    top_row =[InlineKeyboardButton("✏️ Редактировать", callback_data=f"bug_edit_{orig_id}")]
+    top_row = [InlineKeyboardButton("✏️ Редактировать", callback_data=f"bug_edit_{orig_id}")]
     
-    # Кнопка УДАЛИТЬ появляется только если текст < 15 символов
-    if len(original_text) < 15:
+    # Кнопка УДАЛИТЬ появляется только если текст < 15 символов И это НЕ Критикал
+    if len(original_text) < 15 and priority != PRIORITY_CRITICAL:
         top_row.append(InlineKeyboardButton("🗑 Удалить", callback_data=f"bug_cancel_{orig_id}"))
         
     top_row.append(InlineKeyboardButton("💬 Комментировать", callback_data=f"bug_comment_{orig_id}"))
     
     # 2 ряд: Статусы
-    bottom_row =[]
+    bottom_row = []
     if status == STATUS_NEW:
-        bottom_row =[
+        bottom_row = [
             InlineKeyboardButton("🟡 В работе", callback_data=f"bug_status_ip_{orig_id}"),
             InlineKeyboardButton("✅ Отработано", callback_data=f"bug_status_done_{orig_id}")
         ]
     elif status == STATUS_IN_PROGRESS:
-        bottom_row =[
+        bottom_row = [
             InlineKeyboardButton("✏️ В работе", callback_data="bug_noop"), # Заглушка
             InlineKeyboardButton("✅ Отработано", callback_data=f"bug_status_done_{orig_id}")
         ]
     elif status == STATUS_DONE:
-        bottom_row =[
+        bottom_row = [
             InlineKeyboardButton("♻️ Вернуть в работу", callback_data=f"bug_status_ip_{orig_id}"),
             InlineKeyboardButton("✅ Отработано", callback_data="bug_noop") # Заглушка
         ]
@@ -493,7 +498,7 @@ async def handle_publish_card(query, data: str, db) -> bool:
         return True
         
     text = _build_preview_text(row)
-    kb = _build_published_keyboard(orig_id, row.get('original_text', ''), STATUS_NEW)
+    kb = _build_published_keyboard(orig_id, row.get('original_text', ''), STATUS_NEW, row.get('priority'))
     
     try:
         # Пытаемся отредактировать предпросмотр (если медиа не менялось, это сработает)
@@ -621,7 +626,7 @@ async def _set_status(query, context, db, original_msg_id: int, new_status: str)
     row = get_bug_card_by_original(db, original_msg_id) # обновляем данные
 
     text = _build_preview_text(row)
-    kb = _build_published_keyboard(original_msg_id, row.get('original_text', ''), new_status)
+    kb = _build_published_keyboard(original_msg_id, row.get('original_text', ''), new_status, row.get('priority'))
 
     try:
         if query.message.photo or query.message.video:
@@ -696,7 +701,6 @@ async def handle_bug_comment_input(message, context, db) -> bool:
     ensure_bug_tables(db)
     row = get_bug_card_by_original(db, orig_id)
     
-    # 0. ЗАЩИТА ОТ СТАРЫХ КАРТОЧЕК (Которых нет в новой БД)
     if not row:
         sent = await context.bot.send_message(
             chat_id=message.chat.id,
@@ -704,7 +708,6 @@ async def handle_bug_comment_input(message, context, db) -> bool:
             text="❌ <b>Ошибка:</b> Эта карточка создана ДО обновления системы.\nЕё нет в базе данных, поэтому изменить её нельзя.",
             parse_mode="HTML"
         )
-        # Удаляем это уведомление через 5 секунд, чтобы не мусорить в чате
         import asyncio
         async def _del_warning():
             await asyncio.sleep(5)
@@ -716,7 +719,7 @@ async def handle_bug_comment_input(message, context, db) -> bool:
         text = message.text or message.caption or ''
         author = message.from_user.username or message.from_user.first_name
 
-        # 1. ОБРАБОТКА РЕДАКТИРОВАНИЯ (Заменяем текст/медиа и обновляем)
+        # 1. ОБРАБОТКА РЕДАКТИРОВАНИЯ
         if action_type == 'edit_text':
             is_photo = 0
             media_file_id = None
@@ -730,13 +733,13 @@ async def handle_bug_comment_input(message, context, db) -> bool:
             upsert_bug_card(db, orig_id, original_text=text, media_file_id=media_file_id, is_photo=is_photo)
             updated_row = get_bug_card_by_original(db, orig_id)
             
-            # Если это только черновик - пересобираем превью
+            # Если это только черновик - пересобираем превью и передаем chat_id
             if updated_row['status'] == STATUS_DRAFT:
-                await show_card_preview(context, db, orig_id)
-            # Если карточка уже в работе - просто аккуратно меняем текст
+                await show_card_preview(context, db, orig_id, chat_id=message.chat.id)
+            # Если карточка уже в работе - меняем текст
             else:
                 new_text = _build_preview_text(updated_row)
-                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'])
+                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'], updated_row.get('priority'))
                 try:
                     if updated_row.get('is_photo') and updated_row.get('media_file_id'):
                         await context.bot.edit_message_caption(
@@ -751,7 +754,7 @@ async def handle_bug_comment_input(message, context, db) -> bool:
                 except Exception as e:
                     logger.error(f"Error updating edited text: {e}")
 
-        # 2. ОБРАБОТКА КОММЕНТАРИЯ (Добавляем в конец)
+        # 2. ОБРАБОТКА КОММЕНТАРИЯ
         elif action_type == 'comment':
             if text:
                 import json as _json
@@ -771,7 +774,7 @@ async def handle_bug_comment_input(message, context, db) -> bool:
                 
                 updated_row = get_bug_card_by_original(db, orig_id)
                 new_text = _build_preview_text(updated_row)
-                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'])
+                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'], updated_row.get('priority'))
                 
                 try:
                     if row.get('is_photo') and row.get('media_file_id'):
@@ -787,7 +790,7 @@ async def handle_bug_comment_input(message, context, db) -> bool:
                 except Exception as e:
                     logger.error(f"Error updating comment: {e}")
 
-    # 3. УБОРКА (Удаляем prompt от бота и сообщение админа с текстом)
+    # 3. УБОРКА мусора
     import asyncio
     async def _cleanup():
         await asyncio.sleep(1)
