@@ -695,74 +695,103 @@ async def handle_bug_comment_input(message, context, db) -> bool:
 
     ensure_bug_tables(db)
     row = get_bug_card_by_original(db, orig_id)
+    
+    # 0. ЗАЩИТА ОТ СТАРЫХ КАРТОЧЕК (Которых нет в новой БД)
     if not row:
-        return True
+        sent = await context.bot.send_message(
+            chat_id=message.chat.id,
+            message_thread_id=message.message_thread_id,
+            text="❌ <b>Ошибка:</b> Эта карточка создана ДО обновления системы.\nЕё нет в базе данных, поэтому изменить её нельзя.",
+            parse_mode="HTML"
+        )
+        # Удаляем это уведомление через 5 секунд, чтобы не мусорить в чате
+        import asyncio
+        async def _del_warning():
+            await asyncio.sleep(5)
+            try: await context.bot.delete_message(chat_id=message.chat.id, message_id=sent.message_id)
+            except: pass
+        asyncio.create_task(_del_warning())
+        
+    else:
+        text = message.text or message.caption or ''
+        author = message.from_user.username or message.from_user.first_name
 
-    text = message.text or message.caption or ''
-    author = message.from_user.username or message.from_user.first_name
-
-    # 1. ОБРАБОТКА РЕДАКТИРОВАНИЯ (Заменяем текст/медиа и пересоздаем карточку)
-    if action_type == 'edit_text':
-        # Сохраняем новое медиа, если есть
-        is_photo = 0
-        media_file_id = None
-        if message.photo:
-            media_file_id = message.photo[-1].file_id
-            is_photo = 1
-        elif message.video:
-            media_file_id = message.video.file_id
-            is_photo = 1
+        # 1. ОБРАБОТКА РЕДАКТИРОВАНИЯ (Заменяем текст/медиа и обновляем)
+        if action_type == 'edit_text':
+            is_photo = 0
+            media_file_id = None
+            if message.photo:
+                media_file_id = message.photo[-1].file_id
+                is_photo = 1
+            elif message.video:
+                media_file_id = message.video.file_id
+                is_photo = 1
+                
+            upsert_bug_card(db, orig_id, original_text=text, media_file_id=media_file_id, is_photo=is_photo)
+            updated_row = get_bug_card_by_original(db, orig_id)
             
-        upsert_bug_card(db, orig_id, original_text=text, media_file_id=media_file_id, is_photo=is_photo)
-        
-        # Вызываем функцию Предпросмотра (она сама удалит старую карточку и пришлет новую)
-        await show_card_preview(context, db, orig_id)
-
-    # 2. ОБРАБОТКА КОММЕНТАРИЯ (Добавляем в конец)
-    elif action_type == 'comment':
-        if not text:
-            return True # Игнорируем пустые комментарии
-            
-        import json as _json
-        existing = row.get('comment') or ''
-        existing_comments = _parse_comments(existing) if existing else[]
-        
-        # Формируем красивый коммент с упоминанием автора
-        new_comment = f"@{author}: \"{text}\""
-        existing_comments.append(new_comment)
-        
-        comment_data = _json.dumps(existing_comments, ensure_ascii=False)
-        upsert_bug_card(db, orig_id, comment=comment_data, last_comment_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-        
-        # Отменяем таймер удаления (раз пошло обсуждение)
-        existing_jobs = context.job_queue.get_jobs_by_name(f"delete_bug_{orig_id}")
-        for job in existing_jobs:
-            job.schedule_removal()
-        
-        # Пересобираем карточку
-        updated_row = get_bug_card_by_original(db, orig_id)
-        new_text = _build_preview_text(updated_row)
-        kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'])
-        
-        try:
-            if row.get('is_photo') and row.get('media_file_id'):
-                await context.bot.edit_message_caption(
-                    chat_id=message.chat.id, message_id=row['card_msg_id'],
-                    caption=new_text, parse_mode='HTML', reply_markup=kb
-                )
+            # Если это только черновик - пересобираем превью
+            if updated_row['status'] == STATUS_DRAFT:
+                await show_card_preview(context, db, orig_id)
+            # Если карточка уже в работе - просто аккуратно меняем текст
             else:
-                await context.bot.edit_message_text(
-                    chat_id=message.chat.id, message_id=row['card_msg_id'],
-                    text=new_text, parse_mode='HTML', reply_markup=kb
-                )
-        except Exception as e:
-            logger.error(f"Error updating comment: {e}")
+                new_text = _build_preview_text(updated_row)
+                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'])
+                try:
+                    if updated_row.get('is_photo') and updated_row.get('media_file_id'):
+                        await context.bot.edit_message_caption(
+                            chat_id=message.chat.id, message_id=updated_row['card_msg_id'],
+                            caption=new_text, parse_mode='HTML', reply_markup=kb
+                        )
+                    else:
+                        await context.bot.edit_message_text(
+                            chat_id=message.chat.id, message_id=updated_row['card_msg_id'],
+                            text=new_text, parse_mode='HTML', reply_markup=kb
+                        )
+                except Exception as e:
+                    logger.error(f"Error updating edited text: {e}")
+
+        # 2. ОБРАБОТКА КОММЕНТАРИЯ (Добавляем в конец)
+        elif action_type == 'comment':
+            if text:
+                import json as _json
+                existing = row.get('comment') or ''
+                existing_comments = _parse_comments(existing) if existing else []
+                
+                new_comment = f"@{author}: \"{text}\""
+                existing_comments.append(new_comment)
+                
+                from datetime import datetime
+                comment_data = _json.dumps(existing_comments, ensure_ascii=False)
+                upsert_bug_card(db, orig_id, comment=comment_data, last_comment_at=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+                
+                existing_jobs = context.job_queue.get_jobs_by_name(f"delete_bug_{orig_id}")
+                for job in existing_jobs:
+                    job.schedule_removal()
+                
+                updated_row = get_bug_card_by_original(db, orig_id)
+                new_text = _build_preview_text(updated_row)
+                kb = _build_published_keyboard(orig_id, updated_row.get('original_text', ''), updated_row['status'])
+                
+                try:
+                    if row.get('is_photo') and row.get('media_file_id'):
+                        await context.bot.edit_message_caption(
+                            chat_id=message.chat.id, message_id=row['card_msg_id'],
+                            caption=new_text, parse_mode='HTML', reply_markup=kb
+                        )
+                    else:
+                        await context.bot.edit_message_text(
+                            chat_id=message.chat.id, message_id=row['card_msg_id'],
+                            text=new_text, parse_mode='HTML', reply_markup=kb
+                        )
+                except Exception as e:
+                    logger.error(f"Error updating comment: {e}")
 
     # 3. УБОРКА (Удаляем prompt от бота и сообщение админа с текстом)
     import asyncio
     async def _cleanup():
         await asyncio.sleep(1)
-        for msg_id in filter(None,[prompt_msg, message.message_id]):
+        for msg_id in filter(None, [prompt_msg, message.message_id]):
             try:
                 await context.bot.delete_message(chat_id=message.chat.id, message_id=msg_id)
             except Exception:
