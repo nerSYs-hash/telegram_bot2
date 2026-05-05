@@ -327,6 +327,7 @@ export default function App() {
   }, []);
 
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
+  const isOwner = !!(authUser && authUser.is_owner);
 
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
@@ -693,12 +694,22 @@ export default function App() {
   }, []);
   const [quoteSaveMsg, setQuoteSaveMsg] = React.useState('');
   const saveQuoteCfg = async () => {
+    if (!isOwner) {
+      setQuoteSaveMsg('Ошибка: доступно только владельцу');
+      setTimeout(() => setQuoteSaveMsg(''), 3000);
+      return;
+    }
+
     setQuoteSaving(true);
     setQuoteSaveMsg('');
     try {
+      const token = localStorage.getItem('auth_token');
       const r = await fetch('/api/ui_settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           journal_quote_bg:            quoteCfg.bg,
           journal_quote_stripe_mode:   quoteCfg.stripeMode,
@@ -707,8 +718,14 @@ export default function App() {
         }),
       });
       const d = await r.json();
-      setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
-    } catch (e) { setQuoteSaveMsg('Ошибка сети'); }
+      if (!r.ok) {
+        setQuoteSaveMsg(`Ошибка: ${d.detail || (d.errors && d.errors.join(', ')) || 'сервис недоступен'}`);
+      } else {
+        setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
+      }
+    } catch (e) {
+      setQuoteSaveMsg('Ошибка сети');
+    }
     setQuoteSaving(false);
     setTimeout(() => setQuoteSaveMsg(''), 3000);
   };
@@ -1462,12 +1479,18 @@ export default function App() {
 
                <button
                  onClick={saveQuoteCfg}
-                 disabled={quoteSaving}
+                 disabled={quoteSaving || !isOwner}
                  className="w-full py-3 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                 title={!isOwner ? 'Только владелец может сохранять стиль цитат' : ''}
                >
                  {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
                  Сохранить настройки
                </button>
+               {!isOwner && (
+                 <p className="text-center text-xs font-semibold text-gray-500">
+                   Только владелец может сохранить внешний вид цитат.
+                 </p>
+               )}
                {quoteSaveMsg && (
                  <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
                    {quoteSaveMsg}
