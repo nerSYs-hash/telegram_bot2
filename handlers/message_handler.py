@@ -238,7 +238,7 @@ class MessageHandler:
                     if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
                         from handlers.bug_tracker_handlers import handle_bug_message
                         try:
-                            await handle_bug_message(message, context.bot, self.db)
+                            await handle_bug_message(message, context, self.db)
                         except Exception as _bug_err:
                             logging.error(f"handle_bug_message exception: {_bug_err}", exc_info=True)
                             try:
