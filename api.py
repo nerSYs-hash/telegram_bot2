@@ -291,6 +291,17 @@ def _require_owner(authorization: str) -> int:
     return user_id
 
 
+def _require_owner_or_developer(authorization: str) -> int:
+    """Проверяет что пользователь — owner или developer. Возвращает user_id или 403."""
+    payload = _require_auth(authorization)
+    user_id = int(payload.get("user_id", 0))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="ID не определён")
+    if _resolve_user_role(user_id) not in ("owner", "developer"):
+        raise HTTPException(status_code=403, detail="Доступно только владельцу или разработчику")
+    return user_id
+
+
 # ── PERMISSIONS API ──
 @app.get("/api/admin/permissions/catalog")
 async def permissions_catalog(authorization: str = Header(default=None)):
@@ -1492,8 +1503,8 @@ async def get_ui_settings():
 
 @app.post("/api/ui_settings")
 async def save_ui_settings(request: Request, authorization: str = Header(default=None)):
-    """Сохраняет UI-настройки. Только owner."""
-    _require_owner(authorization)
+    """Сохраняет UI-настройки. Только owner или developer."""
+    _require_owner_or_developer(authorization)
     body = await request.json()
     saved = []
     errors = []

@@ -328,6 +328,7 @@ export default function App() {
 
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
   const isOwner = !!(authUser && authUser.is_owner);
+  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
 
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
@@ -694,8 +695,8 @@ export default function App() {
   }, []);
   const [quoteSaveMsg, setQuoteSaveMsg] = React.useState('');
   const saveQuoteCfg = async () => {
-    if (!isOwner) {
-      setQuoteSaveMsg('Ошибка: доступно только владельцу');
+    if (!isOwnerOrDeveloper) {
+      setQuoteSaveMsg('Ошибка: доступно только владельцу или разработчику');
       setTimeout(() => setQuoteSaveMsg(''), 3000);
       return;
     }
@@ -1479,16 +1480,16 @@ export default function App() {
 
                <button
                  onClick={saveQuoteCfg}
-                 disabled={quoteSaving || !isOwner}
+                 disabled={quoteSaving || !isOwnerOrDeveloper}
                  className="w-full py-3 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                 title={!isOwner ? 'Только владелец может сохранять стиль цитат' : ''}
+                 title={!isOwnerOrDeveloper ? 'Только владелец или разработчик может сохранять стиль цитат' : ''}
                >
                  {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
                  Сохранить настройки
                </button>
-               {!isOwner && (
+               {!isOwnerOrDeveloper && (
                  <p className="text-center text-xs font-semibold text-gray-500">
-                   Только владелец может сохранить внешний вид цитат.
+                   Только владелец или разработчик может сохранить внешний вид цитат.
                  </p>
                )}
                {quoteSaveMsg && (
