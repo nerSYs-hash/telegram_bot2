@@ -123,6 +123,12 @@ class CallbackHandler:
             await handle_bbs_callback(query, context, self.db, self.target_chat_id, self.bbs_thread_id)
             return
 
+        # ═══ INACTIVE USERS PAGINATION ═══
+        if data.startswith('inactive_page:'):
+            from handlers.reminders import handle_inactive_pagination
+            await handle_inactive_pagination(update, context, self.db)
+            return
+
         # ═══ DISPATCH TO SUB-MODULES ═══
         if await dispatch_user(self, query, data, user, context):
             return
