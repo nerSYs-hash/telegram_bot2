@@ -564,6 +564,23 @@ class Database:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # ── Таблица для Баг-трекера ──
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bug_cards (
+                original_msg_id INTEGER PRIMARY KEY,
+                author_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                topic TEXT,
+                priority TEXT,
+                original_text TEXT,
+                is_photo BOOLEAN DEFAULT 0,
+                media_file_id TEXT,
+                card_msg_id INTEGER,
+                comments_json TEXT DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
         # Создаём таблицу top_activists_history + индексы
         _create_exchange_tables(self)
