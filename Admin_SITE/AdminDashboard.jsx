@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PromptTranslator from './components/PromptTranslator';
+import PressReleasePage from './components/press_release/PressReleasePage';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -935,16 +936,16 @@ export default function App() {
   };
 
   const navigation = [
-    { id: 'updates',     name: 'Обновления',    icon: Megaphone,      group: 'top' },
-    { id: 'statistics',  name: 'Статистика',    icon: PieChart,       group: 'main',     resource: 'statistics' },
-    { id: 'journal',     name: 'Журнал',        icon: ScrollText,     group: 'main',     resource: 'journal' },
-    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
-    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
-    { id: 'prompt',      name: 'AI-помощник',   icon: Bot,           group: 'modules' },
-    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules',  resource: 'economy' },
-    { id: 'system',      name: 'Система',       icon: Settings,       group: 'main',     resource: 'system' },
-    { id: 'broadcast',   name: 'Рассылка',      icon: Send,           group: 'features', resource: 'broadcast' },
-    { id: 'permissions', name: 'Права',         icon: ShieldCheck,    group: 'features', ownerOnly: true },
+    { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
+    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'main',     resource: 'statistics' },
+    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'main',     resource: 'journal' },
+    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
+    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release' },
+    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
+    { id: 'prompt',        name: 'AI-помощник',    icon: Bot,            group: 'modules' },
+    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy' },
+    { id: 'system',        name: 'Система',        icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
   const renderContent = () => {
@@ -5479,6 +5480,14 @@ export default function App() {
           </EconomyErrorBoundary>
         );
 
+      case 'press_release':
+        return (
+          <PressReleasePage
+            token={localStorage.getItem('auth_token')}
+            userPermissions={authUser?.permissions || []}
+          />
+        );
+
       default: return null;
     }
   };
@@ -5575,7 +5584,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
-          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' ? 'w-full' : 'max-w-3xl mx-auto'}>
+          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' || activeTab === 'press_release' ? 'w-full' : 'max-w-3xl mx-auto'}>
             {renderContent()}
           </div>
         </div>
