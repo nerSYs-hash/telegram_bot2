@@ -165,7 +165,8 @@ def format_title_remaining(row: dict) -> str:
 
 async def apply_title_purchase(db, context, target_chat_id: int, user_id: int,
                                title_text: str,
-                               duration_days: Optional[int]) -> dict:
+                               duration_days: Optional[int],
+                               price: int = 0) -> dict:
     """
     Применить покупку: новая запись или продление существующей.
     Возвращает {'status': 'ok'|'already_permanent'|'apply_failed',
@@ -221,9 +222,9 @@ async def apply_title_purchase(db, context, target_chat_id: int, user_id: int,
         try:
             db.cursor.execute(
                 "INSERT INTO marketplace_services "
-                "(user_id, service_type, status, content, expires_at, start_time) "
-                "VALUES (?, 'title', 'active', ?, ?, ?)",
-                (user_id, title_text, new_expires, now_ts)
+                "(user_id, service_type, status, content, expires_at, start_time, price) "
+                "VALUES (?, 'title', 'active', ?, ?, ?, ?)",
+                (user_id, title_text, new_expires, now_ts, price)
             )
             db.conn.commit()
         except Exception as e:
@@ -640,7 +641,7 @@ async def _do_purchase_pulses(target, context, db, user_id: int, pkg: dict,
 
     target_chat_id = _get_target_chat_id(context)
     result = await apply_title_purchase(db, context, target_chat_id, user_id,
-                                        title_text, duration_days)
+                                        title_text, duration_days, price=price)
 
     if result['status'] != 'ok':
         # Откат

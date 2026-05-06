@@ -573,7 +573,8 @@ async def cb_request_approve(update: Update, context: ContextTypes.DEFAULT_TYPE)
     target_chat_id = _get_target_chat_id(context)
     result = await apply_title_purchase(
         db, context, target_chat_id, req['user_id'],
-        req['title_text'], req['duration_days']
+        req['title_text'], req['duration_days'],
+        price=req.get('price_rub', 0) or 0,
     )
 
     if result['status'] != 'ok':
