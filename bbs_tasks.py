@@ -141,10 +141,10 @@ async def vip_custom_bump_tick(bot, db, target_chat_id, bbs_thread_id):
                 except Exception as e:
                     logger.warning(f"bump_pin pre-unpin failed sub={s['id']}: {e}")
 
-            # Перепубликовать (vip1_trigger=True — не запускает VIP1-цепь)
+            # vip1_trigger=False — публикация VIP4 считается «чужой», VIP1-подписчики поднимаются
             await republish_profile(
                 bot, db, s['p_user_id'], target_chat_id, bbs_thread_id,
-                vip1_trigger=True,
+                vip1_trigger=False,
             )
 
             # BUMP_PIN: закрепить новое сообщение тихо
