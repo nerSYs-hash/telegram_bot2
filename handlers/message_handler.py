@@ -171,6 +171,13 @@ class MessageHandler:
         
         logging.info(f"📨 Incoming message from user_id={user.id} (@{user.username}), "
                     f"chat_id={message.chat.id}, thread_id={thread_id} ({thread_name})")
+
+        # Press-Releases: захват топика форума по факту
+        try:
+            from handlers.bot_chat_tracker import track_topic_from_message
+            track_topic_from_message(message, self.db)
+        except Exception:
+            pass
         
         # Ввод причины отказа по заявке — работает и в ЛС, и в админ-чате
         if message.text and context.user_data.get('awaiting_reject_reason'):

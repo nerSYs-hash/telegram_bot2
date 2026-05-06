@@ -687,6 +687,14 @@ class TelegramBot:
                 ChatMemberHandler.CHAT_MEMBER
             )
         )
+
+        # Press-Releases (V1.16.14): отслеживание чатов где есть бот
+        from handlers.bot_chat_tracker import handle_my_chat_member
+        self.application.add_handler(
+            ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER)
+        )
+        # Прокидываем db в bot_data, чтобы handle_my_chat_member её достал
+        self.application.bot_data['db'] = self.db
         
         # Заявки на вступление (ChatJoinRequest)
         from telegram.ext import ChatJoinRequestHandler
@@ -715,6 +723,13 @@ class TelegramBot:
 
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
+
+        # Press-Releases (V1.16.14): бэкфил каталога чатов и топиков
+        try:
+            from handlers.bot_chat_tracker import backfill_known_chats
+            await backfill_known_chats(self.application, self.db, self.target_chat_id)
+        except Exception as e:
+            logger.warning(f"backfill_known_chats: {e}")
 
         logger.info("Handlers setup complete")
     
