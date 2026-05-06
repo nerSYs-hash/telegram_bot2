@@ -396,44 +396,13 @@ class TelegramBot:
             logger.error(f"check_horoscope_schedule error: {e}", exc_info=True)
 
     async def check_scheduled_posts(self):
-        """Check and publish scheduled posts"""
+        """Press-Releases: публикация запланированных постов + pre-publish reminders.
+           Логика вынесена в handlers/press_release_publisher.py (V1.16.14)."""
         try:
-            from utils.helpers import get_moscow_time
-            now = get_moscow_time()
-            now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-            
-            pending_posts = self.db.get_pending_scheduled_posts(now_str)
-            
-            for post in pending_posts:
-                try:
-                    success = await self.message_handler.publish_press_release_to_target(
-                        bot=self.application.bot,
-                        text=post['text'],
-                        photo_file_id=post['photo_file_id'],
-                        chat_id=post['target_chat_id'],
-                        thread_id=post['thread_id']
-                    )
-                    
-                    if success:
-                        self.db.mark_scheduled_post_published(post['id'])
-                        logger.info(f"Published scheduled post #{post['id']}")
-                        
-                        # Notify author
-                        try:
-                            await self.application.bot.send_message(
-                                chat_id=post['author_id'],
-                                text=f"✅ Запланированный пресс-релиз #{post['id']} опубликован!"
-                            )
-                        except Exception:
-                            pass
-                    else:
-                        logger.error(f"Failed to publish scheduled post #{post['id']}")
-                        
-                except Exception as e:
-                    logger.error(f"Error publishing scheduled post #{post['id']}: {e}")
-            
+            from handlers.press_release_publisher import tick_scheduler
+            await tick_scheduler(self.application, self.db)
         except Exception as e:
-            logger.error(f"Error checking scheduled posts: {e}")
+            logger.error(f"check_scheduled_posts: {e}", exc_info=True)
     
     async def cleanup_expired_freezes(self):
         """Clean up expired frozen balances"""
