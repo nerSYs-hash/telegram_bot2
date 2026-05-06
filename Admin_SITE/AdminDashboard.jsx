@@ -328,10 +328,10 @@ export default function App() {
 
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
   const isOwner = !!(authUser && authUser.is_owner);
-  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
 
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
+  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
   const [accessesOpen, setAccessesOpen]           = useState(false);
