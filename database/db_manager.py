@@ -93,6 +93,22 @@ from database.db_economy_history import (
     get_history_for_key as _get_econ_history,
     get_history_chart_data as _get_econ_chart_data,
 )
+from database.db_titles import (
+    init_titles_tables as _init_titles_tables,
+    seed_default_packages as _seed_title_packages,
+    list_title_packages as _list_title_packages,
+    get_title_package as _get_title_package,
+    create_title_package as _create_title_package,
+    update_title_package as _update_title_package,
+    toggle_title_package as _toggle_title_package,
+    create_title_request as _create_title_request,
+    attach_owner_message as _attach_owner_message,
+    get_title_request as _get_title_request,
+    list_title_requests as _list_title_requests,
+    count_title_requests_by_status as _count_title_requests_by_status,
+    transition_title_request as _transition_title_request,
+    expire_old_title_requests as _expire_old_title_requests,
+)
 from database.db_migrations import (
     migrate_to_decimal_balances as _migrate_to_decimal_balances,
     add_telegram_message_id_to_messages as _add_telegram_message_id_to_messages,
@@ -146,9 +162,19 @@ class Database:
 
     def connect(self):
         """Connect to SQLite database"""
-        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        # timeout=30 — ждём блокировку до 30с вместо мгновенного "database is locked".
+        # WAL — многопроцессный доступ (бот + api.py) без взаимных блокировок чтения/записи.
+        self.conn = sqlite3.connect(
+            self.db_path, check_same_thread=False, timeout=30.0
+        )
         self.conn.row_factory = sqlite3.Row
         self.cursor = self.conn.cursor()
+        try:
+            self.cursor.execute('PRAGMA journal_mode=WAL')
+            self.cursor.execute('PRAGMA busy_timeout=30000')
+            self.cursor.execute('PRAGMA synchronous=NORMAL')
+        except Exception:
+            pass
 
     def create_tables(self):
         """Create all necessary tables"""
@@ -388,6 +414,7 @@ class Database:
                 content TEXT,
                 start_time TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 end_time TIMESTAMP,
+                expires_at REAL,
                 status TEXT DEFAULT 'active',
                 FOREIGN KEY (user_id) REFERENCES users(user_id)
             )
@@ -566,6 +593,23 @@ class Database:
                 timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        
+        # ── Таблица для Баг-трекера ──
+        self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS bug_cards (
+                original_msg_id INTEGER PRIMARY KEY,
+                author_id INTEGER NOT NULL,
+                status TEXT NOT NULL DEFAULT 'draft',
+                topic TEXT,
+                priority TEXT,
+                original_text TEXT,
+                is_photo BOOLEAN DEFAULT 0,
+                media_file_id TEXT,
+                card_msg_id INTEGER,
+                comments_json TEXT DEFAULT '[]',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
 
         # Создаём таблицу top_activists_history + индексы
         _create_exchange_tables(self)
@@ -596,6 +640,19 @@ class Database:
 
         # Initialize economy tables
         _init_economy_tables(self)
+
+        # Initialize titles tables (V1.16.0)
+        _init_titles_tables(self)
+        _seed_title_packages(self)
+
+        # Migration V1.16.0: добавить expires_at в marketplace_services
+        try:
+            self.cursor.execute(
+                "ALTER TABLE marketplace_services ADD COLUMN expires_at REAL"
+            )
+            self.conn.commit()
+        except Exception:
+            pass  # Колонка уже существует
 
     # ── Economy ──
     def get_econ(self, key, default=None, value_type='float'):
@@ -639,6 +696,47 @@ class Database:
 
     def get_economy_metrics(self):
         return _get_economy_metrics(self)
+
+    # ── Titles (V1.16.0) ──
+    def list_title_packages(self, only_enabled=False):
+        return _list_title_packages(self, only_enabled=only_enabled)
+
+    def get_title_package(self, pkg_id):
+        return _get_title_package(self, pkg_id)
+
+    def create_title_package(self, label, duration_days, price_pulses, price_rub):
+        return _create_title_package(self, label, duration_days, price_pulses, price_rub)
+
+    def update_title_package(self, pkg_id, **fields):
+        return _update_title_package(self, pkg_id, **fields)
+
+    def toggle_title_package(self, pkg_id):
+        return _toggle_title_package(self, pkg_id)
+
+    def create_title_request(self, user_id, package_id, title_text, price_rub, duration_days):
+        return _create_title_request(self, user_id, package_id, title_text, price_rub, duration_days)
+
+    def attach_title_request_message(self, request_id, owner_chat_id, owner_msg_id):
+        return _attach_owner_message(self, request_id, owner_chat_id, owner_msg_id)
+
+    def get_title_request(self, request_id):
+        return _get_title_request(self, request_id)
+
+    def list_title_requests(self, status=None, limit=50, offset=0):
+        return _list_title_requests(self, status=status, limit=limit, offset=offset)
+
+    def count_title_requests_pending(self):
+        return _count_title_requests_by_status(self, 'pending')
+
+    def transition_title_request(self, request_id, new_status, decided_by=None,
+                                 reject_reason=None, only_from='pending'):
+        return _transition_title_request(self, request_id, new_status,
+                                         decided_by=decided_by,
+                                         reject_reason=reject_reason,
+                                         only_from=only_from)
+
+    def expire_old_title_requests(self, ttl_hours):
+        return _expire_old_title_requests(self, ttl_hours)
 
     # ── Settings ──
     def get_setting(self, key, default=None):

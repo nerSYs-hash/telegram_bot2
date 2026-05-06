@@ -591,7 +591,8 @@ async def send_admin_panel(bot, chat_id: int, is_owner: bool = False, thread_id:
              InlineKeyboardButton("📊 Не в чате", callback_data="owner_stats_not_in_chat")],
             [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy"),
              InlineKeyboardButton("⚙️ Система", callback_data="owner_system")],
-            [InlineKeyboardButton("💎 VIP BBS", callback_data="bbs_vip_root")],
+            [InlineKeyboardButton("💎 VIP BBS", callback_data="bbs_vip_root"),
+             InlineKeyboardButton("🛍 Настройка Титулов", callback_data="owner_titles_menu")],
             [InlineKeyboardButton("🆘 Восстановление веток", callback_data="owner_recovery_menu")],
         ])
         text = "👑 <b>Панель владельца</b>\n\nВыберите раздел:"

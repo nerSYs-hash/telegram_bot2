@@ -34,7 +34,7 @@ async def _is_pr_privileged(user_id: int, admin_id: int) -> bool:
 
 async def _send_long_text(bot, chat_id, text, parse_mode='HTML', thread_id=None):
     """Отправляет длинный текст, разбивая на части по MSG_LIMIT (4096)."""
-    base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode}
+    base_kw = {'chat_id': chat_id, 'parse_mode': parse_mode, '_no_chain': True}
     if thread_id:
         base_kw['message_thread_id'] = thread_id
     while text:
@@ -92,8 +92,9 @@ async def _send_pr_media(bot, chat_id, thread_id, media_list: list, text: str):
       0 медиа  → send_message (разбивает по MSG_LIMIT)
       1 медиа  → send_photo/video (caption ≤1024 или медиа+текст отдельно)
       2–5 медиа → send_media_group (caption на первом ≤1024, иначе медиа+текст отдельно)
+    _no_chain=True — пресс-релизы не удаляются авто-удалением.
     """
-    kw = {'chat_id': chat_id}
+    kw = {'chat_id': chat_id, '_no_chain': True}
     if thread_id:
         kw['message_thread_id'] = thread_id
 
@@ -117,7 +118,7 @@ async def _send_pr_media(bot, chat_id, thread_id, media_list: list, text: str):
             await _send_long_text(bot, chat_id, text, thread_id=thread_id)
         return
 
-    # 2–5 медиа: send_media_group
+    # 2–5 медиа: send_media_group (send_media_group не патчится, chain не задействован)
     group = []
     for i, (kind, file_id) in enumerate(media_list):
         caption = text if i == 0 and len(text) <= CAPTION_LIMIT else None
@@ -127,7 +128,8 @@ async def _send_pr_media(bot, chat_id, thread_id, media_list: list, text: str):
         else:
             group.append(InputMediaPhoto(media=file_id, caption=caption, parse_mode=parse_mode))
 
-    await bot.send_media_group(media=group, **kw)
+    await bot.send_media_group(media=group, chat_id=chat_id,
+                               **({'message_thread_id': thread_id} if thread_id else {}))
 
     if len(text) > CAPTION_LIMIT:
         await _send_long_text(bot, chat_id, text, thread_id=thread_id)

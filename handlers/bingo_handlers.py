@@ -389,6 +389,13 @@ class BingoHandler:
         if self._is_owner_user(user):
             await query.answer("⚠️ Админ не может играть!", show_alert=True); return
 
+        # Master-switch раздела «🎱 Бинго»
+        try:
+            if not self.db.is_econ_section_enabled('bingo'):
+                await query.answer("⏸ Бинго временно отключено", show_alert=True); return
+        except Exception:
+            pass
+
         # Уже есть карточка?
         existing = self._card(gid, user.id)
         if existing:
@@ -566,6 +573,13 @@ class BingoHandler:
         card = self._card(gid, user.id)
         if not card or not card['has_bingo']:
             await query.answer("❌ У вас нет Бинго!", show_alert=True); return
+
+        # Master-switch раздела «🎱 Бинго»
+        try:
+            if not self.db.is_econ_section_enabled('bingo'):
+                await query.answer("⏸ Бинго временно отключено", show_alert=True); return
+        except Exception:
+            pass
 
         # Забираем банк
         prize = game['total_pool']

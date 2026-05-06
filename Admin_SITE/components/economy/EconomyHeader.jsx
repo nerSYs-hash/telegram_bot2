@@ -27,7 +27,7 @@ export default function EconomyHeader({ metrics, chartData }) {
   const { pulse_rate, bank_balance, users_balance, total_supply, emission_24h, emission_7d } = metrics;
 
   return (
-    <div className="bg-gray-900 text-white rounded-[2.5rem] p-6 md:p-8 sticky top-0 z-10 shadow-2xl">
+    <div className="bg-gray-900 text-white rounded-[2.5rem] p-6 md:p-8 sticky -top-4 sm:-top-6 lg:-top-8 z-30 shadow-2xl">
       <div className="flex items-center gap-3 mb-5">
         <Coins size={22} className="text-amber-400" />
         <h1 className="text-xl font-black uppercase tracking-widest">Экономика</h1>

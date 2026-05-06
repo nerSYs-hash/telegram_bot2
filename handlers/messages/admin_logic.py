@@ -196,23 +196,27 @@ async def publish_press_release(message, context, target_chat_id):
                     chat_id=target_chat_id,
                     photo=photo.file_id,
                     caption=press_release,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    _no_chain=True,
                 )
             else:
                 await context.bot.send_photo(
                     chat_id=target_chat_id,
                     photo=photo.file_id,
+                    _no_chain=True,
                 )
                 await context.bot.send_message(
                     chat_id=target_chat_id,
                     text=press_release,
-                    parse_mode='HTML'
+                    parse_mode='HTML',
+                    _no_chain=True,
                 )
         else:
             await context.bot.send_message(
                 chat_id=target_chat_id,
                 text=press_release,
-                parse_mode='HTML'
+                parse_mode='HTML',
+                _no_chain=True,
             )
 
         # Confirm to owner
@@ -258,6 +262,11 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
         from handlers.anketa_edit_handlers import handle_anketa_edit_input
         if await handle_anketa_edit_input(message, context, db):
             return True
+
+    # === ОБРАБОТКА ВРЕМЕНИ РАСПИСАНИЯ ГОРОСКОПА ===
+    if context.user_data.get('awaiting_horoscope_sched_time') and _is_privileged:
+        await _handle_awaiting_horoscope_sched_time(message, context, db)
+        return True
 
     # === ОБРАБОТКА ВВОДА ID ВЕТКИ (для пресс-релиза) ===
     if context.user_data.get('awaiting_thread_id') and _is_privileged:
@@ -318,6 +327,12 @@ async def process_admin_input(message, user, context, db, admin_id, target_chat_
     if context.user_data.get('awaiting_bank_transfer') and _is_privileged:
         await _handle_awaiting_bank_transfer(message, user, context, db)
         return True
+
+    # === ОБРАБОТКА РУЧНОГО ВВОДА ПОЛУЧАТЕЛЯ ДОНАТА (@username / ID) ===
+    if context.user_data.get('awaiting_donate_manual_user'):
+        from handlers.donate_handlers import handle_manual_donate_user
+        if await handle_manual_donate_user(message, context, db):
+            return True
 
     # === ОБРАБОТКА ВВОДА СУММЫ ДОНАТА ===
     donate_type = context.user_data.get('awaiting_donate_amount')
@@ -761,6 +776,28 @@ async def _handle_awaiting_bank_transfer(message, user, context, db):
     except Exception as e:
         logging.error(f"Error in bank transfer: {e}")
         await message.reply_text(f"❌ Ошибка при переводе: {str(e)}")
+
+
+async def _handle_awaiting_horoscope_sched_time(message, context, db):
+    """FSM: обработка ввода времени для расписания гороскопа (HH:MM)."""
+    import re as _re
+    context.user_data.pop('awaiting_horoscope_sched_time', None)
+
+    raw = (message.text or '').strip()
+    if not _re.match(r'^([01]\d|2[0-3]):([0-5]\d)$', raw):
+        await message.reply_text(
+            "❌ Неверный формат. Введи время в виде <code>ЧЧ:ММ</code>, "
+            "например <code>09:00</code> или <code>21:30</code>.",
+            parse_mode='HTML',
+        )
+        return
+
+    db.set_setting('horoscope_schedule_time', raw)
+    await message.reply_text(
+        f"✅ Время публикации гороскопа установлено: <b>{raw} МСК</b>.\n"
+        f"Вернись в меню расписания чтобы проверить настройки.",
+        parse_mode='HTML',
+    )
 
 
 async def _handle_awaiting_donate_amount(message, user, context, db, donate_type):

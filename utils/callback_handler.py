@@ -602,10 +602,11 @@ class CallbackHandler:
         
         keyboard = [
             [InlineKeyboardButton("💎 Начисления Пульса", callback_data="my_accruals")],
+            [InlineKeyboardButton("🏷 Титулы", callback_data="titles_menu")],
             [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]
         ]
         reply_markup = InlineKeyboardMarkup(keyboard)
-        
+
         await query.edit_message_text(message, reply_markup=reply_markup)
     
     # ═══════════════════════════════════════════
@@ -967,6 +968,27 @@ class CallbackHandler:
         link_stats = self.db.get_referral_link_stats(user.id)
         used_links = link_stats['used_links'] if link_stats else 0
         
+        # Get qualification settings from economy_settings with fallbacks
+        try:
+            hours = int(self.db.get_econ('referral.qualification_hours', 24) or 24)
+        except Exception:
+            hours = 24
+        
+        try:
+            min_messages = int(self.db.get_econ('referral.qualification_messages', 5) or 5)
+        except Exception:
+            min_messages = 5
+        
+        try:
+            min_reactions = int(self.db.get_econ('referral.qualification_reactions', 3) or 3)
+        except Exception:
+            min_reactions = 3
+        
+        try:
+            reward = int(self.db.get_econ('referral.qualified_reward', 500) or 500)
+        except Exception:
+            reward = 500
+        
         message = f"👥 РЕФЕРАЛЬНАЯ СИСТЕМА\n\n"
         message += f"🔗 Ваша ссылка (одноразовая):\n{ref_link}\n\n"
         message += f"⚠️ Ссылка станет неактивной после перехода.\n"
@@ -974,10 +996,10 @@ class CallbackHandler:
         message += f"✅ Квалифицированных рефералов: {qualified}\n"
         message += f"🔗 Использовано ссылок: {used_links}\n\n"
         message += f"💡 Условия:\n"
-        message += f"• Друг должен пробыть в чате 24 часа\n"
-        message += f"• Написать минимум 5 сообщений\n"
-        message += f"• ИЛИ получить 3+ реакции\n\n"
-        message += f"🎁 Награда: 500 💎 за каждого друга"
+        message += f"• Друг должен пробыть в чате {hours} часа\n"
+        message += f"• Написать минимум {min_messages} сообщений\n"
+        message += f"• ИЛИ получить {min_reactions}+ реакции\n\n"
+        message += f"🎁 Награда: {reward} 💎 за каждого друга"
         
         keyboard = [
             [InlineKeyboardButton("🔄 Обновить ссылку", callback_data="referral_refresh")],

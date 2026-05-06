@@ -33,13 +33,15 @@ BACKUP_TEXTS = {
     'pisces': "Эмоциональный фон повышен, уделите время творчеству."
 }
 
-async def get_all_horoscopes(signs_list):
+async def get_all_horoscopes(signs_list, tomorrow: bool = False):
     """
-    Скачивает реальный XML-гороскоп на сегодня без лишних добавлений.
+    Скачивает реальный XML-гороскоп без лишних добавлений.
+    tomorrow=True — берёт тег <tomorrow> вместо <today>.
     """
-    logger.info("🔮 Скачиваю свежий гороскоп от астрологов...")
+    tag = 'tomorrow' if tomorrow else 'today'
+    logger.info(f"🔮 Скачиваю свежий гороскоп от астрологов (тег: {tag})...")
     horoscopes = {}
-    
+
     # Ссылка на бесплатный XML-канал гороскопов (работает всегда)
     url = "https://ignio.com/r/export/utf/xml/daily/com.xml"
 
@@ -48,20 +50,21 @@ async def get_all_horoscopes(signs_list):
             async with session.get(url, timeout=10) as resp:
                 if resp.status == 200:
                     xml_data = await resp.text()
-                    # Парсим XML
                     root = ET.fromstring(xml_data)
-                    
+
                     for sign in signs_list:
-                        slug = sign['slug']  # aries, taurus и т.д.
+                        slug = sign['slug']
                         sign_node = root.find(slug)
-                        
+
                         if sign_node is not None:
-                            # Берем чистый текст из XML и сохраняем без добавок
-                            today_text = sign_node.find('today').text.strip()
-                            horoscopes[slug] = today_text
+                            node = sign_node.find(tag)
+                            if node is None or not node.text:
+                                node = sign_node.find('today')
+                            text = node.text.strip() if (node is not None and node.text) else BACKUP_TEXTS.get(slug, "Нет данных")
+                            horoscopes[slug] = text
                         else:
                             horoscopes[slug] = BACKUP_TEXTS.get(slug, "Нет данных")
-                            
+
                     logger.info("✅ Настоящий гороскоп успешно скачан и собран!")
                     return horoscopes
                 else:
@@ -69,7 +72,6 @@ async def get_all_horoscopes(signs_list):
     except Exception as e:
         logger.error(f"❌ Ошибка парсинга XML: {e}")
 
-    # Если сайт астрологов упал, отдаем просто чистый бэкап-текст
     for sign in signs_list:
         slug = sign['slug']
         horoscopes[slug] = BACKUP_TEXTS.get(slug, "Звезды сегодня молчат.")

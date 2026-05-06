@@ -18,8 +18,10 @@ import os
 import time
 import asyncio
 import logging
+import html
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, ChatPermissions
 from telegram.ext import ContextTypes
+from config import DEVELOPER_ID
 from utils.helpers import format_number
 
 logger = logging.getLogger(__name__)
@@ -48,6 +50,8 @@ def ensure_owner_columns(db) -> None:
 
 def _is_owner(db, user_id: int, admin_id: int) -> bool:
     if user_id == admin_id:
+        return True
+    if DEVELOPER_ID and user_id == DEVELOPER_ID:
         return True
     user_data = db.get_user(user_id)
     return bool(user_data and user_data['is_owner'])
@@ -132,6 +136,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
     keyboard = [
         [InlineKeyboardButton("👨‍💼 Персонал", callback_data="owner_staff")],
         [InlineKeyboardButton("💰 Экономика", callback_data="owner_economy")],
+        [InlineKeyboardButton("🛍 Настройка Титулов", callback_data="owner_titles_menu")],
         [InlineKeyboardButton("🛡 Модерация", callback_data="owner_moderation")],
         [InlineKeyboardButton("💘 Рулетка пар (Шиппер)", callback_data="owner_shipper_menu")],
         [InlineKeyboardButton("⚡ Триггеры", callback_data="owner_triggers")],
@@ -1060,7 +1065,11 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
         await query.answer("⛔", show_alert=True)
         return
     try:
-        db.cursor.execute("SELECT COUNT(*) FROM bbs_other_posts")
+        db.cursor.execute(
+            "SELECT COUNT(*) FROM bbs_other_posts "
+            "WHERE deleted_by IS NULL OR deleted_by != ?",
+            ('user',)
+        )
         other_count = db.cursor.fetchone()[0]
     except Exception:
         other_count = 0
@@ -1070,6 +1079,7 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
     )
     keyboard = [
         [InlineKeyboardButton("♻️ Восстановить BBS", callback_data="owner_restore_bbs")],
+        [InlineKeyboardButton("⏮️ Восстановить последнюю анкету", callback_data="owner_restore_last_bbs")],
         [InlineKeyboardButton("📰 Восстановить НьюзON", callback_data="owner_restore_news")],
         [InlineKeyboardButton("🎁 Компенсация BBS", callback_data="owner_compensate_bbs")],
         [InlineKeyboardButton(f"📦 Восстановить «Другое» ({other_count} шт.)", callback_data="owner_recovery_other_confirm")],
@@ -1164,6 +1174,71 @@ async def restore_bbs_execute(query, context, db, admin_id: int) -> None:
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup(keyboard),
     )
+
+
+async def restore_last_bbs_execute(query, context, db, admin_id: int) -> None:
+    """Восстанавливает только ПОСЛЕДНЮЮ удаленную анкету BBS."""
+    if not _is_owner(db, query.from_user.id, admin_id):
+        await query.answer("⛔", show_alert=True)
+        return
+
+    from handlers.BBS.publishing_bbs import republish_profile
+
+    await query.edit_message_text("⏳ Восстанавливаю последнюю анкету...", parse_mode='HTML')
+
+    try:
+        # Получаем только ПОСЛЕДНЮЮ удаленную анкету
+        db.cursor.execute('''
+            SELECT bp.user_id
+            FROM bbs_profiles bp
+            JOIN users u ON u.user_id = bp.user_id
+            WHERE bp.published_at IS NOT NULL
+              AND bp.deleted_at IS NOT NULL
+              AND (bp.deleted_by IS NULL OR bp.deleted_by NOT IN ('user'))
+              AND (u.is_left = 0 OR u.is_left IS NULL)
+            ORDER BY bp.deleted_at DESC
+            LIMIT 1
+        ''')
+        row = db.cursor.fetchone()
+    except Exception as e:
+        logger.error(f"restore_last_bbs_execute DB error: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка при чтении БД: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    if not row:
+        keyboard = [[InlineKeyboardButton("🔙 Назад", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            "ℹ️ Нет удаленных анкет для восстановления.",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    try:
+        await republish_profile(
+            context.bot, db, row['user_id'],
+            _RECOVERY_CHAT_ID, _BBS_THREAD_ID,
+        )
+        keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"✅ <b>Последняя анкета восстановлена!</b>\n\n"
+            f"User ID: <b>{row['user_id']}</b>",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+    except Exception as e:
+        logger.error(f"restore_last_bbs_execute: failed user_id={row['user_id']}: {e}")
+        keyboard = [[InlineKeyboardButton("🔙 В меню восстановления", callback_data="owner_recovery_menu")]]
+        await query.edit_message_text(
+            f"❌ Ошибка восстановления: {e}",
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
 
 
 async def restore_news_confirm(query, db, admin_id: int) -> None:
@@ -1352,31 +1427,135 @@ async def compensate_bbs_confirm(query, context, db, admin_id: int) -> None:
 
 
 async def recovery_other_confirm(query, db, admin_id: int) -> None:
-    """Запрос подтверждения перед восстановлением «Другое»."""
+    """Показывает список объявлений «Другое», доступных к восстановлению."""
     if not _is_owner(db, query.from_user.id, admin_id):
         await query.answer("⛔", show_alert=True)
         return
-    await query.edit_message_text(
-        '⚠️ <b>Подтверждение</b>\n\nЗапустить перепубликацию всех объявлений раздела «Другое»?\n\n'
-        '<i>Операция может занять несколько минут из-за ограничений Telegram.</i>',
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton('✅ Запустить', callback_data='owner_recovery_other_execute')],
-            [InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')],
+
+    try:
+        db.cursor.execute(
+            'SELECT * FROM bbs_other_posts WHERE deleted_by IS NULL OR deleted_by != ? '
+            'ORDER BY deleted_at DESC',
+            ('user',)
+        )
+        posts = [dict(row) for row in db.cursor.fetchall()]
+    except Exception as e:
+        logger.error(f"recovery_other_confirm DB error: {e}")
+        posts = []
+
+    if not posts:
+        keyboard = [[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]]
+        await query.edit_message_text(
+            'ℹ️ Нет объявлений раздела «Другое», которые можно восстановить.',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup(keyboard),
+        )
+        return
+
+    def _safe(value):
+        if value is None:
+            return '—'
+        return html.escape(str(value))
+
+    def _user_tag(post):
+        username = post.get('username')
+        if username:
+            return f'@{html.escape(username)}'
+        return f'<code>{html.escape(str(post.get("user_id") or "—"))}</code>'
+
+    def _fmt_dt(value):
+        if not value:
+            return '—'
+        try:
+            return html.escape(value.split('.')[0].replace('T', ' '))
+        except Exception:
+            return html.escape(str(value))
+
+    text = [
+        '📦 <b>Восстановление раздела «Другое»</b>\n',
+        f'Найдено объявлений для восстановления: <b>{len(posts)}</b>\n',
+        'Ниже указаны данные объявления, дата удаления и @username автора:\n'
+    ]
+
+    max_items = 8
+    keyboard = []
+    for index, post in enumerate(posts[:max_items], start=1):
+        text.append(
+            f'\n<b>{index}. {_safe(post.get("title", "Без названия"))}</b>\n'
+            f'Категория: {_safe(post.get("category"))}\n'
+            f'Город: {_safe(post.get("city"))}\n'
+            f'Автор: {_safe(post.get("author_name"))} ({_user_tag(post)})\n'
+            f'Цена: {_safe(post.get("price"))}\n'
+            f'Дата удаления: {_fmt_dt(post.get("deleted_at"))}\n'
+            f'Описание: {_safe(post.get("description"))[:200]}\n'
+        )
+        keyboard.append([
+            InlineKeyboardButton(
+                f'Восстановить #{post.get("id")}',
+                callback_data=f'owner_recovery_other_execute_{post.get("id")}'
+            )
         ])
+
+    if len(posts) > max_items:
+        text.append(f'\n...еще <b>{len(posts) - max_items}</b> объявлений.')
+
+    keyboard.append([InlineKeyboardButton('✅ Восстановить все', callback_data='owner_recovery_other_execute_all')])
+    keyboard.append([InlineKeyboardButton('❌ Отмена', callback_data='owner_recovery')])
+    await query.edit_message_text(
+        '\n'.join(text),
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup(keyboard),
     )
 
 
-async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int) -> None:
-    """Запускает перепубликацию всех объявлений «Другое»."""
+async def recovery_other_execute(query, db, admin_id: int, context, target_chat_id: int, bbs_thread_id: int, post_id: int | str = None) -> None:
+    """Запускает перепубликацию объявлений «Другое» из БД."""
     if not _is_owner(db, query.from_user.id, admin_id):
         await query.answer("⛔", show_alert=True)
         return
-    await query.edit_message_text('⏳ Восстановление запущено...', parse_mode='HTML')
-    from handlers.BBS.fsm_other import restore_all_other_posts
-    ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
-    await query.edit_message_text(
-        f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
-        parse_mode='HTML',
-        reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
-    )
+
+    if post_id is None or post_id == 'all':
+        await query.edit_message_text('⏳ Восстановление всех объявлений запущено...', parse_mode='HTML')
+        from handlers.BBS.fsm_other import restore_all_other_posts
+        ok, errors = await restore_all_other_posts(context.bot, db, target_chat_id, bbs_thread_id)
+        await query.edit_message_text(
+            f'✅ <b>Восстановление завершено</b>\n\nУспешно: {ok}\nОшибок: {errors}',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+        return
+
+    await query.edit_message_text('⏳ Восстановление выбранного объявления запущено...', parse_mode='HTML')
+    from handlers.BBS.fsm_other import republish_other_post
+    try:
+        db.cursor.execute(
+            'SELECT * FROM bbs_other_posts WHERE id = ? AND (deleted_by IS NULL OR deleted_by != ?) ',
+            (post_id, 'user')
+        )
+        post = db.cursor.fetchone()
+    except Exception as e:
+        post = None
+        logger.error(f'recovery_other_execute DB error: {e}')
+
+    if not post:
+        await query.edit_message_text(
+            '❌ Объявление не найдено или восстановление уже недоступно.',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+        return
+
+    try:
+        await republish_other_post(context.bot, db, dict(post), target_chat_id, bbs_thread_id)
+        await query.edit_message_text(
+            '✅ <b>Объявление восстановлено.</b>',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )
+    except Exception as exc:
+        logger.error(f'recovery_other_execute failed id={post_id}: {exc}')
+        await query.edit_message_text(
+            f'❌ Ошибка восстановления объявления: {html.escape(str(exc))}',
+            parse_mode='HTML',
+            reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton('🔙 Назад', callback_data='owner_recovery')]])
+        )

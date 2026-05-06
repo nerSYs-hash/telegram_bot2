@@ -17,7 +17,10 @@
 """
 
 import logging
+import json
 from datetime import datetime, timedelta
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import ContextTypes
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ logger = logging.getLogger(__name__)
 async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> None:
     """
     Проверяет пользователей, не активных более 60 дней.
-    Логирует в журнал, уведомляет владельца.
+    Логирует в журнал, уведомляет владельца (с пагинацией).
     Вызывается из scheduler каждые 24 часа.
     """
     try:
@@ -47,7 +50,6 @@ async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> N
                     AND created_at >= datetime('now', '-30 days')
               )
             ORDER BY last_active ASC
-            LIMIT 20
         ''')
         inactive = db.cursor.fetchall()
 
@@ -75,27 +77,16 @@ async def check_inactive_users(bot, db, target_chat_id: int, admin_id: int) -> N
         except Exception as e:
             logger.error(f"Journal inactive log error: {e}")
 
-        # Уведомление владельцу (сводка)
+        # Сохраняем список в settings для пагинации
+        inactive_data = [
+            {'user_id': u['user_id'], 'username': u['username'], 'first_name': u['first_name'], 'last_active': u['last_active']}
+            for u in inactive
+        ]
+        db.set_setting(f'inactive_users_list_{admin_id}', json.dumps(inactive_data))
+
+        # Уведомление владельцу (первая страница + кнопка)
         try:
-            lines = []
-            for u in inactive[:10]:
-                name = u['username'] or u['first_name'] or f"ID:{u['user_id']}"
-                last = str(u['last_active'])[:10] if u['last_active'] else '—'
-                lines.append(f"  💤 @{name} — {last}")
-
-            text = (
-                f"📋 <b>Неактивные пользователи</b>\n"
-                f"(более 60 дней без сообщений)\n\n"
-                + "\n".join(lines)
-            )
-            if len(inactive) > 10:
-                text += f"\n\n...и ещё {len(inactive) - 10}"
-
-            await bot.send_message(
-                chat_id=admin_id,
-                text=text,
-                parse_mode='HTML',
-            )
+            await _send_inactive_page(bot, db, admin_id, inactive_data, page=0)
         except Exception as e:
             logger.error(f"Inactive users notification error: {e}")
 
@@ -193,3 +184,90 @@ async def send_weekly_report(bot, db, admin_id: int) -> None:
 
     except Exception as e:
         logger.error(f"send_weekly_report error: {e}")
+
+
+# ═══════════════════════════════════════════════════════════════
+#  ПАГИНАЦИЯ НЕАКТИВНЫХ ПОЛЬЗОВАТЕЛЕЙ
+# ═══════════════════════════════════════════════════════════════
+
+async def _send_inactive_page(bot, db, admin_id: int, users_list: list, page: int = 0) -> None:
+    """Отправляет страницу неактивных пользователей с кнопками пагинации."""
+    per_page = 10
+    start_idx = page * per_page
+    end_idx = start_idx + per_page
+    page_users = users_list[start_idx:end_idx]
+
+    if not page_users:
+        logger.warning(f"No users for page {page}")
+        return
+
+    # Формируем текст
+    lines = []
+    for u in page_users:
+        name = u['username'] or u['first_name'] or f"ID:{u['user_id']}"
+        last = str(u['last_active'])[:10] if u['last_active'] else '—'
+        lines.append(f"  💤 @{name} — {last}")
+
+    total = len(users_list)
+    current_count = min((page + 1) * per_page, total)
+    text = (
+        f"📋 <b>Неактивные пользователи</b>\n"
+        f"(более 60 дней без сообщений)\n\n"
+        + "\n".join(lines) + "\n\n"
+        + f"<i>{current_count} из {total}</i>"
+    )
+
+    # Клавиатура с кнопками
+    keyboard = []
+    row = []
+    if page > 0:
+        row.append(InlineKeyboardButton("⬅️ Назад", callback_data=f"inactive_page:{page-1}:{admin_id}"))
+    if end_idx < total:
+        row.append(InlineKeyboardButton("Далее ➡️", callback_data=f"inactive_page:{page+1}:{admin_id}"))
+    if row:
+        keyboard.append(row)
+
+    reply_markup = InlineKeyboardMarkup(keyboard) if keyboard else None
+
+    await bot.send_message(
+        chat_id=admin_id,
+        text=text,
+        parse_mode='HTML',
+        reply_markup=reply_markup,
+    )
+
+
+async def handle_inactive_pagination(update: Update, context: ContextTypes.DEFAULT_TYPE, db) -> None:
+    """Обработчик пагинации списка неактивных пользователей."""
+    query = update.callback_query
+    if not query.data.startswith('inactive_page:'):
+        return
+
+    try:
+        parts = query.data.split(':')
+        page = int(parts[1])
+        admin_id = int(parts[2])
+
+        # Проверяем права
+        if query.from_user.id != admin_id:
+            await query.answer("Это не ваш отчёт", show_alert=True)
+            return
+
+        # Получаем сохранённый список
+        inactive_json = db.get_setting(f'inactive_users_list_{admin_id}')
+        if not inactive_json:
+            await query.answer("Список истёк. Попросите отчёт снова.", show_alert=True)
+            return
+
+        inactive_list = json.loads(inactive_json)
+        
+        # Отправляем страницу
+        await _send_inactive_page(context.bot, db, admin_id, inactive_list, page)
+        await query.answer()
+        # Удаляем старое сообщение
+        await query.delete_message()
+
+    except Exception as e:
+        logger.error(f"handle_inactive_pagination error: {e}")
+        await query.answer("Ошибка", show_alert=True)
+

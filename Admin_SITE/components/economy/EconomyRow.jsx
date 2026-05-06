@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { BarChart3, Edit } from 'lucide-react';
-import EconomyEditModal from './EconomyEditModal';
-import EconomyToggleModal from './EconomyToggleModal';
+import EconomyEditForm from './EconomyEditForm';
+import EconomyToggleForm from './EconomyToggleForm';
 
 export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChanged, token, canEdit }) {
   const [editing, setEditing]   = useState(false);
@@ -9,6 +9,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
 
   const isRecent = recentlyChanged?.has(row.key);
   const isNew = row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 86_400_000;
+  const isExpanded = editing || toggling;
 
   const handleSave = async (newValue, comment) => {
     const res = await fetch(`/api/economy/settings/${row.key}`, {
@@ -37,10 +38,10 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
   };
 
   return (
-    <>
-      <div className={`flex items-center gap-3 p-3 bg-white rounded-xl border transition ${
-        isRecent ? 'border-amber-200 bg-amber-50/30' : 'border-gray-100 hover:border-gray-200'
-      }`}>
+    <div className={`bg-white rounded-xl border transition overflow-hidden ${
+      isRecent ? 'border-amber-200 bg-amber-50/30' : isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+    }`}>
+      <div className="flex items-center gap-3 p-3">
 
         {/* Название */}
         <div className="flex-1 min-w-0">
@@ -62,65 +63,77 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
           )}
         </div>
 
-        {/* Значение */}
-        <div className="text-base font-black text-gray-900 flex-shrink-0 whitespace-nowrap">
+        {/* Значение — фиксированная ширина */}
+        <div className="w-24 text-right text-base font-black text-gray-900 flex-shrink-0 whitespace-nowrap tabular-nums">
           {row.value} <span className="text-[10px] text-gray-500 font-normal">{row.unit}</span>
         </div>
 
-        {/* Тумблер */}
-        <button
-          onClick={() => canEdit && setToggling(true)}
-          disabled={!canEdit}
-          title={canEdit ? (row.is_enabled ? 'Выключить' : 'Включить') : 'Нет прав'}
-          className={`w-12 h-6 rounded-full flex-shrink-0 relative transition-colors ${
-            row.is_enabled ? 'bg-green-500' : 'bg-gray-200'
-          } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-          <div className={`w-5 h-5 bg-white rounded-full shadow absolute top-0.5 transition-all ${
-            row.is_enabled ? 'right-0.5' : 'left-0.5'
-          }`} />
-        </button>
+        {/* Тумблер — фиксированная ширина */}
+        <div className="w-12 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => canEdit && setToggling(v => !v)}
+            disabled={!canEdit}
+            title={canEdit ? (row.is_enabled ? 'Выключить' : 'Включить') : 'Нет прав'}
+            className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
+              row.is_enabled ? 'bg-green-500' : 'bg-gray-200'
+            } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
+            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+              row.is_enabled ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
 
-        {/* История */}
-        <button
-          onClick={() => onOpenHistory(row.key, row.label)}
-          className="flex items-center gap-1 p-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition active:scale-90 flex-shrink-0">
-          <BarChart3 size={15} />
-          {row.history_count > 0 && (
-            <span className="text-[9px] font-black">{row.history_count}</span>
-          )}
-        </button>
+        {/* История — фиксированная ширина */}
+        <div className="w-12 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => onOpenHistory(row.key, row.label)}
+            className="flex items-center justify-center gap-1 px-2 py-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition active:scale-90 min-w-[34px]">
+            <BarChart3 size={15} />
+            {row.history_count > 0 && (
+              <span className="text-[9px] font-black tabular-nums">{row.history_count}</span>
+            )}
+          </button>
+        </div>
 
-        {/* Редактировать */}
-        <button
-          onClick={() => canEdit && setEditing(true)}
-          disabled={!canEdit}
-          title={canEdit ? 'Изменить значение' : 'Нет прав'}
-          className={`p-2 rounded-lg transition flex-shrink-0 ${
-            canEdit
-              ? 'text-gray-400 hover:text-blue-500 hover:bg-blue-50 active:scale-90'
-              : 'text-gray-200 cursor-not-allowed'
-          }`}>
-          <Edit size={15} />
-        </button>
+        {/* Редактировать — фиксированная ширина */}
+        <div className="w-10 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => canEdit && setEditing(v => !v)}
+            disabled={!canEdit}
+            title={canEdit ? 'Изменить значение' : 'Нет прав'}
+            className={`p-2 rounded-lg transition ${
+              editing ? 'text-blue-600 bg-blue-50' :
+              canEdit ? 'text-gray-400 hover:text-blue-500 hover:bg-blue-50 active:scale-90'
+                      : 'text-gray-200 cursor-not-allowed'
+            }`}>
+            <Edit size={15} />
+          </button>
+        </div>
       </div>
 
+      {/* Inline expand: редактирование */}
       {editing && (
-        <EconomyEditModal
-          row={row}
-          onClose={() => setEditing(false)}
-          onSave={handleSave}
-        />
+        <div className="border-t border-blue-100 bg-blue-50/30 animate-in slide-in-from-top-2 duration-200">
+          <EconomyEditForm
+            row={row}
+            onCancel={() => setEditing(false)}
+            onSave={async (v, c) => { await handleSave(v, c); setEditing(false); }}
+          />
+        </div>
       )}
 
+      {/* Inline expand: тумблер с комментарием */}
       {toggling && (
-        <EconomyToggleModal
-          label={row.label}
-          currentEnabled={row.is_enabled}
-          isMaster={false}
-          onClose={() => setToggling(false)}
-          onSave={handleToggle}
-        />
+        <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+          <EconomyToggleForm
+            label={row.label}
+            currentEnabled={row.is_enabled}
+            isMaster={false}
+            onCancel={() => setToggling(false)}
+            onSave={async (c) => { await handleToggle(c); setToggling(false); }}
+          />
+        </div>
       )}
-    </>
+    </div>
   );
 }

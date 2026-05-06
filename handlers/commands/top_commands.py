@@ -19,24 +19,19 @@ from utils.helpers import format_number, get_today_date_msk, get_moscow_time
 
 async def show_top_rich(message, context, db):
     """
-    Show top 5 richest users with balance + mined today.
-    
+    Show top 5 richest users with balance.
+
     Исключены: is_admin=1, is_owner=1.
-    НЕ показывает «Добыто всего» — только Баланс и Добыто сегодня.
+    Показывает только Баланс. У 1-го места — анимированный зелёный мешок.
     """
     try:
-        today = get_today_date_msk()
-
         db.cursor.execute('''
-            SELECT u.user_id, u.username, u.first_name, u.balance,
-                   COALESCE(us_today.pulses_mined, 0) as pulses_today
+            SELECT u.user_id, u.username, u.first_name, u.balance
             FROM users u
-            LEFT JOIN user_stats us_today 
-                ON u.user_id = us_today.user_id AND us_today.date = ?
             WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
             ORDER BY u.balance DESC
             LIMIT 5
-        ''', (today,))
+        ''')
 
         top_users = db.cursor.fetchall()
 
@@ -47,22 +42,22 @@ async def show_top_rich(message, context, db):
             )
             return
 
-        response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
+        from config.emojis import ICON_MONEY_BAG_GREEN
 
+        response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
         emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
 
         for idx, user in enumerate(top_users):
             username = user['username'] or user['first_name'] or 'Unknown'
             balance = format_number(user['balance'])
-            pulses_today = format_number(user['pulses_today'])
-
+            bag = ICON_MONEY_BAG_GREEN if idx == 0 else '💰'
             response += f"{emojis[idx]} @{username}\n"
-            response += f"   💰 Баланс: {balance} 💎\n"
-            response += f"   ⛏ Добыто сегодня: {pulses_today} 💎\n\n"
+            response += f"   {bag} Баланс: {balance} 💎\n\n"
 
         await context.bot.send_message(
             chat_id=message.chat.id,
-            text=response
+            text=response,
+            parse_mode='HTML'
         )
 
     except Exception as e:

@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
+import PromptTranslator from './components/PromptTranslator';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -326,6 +327,8 @@ export default function App() {
   }, []);
 
   const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
+  const isOwner = !!(authUser && authUser.is_owner);
+  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
 
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
@@ -354,6 +357,12 @@ export default function App() {
   const userCan = useCallback((perm) => {
     if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
+  }, [authUser, userPermissions, profileData]);
+
+  const userCanAny = useCallback((resourceKey) => {
+    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (!profileData) return true;
+    return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
   }, [authUser, userPermissions, profileData]);
 
   // ── ПРАВА ДОСТУПА ──
@@ -686,12 +695,22 @@ export default function App() {
   }, []);
   const [quoteSaveMsg, setQuoteSaveMsg] = React.useState('');
   const saveQuoteCfg = async () => {
+    if (!isOwnerOrDeveloper) {
+      setQuoteSaveMsg('Ошибка: доступно только владельцу или разработчику');
+      setTimeout(() => setQuoteSaveMsg(''), 3000);
+      return;
+    }
+
     setQuoteSaving(true);
     setQuoteSaveMsg('');
     try {
+      const token = localStorage.getItem('auth_token');
       const r = await fetch('/api/ui_settings', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
         body: JSON.stringify({
           journal_quote_bg:            quoteCfg.bg,
           journal_quote_stripe_mode:   quoteCfg.stripeMode,
@@ -700,8 +719,14 @@ export default function App() {
         }),
       });
       const d = await r.json();
-      setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
-    } catch (e) { setQuoteSaveMsg('Ошибка сети'); }
+      if (!r.ok) {
+        setQuoteSaveMsg(`Ошибка: ${d.detail || (d.errors && d.errors.join(', ')) || 'сервис недоступен'}`);
+      } else {
+        setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
+      }
+    } catch (e) {
+      setQuoteSaveMsg('Ошибка сети');
+    }
     setQuoteSaving(false);
     setTimeout(() => setQuoteSaveMsg(''), 3000);
   };
@@ -910,19 +935,26 @@ export default function App() {
   };
 
   const navigation = [
-    { id: 'updates',     name: 'Обновления',    icon: Megaphone,   group: 'top' },
-    { id: 'statistics',  name: 'Статистика',    icon: PieChart,    group: 'main' },
-    { id: 'journal',     name: 'Журнал',        icon: ScrollText,  group: 'main' },
-    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules' },
-    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules' },
-    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules' },
-    { id: 'system',      name: 'Система',       icon: Settings,    group: 'main' },
-    { id: 'broadcast',   name: 'Рассылка',      icon: Send,        group: 'features' },
-    { id: 'permissions', name: 'Права',         icon: ShieldCheck, group: 'features', ownerOnly: true },
+    { id: 'updates',     name: 'Обновления',    icon: Megaphone,      group: 'top' },
+    { id: 'statistics',  name: 'Статистика',    icon: PieChart,       group: 'main',     resource: 'statistics' },
+    { id: 'journal',     name: 'Журнал',        icon: ScrollText,     group: 'main',     resource: 'journal' },
+    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
+    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
+    { id: 'prompt',      name: 'AI-помощник',   icon: Bot,           group: 'modules' },
+    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules',  resource: 'economy' },
+    { id: 'system',      name: 'Система',       icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'broadcast',   name: 'Рассылка',      icon: Send,           group: 'features', resource: 'broadcast' },
+    { id: 'permissions', name: 'Права',         icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'prompt':
+        return (
+          <div className="space-y-4 pb-24">
+            <PromptTranslator />
+          </div>
+        );
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
@@ -1448,12 +1480,18 @@ export default function App() {
 
                <button
                  onClick={saveQuoteCfg}
-                 disabled={quoteSaving}
+                 disabled={quoteSaving || !isOwnerOrDeveloper}
                  className="w-full py-3 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                 title={!isOwnerOrDeveloper ? 'Только владелец или разработчик может сохранять стиль цитат' : ''}
                >
                  {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
                  Сохранить настройки
                </button>
+               {!isOwnerOrDeveloper && (
+                 <p className="text-center text-xs font-semibold text-gray-500">
+                   Только владелец или разработчик может сохранить внешний вид цитат.
+                 </p>
+               )}
                {quoteSaveMsg && (
                  <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
                    {quoteSaveMsg}
@@ -5239,7 +5277,7 @@ export default function App() {
         };
 
         const editableRoles = (permCatalog?.roles || []).filter(r => r.editable);
-        const totalPerms = (permCatalog?.resources?.length || 0) * (permCatalog?.actions?.length || 0);
+        const totalPerms = (permCatalog?.resources || []).reduce((sum, r) => sum + (r.actions?.length || 0), 0);
         const currentSet = permLocal[permActiveRole] || new Set();
         const selectedResData = permCatalog?.resources?.find(r => r.key === permSelectedRes);
 
@@ -5255,8 +5293,10 @@ export default function App() {
         const toggleAllForResource = (resKey, enable) => {
           setPermLocal(prev => {
             const next = new Set(prev[permActiveRole]);
-            (permCatalog?.actions || []).forEach(a => {
+            const resData = permCatalog?.resources?.find(r => r.key === resKey);
+            (resData?.actions || []).forEach(a => {
               const p = `${resKey}.${a.key}`;
+              if (permCatalog?.owner_level?.includes(p)) return;
               enable ? next.add(p) : next.delete(p);
             });
             return { ...prev, [permActiveRole]: next };
@@ -5350,99 +5390,81 @@ export default function App() {
                   })}
                 </div>
 
-                {/* Два столбика */}
-                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-
-                  {/* Левый: ресурсы */}
-                  <div className="space-y-2">
-                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">Ресурсы</p>
-                    {(permCatalog?.resources || []).map(res => {
-                      const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
-                      const resPerms = (permCatalog?.actions || []).map(a => `${res.key}.${a.key}`);
-                      const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
-                      const allEnabled  = enabledCount === resPerms.length;
-                      const isSelected  = permSelectedRes === res.key;
-                      return (
+                {/* Аккордеон: каждый ресурс — раскрывающаяся карточка */}
+                <div className="space-y-2">
+                  {(permCatalog?.resources || []).map(res => {
+                    const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
+                    const resPerms = (res.actions || []).map(a => `${res.key}.${a.key}`).filter(p => !(permCatalog?.owner_level || []).includes(p));
+                    const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
+                    const allEnabled = resPerms.length > 0 && enabledCount === resPerms.length;
+                    const isExpanded = permSelectedRes === res.key;
+                    return (
+                      <div key={res.key} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                        {/* Заголовок — клик раскрывает/закрывает */}
                         <div
-                          key={res.key}
-                          onClick={() => setPermSelectedRes(res.key)}
-                          className={`bg-white rounded-2xl border p-4 cursor-pointer transition-all duration-200 ${
-                            isSelected
-                              ? 'border-blue-300 shadow-md shadow-blue-50 ring-2 ring-blue-100'
-                              : 'border-gray-100 hover:border-gray-200'
-                          }`}
+                          onClick={() => setPermSelectedRes(isExpanded ? null : res.key)}
+                          className={`flex items-center gap-3 p-4 cursor-pointer transition-all hover:bg-gray-50 ${isExpanded ? 'border-b border-gray-100' : ''}`}
                         >
-                          <div className="flex items-center gap-3">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border flex-shrink-0 ${isSelected ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
-                              <ResIcon size={16} className={isSelected ? 'text-blue-500' : 'text-gray-400'}/>
-                            </div>
-                            <div className="flex-1 min-w-0">
-                              <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
-                              <p className="text-[10px] text-gray-400 font-medium mt-0.5">{enabledCount} / {resPerms.length} действий</p>
-                            </div>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border flex-shrink-0 transition-colors ${isExpanded ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
+                            <ResIcon size={15} className={isExpanded ? 'text-blue-500' : 'text-gray-400'}/>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
+                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                              {enabledCount === 0 ? 'Нет доступа' : `${enabledCount} из ${resPerms.length} действий`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                               onClick={e => { e.stopPropagation(); toggleAllForResource(res.key, !allEnabled); }}
-                              className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${
-                                allEnabled
-                                  ? 'bg-red-50 text-red-500 hover:bg-red-100'
-                                  : 'bg-green-50 text-green-600 hover:bg-green-100'
-                              }`}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${allEnabled ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
                             >
-                              {allEnabled ? 'Выкл все' : 'Вкл все'}
+                              {allEnabled ? 'Выкл' : 'Вкл'}
                             </button>
+                            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
-
-                  {/* Правый: действия выбранного ресурса */}
-                  <div>
-                    <p className="px-1 text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
-                      {selectedResData ? `Действия: ${selectedResData.label}` : 'Действия'}
-                    </p>
-                    {!selectedResData ? (
-                      <div className="bg-white rounded-2xl border border-gray-100 flex flex-col items-center justify-center py-16 text-center">
-                        <ShieldCheck size={28} className="text-gray-200 mb-3"/>
-                        <p className="text-sm font-black text-gray-300">Выберите ресурс слева</p>
+                        {/* Раскрытая панель: 2 колонки действий */}
+                        {isExpanded && (
+                          <div className="grid grid-cols-2 gap-2 p-4">
+                            {(res.actions || []).map(action => {
+                              const perm = `${res.key}.${action.key}`;
+                              const isOwnerLevel = (permCatalog?.owner_level || []).includes(perm);
+                              const enabled = currentSet.has(perm);
+                              const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
+                              return (
+                                <label
+                                  key={action.key}
+                                  title={isOwnerLevel ? 'Доступно только владельцу' : ''}
+                                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
+                                    isOwnerLevel
+                                      ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
+                                      : `cursor-pointer active:scale-95 ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isOwnerLevel ? false : enabled}
+                                    disabled={isOwnerLevel}
+                                    onChange={() => !isOwnerLevel && togglePerm(perm)}
+                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className={`block text-[10px] font-black uppercase tracking-wide leading-none ${badgeCls.split(' ').slice(1).join(' ')}`}>
+                                      {action.label}
+                                    </span>
+                                    <span className="text-[9px] text-gray-400 font-medium mt-0.5 block leading-tight">
+                                      {isOwnerLevel ? 'только владелец' : (ACTION_DESCRIPTIONS[action.key] || action.label)}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
                       </div>
-                    ) : (
-                      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                        {(permCatalog?.actions || []).map((action, idx) => {
-                          const perm = `${selectedResData.key}.${action.key}`;
-                          const enabled = currentSet.has(perm);
-                          const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
-                          return (
-                            <label
-                              key={action.key}
-                              className={`flex items-center gap-4 px-5 py-4 cursor-pointer transition-all duration-150 ${
-                                idx < (permCatalog.actions.length - 1) ? 'border-b border-gray-50' : ''
-                              } ${enabled ? 'bg-blue-50/30 hover:bg-blue-50/50' : 'hover:bg-gray-50'}`}
-                            >
-                              <input
-                                type="checkbox"
-                                checked={enabled}
-                                onChange={() => togglePerm(perm)}
-                                className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <div className="flex items-center gap-2 mb-0.5">
-                                  <span className={`px-2.5 py-0.5 rounded-lg text-[10px] font-black uppercase tracking-wide ${badgeCls}`}>
-                                    {action.label}
-                                  </span>
-                                </div>
-                                <p className="text-xs text-gray-400 font-medium">
-                                  {ACTION_DESCRIPTIONS[action.key] || action.label}
-                                </p>
-                              </div>
-                              {enabled && <CheckCircle2 size={14} className="text-blue-500 flex-shrink-0"/>}
-                            </label>
-                          );
-                        })}
-                      </div>
-                    )}
-                  </div>
-
+                    );
+                  })}
                 </div>
               </>
             )}
@@ -5490,7 +5512,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer')).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer') && (!n.resource || userCanAny(n.resource))).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
@@ -5553,7 +5575,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
-          <div className={activeTab === 'triggers' && editingTrigger ? 'w-full' : 'max-w-3xl mx-auto'}>
+          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' ? 'w-full' : 'max-w-3xl mx-auto'}>
             {renderContent()}
           </div>
         </div>

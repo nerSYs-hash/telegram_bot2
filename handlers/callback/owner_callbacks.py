@@ -13,8 +13,10 @@ from handlers.owner_handlers import (
     send_database_backup,
     show_statistics_not_in_chat,
     show_recovery_menu, restore_bbs_confirm, restore_bbs_execute,
+    restore_last_bbs_execute,
     restore_news_confirm, restore_news_execute,
     compensate_bbs_start, compensate_bbs_confirm,
+    recovery_other_confirm, recovery_other_execute,
 )
 from handlers.placeholder_handlers import (
     show_placeholder_menu,
@@ -181,9 +183,17 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await show_recovery_menu(query, db, admin_id)
     elif data == "owner_recovery_other_confirm":
         await recovery_other_confirm(query, db, admin_id)
-    elif data == "owner_recovery_other_execute":
+    elif data.startswith("owner_recovery_other_execute"):
         bbs_thread_id = handler.bbs_thread_id
-        await recovery_other_execute(query, db, admin_id, context, target_chat_id, bbs_thread_id)
+        post_id = None
+        if data == "owner_recovery_other_execute_all":
+            post_id = 'all'
+        elif data != "owner_recovery_other_execute":
+            try:
+                post_id = int(data.rsplit("_", 1)[1])
+            except Exception:
+                post_id = None
+        await recovery_other_execute(query, db, admin_id, context, target_chat_id, bbs_thread_id, post_id)
 
     # ── Старая panel_* система (маршрутизация через panel_callback) ──
     elif data.startswith("panel_"):
@@ -199,6 +209,8 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
         await restore_bbs_confirm(query, db, admin_id)
     elif data == "owner_restore_bbs_confirm":
         await restore_bbs_execute(query, context, db, admin_id)
+    elif data == "owner_restore_last_bbs":
+        await restore_last_bbs_execute(query, context, db, admin_id)
     elif data == "owner_restore_news":
         await restore_news_confirm(query, db, admin_id)
     elif data == "owner_restore_news_confirm":

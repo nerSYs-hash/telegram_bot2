@@ -28,6 +28,13 @@ current_dir = os.path.dirname(os.path.abspath(__file__))
 if current_dir not in sys.path:
     sys.path.append(current_dir)
 
+# Загружаем .env (MAIN_ADMIN_ID, DEVELOPER_ID, BOT_TOKEN и др.)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(os.path.join(current_dir, '.env'))
+except ImportError:
+    logger.warning("⚠️ python-dotenv не установлен — .env не загружен")
+
 app = FastAPI(
     title="Pulse Pro API",
     description="Backend API для панели управления (из корня бота)",
@@ -71,6 +78,14 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения economy router: {e}")
     _economy_ws_manager = None
+
+try:
+    from api.titles_routes import router as titles_router, _setup as _titles_setup
+    _titles_setup(db, lambda auth: _require_auth(auth), lambda uid: _resolve_user_role(uid))
+    app.include_router(titles_router)
+    logger.info("✅ titles: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения titles router: {e}")
 
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
@@ -121,9 +136,12 @@ async def auth_telegram(request: Request):
     if time.time() - int(data.get("auth_date", 0)) > 86400:
         raise HTTPException(status_code=401, detail="Данные авторизации устарели")
     user_id = int(data["id"])
+    _main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
+    _developer_id  = int(os.getenv('DEVELOPER_ID', 0))
     udata = db.get_user(user_id) if db else None
-    is_admin = bool(udata and (udata["is_admin"] or udata["is_owner"]))
-    is_owner = bool(udata and udata["is_owner"])
+    is_owner    = bool((udata and udata["is_owner"]) or (_main_admin_id and user_id == _main_admin_id))
+    is_developer = bool(_developer_id and user_id == _developer_id)
+    is_admin    = bool(is_owner or is_developer or (udata and udata["is_admin"]))
     token = _make_jwt({
         "user_id":    user_id,
         "username":   data.get("username", ""),
@@ -213,7 +231,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
     if not joined_at:
         joined_at = role_meta.get("created_at")
 
-    has_chat = role_raw in ("owner", "deputy", "admin")
+    has_chat = role_raw in ("owner", "developer", "deputy", "admin")
     accesses = get_role_accesses(role_raw)
     from permissions import get_role_permissions
     permissions_flat = get_role_permissions(role_raw)
@@ -224,6 +242,7 @@ async def admin_profile_me(authorization: str = Header(default=None)):
         "first_name":     payload.get("first_name", ""),
         "photo_url":      payload.get("photo_url", ""),
         "role":           role_raw,
+        "role_raw":       role_raw,
         "role_label":     role_label,
         "joined_at":      joined_at,
         "last_message":   last_msg_date,
@@ -250,10 +269,13 @@ def _require_auth(authorization: str) -> dict:
 
 
 def _resolve_user_role(user_id: int) -> str:
-    """Возвращает роль пользователя (owner/deputy/admin/user) с учётом MAIN_ADMIN_ID."""
+    """Возвращает роль пользователя (owner/developer/deputy/admin/user)."""
     main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
     if main_admin_id and user_id == main_admin_id:
         return "owner"
+    developer_id = int(os.getenv('DEVELOPER_ID', 0))
+    if developer_id and user_id == developer_id:
+        return "developer"
     meta = _get_user_role_meta(user_id)
     return (meta.get("role") or "user").lower()
 
@@ -266,6 +288,17 @@ def _require_owner(authorization: str) -> int:
         raise HTTPException(status_code=400, detail="ID не определён")
     if _resolve_user_role(user_id) != "owner":
         raise HTTPException(status_code=403, detail="Доступно только владельцу")
+    return user_id
+
+
+def _require_owner_or_developer(authorization: str) -> int:
+    """Проверяет что пользователь — owner или developer. Возвращает user_id или 403."""
+    payload = _require_auth(authorization)
+    user_id = int(payload.get("user_id", 0))
+    if not user_id:
+        raise HTTPException(status_code=400, detail="ID не определён")
+    if _resolve_user_role(user_id) not in ("owner", "developer"):
+        raise HTTPException(status_code=403, detail="Доступно только владельцу или разработчику")
     return user_id
 
 
@@ -296,13 +329,22 @@ async def permissions_roles_update(
     body: PermissionsUpdate,
     authorization: str = Header(default=None),
 ):
-    """Перезаписать список permissions для роли. Только owner."""
-    _require_owner(authorization)
-    from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions
+    """Перезаписать список permissions для роли. Только owner или developer."""
+    payload = _require_auth(authorization)
+    caller_id = int(payload.get("user_id", 0))
+    if _resolve_user_role(caller_id) not in ("owner", "developer"):
+        raise HTTPException(status_code=403, detail="Доступно только владельцу или разработчику")
+    from permissions import set_role_permissions, EDITABLE_ROLES, get_role_permissions, OWNER_LEVEL_PERMISSIONS
     if role not in EDITABLE_ROLES:
         raise HTTPException(
             status_code=400,
             detail=f"Роль '{role}' нельзя редактировать (доступны: {list(EDITABLE_ROLES)})",
+        )
+    forbidden = [p for p in body.permissions if p in OWNER_LEVEL_PERMISSIONS]
+    if forbidden:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Эти права доступны только владельцу и не могут быть выданы: {', '.join(forbidden)}",
         )
     try:
         set_role_permissions(role, body.permissions)
@@ -1461,8 +1503,8 @@ async def get_ui_settings():
 
 @app.post("/api/ui_settings")
 async def save_ui_settings(request: Request, authorization: str = Header(default=None)):
-    """Сохраняет UI-настройки. Только owner."""
-    _require_owner(authorization)
+    """Сохраняет UI-настройки. Только owner или developer."""
+    _require_owner_or_developer(authorization)
     body = await request.json()
     saved = []
     errors = []
@@ -1706,6 +1748,7 @@ FEATURES_LIST = [
     {'id': 'bbs',           'name': '❣️ Pulse BBS'},
     {'id': 'bbs_other',     'name': '📦 BBS: Другое'},
     {'id': 'bbs_edit',      'name': '✏️ Редактирование анкет BBS'},
+    {'id': 'titles',        'name': '🏷 Кастомные титулы'},
     {'id': 'registration',  'name': '📝 Регистрация новых участников'},
 ]
 

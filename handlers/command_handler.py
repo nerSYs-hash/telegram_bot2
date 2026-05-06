@@ -4,7 +4,7 @@ import logging
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import ContextTypes
 from handlers.commands.economy_commands import (
-    safe_name, balance_command, pay_command, give_pulse_command, wipe_balances_command 
+    safe_name, balance_command, pay_command, tip_command, give_pulse_command, wipe_balances_command
 )
 from utils.ai_core import ask_ai
 from database.db_friend import get_user, get_user_pending_application, is_blacklisted, get_blacklist_reason
@@ -203,6 +203,24 @@ class CommandHandler:
                 await self.message.reply_text(text, **kwargs)
         dummy_query = DummyQuery(update.message)
         await restore_bbs_execute(dummy_query, context, self.db, self.main_admin_id)
+
+    async def restore_last_bbs_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)."""
+        if update.effective_user.id != self.main_admin_id:
+            await update.message.reply_text("⛔ Нет доступа.")
+            return
+        from handlers.owner_handlers import restore_last_bbs_execute
+        # Эмулируем query для совместимости с restore_last_bbs_execute
+        class DummyQuery:
+            def __init__(self, message):
+                self.message = message
+                self.from_user = message.from_user
+            async def answer(self, *a, **kw):
+                pass
+            async def edit_message_text(self, text, **kwargs):
+                await self.message.reply_text(text, **kwargs)
+        dummy_query = DummyQuery(update.message)
+        await restore_last_bbs_execute(dummy_query, context, self.db, self.main_admin_id)
     def __init__(self, db, target_chat_id, main_admin_id, bot_username=None):
         self.db = db
         self.target_chat_id = target_chat_id
@@ -432,6 +450,10 @@ class CommandHandler:
     async def pay_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /pay command — delegates to economy_commands"""
         await pay_command(update, context, self.db)
+
+    async def tip_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /tip <amount> — quick reply tip; delegates to economy_commands"""
+        await tip_command(update, context, self.db)
 
     async def donate_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /donate command — delegates to donation_commands"""

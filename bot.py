@@ -189,6 +189,10 @@ class TelegramBot:
         except Exception as _e:
             logger.warning(f"TOP-5% warmup failed: {_e}")
 
+        # ── Auto-delete: патчим бота для chain-delete в главном чате ──
+        from utils.auto_delete import patch_bot_for_autodelete
+        patch_bot_for_autodelete(application.bot, application, self.target_chat_id)
+
         # ── Уведомление о версии при старте ──
         await self._notify_version(bot)
 
@@ -298,9 +302,21 @@ class TelegramBot:
                     self.db.cursor.execute('''
                         UPDATE users SET is_qualified = 1 WHERE user_id = ?
                     ''', (user_id,))
-                    
-                    # Award referrer
-                    reward = int(os.getenv('REFERRAL_REWARD', 500))
+
+                    # Master-switch раздела «👥 Реферальная программа»
+                    try:
+                        if not self.db.is_econ_section_enabled('referral'):
+                            self.db.conn.commit()
+                            continue
+                    except Exception:
+                        pass
+
+                    # Award referrer (размер берём из economy_settings, fallback — старый ENV)
+                    try:
+                        reward = int(self.db.get_econ('referral.qualified_reward',
+                                                     int(os.getenv('REFERRAL_REWARD', 500))) or 500)
+                    except Exception:
+                        reward = int(os.getenv('REFERRAL_REWARD', 500))
                     self.db.update_user_balance(referrer_id, reward, 'add')
                     self.db.add_transaction(
                         None,
@@ -330,6 +346,55 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error checking qualifications: {e}")
     
+    async def check_horoscope_schedule(self):
+        """Ежеминутная проверка расписания автопубликации гороскопа."""
+        try:
+            if self.db.get_setting('horoscope_schedule_enabled', '0') != '1':
+                return
+
+            from utils.helpers import get_moscow_time
+            now = get_moscow_time()
+            current_time = now.strftime('%H:%M')
+            scheduled_time = self.db.get_setting('horoscope_schedule_time', '09:00')
+            if current_time != scheduled_time:
+                return
+
+            # Защита от двойной публикации в один день
+            today_str = now.strftime('%Y-%m-%d')
+            if self.db.get_setting('horoscope_last_published_date', '') == today_str:
+                return
+
+            mode = self.db.get_setting('horoscope_schedule_mode', 'today')
+            thread_id_str = self.db.get_setting('horoscope_schedule_thread_id', '') or ''
+            thread_id = int(thread_id_str) if thread_id_str else None
+
+            from datetime import timedelta
+            from handlers.horoscope_handler import _load_custom_emoji, build_single_message, ZODIAC_SIGNS
+            from utils.horoscope_parser import get_all_horoscopes
+
+            tomorrow_mode = (mode == 'tomorrow')
+            target_date = now + timedelta(days=1) if tomorrow_mode else now
+
+            cache = await _load_custom_emoji(self.application.bot)
+            data = await get_all_horoscopes(ZODIAC_SIGNS, tomorrow=tomorrow_mode)
+            msg_text = build_single_message(data, cache, target_date=target_date)
+
+            send_kwargs = {
+                'chat_id': self.target_chat_id,
+                'text': msg_text,
+                'parse_mode': 'HTML',
+                '_no_chain': True,
+            }
+            if thread_id:
+                send_kwargs['message_thread_id'] = thread_id
+
+            await self.application.bot.send_message(**send_kwargs)
+            self.db.set_setting('horoscope_last_published_date', today_str)
+            logger.info(f"✅ Авто-гороскоп опубликован (режим={mode}, дата={target_date.strftime('%d.%m.%Y')})")
+
+        except Exception as e:
+            logger.error(f"check_horoscope_schedule error: {e}", exc_info=True)
+
     async def check_scheduled_posts(self):
         """Check and publish scheduled posts"""
         try:
@@ -565,6 +630,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("course", self.command_handler.course_command))
         self.application.add_handler(CommandHandler("give_pulse", self.command_handler.give_pulse_command))
         self.application.add_handler(CommandHandler("pay", self.command_handler.pay_command))
+        self.application.add_handler(CommandHandler("tip", self.command_handler.tip_command))
         self.application.add_handler(CommandHandler("donate", self.command_handler.donate_command))
         self.application.add_handler(CommandHandler("help", self.command_handler.help_command))
         self.application.add_handler(CommandHandler("recalc", lambda u, c: recalc_rate_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
@@ -578,6 +644,8 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("unfreeze", self.command_handler.unfreeze_command))
         # Восстановить все анкеты BBS (только для владельца)
         self.application.add_handler(CommandHandler("restore_bbs", self.command_handler.restore_bbs_command))
+        # Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)
+        self.application.add_handler(CommandHandler("restore_last_bbs", self.command_handler.restore_last_bbs_command))
         # Восстановить все посты НьюзON (только для владельца)
         self.application.add_handler(CommandHandler("restore_news", self.command_handler.restore_news_command))
         self.application.add_handler(CommandHandler("resend_dossier", self.command_handler.resend_dossier_command))
@@ -623,10 +691,31 @@ class TelegramBot:
         # Заявки на вступление (ChatJoinRequest)
         from telegram.ext import ChatJoinRequestHandler
         self.application.add_handler(ChatJoinRequestHandler(self.handle_join_request))
-        
+
+        # Кастомные титулы (V1.16.0): UI юзера + панель Владельца.
+        # НЕ оборачиваем в try/except — если упадёт, лучше увидеть это сразу при старте.
+        from handlers.titles_handlers import register_titles
+        from handlers.owner_titles_panel import register_owner_titles
+        register_titles(
+            self.application, self.db,
+            self.target_chat_id, self.main_admin_id
+        )
+        register_owner_titles(self.application)
+        logger.info("✅ Titles (V1.16.0) handlers registered: /titles + menu_balance")
+
+        # Удаление команд пользователей из главного чата (group -1, до всех остальных)
+        from utils.auto_delete import delete_user_command_in_main_chat
+        self.application.add_handler(
+            MessageHandler(
+                filters.COMMAND & filters.Chat(chat_id=self.target_chat_id),
+                delete_user_command_in_main_chat
+            ),
+            group=-1
+        )
+
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
-        
+
         logger.info("Handlers setup complete")
     
     async def handle_join_request(self, update: Update, context):
@@ -709,6 +798,33 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in check_inactive_users: {e}")
 
+    async def cleanup_title_requests_job(self):
+        """Scheduled: авто-expire pending заявок на титулы (V1.16.0)."""
+        try:
+            from handlers.titles_handlers import _get_request_ttl_hours, _format_number
+            ttl_hours = _get_request_ttl_hours(self.db)
+            expired = self.db.expire_old_title_requests(ttl_hours)
+            if not expired:
+                return
+            logger.info(f"🏷 Title requests auto-expired: {len(expired)}")
+            for req in expired:
+                chat_id = req.get('owner_chat_id')
+                msg_id = req.get('owner_msg_id')
+                if not chat_id or not msg_id:
+                    continue
+                try:
+                    await self.application.bot.edit_message_text(
+                        chat_id=chat_id, message_id=msg_id,
+                        text=(f"📨 ЗАЯВКА #{req['id']} — ⌛ ИСТЕКЛА (TTL {ttl_hours} ч)\n\n"
+                              f"🏷 «{req['title_text']}» · "
+                              f"{_format_number(req['price_rub'])} ₽"),
+                        parse_mode='HTML',
+                    )
+                except Exception as e:
+                    logger.debug(f"Title cleanup edit failed for #{req['id']}: {e}")
+        except Exception as e:
+            logger.error(f"cleanup_title_requests_job: {e}")
+
     async def send_weekly_report_job(self):
         """Scheduled: еженедельный отчёт владельцу"""
         try:
@@ -739,6 +855,14 @@ class TelegramBot:
             'interval',
             hours=1,
             id='check_qualifications'
+        )
+
+        # V1.16.0: cleanup истёкших pending-заявок на титулы (раз в час)
+        self.scheduler.add_job(
+            self.cleanup_title_requests_job,
+            'interval',
+            hours=1,
+            id='cleanup_title_requests'
         )
         
         # Check lottery endings every minute
@@ -771,6 +895,14 @@ class TelegramBot:
             'interval',
             seconds=30,
             id='check_scheduled_posts'
+        )
+
+        # Авто-публикация гороскопа — проверка каждую минуту
+        self.scheduler.add_job(
+            self.check_horoscope_schedule,
+            'interval',
+            minutes=1,
+            id='check_horoscope_schedule'
         )
         
         # Cleanup dead BBS profiles every 12 hours

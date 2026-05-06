@@ -227,9 +227,21 @@ class TelegramBot:
                     self.db.cursor.execute('''
                         UPDATE users SET is_qualified = 1 WHERE user_id = ?
                     ''', (user_id,))
-                    
-                    # Award referrer
-                    reward = int(os.getenv('REFERRAL_REWARD', 500))
+
+                    # Master-switch раздела «👥 Реферальная программа»
+                    try:
+                        if not self.db.is_econ_section_enabled('referral'):
+                            self.db.conn.commit()
+                            continue
+                    except Exception:
+                        pass
+
+                    # Award referrer (размер берём из economy_settings, fallback — старый ENV)
+                    try:
+                        reward = int(self.db.get_econ('referral.qualified_reward',
+                                                     int(os.getenv('REFERRAL_REWARD', 500))) or 500)
+                    except Exception:
+                        reward = int(os.getenv('REFERRAL_REWARD', 500))
                     self.db.update_user_balance(referrer_id, reward, 'add')
                     self.db.add_transaction(
                         None,
@@ -435,6 +447,7 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("course", self.command_handler.course_command))
         self.application.add_handler(CommandHandler("give_pulse", self.command_handler.give_pulse_command))
         self.application.add_handler(CommandHandler("pay", self.command_handler.pay_command))
+        self.application.add_handler(CommandHandler("tip", self.command_handler.tip_command))
         self.application.add_handler(CommandHandler("donate", self.command_handler.donate_command))
         self.application.add_handler(CommandHandler("help", self.command_handler.help_command))
         self.application.add_handler(CommandHandler("recalc", lambda u, c: recalc_rate_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))

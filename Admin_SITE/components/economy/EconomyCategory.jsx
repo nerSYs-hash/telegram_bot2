@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import EconomySubTable from './EconomySubTable';
-import EconomyToggleModal from './EconomyToggleModal';
+import EconomyToggleForm from './EconomyToggleForm';
 
 function groupBy(arr, key) {
   return arr.reduce((acc, item) => {
@@ -18,14 +18,16 @@ function _categoryEmoji(key) {
 
 export default function EconomyCategory({
   category, isExpanded, onToggle, onOpenHistory,
-  token, recentlyChanged, canEdit,
+  token, recentlyChanged, canEdit, sectionEnabled,
 }) {
   const [settings, setSettings]     = useState(null);
   const [loading, setLoading]       = useState(false);
-  const [sectionEnabled, setEnabled] = useState(category.is_enabled);
+  const [enabled, setEnabled]       = useState(sectionEnabled ?? category.is_enabled);
   const [masterModal, setMasterModal] = useState(false);
 
-  useEffect(() => { setEnabled(category.is_enabled); }, [category.is_enabled]);
+  useEffect(() => {
+    setEnabled(sectionEnabled ?? category.is_enabled);
+  }, [sectionEnabled, category.is_enabled]);
 
   useEffect(() => {
     if (!isExpanded || settings) return;
@@ -73,13 +75,12 @@ export default function EconomyCategory({
         <div className="flex items-center">
           <button
             onClick={onToggle}
-            className="flex-1 flex items-center gap-4 p-6 hover:bg-gray-50 transition text-left">
-            <span className="text-2xl">{_categoryEmoji(category.key)}</span>
+            className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition text-left">
             <div className="flex-1 min-w-0">
-              <div className="text-base font-black text-gray-900">{category.label}</div>
+              <div className="text-sm font-black text-gray-900">{category.label}</div>
               <div className="text-[10px] text-gray-400 mt-0.5">
                 {category.rows_count} параметров
-                {!sectionEnabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
+                {!enabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
               </div>
             </div>
             <ChevronDown
@@ -88,23 +89,37 @@ export default function EconomyCategory({
             />
           </button>
 
-          {/* Мастер-свич */}
+          {/* Мастер-свич — единый стиль с строками */}
           <button
-            onClick={() => canEdit ? setMasterModal(true) : null}
+            onClick={() => canEdit ? setMasterModal(v => !v) : null}
             disabled={!canEdit}
-            title={canEdit ? (sectionEnabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
-            className={`mr-5 w-14 h-8 rounded-full relative transition-colors shrink-0 ${
-              sectionEnabled ? 'bg-green-500' : 'bg-gray-200'
+            title={canEdit ? (enabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
+            className={`mr-4 relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
+              enabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <div className={`w-6 h-6 bg-white rounded-full shadow absolute top-1 transition-all ${
-              sectionEnabled ? 'right-1' : 'left-1'
+            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+              enabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
         </div>
 
+        {/* Inline форма мастер-тумблера */}
+        {masterModal && (
+          <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+            <EconomyToggleForm
+              label={category.label}
+              currentEnabled={enabled}
+              rowCount={category.rows_count}
+              isMaster={true}
+              onCancel={() => setMasterModal(false)}
+              onSave={async (c) => { await handleMasterToggle(c); setMasterModal(false); }}
+            />
+          </div>
+        )}
+
         {/* Тело */}
         {isExpanded && (
-          <div className="border-t border-gray-100 p-6 space-y-5">
+          <div className="border-t border-gray-100 px-5 py-4 space-y-4">
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -128,17 +143,6 @@ export default function EconomyCategory({
           </div>
         )}
       </div>
-
-      {masterModal && (
-        <EconomyToggleModal
-          label={category.label}
-          currentEnabled={sectionEnabled}
-          rowCount={category.rows_count}
-          isMaster={true}
-          onClose={() => setMasterModal(false)}
-          onSave={handleMasterToggle}
-        />
-      )}
     </>
   );
 }

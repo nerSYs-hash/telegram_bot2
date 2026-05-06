@@ -83,6 +83,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 caption=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(msg.message_id)
         elif len(photos) > 1:
@@ -102,6 +103,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 text=" 👆<b>Понравился ?</b>",
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(btn_msg.message_id)
         else:
@@ -112,6 +114,7 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
                 text=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user.id, bot_username),
+                _no_chain=True,
             )
             sent_message_ids.append(msg.message_id)
     except Exception as e:
@@ -213,20 +216,26 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_delete
         except Exception:
             msg_ids = []
 
+    if not (msg_ids or []):
+        logging.warning(f"BBS delete_profile_chat_messages: message_ids пустой/None для профиля {profile.get('id')} user {profile.get('user_id')}")
+
     for mid in (msg_ids or []):
         try:
             await bot.delete_message(chat_id=target_chat_id, message_id=mid)
-        except Exception:
+            logging.debug(f"BBS: deleted msg {mid} from chat {target_chat_id}")
+        except Exception as del_err:
+            logging.warning(f"BBS: delete_message failed for msg {mid} chat {target_chat_id}: {del_err}")
             if not mark_deleted:
-                logging.warning(f"BBS: Could not delete msg {mid} (edit-flow, skipping mark)")
                 continue
-            # Сообщение старше 48ч — редактируем вместо удаления
+            # Не смогли удалить — помечаем: убираем кнопки и меняем caption/text
+            no_buttons = InlineKeyboardMarkup([])
             try:
                 await bot.edit_message_text(
                     chat_id=target_chat_id,
                     message_id=mid,
                     text="<i>Анкета удалена ✓</i>",
                     parse_mode='HTML',
+                    reply_markup=no_buttons,
                 )
             except Exception:
                 try:
@@ -235,9 +244,18 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_delete
                         message_id=mid,
                         caption="<i>Анкета удалена ✓</i>",
                         parse_mode='HTML',
+                        reply_markup=no_buttons,
                     )
-                except Exception as e2:
-                    logging.warning(f"BBS: Could not remove msg {mid}: {e2}")
+                except Exception:
+                    # Медиагруппа без caption — убираем хотя бы кнопки
+                    try:
+                        await bot.edit_message_reply_markup(
+                            chat_id=target_chat_id,
+                            message_id=mid,
+                            reply_markup=no_buttons,
+                        )
+                    except Exception as e3:
+                        logging.warning(f"BBS: Could not remove msg {mid}: {e3}")
 
 
 async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None, deleted_by: str = 'system'):
@@ -338,6 +356,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
                 caption=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user_id, bot.username),
+                _no_chain=True,
             )
             sent_ids.append(msg.message_id)
         elif len(photos) > 1:
@@ -351,6 +370,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
                     text=profile_text,
                     parse_mode='HTML',
                     reply_markup=write_button(user_id, bot.username),
+                    _no_chain=True,
                 )
                 sent_ids.append(msg.message_id)
             elif len(valid_photos) == 1:
@@ -362,6 +382,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
                     caption=profile_text,
                     parse_mode='HTML',
                     reply_markup=write_button(user_id, bot.username),
+                    _no_chain=True,
                 )
                 sent_ids.append(msg.message_id)
             else:
@@ -383,6 +404,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
                         text=" 👆<b>Понравился ?</b>",
                         parse_mode='HTML',
                         reply_markup=write_button(user_id, bot.username),
+                        _no_chain=True,
                     )
                     sent_ids.append(btn_msg.message_id)
                 except Exception as btn_err:
@@ -395,6 +417,7 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
                 text=profile_text,
                 parse_mode='HTML',
                 reply_markup=write_button(user_id, bot.username),
+                _no_chain=True,
             )
             sent_ids.append(msg.message_id)
             
@@ -499,7 +522,13 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
             edited_in_place = True
             logging.info(f"BBS update_in_place: caption edited for user {user_id}")
         except Exception as e:
-            logging.warning(f"BBS update_in_place: edit_message_caption failed: {e}")
+            err = str(e).lower()
+            if 'not modified' in err:
+                # Текст не изменился — считаем успехом, перепубликация не нужна
+                edited_in_place = True
+                logging.info(f"BBS update_in_place: caption not modified (unchanged) for user {user_id}")
+            else:
+                logging.warning(f"BBS update_in_place: edit_message_caption failed: {e}")
     else:
         # Текстовое сообщение
         try:
@@ -513,11 +542,16 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
             edited_in_place = True
             logging.info(f"BBS update_in_place: text edited for user {user_id}")
         except Exception as e:
-            logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
+            err = str(e).lower()
+            if 'not modified' in err:
+                edited_in_place = True
+                logging.info(f"BBS update_in_place: text not modified (unchanged) for user {user_id}")
+            else:
+                logging.warning(f"BBS update_in_place: edit_message_text failed: {e}")
 
     if not edited_in_place:
         # Fallback: удалить старые и перепубликовать.
-        # mark_deleted=False — при >48ч просто оставляем старое сообщение, не пишем «Анкета удалена»
+        # mark_deleted=True — при неудаче удаления хотя бы убираем кнопки и помечаем caption
         logging.info(f"BBS update_in_place: fallback to republish for user {user_id}")
-        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=False)
+        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=True)
         await republish_profile(bot, db, user_id, target_chat_id, thread_id)

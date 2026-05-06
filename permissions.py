@@ -43,21 +43,21 @@ ROLE_LABELS = {
     ROLE_USER:      "Без статуса",
 }
 
-# ── РЕСУРСЫ (каталог) ──
+# ── РЕСУРСЫ (каталог) — у каждого ресурса свой список осмысленных actions ──
 RESOURCES = {
-    "triggers":   {"label": "Триггеры",           "icon": "ShieldAlert"},
-    "shipper":    {"label": "Шиппер",             "icon": "HeartHandshake"},
-    "broadcast":  {"label": "Рассылка",           "icon": "Send"},
-    "journal":    {"label": "Журнал событий",     "icon": "ScrollText"},
-    "statistics": {"label": "Статистика",         "icon": "PieChart"},
-    "system":     {"label": "Системные настройки","icon": "Settings"},
-    "admins":     {"label": "Управление админами","icon": "ShieldCheck"},
-    "blacklist":  {"label": "Чёрный список",      "icon": "Ban"},
-    "moderation": {"label": "Модерация чата",     "icon": "ShieldBan"},
-    "economy":    {"label": "Экономика",          "icon": "Coins"},
+    "triggers":   {"label": "Триггеры",            "icon": "ShieldAlert",     "actions": ["view", "create", "edit", "delete", "toggle"]},
+    "shipper":    {"label": "Шиппер",              "icon": "HeartHandshake",  "actions": ["view", "edit", "toggle"]},
+    "broadcast":  {"label": "Рассылка",            "icon": "Send",            "actions": ["view", "create", "edit", "delete"]},
+    "journal":    {"label": "Журнал событий",      "icon": "ScrollText",      "actions": ["view", "export"]},
+    "statistics": {"label": "Статистика",          "icon": "PieChart",        "actions": ["view", "export"]},
+    "system":     {"label": "Системные настройки", "icon": "Settings",        "actions": ["view", "edit", "toggle"]},
+    "admins":     {"label": "Управление админами", "icon": "ShieldCheck",     "actions": ["view", "create", "edit", "delete"]},
+    "blacklist":  {"label": "Чёрный список",       "icon": "Ban",             "actions": ["view", "create", "delete"]},
+    "moderation": {"label": "Модерация чата",      "icon": "ShieldBan",       "actions": ["view", "delete", "toggle"]},
+    "economy":    {"label": "Экономика",           "icon": "Coins",           "actions": ["view", "edit", "toggle", "rollback", "cancel"]},
 }
 
-# ── ДЕЙСТВИЯ (каталог) ──
+# ── ДЕЙСТВИЯ (каталог — все уникальные labels) ──
 ACTION_LABELS = {
     "view":     "просмотр",
     "create":   "создание",
@@ -69,24 +69,42 @@ ACTION_LABELS = {
     "cancel":   "отмена выплат",
 }
 
-# ── ВСЕ ВОЗМОЖНЫЕ permissions (плоский список) ──
+# ── Permissions только для owner и developer — нельзя выдать deputy/admin ──
+OWNER_LEVEL_PERMISSIONS = frozenset({
+    "admins.create",
+    "admins.edit",
+    "admins.delete",
+    "economy.cancel",
+})
+
+# ── ВСЕ ВОЗМОЖНЫЕ permissions (только осмысленные пары resource.action) ──
 def all_permissions() -> list:
-    return [f"{r}.{a}" for r in RESOURCES for a in ACTION_LABELS]
+    return [f"{r}.{a}" for r, meta in RESOURCES.items() for a in meta["actions"]]
 
 
 # ── ДЕФОЛТЫ для сидинга при первом старте ──
 DEFAULT_ROLE_PERMISSIONS = {
     ROLE_DEPUTY: [
-        "triggers.view",   "triggers.create", "triggers.edit", "triggers.delete", "triggers.toggle",
-        "shipper.view",    "shipper.edit",    "shipper.toggle",
-        "broadcast.view",  "broadcast.create","broadcast.edit","broadcast.delete",
-        "journal.view",    "journal.export",
+        # Триггеры
+        "triggers.view", "triggers.create", "triggers.edit", "triggers.delete", "triggers.toggle",
+        # Шиппер
+        "shipper.view", "shipper.edit", "shipper.toggle",
+        # Рассылка
+        "broadcast.view", "broadcast.create", "broadcast.edit", "broadcast.delete",
+        # Журнал
+        "journal.view", "journal.export",
+        # Статистика
         "statistics.view", "statistics.export",
-        "system.view",
+        # Системные настройки
+        "system.view", "system.edit", "system.toggle",
+        # Управление админами — только view (create/edit/delete — OWNER_LEVEL)
         "admins.view",
-        "blacklist.view",  "blacklist.create","blacklist.delete",
-        "moderation.delete", "moderation.edit", "moderation.toggle",
-        "economy.view",    "economy.edit",   "economy.toggle", "economy.rollback",
+        # Чёрный список
+        "blacklist.view", "blacklist.create", "blacklist.delete",
+        # Модерация
+        "moderation.view", "moderation.delete", "moderation.toggle",
+        # Экономика — без cancel (cancel — OWNER_LEVEL)
+        "economy.view", "economy.edit", "economy.toggle", "economy.rollback",
     ],
     ROLE_ADMIN: [
         "triggers.view",
@@ -94,7 +112,10 @@ DEFAULT_ROLE_PERMISSIONS = {
         "broadcast.view",
         "journal.view",
         "statistics.view",
-        "moderation.delete",
+        "system.view",
+        "admins.view",
+        "blacklist.view",
+        "moderation.view", "moderation.delete",
         "economy.view",
     ],
 }
@@ -110,7 +131,7 @@ def _db_path() -> str:
 def init_permissions_db(db_path: Optional[str] = None) -> None:
     """
     Создаёт таблицу role_permissions и заполняет дефолтами при первом старте.
-    Безопасно вызывать многократно.
+    Безопасно вызывать многократно. Также чистит legacy permissions.
     """
     path = db_path or _db_path()
     if not os.path.exists(os.path.dirname(path)):
@@ -131,6 +152,22 @@ def init_permissions_db(db_path: Optional[str] = None) -> None:
                     "INSERT OR IGNORE INTO role_permissions (role, permission) VALUES (?, ?)",
                     (role, perm),
                 )
+        # Чистка устаревших permissions (не входящих в новый каталог)
+        valid = set(all_permissions())
+        cur = conn.execute("SELECT role, permission FROM role_permissions")
+        rows = cur.fetchall()
+        legacy = [(r, p) for (r, p) in rows if p not in valid]
+        if legacy:
+            conn.executemany(
+                "DELETE FROM role_permissions WHERE role = ? AND permission = ?",
+                legacy,
+            )
+        # Чистка OWNER_LEVEL у deputy/admin (защита от ранее выданных вручную)
+        for owner_perm in OWNER_LEVEL_PERMISSIONS:
+            conn.execute(
+                "DELETE FROM role_permissions WHERE permission = ? AND role IN (?, ?)",
+                (owner_perm, ROLE_DEPUTY, ROLE_ADMIN),
+            )
         conn.commit()
     finally:
         conn.close()
@@ -216,7 +253,8 @@ def set_role_permissions(role: str, permissions: list) -> None:
     if role not in EDITABLE_ROLES:
         raise ValueError(f"Роль '{role}' не редактируется")
     valid = set(all_permissions())
-    cleaned = sorted({p for p in permissions if p in valid})
+    # Фильтруем OWNER_LEVEL — их нельзя выдать deputy/admin
+    cleaned = sorted({p for p in permissions if p in valid and p not in OWNER_LEVEL_PERMISSIONS})
     path = _db_path()
     conn = sqlite3.connect(path)
     try:
@@ -269,17 +307,22 @@ def get_role_accesses(role) -> list:
 def get_catalog() -> dict:
     """
     Полный каталог для UI редактора прав.
-    Возвращает структуру для отрисовки матрицы «ресурс × действие».
+    Каждый ресурс отдаёт СВОИ actions (не декартово произведение).
     """
     return {
         "resources": [
-            {"key": k, "label": v["label"], "icon": v["icon"]}
+            {
+                "key": k,
+                "label": v["label"],
+                "icon": v["icon"],
+                "actions": [
+                    {"key": a, "label": ACTION_LABELS[a]}
+                    for a in v["actions"]
+                ],
+            }
             for k, v in RESOURCES.items()
         ],
-        "actions": [
-            {"key": k, "label": v}
-            for k, v in ACTION_LABELS.items()
-        ],
+        "owner_level": sorted(OWNER_LEVEL_PERMISSIONS),
         "roles": [
             {"key": r, "label": ROLE_LABELS[r], "editable": r in EDITABLE_ROLES}
             for r in ROLES

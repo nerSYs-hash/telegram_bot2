@@ -160,7 +160,11 @@ class GiftHandler:
         
         gift, current_month = self._get_current_gift()
         
-        current_amount = gift['prize_amount'] if gift else 500
+        try:
+            _default_amount = int(self.db.get_econ('monthly_gift.default_amount', 500) or 500)
+        except Exception:
+            _default_amount = 500
+        current_amount = gift['prize_amount'] if gift else _default_amount
         
         message = "🎁 НАСТРОЙКА ПОДАРКА\n"
         message += f"📅 {current_month}\n\n"
@@ -584,7 +588,16 @@ class GiftHandler:
         winner_id = winner['user_id']
         winner_username = winner['username']
         gift_amount = gift['prize_amount']
-        
+
+        # Master-switch раздела «🎁 Подарок месяца»
+        try:
+            if not self.db.is_econ_section_enabled('monthly_gift'):
+                await query.edit_message_text(
+                    "⏸ Раздел «Подарок месяца» временно отключён в панели экономики.")
+                return
+        except Exception:
+            pass
+
         # Award the prize (from bank)
         bank_balance = self.db.get_bank_balance()
         if bank_balance < gift_amount:

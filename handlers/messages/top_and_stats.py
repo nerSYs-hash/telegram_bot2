@@ -117,16 +117,17 @@ async def show_top_rich(message, context, db):
             sent = await context.bot.send_message(chat_id=message.chat.id, text="Пока нет данных о богачах.")
             return sent
 
+        from config.emojis import ICON_MONEY_BAG_GREEN
         response = "🏆 ТОП-5 БОГАЧЕЙ ЧАТА\n\n"
-        emojis =['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
+        emojis = ['🥇', '🥈', '🥉', '4️⃣', '5️⃣']
 
         for idx, user in enumerate(top_users):
             username = user['username'] or user['first_name'] or 'Unknown'
             balance = format_number(user['balance'])
-            pulses_today = format_number(user['pulses_today'])
-            response += f"{emojis[idx]} @{username}\n   💰 Баланс: {balance} 💎\n   ⛏ Добыто сегодня: {pulses_today} 💎\n\n"
+            bag = ICON_MONEY_BAG_GREEN if idx == 0 else '💰'
+            response += f"{emojis[idx]} @{username}\n   {bag} Баланс: {balance} 💎\n\n"
 
-        sent = await context.bot.send_message(chat_id=message.chat.id, text=response)
+        sent = await context.bot.send_message(chat_id=message.chat.id, text=response, parse_mode='HTML')
         return sent
     except Exception as e:
         logging.error(f"Error showing top rich: {e}")

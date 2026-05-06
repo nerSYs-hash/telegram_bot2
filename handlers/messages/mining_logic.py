@@ -132,6 +132,64 @@ PENALTY_COEFFICIENTS: dict[str, int] = {
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+#  ДИНАМИЧЕСКИЕ НАСТРОЙКИ ЭКОНОМИКИ
+# ══════════════════════════════════════════════════════════════════════════════
+
+def get_dynamic_economy_config(db) -> tuple[float, dict, dict, dict, dict, dict]:
+    """
+    Читает все настройки экономики из БД в реальном времени.
+    Возвращает (global_rate, base_coeffs, combo_coeffs, sprints_config, penalty_coeffs, defib_config).
+    Если настройка не задана в БД — используется значение из глобальных констант.
+    """
+    try:
+        global_rate = float(db.get_econ('mining.global_rate', GLOBAL_BASE_RATE) or GLOBAL_BASE_RATE)
+
+        base_coeffs = {
+            name: int(db.get_econ(f'base.{name}', val) or val)
+            for name, val in BASE_COEFFICIENTS.items()
+        }
+
+        combo_coeffs = {
+            name: int(db.get_econ(f'combo.{name}', val) or val)
+            for name, val in COMBO_COEFFICIENTS.items()
+        }
+
+        sprints_config = {
+            name: int(db.get_econ(f'sprint.{name}', cfg['coeff']) or cfg['coeff'])
+            for name, cfg in SPRINTS_CONFIG.items()
+        }
+
+        penalty_coeffs = {
+            name: int(db.get_econ(f'penalty.{name}', val) or val)
+            for name, val in PENALTY_COEFFICIENTS.items()
+        }
+
+        defib_config = {
+            'buff_multiplier':   float(db.get_econ('defib.buff_multiplier',   DEFIBRILLATOR_BUFF_MULTIPLIER) or DEFIBRILLATOR_BUFF_MULTIPLIER),
+            'buff_duration_min': int(db.get_econ('defib.buff_duration_min',   DEFIBRILLATOR_BUFF_DURATION_MIN) or DEFIBRILLATOR_BUFF_DURATION_MIN),
+            'silence_min':       int(db.get_econ('defib.silence_min_minutes', DEFIBRILLATOR_SILENCE_MIN) or DEFIBRILLATOR_SILENCE_MIN),
+            'silence_max':       int(db.get_econ('defib.silence_max_minutes', DEFIBRILLATOR_SILENCE_MAX) or DEFIBRILLATOR_SILENCE_MAX),
+        }
+
+        return global_rate, base_coeffs, combo_coeffs, sprints_config, penalty_coeffs, defib_config
+    except Exception as e:
+        logger.debug(f"get_dynamic_economy_config fallback: {e}")
+        return (
+            GLOBAL_BASE_RATE,
+            dict(BASE_COEFFICIENTS),
+            dict(COMBO_COEFFICIENTS),
+            {n: c['coeff'] for n, c in SPRINTS_CONFIG.items()},
+            dict(PENALTY_COEFFICIENTS),
+            {
+                'buff_multiplier':   DEFIBRILLATOR_BUFF_MULTIPLIER,
+                'buff_duration_min': DEFIBRILLATOR_BUFF_DURATION_MIN,
+                'silence_min':       DEFIBRILLATOR_SILENCE_MIN,
+                'silence_max':       DEFIBRILLATOR_SILENCE_MAX,
+            },
+        )
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 #  УТИЛИТЫ
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -198,13 +256,16 @@ def calculate_base_coefficients(
     is_reply: bool = False,
     thread_id: Optional[int] = None,
     special_thread_ids: Optional[set[int]] = None,
+    coeff_overrides: Optional[dict] = None,
 ) -> tuple[int, list[str]]:
     """
     Считает сумму базовых коэффициентов за одно сообщение.
 
     Возвращает (сумма_коэффициентов, список_сработавших).
     Умножение на GLOBAL_BASE_RATE делает вызывающий код.
+    coeff_overrides — значения из economy_settings (если None — используем BASE_COEFFICIENTS).
     """
+    coeffs = coeff_overrides or BASE_COEFFICIENTS
     total: int = 0
     triggered: list[str] = []
     clean = (text or '').strip()
@@ -212,44 +273,44 @@ def calculate_base_coefficients(
     # ── Текст ─────────────────────────────────────────────────────────────
     if clean:
         if _is_emoji_only(clean):
-            total += BASE_COEFFICIENTS['emoji_only']
+            total += coeffs['emoji_only']
             triggered.append('emoji_only')
         else:
-            total += BASE_COEFFICIENTS['text_message']
+            total += coeffs['text_message']
             triggered.append('text_message')
 
     # ── Медиа ─────────────────────────────────────────────────────────────
     if has_photo:
         is_special = (special_thread_ids and thread_id and thread_id in special_thread_ids)
         if photo_count >= 2 and is_special:
-            total += BASE_COEFFICIENTS['photo_album_special_thread']
+            total += coeffs['photo_album_special_thread']
             triggered.append('photo_album_special_thread')
         else:
-            total += BASE_COEFFICIENTS['photo']
+            total += coeffs['photo']
             triggered.append('photo')
 
     if is_video_note:
-        total += BASE_COEFFICIENTS['video_note']
+        total += coeffs['video_note']
         triggered.append('video_note')
     elif has_video:
-        total += BASE_COEFFICIENTS['video_regular']
+        total += coeffs['video_regular']
         triggered.append('video_regular')
 
     if has_voice:
-        total += BASE_COEFFICIENTS['voice']
+        total += coeffs['voice']
         triggered.append('voice')
 
     if has_audio or _has_link(clean):
-        total += BASE_COEFFICIENTS['audio_or_link']
+        total += coeffs['audio_or_link']
         triggered.append('audio_or_link')
 
     if has_gif:
-        total += BASE_COEFFICIENTS['gif']
+        total += coeffs['gif']
         triggered.append('gif')
 
     # ── Reply ─────────────────────────────────────────────────────────────
     if is_reply:
-        total += BASE_COEFFICIENTS['reply_sent']
+        total += coeffs['reply_sent']
         triggered.append('reply_sent')
 
     return total, triggered
@@ -429,6 +490,7 @@ def calculate_penalties(
     chat_id: int,
     is_copypaste: bool = False,
     is_wrong_door: bool = False,
+    coeff_overrides: Optional[dict] = None,
 ) -> tuple[int, list[str]]:
     """
     Проверяет штрафные условия для текущего сообщения.
@@ -437,7 +499,9 @@ def calculate_penalties(
     wrong_door и toxic — только через внешние флаги.
 
     Возвращает (сумма_отрицательных_коэффициентов, список_штрафов).
+    coeff_overrides — значения из economy_settings (если None — используем PENALTY_COEFFICIENTS).
     """
+    coeffs = coeff_overrides or PENALTY_COEFFICIENTS
     penalties: list[str] = []
     total: int = 0
 
@@ -447,12 +511,12 @@ def calculate_penalties(
 
     if is_copypaste:
         penalties.append('copypaste')
-        total += PENALTY_COEFFICIENTS['copypaste']
+        total += coeffs['copypaste']
 
     # ── Wrong door ────────────────────────────────────────────────────────
     if is_wrong_door:
         penalties.append('wrong_door')
-        total += PENALTY_COEFFICIENTS['wrong_door']
+        total += coeffs['wrong_door']
 
     # toxic — зарезервировано для будущего AI-модератора
 
@@ -785,12 +849,19 @@ def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, 
 #  ДЕФИБРИЛЛЯТОР — «Разрушитель тишины»
 # ══════════════════════════════════════════════════════════════════════════════
 
-def _check_and_grant_defibrillator(db, user_id: int, chat_id: int, now: datetime) -> bool:
+def _check_and_grant_defibrillator(db, user_id: int, chat_id: int, now: datetime, defib_config: Optional[dict] = None) -> bool:
     """
-    Если во всём чате была тишина >= random(5..15) минут,
-    первый написавший получает бафф x3 на 10 минут.
+    Если во всём чате была тишина >= random(silence_min..silence_max) минут,
+    первый написавший получает бафф на buff_duration_min минут.
     Анти-абуз: 1 раз в 24 часа на юзера.
+    Все параметры читаются из defib_config (БД) с фолбэком на константы.
     """
+    cfg = defib_config or {}
+    buff_mult     = cfg.get('buff_multiplier',   DEFIBRILLATOR_BUFF_MULTIPLIER)
+    buff_dur_min  = cfg.get('buff_duration_min', DEFIBRILLATOR_BUFF_DURATION_MIN)
+    silence_min   = cfg.get('silence_min',       DEFIBRILLATOR_SILENCE_MIN)
+    silence_max   = cfg.get('silence_max',       DEFIBRILLATOR_SILENCE_MAX)
+
     try:
         # 1. КД — получал ли бафф за последние 24ч
         db.cursor.execute('''
@@ -821,22 +892,22 @@ def _check_and_grant_defibrillator(db, user_id: int, chat_id: int, now: datetime
         now_naive = now.replace(tzinfo=None) if now.tzinfo else now
         delta_minutes = (now_naive - prev_time_msk).total_seconds() / 60
 
-        if delta_minutes < DEFIBRILLATOR_SILENCE_MIN:
+        if delta_minutes < silence_min:
             return False
 
         # 4. Рандомный порог (анти-абуз)
-        target_minutes = random.randint(DEFIBRILLATOR_SILENCE_MIN, DEFIBRILLATOR_SILENCE_MAX)
+        target_minutes = random.randint(silence_min, max(silence_min, silence_max))
         if delta_minutes < target_minutes:
             return False
 
         # 5. Активируем бафф
-        expires_at = now_naive + timedelta(minutes=DEFIBRILLATOR_BUFF_DURATION_MIN)
+        expires_at = now_naive + timedelta(minutes=buff_dur_min)
         expires_str = expires_at.strftime('%Y-%m-%d %H:%M:%S')
 
         db.cursor.execute('''
             UPDATE users SET mining_buff_multiplier = ?, mining_buff_expires_at = ?
             WHERE user_id = ?
-        ''', (DEFIBRILLATOR_BUFF_MULTIPLIER, expires_str, user_id))
+        ''', (buff_mult, expires_str, user_id))
 
         now_str = now_naive.strftime('%Y-%m-%d %H:%M:%S')
         db.cursor.execute('''
@@ -849,7 +920,7 @@ def _check_and_grant_defibrillator(db, user_id: int, chat_id: int, now: datetime
         logger.info(
             f"⚡ ДЕФИБРИЛЛЯТОР | user={user_id} | "
             f"тишина={delta_minutes:.1f}мин >= {target_minutes}мин | "
-            f"бафф x{DEFIBRILLATOR_BUFF_MULTIPLIER} на {DEFIBRILLATOR_BUFF_DURATION_MIN}мин"
+            f"бафф x{buff_mult} на {buff_dur_min}мин"
         )
         return True
 
@@ -918,6 +989,13 @@ def process_mining_reward(
         logger.warning(f"⚠️ No user_data for {user_id}")
         return 0.0, None
 
+    # Master-switch раздела «💰 Майнинг» — выключает все начисления (база/комбо/спринты/дефиб)
+    try:
+        if not db.is_econ_section_enabled('mining'):
+            return 0.0, None
+    except Exception:
+        pass
+
     try:
         # ══════════════════════════════════════════════════════════════════
         #  ИЗВЛЕЧЕНИЕ ДАННЫХ ИЗ telegram.Message
@@ -944,16 +1022,9 @@ def process_mining_reward(
 
         # ══════════════════════════════════════════════════════════════════
         #  ЧТЕНИЕ НАСТРОЕК ЭКОНОМИКИ ИЗ БД
+        # ⚡️ Читаем настройки ровно в ту миллисекунду, когда пришло сообщение!
         # ══════════════════════════════════════════════════════════════════
-        _econ_rate = db.get_econ('mining.global_rate', GLOBAL_BASE_RATE) or GLOBAL_BASE_RATE
-        _combo_coeffs = {
-            name: (db.get_econ(f'combo.{name}', COMBO_COEFFICIENTS[name]) or COMBO_COEFFICIENTS[name])
-            for name in COMBO_COEFFICIENTS
-        }
-        _sprint_coeffs = {
-            name: (db.get_econ(f'sprint.{name}', cfg['coeff']) or cfg['coeff'])
-            for name, cfg in SPRINTS_CONFIG.items()
-        }
+        _econ_rate, _base_coeffs, _combo_coeffs, _sprint_coeffs, _penalty_coeffs, _defib_cfg = get_dynamic_economy_config(db)
 
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 1: БАЗА
@@ -966,6 +1037,7 @@ def process_mining_reward(
             has_audio=has_audio, has_gif=has_gif,
             is_reply=is_reply, thread_id=thread_id,
             special_thread_ids=SPECIAL_THREAD_IDS,
+            coeff_overrides=_base_coeffs,
         )
 
         # ══════════════════════════════════════════════════════════════════
@@ -978,7 +1050,7 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
         #  ДЕФИБРИЛЛЯТОР — «Разрушитель тишины»
         # ══════════════════════════════════════════════════════════════════
-        defibrillator_activated = _check_and_grant_defibrillator(db, user_id, chat_id, now)
+        defibrillator_activated = _check_and_grant_defibrillator(db, user_id, chat_id, now, _defib_cfg)
 
         # claimed_combos = {combo_name: claimed_at_datetime} — на КД
         claimed_combos = _get_claimed_combos(db, user_id, now)
@@ -1010,6 +1082,7 @@ def process_mining_reward(
         penalty_coeff, penalties = calculate_penalties(
             text=text, thread_id=thread_id, db=db,
             user_id=user_id, chat_id=chat_id,
+            coeff_overrides=_penalty_coeffs,
         )
 
         # ══════════════════════════════════════════════════════════════════
@@ -1069,8 +1142,8 @@ def process_mining_reward(
 
         # ── ШТРАФЫ ────────────────────────────────────────────────────────
         if penalties:
-            penalty_rw_log = round(abs(penalty_coeff) * GLOBAL_BASE_RATE, 4)
-            pen_names = [f"{PENALTY_LABELS.get(p, p)} ({PENALTY_COEFFICIENTS.get(p, 0)}x)" for p in penalties]
+            penalty_rw_log = round(abs(penalty_coeff) * _econ_rate, 4)
+            pen_names = [f"{PENALTY_LABELS.get(p, p)} ({_penalty_coeffs.get(p, 0)}x)" for p in penalties]
             logger.warning(
                 f"🚫 ШТРАФ | user={user_id} | "
                 f"{', '.join(pen_names)} = -{penalty_rw_log} 💎"
@@ -1102,14 +1175,17 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
         notification = None
         if defibrillator_activated:
+            _dmult = _defib_cfg.get('buff_multiplier', DEFIBRILLATOR_BUFF_MULTIPLIER)
+            _ddur  = _defib_cfg.get('buff_duration_min', DEFIBRILLATOR_BUFF_DURATION_MIN)
+            _dpct  = int((_dmult - 1) * 100)
             notification = {
                 'type': 'defibrillator',
                 'user_id': user_id,
                 'text': (
-                    "⚡️ <b>СЕКРЕТ РАСКРЫТ: «Дефибриллятор»!</b>\n\n"
-                    "Чат спал, но вы прервали тишину! "
-                    "Ваша кирка заряжена: <b>весь ваш майнинг увеличен "
-                    "на 200% (х3) на следующие 10 минут!</b>"
+                    f"⚡️ <b>СЕКРЕТ РАСКРЫТ: «Дефибриллятор»!</b>\n\n"
+                    f"Чат спал, но вы прервали тишину! "
+                    f"Ваша кирка заряжена: <b>весь ваш майнинг увеличен "
+                    f"на {_dpct}% (х{_dmult}) на следующие {_ddur} минут!</b>"
                 ),
             }
 

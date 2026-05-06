@@ -59,6 +59,11 @@ class CallbackHandler:
         if not data:
             return
 
+        # V1.16.0: titles_* и owner_titles_* обрабатываются выделенными
+        # хэндлерами в группе 1 — не перехватываем здесь.
+        if data.startswith('titles_') or data.startswith('owner_titles_'):
+            return
+
         try:
             await query.answer()
         except Exception:
@@ -124,6 +129,12 @@ class CallbackHandler:
             await handle_bbs_callback(query, context, self.db, self.target_chat_id, self.bbs_thread_id)
             return
 
+        # ═══ INACTIVE USERS PAGINATION ═══
+        if data.startswith('inactive_page:'):
+            from handlers.reminders import handle_inactive_pagination
+            await handle_inactive_pagination(update, context, self.db)
+            return
+
         # ═══ DISPATCH TO SUB-MODULES ═══
         if await dispatch_user(self, query, data, user, context):
             return
@@ -136,13 +147,29 @@ class CallbackHandler:
 
         # Перезапуск регистрации
         if data in ("restart_registration", "reapply"):
-            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user
+            from database.db_friend import update_user, cancel_user_applications, get_user as _get_friend_user, db_pool
+            from constants import ApplicationStatus
             from config import OWNER_ID
 
-            # Защита: если у юзера уже есть q_name — он возвращающийся, не новый
-            # Не стираем его данные, отправляем сразу /register для генерации invite-ссылки
+            # Защита: если юзер УЖЕ регистрировался (есть q_name)
+            # ИЛИ был ранее одобрен (есть запись APPROVED в applications) —
+            # это возвращающийся, его данные стирать нельзя.
             existing = await _get_friend_user(user.id)
-            if existing and existing.get('q_name'):
+            has_q_name = bool(existing and existing.get('q_name'))
+
+            has_approved_app = False
+            if not has_q_name:
+                try:
+                    async with db_pool.get_connection() as _db:
+                        async with _db.execute(
+                            "SELECT 1 FROM applications WHERE user_id = ? AND status = ? LIMIT 1",
+                            (user.id, ApplicationStatus.APPROVED)
+                        ) as _cur:
+                            has_approved_app = bool(await _cur.fetchone())
+                except Exception as e:
+                    logger.error(f"restart_registration: approved_app check failed for {user.id}: {e}")
+
+            if has_q_name or has_approved_app:
                 await query.answer()
                 await query.edit_message_text(
                     "✅ Ты уже регистрировался ранее.\n\n"
@@ -240,8 +267,10 @@ class CallbackHandler:
 
         keyboard = [
             [InlineKeyboardButton("💎 Начисления Пульса", callback_data="my_accruals")],
-            [InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")]
         ]
+        if self.db.is_feature_enabled('titles'):
+            keyboard.append([InlineKeyboardButton("🏷 Титулы", callback_data="titles_menu")])
+        keyboard.append([InlineKeyboardButton("🔙 Назад в меню", callback_data="back_to_menu")])
         reply_markup = InlineKeyboardMarkup(keyboard)
 
         await query.edit_message_text(message, reply_markup=reply_markup)
@@ -620,6 +649,27 @@ class CallbackHandler:
         link_stats = self.db.get_referral_link_stats(user.id)
         used_links = link_stats['used_links'] if link_stats else 0
 
+        # Get qualification settings from economy_settings with fallbacks
+        try:
+            hours = int(self.db.get_econ('referral.qualification_hours', 24) or 24)
+        except Exception:
+            hours = 24
+        
+        try:
+            min_messages = int(self.db.get_econ('referral.qualification_messages', 5) or 5)
+        except Exception:
+            min_messages = 5
+        
+        try:
+            min_reactions = int(self.db.get_econ('referral.qualification_reactions', 3) or 3)
+        except Exception:
+            min_reactions = 3
+        
+        try:
+            reward = int(self.db.get_econ('referral.qualified_reward', 100) or 100)
+        except Exception:
+            reward = 100
+        
         message = f"👥 РЕФЕРАЛЬНАЯ СИСТЕМА\n\n"
         message += f"🔗 Ваша ссылка (одноразовая):\n{ref_link}\n\n"
         message += f"⚠️ Ссылка станет неактивной после перехода.\n"
@@ -627,10 +677,10 @@ class CallbackHandler:
         message += f"✅ Квалифицированных рефералов: {qualified}\n"
         message += f"🔗 Использовано ссылок: {used_links}\n\n"
         message += f"💡 Условия:\n"
-        message += f"• Друг должен пробыть в чате 24 часа\n"
-        message += f"• Написать минимум 5 сообщений\n"
-        message += f"• ИЛИ получить 3+ реакции\n\n"
-        message += f"🎁 Награда: 100 💎 за каждого друга"
+        message += f"• Друг должен пробыть в чате {hours} часа\n"
+        message += f"• Написать минимум {min_messages} сообщений\n"
+        message += f"• ИЛИ получить {min_reactions}+ реакции\n\n"
+        message += f"🎁 Награда: {reward} 💎 за каждого друга"
 
         keyboard = [
             [InlineKeyboardButton("🔄 Обновить ссылку", callback_data="referral_refresh")],

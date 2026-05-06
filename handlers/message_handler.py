@@ -221,11 +221,7 @@ class MessageHandler:
                         from handlers.shipper_handlers import send_shipper_panel
                         await send_shipper_panel(message, context, self.db, self.target_chat_id)
                         return
-                # FSM: ввод комментария к баг-карточке прямо в треде
-                if context.user_data.get('bug_awaiting_comment') and message.reply_to_message:
-                    from handlers.bug_tracker_handlers import handle_bug_comment_input
-                    if await handle_bug_comment_input(message, context, self.db):
-                        return
+                
                 # FSM: редактирование анкеты (фото / примечание) в ADMIN_CHAT
                 if context.user_data.get('anketa_edit'):
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input
@@ -233,27 +229,41 @@ class MessageHandler:
                         return
                 # Ветки багов: сообщения от владельца или разработчика → создаём трекер-карточку
                 from config import BUG_THREAD_BOT, BUG_THREAD_SITE, OWNER_ID as _OWNER_ID, DEVELOPER_ID as _DEV_ID
-                # Ответ на ДРУГОЕ сообщение (не на корень топика) — не создаём карточку
-                _is_real_reply = (
-                    message.reply_to_message is not None and
-                    message.reply_to_message.message_id != message.message_thread_id
-                )
-                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id and not _is_real_reply:
+                
+                if user.id in (_OWNER_ID, _DEV_ID) and message.message_thread_id:
                     if message.message_thread_id in (BUG_THREAD_BOT, BUG_THREAD_SITE):
-                        from handlers.bug_tracker_handlers import handle_bug_message
-                        try:
-                            await handle_bug_message(message, context.bot, self.db)
-                        except Exception as _bug_err:
-                            logging.error(f"handle_bug_message exception: {_bug_err}", exc_info=True)
+                        
+                        # 1. ПЕРЕХВАТ КОММЕНТАРИЕВ И РЕДАКТИРОВАНИЯ
+                        if context.user_data.get('bug_action_type'):
+                            from handlers.bug_tracker_handlers import handle_bug_comment_input
+                            if await handle_bug_comment_input(message, context, self.db):
+                                return # Успешно добавили коммент/изменили текст - выходим
+
+                        # 2. ЗАЩИТА ОТ МНОЖЕСТВЕННЫХ МЕДИА (Альбомов)
+                        if message.media_group_id:
+                            mg_key = f"mg_bug_{message.media_group_id}"
+                            if context.user_data.get(mg_key):
+                                # Это 2-я, 3-я фотка из альбома. Удаляем её из чата, чтобы не мусорить менюшками
+                                try:
+                                    await message.delete()
+                                except Exception:
+                                    pass
+                                return
+                            context.user_data[mg_key] = True
+
+                        # 3. ИГНОР ОБЫЧНОГО ОБЩЕНИЯ (ответы на чужие сообщения)
+                        _is_real_reply = (
+                            message.reply_to_message is not None and
+                            message.reply_to_message.message_id != message.message_thread_id
+                        )
+                        
+                        if not _is_real_reply:
+                            from handlers.bug_tracker_handlers import handle_bug_message
                             try:
-                                await context.bot.send_message(
-                                    chat_id=user.id,
-                                    text=f"❌ BUG TRACKER ERROR:\n<code>{_bug_err}</code>",
-                                    parse_mode="HTML"
-                                )
-                            except Exception:
-                                pass
-                        return
+                                await handle_bug_message(message, context, self.db)
+                            except Exception as _bug_err:
+                                logging.error(f"handle_bug_message exception: {_bug_err}", exc_info=True)
+                            return
                 return  # остальные сообщения из админского чата — игнорируем
             logging.warning(f"⚠️  Skipping: wrong chat. Got {message.chat.id}, expected {self.target_chat_id}")
             return
@@ -693,19 +703,21 @@ class MessageHandler:
             # === ВЫПОЛНЕНИЕ ТРИГГЕРА ===
             if triggered:
                 # Сначала отвечаем, потом удаляем триггер
+                from utils.auto_delete import trigger_scope
                 bot_msg = None
-                if trigger_type in ('rich', 'activist') and self.db.is_feature_enabled('top_commands'):
-                    if trigger_type == 'rich':
-                        logging.info(f"✅ TRIGGER ACTIVATED: 'богач' by {message.from_user.id}")
-                        bot_msg = await show_top_rich(message, context, self.db)
-                    elif trigger_type == 'activist':
-                        logging.info(f"✅ TRIGGER ACTIVATED: 'активист' by {message.from_user.id}")
-                        bot_msg = await show_top_activists(message, context, self.db)
-                elif trigger_type == 'course':
-                    logging.info(f"✅ TRIGGER ACTIVATED: 'курс' by {message.from_user.id}")
-                    bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
+                async with trigger_scope():
+                    if trigger_type in ('rich', 'activist') and self.db.is_feature_enabled('top_commands'):
+                        if trigger_type == 'rich':
+                            logging.info(f"✅ TRIGGER ACTIVATED: 'богач' by {message.from_user.id}")
+                            bot_msg = await show_top_rich(message, context, self.db)
+                        elif trigger_type == 'activist':
+                            logging.info(f"✅ TRIGGER ACTIVATED: 'активист' by {message.from_user.id}")
+                            bot_msg = await show_top_activists(message, context, self.db)
+                    elif trigger_type == 'course':
+                        logging.info(f"✅ TRIGGER ACTIVATED: 'курс' by {message.from_user.id}")
+                        bot_msg = await _course_command(update=update, context=context, db=self.db, target_chat_id=self.target_chat_id)
 
-                # Удаляем ответ бота через 60 секунд
+                # Удаляем ответ бота через 60 секунд (своя система, не chain-delete)
                 if bot_msg:
                     _schedule_auto_delete(context, bot_msg.chat.id, bot_msg.message_id, delay=60)
 
@@ -724,7 +736,10 @@ class MessageHandler:
         # === DB-ТРИГГЕРЫ АВТОМОДЕРАЦИИ (fix V1.8.1c) ===
         if message.text:
             from handlers.triggers_handlers import process_triggers
-            if await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id):
+            from utils.auto_delete import trigger_scope as _tscope
+            async with _tscope():
+                _trigger_handled = await process_triggers(update, context, self.db, self.target_chat_id, self.main_admin_id)
+            if _trigger_handled:
                 return
 
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
@@ -795,8 +810,8 @@ class MessageHandler:
                         pass  # Forbidden — бот заблокирован пользователем
                 return
 
-        # ═══ BUG TRACKER: ввод комментария от владельца/зама ═══
-        if message.text and context.user_data.get('bug_awaiting_comment') and _is_owner_or_dep:
+        # ═══ BUG TRACKER: ввод текста или медиа от админа/владельца ═══
+        if context.user_data.get('bug_action_type') and _is_owner_or_dep:
             from handlers.bug_tracker_handlers import handle_bug_comment_input
             if await handle_bug_comment_input(message, context, self.db):
                 return
@@ -1021,6 +1036,11 @@ class MessageHandler:
         # exchange_rate, bank_transfer, donate, а также новые: pr_photo, edit_text,
         # edit_photo, edit_time, edit_target_manual
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
+            return
+
+        # Пропускаем catch-all если юзер внутри FSM-флоу (titles и др.)
+        if (context.user_data.get('_titles_pkg_id') is not None
+                or context.user_data.get('_titles_rename_active')):
             return
 
         # Default: suggest using menu

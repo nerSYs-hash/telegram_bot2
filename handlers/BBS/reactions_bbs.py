@@ -87,7 +87,14 @@ async def handle_bbs_reaction(reaction_update, context, db, target_chat_id):
 
 async def _check_ambassador_of_love(db, user, context):
     """Скрытая механика: 3 реакции ❤️/🔥 на разные анкеты за 24 часа = +10 💎"""
-    
+
+    # Master-switch раздела «❤️ BBS — бонус за реакции»
+    try:
+        if not db.is_econ_section_enabled('bbs_bonus'):
+            return
+    except Exception:
+        pass
+
     # 1. Проверяем, получал ли он этот бонус сегодня (защита от абуза)
     db.cursor.execute(
         "SELECT 1 FROM combo_claims WHERE user_id = ? AND combo_name = 'ambassador_of_love' AND date(claimed_at) = date('now')",
@@ -144,6 +151,13 @@ async def _check_ambassador_of_love(db, user, context):
 
 async def _try_award_bonus(db, profile, author_id):
     """Начислить бонус автору за популярность анкеты (10 реакций)."""
+    # Master-switch раздела «❤️ BBS — бонус за реакции»
+    try:
+        if not db.is_econ_section_enabled('bbs_bonus'):
+            return
+    except Exception:
+        pass
+
     last_paid = profile.get('bonus_paid_at')
     if last_paid:
         try:
