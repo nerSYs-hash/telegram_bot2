@@ -87,6 +87,15 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения titles router: {e}")
 
+# Press-Releases (V1.16.14)
+try:
+    from api.press_release_routes import router as pr_router, _setup as _pr_setup
+    _pr_setup(db, lambda auth: _require_auth(auth), lambda uid: _resolve_user_role(uid))
+    app.include_router(pr_router)
+    logger.info("✅ press-release: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения press_release router: {e}")
+
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
