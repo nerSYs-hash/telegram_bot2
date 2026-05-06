@@ -622,6 +622,14 @@ class Database:
         except Exception:
             pass  # Колонка уже существует
 
+        # Migration V1.16.14a: пресс-релизы (расширение scheduled_posts + новые таблицы)
+        try:
+            from database.db_press_release import init_press_release_tables
+            init_press_release_tables(self)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"init_press_release_tables: {e}")
+
     # ── Economy ──
     def get_econ(self, key, default=None, value_type='float'):
         return _get_econ(self, key, default, value_type)
