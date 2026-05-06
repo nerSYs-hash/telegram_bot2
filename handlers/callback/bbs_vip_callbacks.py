@@ -17,6 +17,7 @@ from handlers.bbs_vip_handlers import (
     show_cooldown_info,
     show_no_profile_info,
     show_already_active_info,
+    handle_contact_admin,
 )
 from handlers.bbs_vip_owner import (
     show_vip_root_menu,
@@ -64,6 +65,9 @@ async def dispatch_bbs_vip(handler, query, data, user, context) -> bool:
 
     elif data == "bbs_vip_already_active":
         await show_already_active_info(query, user)
+
+    elif data.startswith("bbs_vip_contact_admin_"):
+        await handle_contact_admin(query, data, user, context, db, admin_id)
 
     # ── Владелец ─────────────────────────────────────────────────────
     elif data == "bbs_vip_root":

@@ -18,6 +18,11 @@ FAMILY_META = {
     'PROMO_CHAT':  ('📣', 'VIP6 — Промо в общий чат 10:00/15:00/21:00 МСК'),
 }
 
+FAMILY_VIP_NUM = {
+    'BUMP': 'VIP1', 'SILENT_PIN': 'VIP2', 'LOUD_PIN': 'VIP3',
+    'CUSTOM_BUMP': 'VIP4', 'BUMP_PIN': 'VIP5', 'PROMO_CHAT': 'VIP6',
+}
+
 
 def _is_owner(db, user_id: int, admin_id: int) -> bool:
     if user_id == admin_id:
@@ -81,9 +86,11 @@ async def show_vip_pricelist(query, user, db, admin_id):
             pulse_price = round(item['price_rub'] / rate, 2)
             dur_str = f"{item['duration_hours']} ч" if item['duration_hours'] else "разовая"
             lines.append(f"   • {dur_str}  — {item['price_rub']:.2f} RUB ≈ {pulse_price:.2f} 💎")
+            vip_num = FAMILY_VIP_NUM.get(fam, '')
+            btn_label = f"✏️ {vip_num}·{item['vip_code']}" if vip_num else f"✏️ {item['vip_code']}"
             edit_buttons.append(
                 InlineKeyboardButton(
-                    f"✏️ {item['vip_code']}",
+                    btn_label,
                     callback_data=f"bbs_vip_price_edit_{item['vip_code']}",
                 )
             )
@@ -115,9 +122,12 @@ async def start_edit_vip_price(query, data, user, context, db, admin_id):
     context.user_data['vip_price_edit'] = code
     context.user_data['owner_awaiting'] = f'vip_price_edit_{code}'
 
+    vip_num = FAMILY_VIP_NUM.get(setting['vip_family'], '')
+    vip_tag = f" [{vip_num}]" if vip_num else ''
     text = (
-        f"✏️ <b>Изменить цену</b>\n\n"
+        f"✏️ <b>Изменить цену</b>{vip_tag}\n\n"
         f"Услуга: <b>{code}</b>\n"
+        f"Семья: <b>{setting['vip_family']}</b>{vip_tag}\n"
         f"{setting['title']}\n"
         f"Текущая цена: <b>{setting['price_rub']:.2f} RUB</b>\n\n"
         f"Введите новую цену в RUB (от 0.01 до 999999.99):"

@@ -181,7 +181,7 @@ async def show_vip_family(query, data, user, context, db):
     for item in items:
         pulse_price = round(item['price_rub'] / rate, 2)
         dur = f"{item['duration_hours']} ч" if item['duration_hours'] else "разовая"
-        label_detail = f"{dur} — {pulse_price:.0f} 💎 ({item['price_rub']:.0f} ₽)"
+        label_detail = f"{dur} — {pulse_price:.0f} 💎"
 
         if not has_profile:
             btn = InlineKeyboardButton(
@@ -264,16 +264,20 @@ async def show_vip_confirmation(query, data, user, context, db):
         f"💎 <b>Подтверждение покупки</b>\n\n"
         f"{icon} <b>{setting['title']}</b>\n"
         f"Длительность: {dur}\n"
-        f"Цена: <b>{price_pulses:.2f} 💎</b> ({setting['price_rub']:.0f} ₽ × {rate:.2f})\n\n"
+        f"Цена: <b>{price_pulses:.2f} 💎</b>\n\n"
         f"Ваш баланс: <b>{balance:.2f} 💎</b>\n"
         f"После покупки: <b>{after:.2f} 💎</b>"
     )
 
     if after < 0:
         need = -after
-        text += f"\n\n❌ <b>Не хватает {need:.2f} 💎</b>"
+        text += (
+            f"\n\n❌ <b>Не хватает {need:.2f} 💎</b>\n\n"
+            f"<i>⏱ После обращения к администратору курс фиксируется на 24 часа.</i>"
+        )
         keyboard = [
-            [InlineKeyboardButton("💳 Пополнить баланс", callback_data="bbs_vip_topup")],
+            [InlineKeyboardButton("📨 Обратиться к администратору",
+                                  callback_data=f"bbs_vip_contact_admin_{vip_code}")],
             [InlineKeyboardButton("🔙 Назад", callback_data=f"bbs_vip_family_{family}")],
         ]
     else:
@@ -307,11 +311,13 @@ async def process_vip_purchase(query, data, user, context, db, target_chat_id, b
     except VipPurchaseError as e:
         if e.code == 'not_enough':
             extra = e.extra
+            _s = db.get_vip_settings(code=vip_code)
             await _show_insufficient_balance(
                 query,
                 extra.get('price_pulses', 0),
                 extra.get('balance', 0),
-                db.get_vip_settings(code=vip_code)['vip_family'] if db.get_vip_settings(code=vip_code) else '',
+                _s['vip_family'] if _s else '',
+                vip_code=vip_code,
             )
             return
         if e.code == 'global_cooldown':
@@ -402,20 +408,71 @@ async def _apply_side_effects(bot, db, user_id, profile, sub_id, family,
 # Вспомогательные экраны
 # ════════════════════════════════════════════════════════════════════
 
-async def _show_insufficient_balance(query, price_pulses: float, balance: float, family: str):
+async def _show_insufficient_balance(query, price_pulses: float, balance: float,
+                                      family: str, vip_code: str = ''):
     need = max(0, price_pulses - balance)
+    contact_cb = f"bbs_vip_contact_admin_{vip_code}" if vip_code else "bbs_vip_storefront"
     text = (
         f"❌ <b>Недостаточно Пульсов</b>\n\n"
         f"Нужно: <b>{price_pulses:.2f} 💎</b>\n"
         f"На балансе: <b>{balance:.2f} 💎</b>\n"
         f"Не хватает: <b>{need:.2f} 💎</b>\n\n"
-        f"Для пополнения напишите владельцу @LockUp11 — он переведёт Пульсы за ручной платёж."
+        f"Обратитесь к администратору — он зачислит Пульсы за ручной платёж.\n\n"
+        f"<i>⏱ После обращения курс фиксируется на 24 часа.</i>"
     )
     keyboard = [
-        [InlineKeyboardButton("💬 Написать @LockUp11", url="https://t.me/LockUp11")],
+        [InlineKeyboardButton("📨 Обратиться к администратору", callback_data=contact_cb)],
         [InlineKeyboardButton("🔙 Назад", callback_data=f"bbs_vip_family_{family}" if family else "bbs_vip_storefront")],
     ]
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+async def handle_contact_admin(query, data, user, context, db, admin_id):
+    """Пользователь нажал «Обратиться к администратору» — шлём DM Владельцу."""
+    vip_code = data.removeprefix("bbs_vip_contact_admin_")
+    setting = db.get_vip_settings(code=vip_code)
+    rate = _get_rate(db)
+
+    user_db = db.get_user(user.id)
+    balance = float(user_db['balance'] if user_db else 0)
+    price_pulses = round(setting['price_rub'] / rate, 2) if setting else 0
+    need = max(0.0, price_pulses - balance)
+
+    username = f"@{user.username}" if user.username else f"id:{user.id}"
+    service_name = setting.get('title', vip_code) if setting else vip_code
+
+    from datetime import datetime
+    now_str = datetime.now().strftime('%d.%m.%Y %H:%M')
+
+    try:
+        await context.bot.send_message(
+            chat_id=admin_id,
+            text=(
+                f"📨 <b>Запрос на VIP BBS</b>\n\n"
+                f"👤 {username}\n"
+                f"🛒 Услуга: <b>{service_name}</b> (<code>{vip_code}</code>)\n"
+                f"💎 Нужно: <b>{price_pulses:.2f}</b> / Баланс: <b>{balance:.2f}</b>\n"
+                f"❗ Не хватает: <b>{need:.2f} 💎</b>\n\n"
+                f"💱 Курс на момент обращения: 1 💎 = {rate:.4f} ₽\n"
+                f"🕐 {now_str} — курс действует 24 часа"
+            ),
+            parse_mode='HTML',
+        )
+        logger.info(f"contact_admin: sent to admin_id={admin_id} for user={user.id} code={vip_code}")
+    except Exception as e:
+        logger.warning(f"contact_admin send failed: {e}")
+
+    await query.edit_message_text(
+        f"✅ <b>Запрос отправлен!</b>\n\n"
+        f"Администратор получил уведомление.\n\n"
+        f"💱 Курс на момент обращения: <b>1 💎 = {rate:.4f} ₽</b>\n"
+        f"⏱ Этот курс действует <b>24 часа</b> с момента обращения.\n\n"
+        f"<i>Ожидайте ответа.</i>",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("🔙 К услугам", callback_data="bbs_vip_storefront"),
+        ]]),
+    )
 
 
 async def show_topup_stub(query, user=None):
