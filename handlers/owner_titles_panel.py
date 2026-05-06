@@ -160,14 +160,14 @@ async def cb_pkg_list(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def _build_pkg_card(pkg: dict, rate: float = 0.0) -> tuple[str, InlineKeyboardMarkup]:
     rub = f"{_format_number(pkg['price_rub'])} ₽" if pkg['price_rub'] else 'не продаётся'
-    hint = _rate_hint(int(pkg['price_pulses']), int(pkg.get('price_rub') or 0), rate)
+    rate_line = f"\n💱 Курс: 1 💎 = {rate:.4f} ₽" if rate > 0 else ''
+    status = '🟢 включён' if pkg['is_enabled'] else '⚪ выключен'
     text = (
         f"📦 <b>«{pkg['label']}»</b>\n"
-        f"Срок: {_fmt_duration(pkg['duration_days'])}\n"
         f"💎 Пульсы: {_format_number(pkg['price_pulses'])}\n"
-        f"💳 Рубли: {rub}\n"
-        + (hint + '\n' if hint else '')
-        + f"Состояние: {'🟢 включён' if pkg['is_enabled'] else '⚪ выключен'}"
+        f"💳 Рубли: {rub}"
+        + rate_line
+        + f"\nСостояние: {status}"
     )
     pid = pkg['id']
     kb = InlineKeyboardMarkup([
@@ -352,11 +352,13 @@ async def cb_pkg_edit_entry(update: Update, context: ContextTypes.DEFAULT_TYPE):
     db = _get_db(context)
     rate = _get_current_rate(db)
     rate_note = f"\n\n💱 Текущий курс: 1 💎 = {rate:.4f} ₽" if (field in ('price_pulses', 'price_rub') and rate > 0) else ''
+    sync_hint_pulses = '\n⟳ Рубли пересчитаются автоматически.' if rate > 0 else ''
+    sync_hint_rub = '\n⟳ Пульсы пересчитаются автоматически.' if rate > 0 else ''
     prompts = {
         'label': 'Новое название (1–30 символов).',
         'duration_days': 'Новый срок в днях (целое > 0). 0/- = бессрочно.',
-        'price_pulses': f'Новая цена в Пульсах (целое > 0).',
-        'price_rub': f'Новая цена в Рублях (целое ≥ 0). 0 = не продаётся за рубли.',
+        'price_pulses': f'Новая цена в Пульсах (целое > 0).{sync_hint_pulses}',
+        'price_rub': f'Новая цена в Рублях (целое ≥ 0). 0 = не продаётся за рубли.{sync_hint_rub}',
     }
     await query.edit_message_text(
         f"✏️ Изменение поля <b>{field}</b>.\n\n{prompts[field]}{rate_note}",
@@ -403,6 +405,10 @@ async def fsm_pkg_edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text('❌ Целое > 0.')
             return ST_PKG_EDIT_VALUE
         db.update_title_package(pid, price_pulses=v)
+        rate = _get_current_rate(db)
+        if rate > 0:
+            rub_auto = max(1, int(round(v * rate)))
+            db.update_title_package(pid, price_rub=rub_auto)
     elif field == 'price_rub':
         try:
             v = int(raw)
@@ -411,6 +417,11 @@ async def fsm_pkg_edit_value(update: Update, context: ContextTypes.DEFAULT_TYPE)
             await update.message.reply_text('❌ Целое ≥ 0.')
             return ST_PKG_EDIT_VALUE
         db.update_title_package(pid, price_rub=(v if v > 0 else None))
+        if v > 0:
+            rate = _get_current_rate(db)
+            if rate > 0:
+                pulses_auto = max(1, int(round(v / rate)))
+                db.update_title_package(pid, price_pulses=pulses_auto)
 
     context.user_data.pop(UD_EDIT_PKG_ID, None)
     context.user_data.pop(UD_EDIT_FIELD, None)
