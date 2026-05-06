@@ -16,17 +16,19 @@ logger = logging.getLogger(__name__)
 # ════════════════════════════════════════════════════════════════════════════════
 
 async def apply_title_to_user(context, chat_id: int, user_id: int, title_text: str) -> bool:
-    """Выдает админские права пользователю с кастомным титулом.
-    
-    Использует Telegram API для:
-    - Выдачи админских прав (без прав удаления сообщений)
-    - Установки кастомного титула к нику
+    """Выдаёт серый кастомный титул пользователю.
+
+    Три шага (Telegram требует именно такой порядок):
+    1. Назначить минимальным админом — иначе set_chat_administrator_custom_title отказывает.
+    2. Установить текст титула.
+    3. Снять права — титул остаётся серым, зелёный тег исчезает.
     """
     try:
-        # Выдаем админские права с кастомным титулом
+        # Шаг 1: временно назначить админом (нужно для установки титула)
         await context.bot.promote_chat_member(
             chat_id=chat_id,
             user_id=user_id,
+            can_manage_chat=True,
             can_post_messages=False,
             can_edit_messages=False,
             can_delete_messages=False,
@@ -36,17 +38,32 @@ async def apply_title_to_user(context, chat_id: int, user_id: int, title_text: s
             can_invite_users=False,
             can_pin_messages=False,
             can_manage_video_chats=False,
-            can_manage_chat=True,   # was False — must be True so Telegram accepts a custom title
         )
-        
-        # Устанавливаем кастомный титул (после выдачи прав)
+
+        # Шаг 2: установить текст титула
         await context.bot.set_chat_administrator_custom_title(
             chat_id=chat_id,
             user_id=user_id,
             custom_title=title_text
         )
-        
-        logger.info(f"✅ Title applied: user={user_id}, title={title_text}")
+
+        # Шаг 3: снять права → титул становится серым, юзер не admin
+        await context.bot.promote_chat_member(
+            chat_id=chat_id,
+            user_id=user_id,
+            can_manage_chat=False,
+            can_post_messages=False,
+            can_edit_messages=False,
+            can_delete_messages=False,
+            can_restrict_members=False,
+            can_promote_members=False,
+            can_change_info=False,
+            can_invite_users=False,
+            can_pin_messages=False,
+            can_manage_video_chats=False,
+        )
+
+        logger.info(f"✅ Title applied (grey): user={user_id}, title={title_text}")
         return True
     except Exception as e:
         logger.error(f"Error applying title: {e}")

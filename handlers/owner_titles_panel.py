@@ -605,12 +605,14 @@ async def cb_request_approve(update: Update, context: ContextTypes.DEFAULT_TYPE)
         until = datetime.fromtimestamp(result['expires_at']).strftime('%d.%m.%Y')
     word = 'продлён до' if result['extended'] else 'установлен до'
 
+    admin_note = '\n⚠️ Статус <b>admin</b> снят (титул несовместим с правами)' if result.get('was_admin') else ''
     try:
         await query.edit_message_text(
             f"📨 ЗАЯВКА #{rid} — ✅ ПОДТВЕРЖДЕНО\n\n"
             f"👤 user_id={req['user_id']} · {_format_number(req['price_rub'])} ₽\n"
             f"🏷 Применён «{result['text']}» {word} {until}\n"
-            f"👍 Витя · {datetime.now().strftime('%d.%m.%Y %H:%M')}",
+            f"👍 Витя · {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+            f"{admin_note}",
             parse_mode='HTML',
         )
     except Exception:

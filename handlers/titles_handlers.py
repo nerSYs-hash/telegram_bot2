@@ -255,8 +255,21 @@ async def apply_title_purchase(db, context, target_chat_id: int, user_id: int,
         return {'status': 'apply_failed', 'text': title_to_apply,
                 'expires_at': None, 'extended': extended}
 
+    # Снять статус admin если был — promote_chat_member уже урезал TG-права,
+    # синхронизируем внутреннюю БД чтобы бот не считал их полноценным админом
+    was_admin = False
+    try:
+        user_row = db.get_user(user_id)
+        if user_row and user_row['is_admin']:
+            db.cursor.execute('UPDATE users SET is_admin = 0 WHERE user_id = ?', (user_id,))
+            db.conn.commit()
+            was_admin = True
+            logger.warning('Титул выдан user_id=%s — снят статус admin в БД', user_id)
+    except Exception as e:
+        logger.warning('apply_title_purchase: не удалось снять is_admin: %s', e)
+
     return {'status': 'ok', 'text': title_to_apply,
-            'expires_at': new_expires, 'extended': extended}
+            'expires_at': new_expires, 'extended': extended, 'was_admin': was_admin}
 
 
 # ════════════════════════════════════════════════════════════════════════════════
@@ -651,10 +664,12 @@ async def _do_purchase_pulses(target, context, db, user_id: int, pkg: dict,
     else:
         until = datetime.fromtimestamp(result['expires_at']).strftime('%d.%m.%Y')
     word = 'продлён до' if result['extended'] else 'установлен до'
+    admin_note = '\n⚠️ Твой статус администратора снят — титул несовместим с полными правами.' if result.get('was_admin') else ''
     await _safe_send(
         target,
         f"✅ Титул «{result['text']}» {word} {until}.\n"
-        f"Списано: {_format_number(price)}💎",
+        f"Списано: {_format_number(price)}💎"
+        f"{admin_note}",
     )
     context.user_data.pop(UD_PKG_ID, None)
     return ConversationHandler.END
