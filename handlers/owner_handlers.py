@@ -909,6 +909,26 @@ async def handle_owner_text_input(
             context.user_data.pop('vip_price_edit', None)
         return True
 
+    # ── VIP BBS: создание скидки (тема) ──
+    if awaiting == 'vip_disc_theme':
+        try:
+            from handlers.bbs_vip_owner import handle_disc_theme_input
+            await handle_disc_theme_input(message, context, db)
+        except Exception as e:
+            logger.error(f"vip_disc_theme FSM error: {e}")
+            context.user_data.pop('owner_awaiting', None)
+        return True
+
+    # ── VIP BBS: создание скидки (процент) ──
+    if awaiting == 'vip_disc_percent':
+        try:
+            from handlers.bbs_vip_owner import handle_disc_percent_input
+            await handle_disc_percent_input(message, context, db)
+        except Exception as e:
+            logger.error(f"vip_disc_percent FSM error: {e}")
+            context.user_data.pop('owner_awaiting', None)
+        return True
+
     if awaiting and (awaiting.startswith('journal_connect_') or awaiting.startswith('journal_thread_')):
         return False
 

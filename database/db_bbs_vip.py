@@ -160,6 +160,20 @@ def init_bbs_vip_tables(db) -> None:
         """, (code, family, title, price, dur, bump, sort))
     db.conn.commit()
 
+    # ── Таблица скидок ───────────────────────────────────────────────
+    c.execute("""
+        CREATE TABLE IF NOT EXISTS bbs_vip_discount (
+            id          INTEGER PRIMARY KEY,
+            theme       TEXT NOT NULL,
+            percent     INTEGER NOT NULL,
+            apply_to    TEXT NOT NULL DEFAULT 'ALL',
+            is_active   INTEGER NOT NULL DEFAULT 0,
+            created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+            created_by  INTEGER
+        )
+    """)
+    db.conn.commit()
+
     # ── Миграция: добавить bump_interval_hours если колонка пропала ──
     for col, definition in [
         ('bump_interval_hours', 'INTEGER'),
@@ -233,6 +247,88 @@ def set_vip_price(db, code: str, price_rub: float) -> bool:
     except Exception as e:
         logger.error(f"set_vip_price error: {e}")
         return False
+
+
+# ════════════════════════════════════════════════════════════════════
+# Скидки
+# ════════════════════════════════════════════════════════════════════
+
+def get_discount(db) -> dict | None:
+    """Возвращает единственную запись скидки (активную или нет) или None."""
+    try:
+        row = db.cursor.execute("SELECT * FROM bbs_vip_discount LIMIT 1").fetchone()
+        return dict(row) if row else None
+    except Exception as e:
+        logger.error(f"get_discount error: {e}")
+        return None
+
+
+def get_active_discount(db) -> dict | None:
+    """Возвращает скидку только если is_active=1."""
+    d = get_discount(db)
+    return d if (d and d['is_active']) else None
+
+
+def upsert_discount(db, theme: str, percent: int, apply_to: str, created_by: int) -> int:
+    """Создаёт или заменяет скидку. Возвращает id."""
+    try:
+        db.cursor.execute("DELETE FROM bbs_vip_discount")
+        db.cursor.execute(
+            "INSERT INTO bbs_vip_discount (theme, percent, apply_to, is_active, created_by) VALUES (?,?,?,0,?)",
+            (theme, percent, apply_to, created_by)
+        )
+        db.conn.commit()
+        return db.cursor.lastrowid
+    except Exception as e:
+        logger.error(f"upsert_discount error: {e}")
+        return 0
+
+
+def toggle_discount_active(db) -> bool:
+    """Переключает is_active. Возвращает новое состояние."""
+    try:
+        row = db.cursor.execute("SELECT is_active FROM bbs_vip_discount LIMIT 1").fetchone()
+        if not row:
+            return False
+        new_val = 0 if row[0] else 1
+        db.cursor.execute("UPDATE bbs_vip_discount SET is_active=?", (new_val,))
+        db.conn.commit()
+        return bool(new_val)
+    except Exception as e:
+        logger.error(f"toggle_discount_active error: {e}")
+        return False
+
+
+def delete_discount(db) -> bool:
+    try:
+        db.cursor.execute("DELETE FROM bbs_vip_discount")
+        db.conn.commit()
+        return True
+    except Exception as e:
+        logger.error(f"delete_discount error: {e}")
+        return False
+
+
+def is_code_discounted(vip_code: str, discount: dict | None) -> bool:
+    if not discount:
+        return False
+    apply_to = discount.get('apply_to', 'ALL')
+    if apply_to == 'ALL':
+        return True
+    try:
+        import json as _json
+        codes = _json.loads(apply_to)
+        return vip_code in codes
+    except Exception:
+        return False
+
+
+def apply_discount_price(price_rub: float, vip_code: str, discount: dict | None) -> float:
+    """Возвращает цену со скидкой или оригинальную если скидка не применима."""
+    if not is_code_discounted(vip_code, discount):
+        return price_rub
+    pct = int(discount.get('percent', 0))
+    return round(price_rub * (1 - pct / 100), 2)
 
 
 def toggle_vip_service(db, code: str) -> bool | None:
@@ -621,6 +717,10 @@ def purchase_vip(db, user_id: int, profile_id: int, vip_code: str) -> dict:
     price_rub = float(settings['price_rub'])
     duration_h = settings.get('duration_hours')
     bump_h = settings.get('bump_interval_hours')
+
+    # Применяем скидку если активна
+    discount = get_active_discount(db)
+    price_rub = apply_discount_price(price_rub, vip_code, discount)
 
     # 2. Профиль
     prof = db.cursor.execute(

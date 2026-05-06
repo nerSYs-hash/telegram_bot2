@@ -26,6 +26,13 @@ from handlers.bbs_vip_owner import (
     show_vip_stats,
     show_vip_active_subs,
     cancel_vip_subscription,
+    show_vip_discount_menu,
+    cb_disc_toggle,
+    cb_disc_delete,
+    cb_disc_create_entry,
+    cb_disc_toggle_code,
+    cb_disc_scope_all,
+    cb_disc_save_selected,
 )
 
 logger = logging.getLogger(__name__)
@@ -91,6 +98,28 @@ async def dispatch_bbs_vip(handler, query, data, user, context) -> bool:
 
     elif data.startswith("bbs_vip_price_edit_"):
         await start_edit_vip_price(query, data, user, context, db, admin_id)
+
+    # ── Скидки ───────────────────────────────────────────────────────
+    elif data == "bbs_vip_discount":
+        await show_vip_discount_menu(query, user, db, admin_id)
+
+    elif data == "bbs_vip_disc_toggle":
+        await cb_disc_toggle(query, user, db, admin_id)
+
+    elif data == "bbs_vip_disc_delete":
+        await cb_disc_delete(query, user, db, admin_id)
+
+    elif data == "bbs_vip_disc_create":
+        await cb_disc_create_entry(query, user, context, db, admin_id)
+
+    elif data.startswith("bbs_vip_disc_tog_"):
+        await cb_disc_toggle_code(query, data, user, context, db, admin_id)
+
+    elif data == "bbs_vip_disc_scope_all":
+        await cb_disc_scope_all(query, user, context, db, admin_id)
+
+    elif data == "bbs_vip_disc_save_sel":
+        await cb_disc_save_selected(query, user, context, db, admin_id)
 
     elif data.startswith("bbs_vip_cancel_sub_"):
         await cancel_vip_subscription(query, data, user, db, admin_id)

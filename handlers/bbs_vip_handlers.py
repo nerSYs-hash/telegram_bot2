@@ -31,6 +31,9 @@ FAMILY_META = {
 GLOBAL_COOLDOWN_FAMILIES = frozenset({'LOUD_PIN', 'PROMO_CHAT'})
 
 
+DISCOUNT_EMOJI = '<tg-emoji emoji-id="6066908087493595650">🏷</tg-emoji>'
+
+
 def _get_rate(db) -> float:
     try:
         rate = float(db.get_setting('pulse_rate', '1.42') or '1.42')
@@ -41,6 +44,27 @@ def _get_rate(db) -> float:
 
 def _fmt_pulses(rub: float, rate: float) -> str:
     return f"{round(rub / rate, 0):.0f}"
+
+
+def _fmt_price_with_discount(rub: float, rate: float, vip_code: str, discount) -> str:
+    """HTML-строка цены: если скидка — зачёркнутая + новая + emoji."""
+    from database.db_bbs_vip import is_code_discounted, apply_discount_price
+    if discount and is_code_discounted(vip_code, discount):
+        disc_rub = apply_discount_price(rub, vip_code, discount)
+        orig_p = round(rub / rate, 0)
+        disc_p = round(disc_rub / rate, 0)
+        return f"<s>{orig_p:.0f}</s> → <b>{disc_p:.0f} 💎</b> {DISCOUNT_EMOJI} -{discount['percent']}%"
+    return f"{round(rub / rate, 0):.0f} 💎"
+
+
+def _fmt_price_btn(rub: float, rate: float, vip_code: str, discount) -> str:
+    """Версия без HTML-тегов — для текста кнопки."""
+    from database.db_bbs_vip import is_code_discounted, apply_discount_price
+    if discount and is_code_discounted(vip_code, discount):
+        disc_rub = apply_discount_price(rub, vip_code, discount)
+        disc_p = round(disc_rub / rate, 0)
+        return f"{disc_p:.0f} 💎 🏷 -{discount['percent']}%"
+    return f"{round(rub / rate, 0):.0f} 💎"
 
 
 def _fmt_countdown(locked_until_iso: str) -> str:
@@ -137,10 +161,11 @@ async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs
 
 async def show_vip_family(query, data, user, context, db):
     """Детальный экран с вариантами услуги и состоянием active/cooldown."""
-    from database.db_bbs_vip import check_global_cooldown
+    from database.db_bbs_vip import check_global_cooldown, get_active_discount
 
     family = data.removeprefix("bbs_vip_family_")
     rate = _get_rate(db)
+    discount = get_active_discount(db)
 
     items = db.get_vip_settings(family=family)
     if not items:
@@ -179,9 +204,9 @@ async def show_vip_family(query, data, user, context, db):
 
     keyboard = []
     for item in items:
-        pulse_price = round(item['price_rub'] / rate, 2)
         dur = f"{item['duration_hours']} ч" if item['duration_hours'] else "разовая"
-        label_detail = f"{dur} — {pulse_price:.0f} 💎"
+        price_str = _fmt_price_btn(item['price_rub'], rate, item['vip_code'], discount)
+        label_detail = f"{dur} — {price_str}"
 
         if not has_profile:
             btn = InlineKeyboardButton(
@@ -252,19 +277,24 @@ async def show_vip_confirmation(query, data, user, context, db):
         return
 
     rate = _get_rate(db)
-    price_pulses = round(setting['price_rub'] / rate, 2)
+    from database.db_bbs_vip import get_active_discount, apply_discount_price
+    discount = get_active_discount(db)
+    orig_rub = float(setting['price_rub'])
+    actual_rub = apply_discount_price(orig_rub, vip_code, discount)
+    price_pulses = round(actual_rub / rate, 2)
     user_db = db.get_user(user.id)
     balance = float(user_db['balance'] if user_db else 0)
     after = balance - price_pulses
 
     dur = f"{setting['duration_hours']} ч" if setting.get('duration_hours') else "разовая"
     icon, name, _ = FAMILY_META.get(family, ('💎', family, ''))
+    price_line = _fmt_price_with_discount(orig_rub, rate, vip_code, discount)
 
     text = (
         f"💎 <b>Подтверждение покупки</b>\n\n"
         f"{icon} <b>{setting['title']}</b>\n"
         f"Длительность: {dur}\n"
-        f"Цена: <b>{price_pulses:.2f} 💎</b>\n\n"
+        f"Цена: {price_line}\n\n"
         f"Ваш баланс: <b>{balance:.2f} 💎</b>\n"
         f"После покупки: <b>{after:.2f} 💎</b>"
     )
