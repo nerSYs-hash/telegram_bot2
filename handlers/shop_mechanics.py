@@ -47,20 +47,14 @@ async def apply_title_to_user(context, chat_id: int, user_id: int, title_text: s
             custom_title=title_text
         )
 
-        # Шаг 3: снять права → титул становится серым, юзер не admin
+        # Шаг 3: снять права → титул становится серым, юзер не admin.
+        # Передаём только can_manage_chat=False: channel-only параметры
+        # (can_post_messages, can_edit_messages) вызывают BadRequest в супергруппе
+        # при полном снятии прав.
         await context.bot.promote_chat_member(
             chat_id=chat_id,
             user_id=user_id,
             can_manage_chat=False,
-            can_post_messages=False,
-            can_edit_messages=False,
-            can_delete_messages=False,
-            can_restrict_members=False,
-            can_promote_members=False,
-            can_change_info=False,
-            can_invite_users=False,
-            can_pin_messages=False,
-            can_manage_video_chats=False,
         )
 
         logger.info(f"✅ Title applied (grey): user={user_id}, title={title_text}")
