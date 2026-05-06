@@ -396,9 +396,10 @@ def _build_discount_menu(disc) -> tuple[str, InlineKeyboardMarkup]:
                 scope_str = apply_to
 
         status_icon = "🟢" if active else "⚪"
+        desc_line = f"\nОписание: <i>{disc['description']}</i>" if disc.get('description') else ''
         text = (
             f"🏷 <b>Скидка VIP BBS</b>\n\n"
-            f"Тема: <b>{disc['theme']}</b>\n"
+            f"Тема: <b>{disc['theme']}</b>{desc_line}\n"
             f"Размер: <b>{disc['percent']}%</b>\n"
             f"Применяется к: <b>{scope_str}</b>\n"
             f"Статус: {status_icon} {'активна' if active else 'выключена'}"
@@ -472,10 +473,34 @@ async def handle_disc_theme_input(message, context, db):
         await message.reply_text("❌ Длина 1–40 символов. Попробуй ещё.")
         return
     context.user_data['vip_disc_draft']['theme'] = theme
+    context.user_data['owner_awaiting'] = 'vip_disc_desc'
+    await message.reply_text(
+        f"🏷 <b>Создание скидки — 2/4</b>\n\n"
+        f"Тема: <b>{theme}</b>\n\n"
+        f"Введи <b>описание акции</b> — в честь чего и почему.\n"
+        f"(до 120 символов, показывается в шапке магазина)\n\n"
+        f"Пример: «В честь лета дарим скидку на все услуги!»",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="bbs_vip_discount")
+        ]])
+    )
+
+
+async def handle_disc_desc_input(message, context, db):
+    """owner_awaiting = 'vip_disc_desc' — ввод описания."""
+    desc = (message.text or '').strip()
+    if len(desc) > 120:
+        await message.reply_text("❌ Не более 120 символов. Попробуй ещё.")
+        return
+    draft = context.user_data.get('vip_disc_draft', {})
+    draft['description'] = desc
+    context.user_data['vip_disc_draft'] = draft
     context.user_data['owner_awaiting'] = 'vip_disc_percent'
     await message.reply_text(
-        f"🏷 <b>Создание скидки — 2/3</b>\n\n"
-        f"Тема: <b>{theme}</b>\n\n"
+        f"🏷 <b>Создание скидки — 3/4</b>\n\n"
+        f"Тема: <b>{draft['theme']}</b>\n"
+        f"Описание: <i>{desc}</i>\n\n"
         f"Введи <b>размер скидки в %</b> (целое от 1 до 99).",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([[
@@ -498,14 +523,14 @@ async def handle_disc_percent_input(message, context, db):
     context.user_data['vip_disc_draft'] = draft
     context.user_data['owner_awaiting'] = 'vip_disc_scope'
 
-    # Показываем кнопку "Все" + коды для выбора
     context.user_data['vip_disc_selected'] = set()
     await message.reply_text(
-        f"🏷 <b>Создание скидки — 3/3</b>\n\n"
+        f"🏷 <b>Создание скидки — 4/4</b>\n\n"
         f"Тема: <b>{draft['theme']}</b>\n"
+        f"Описание: <i>{draft.get('description', '—')}</i>\n"
         f"Скидка: <b>{pct}%</b>\n\n"
         f"Выбери на какие бандлы применить скидку.\n"
-        f"Нажимай коды для выбора, потом «✅ Сохранить».",
+        f"Нажимай коды для выбора, потом «💾 Сохранить».",
         parse_mode='HTML',
         reply_markup=_build_scope_kb(set())
     )
@@ -569,8 +594,9 @@ async def _save_discount(query, context, db, apply_to: str):
     context.user_data.pop('vip_disc_selected', None)
     theme = draft.get('theme', '?')
     percent = draft.get('percent', 0)
+    description = draft.get('description', '')
     upsert_discount(db, theme=theme, percent=percent, apply_to=apply_to,
-                    created_by=query.from_user.id)
+                    description=description, created_by=query.from_user.id)
     await query.answer("✅ Скидка сохранена!")
     disc = get_discount(db)
     text, kb = _build_discount_menu(disc)

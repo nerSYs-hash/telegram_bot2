@@ -165,6 +165,7 @@ def init_bbs_vip_tables(db) -> None:
         CREATE TABLE IF NOT EXISTS bbs_vip_discount (
             id          INTEGER PRIMARY KEY,
             theme       TEXT NOT NULL,
+            description TEXT NOT NULL DEFAULT '',
             percent     INTEGER NOT NULL,
             apply_to    TEXT NOT NULL DEFAULT 'ALL',
             is_active   INTEGER NOT NULL DEFAULT 0,
@@ -172,6 +173,12 @@ def init_bbs_vip_tables(db) -> None:
             created_by  INTEGER
         )
     """)
+    # Миграция: добавить description если колонки нет
+    try:
+        db.cursor.execute("ALTER TABLE bbs_vip_discount ADD COLUMN description TEXT NOT NULL DEFAULT ''")
+        db.conn.commit()
+    except Exception:
+        pass
     db.conn.commit()
 
     # ── Миграция: добавить bump_interval_hours если колонка пропала ──
@@ -269,13 +276,15 @@ def get_active_discount(db) -> dict | None:
     return d if (d and d['is_active']) else None
 
 
-def upsert_discount(db, theme: str, percent: int, apply_to: str, created_by: int) -> int:
+def upsert_discount(db, theme: str, percent: int, apply_to: str, created_by: int,
+                    description: str = '') -> int:
     """Создаёт или заменяет скидку. Возвращает id."""
     try:
         db.cursor.execute("DELETE FROM bbs_vip_discount")
         db.cursor.execute(
-            "INSERT INTO bbs_vip_discount (theme, percent, apply_to, is_active, created_by) VALUES (?,?,?,0,?)",
-            (theme, percent, apply_to, created_by)
+            "INSERT INTO bbs_vip_discount (theme, description, percent, apply_to, is_active, created_by) "
+            "VALUES (?,?,?,?,0,?)",
+            (theme, description, percent, apply_to, created_by)
         )
         db.conn.commit()
         return db.cursor.lastrowid

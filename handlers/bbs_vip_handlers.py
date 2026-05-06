@@ -98,13 +98,15 @@ def _get_profile(db, user_id):
 
 async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs_thread_id=None):
     """Корневой экран VIP: все семьи, мин. цена, таймер global cooldown."""
-    from database.db_bbs_vip import check_global_cooldown
+    from database.db_bbs_vip import check_global_cooldown, get_active_discount, is_code_discounted, apply_discount_price
 
     rate = _get_rate(db)
     all_settings = db.get_vip_settings()
     if not all_settings:
         await query.answer("VIP услуги временно недоступны.", show_alert=True)
         return
+
+    discount = get_active_discount(db)
 
     # min цена по каждой семье
     by_family: dict = {}
@@ -118,6 +120,17 @@ async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs
     has_profile = bool(profile and profile.get('published_at') and not profile.get('deleted_at'))
 
     text_lines = ["💎 <b>VIP-услуги для вашей анкеты BBS</b>\n"]
+
+    # Баннер активной скидки
+    if discount:
+        theme = discount.get('theme', '')
+        desc = discount.get('description', '')
+        pct = discount['percent']
+        banner = f"{DISCOUNT_EMOJI} <b>Акция «{theme}» — -{pct}%</b>"
+        if desc:
+            banner += f"\n<i>{desc}</i>"
+        text_lines.append(banner + "\n")
+
     if not has_profile:
         text_lines.append("⚠️ <i>Опубликуйте анкету чтобы купить VIP-услугу.</i>\n")
 
@@ -127,7 +140,16 @@ async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs
         if not row:
             continue
         icon, name, _ = FAMILY_META.get(fam, ('•', fam, ''))
-        min_pulses = _fmt_pulses(row['price_rub'], rate)
+
+        # Вычислить мин. цену с учётом скидки
+        base_rub = row['price_rub']
+        # Ищем минимальный код этой семьи для проверки скидки
+        min_code = row['vip_code']
+        if discount and is_code_discounted(min_code, discount):
+            disc_rub = apply_discount_price(base_rub, min_code, discount)
+            min_pulses = f"{round(disc_rub / rate, 0):.0f} 💎 🏷 -{discount['percent']}%"
+        else:
+            min_pulses = f"{_fmt_pulses(base_rub, rate)} 💎"
 
         # Global cooldown
         cooldown_suffix = ''
@@ -143,7 +165,7 @@ async def show_vip_storefront(query, user, context, db, target_chat_id=None, bbs
             if active_sub:
                 active_suffix = ' ✅'
 
-        label = f"{icon} {name} — от {min_pulses} 💎{cooldown_suffix}{active_suffix}"
+        label = f"{icon} {name} — от {min_pulses}{cooldown_suffix}{active_suffix}"
         keyboard.append([InlineKeyboardButton(label, callback_data=f"bbs_vip_family_{fam}")])
 
     keyboard.append([InlineKeyboardButton("🔙 Назад", callback_data="bbs_dating")])
