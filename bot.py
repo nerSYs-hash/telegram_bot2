@@ -171,7 +171,14 @@ class TelegramBot:
 
         # Setup handlers after initialization
         self.setup_handlers()
-        
+
+        # Press-Releases (V1.16.14): бэкфил каталога чатов и топиков
+        try:
+            from handlers.bot_chat_tracker import backfill_known_chats
+            await backfill_known_chats(self.application, self.db, self.target_chat_id)
+        except Exception as e:
+            logger.warning(f"backfill_known_chats: {e}")
+
         # Setup scheduled jobs
         self.setup_jobs()
         
@@ -692,13 +699,6 @@ class TelegramBot:
 
         # Error handler (MUST be last)
         self.application.add_error_handler(self.error_handler)
-
-        # Press-Releases (V1.16.14): бэкфил каталога чатов и топиков
-        try:
-            from handlers.bot_chat_tracker import backfill_known_chats
-            await backfill_known_chats(self.application, self.db, self.target_chat_id)
-        except Exception as e:
-            logger.warning(f"backfill_known_chats: {e}")
 
         logger.info("Handlers setup complete")
     
