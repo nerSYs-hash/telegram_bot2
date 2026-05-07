@@ -12,7 +12,16 @@ import StyledSelect from '../shared/StyledSelect';
 import Button from '../shared/Button';
 import ButtonGroup from '../shared/ButtonGroup';
 import Toggle from '../shared/Toggle';
+import Stepper from '../shared/Stepper';
 import BrandingPanel, { parseSignatures } from './BrandingPanel';
+
+// Этапы пресс-релиза для Stepper. Edge-кейсы (failed/cancelled) показываем
+// отдельным баннером, в потоке степпера их нет.
+const STATUS_STEPS = [
+  { id: 'draft',     label: 'Черновик',     icon: FileText, color: 'blue'    },
+  { id: 'scheduled', label: 'Запланирован', icon: Calendar, color: 'violet'  },
+  { id: 'published', label: 'Опубликован',  icon: Send,     color: 'emerald' },
+];
 
 const TEXT_LIMIT      = 4096;
 const CAPTION_LIMIT   = 1024;
@@ -650,9 +659,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           loadingLabel="Сохраняю…"
           onClick={() => handleSave('scheduled')}
           disabled={saving || !draft.publish_at || draft.targets?.length === 0}
-          className={draft.status === 'scheduled' ? 'ring-2 ring-blue-300 ring-offset-2' : ''}
         >
-          {draft.status === 'scheduled' ? 'Запланирован' : 'Запланировать'}
+          {draft.status === 'scheduled' ? 'Перепланировать' : 'Запланировать'}
         </Button>
         {userCan('press_release.publish_now') && (
           <Button
@@ -660,8 +668,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
             state={savingAction === 'published' ? 'loading' : doneAction === 'published' ? 'done' : 'idle'}
             loadingLabel="Публикую…"
             onClick={handlePublishNow}
-            disabled={saving || draft.targets?.length === 0}
-            className={draft.status === 'published' ? 'ring-2 ring-emerald-300 ring-offset-2' : ''}
+            disabled={saving || draft.targets?.length === 0 || draft.status === 'published'}
           >
             {draft.status === 'published' ? 'Опубликован' : 'Сейчас'}
           </Button>
@@ -671,6 +678,34 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
             aria-label="Удалить" className="text-red-400 hover:text-red-600 hover:bg-red-50" />
         )}
       </div>
+
+      {/* ── Stepper статуса публикации ── */}
+      {(draft.status === 'failed' || draft.status === 'cancelled') ? (
+        <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
+          draft.status === 'failed'
+            ? 'bg-red-50 border-red-200 text-red-700'
+            : 'bg-amber-50 border-amber-200 text-amber-700'
+        }`}>
+          <AlertTriangle size={18} className="flex-shrink-0" />
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-black">
+              {draft.status === 'failed' ? 'Публикация упала с ошибкой' : 'Публикация отменена'}
+            </div>
+            <div className="text-[11px] opacity-80 mt-0.5">
+              {draft.status === 'failed'
+                ? 'Проверьте таргеты и попробуйте опубликовать заново.'
+                : 'Запланированная отправка была отменена. Можно перепланировать или удалить.'}
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-3">
+          <Stepper
+            steps={STATUS_STEPS}
+            current={draft.status || 'draft'}
+          />
+        </div>
+      )}
 
       {/* Подсказка о drag&drop + сброс */}
       <div className="flex items-center justify-between bg-blue-50/60 border border-blue-100 rounded-xl px-3 py-2">

@@ -15,7 +15,9 @@
   content: '';
   position: absolute;
   inset: -2px;
-  border-radius: inherit;
+  /* radius = button-radius + |inset|; rounded-2xl=16px → 18px тут.
+     Без +2px внешний угол визуально «уже», чем у самой кнопки. */
+  border-radius: 18px;
   padding: 2px;
   background: conic-gradient(
     from var(--pulse-btn-angle),
@@ -45,6 +47,15 @@
 }
 .pulse-btn-check {
   animation: pulse-btn-pop 350ms cubic-bezier(.34, 1.56, .64, 1) forwards;
+}
+
+/* ── Subtle pulse для активного шага Stepper ── */
+@keyframes pulse-step {
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 currentColor; }
+  50%      { transform: scale(1.08); box-shadow: 0 0 0 6px transparent; }
+}
+.pulse-step-current {
+  animation: pulse-step 1.8s ease-in-out infinite;
 }
 
 @keyframes tag-jiggle {
