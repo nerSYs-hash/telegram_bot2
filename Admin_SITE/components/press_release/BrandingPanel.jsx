@@ -1,42 +1,102 @@
 import { useState, useEffect } from 'react';
-import { Palette, Save, CheckCircle2 } from 'lucide-react';
+import { Palette, Save, CheckCircle2, Plus, Trash2, Edit3, Star, X } from 'lucide-react';
 import { makeApi } from './useApi';
 
 /**
- * Маленькая панель «Подпись и брендинг» — встраивается на страницу пресс-релизов
- * либо в Систему. Сохраняет ключи в branding_settings (signature и т.п.).
+ * Менеджер шаблонов подписей.
+ * Хранит JSON-массив в branding_settings.signatures = [{id, name, html, is_default}].
+ * Один из них можно отметить как default — он подставляется при создании пресс-релиза.
+ *
+ * props:
+ *   token             — JWT
+ *   onChange()        — колбэк при изменении (чтобы родитель refetch'ил branding)
+ *   compact           — компактный режим (без своего контейнера, для встраивания)
  */
-export default function BrandingPanel({ token }) {
+
+function newId() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); }
+
+function parseList(raw) {
+  if (!raw) return [];
+  try {
+    const v = JSON.parse(raw);
+    return Array.isArray(v) ? v : [];
+  } catch { return []; }
+}
+
+export default function BrandingPanel({ token, onChange, compact = false }) {
   const api = makeApi(token);
-  const [signature, setSignature] = useState('');
-  const [savedAt,   setSavedAt]   = useState(null);
-  const [busy,      setBusy]      = useState(false);
+  const [list, setList] = useState([]);
+  const [editing, setEditing] = useState(null);  // {id?, name, html, is_default}
+  const [savedAt, setSavedAt] = useState(0);
+  const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    api.getBranding().then(d => setSignature(d?.signature || '')).catch(() => {});
-  }, []);
+  const refresh = () => api.getBranding().then(d => {
+    setList(parseList(d?.signatures));
+  }).catch(() => {});
 
-  const save = async () => {
+  useEffect(() => { refresh(); }, []);
+
+  const saveAll = async (next) => {
     setBusy(true);
     try {
-      await api.setBranding('signature', signature);
+      // Сохраняем массив в JSON
+      await api.setBranding('signatures', JSON.stringify(next));
+      // Обновляем legacy ключ "signature" — это default-подпись для обратной совместимости
+      const def = next.find(s => s.is_default);
+      await api.setBranding('signature', def?.html || '');
+      setList(next);
       setSavedAt(Date.now());
-      setTimeout(() => setSavedAt(null), 2000);
+      setTimeout(() => setSavedAt(0), 1500);
+      onChange?.();
     } catch (e) {
       alert('Ошибка: ' + (e?.detail || e?.message || e));
     } finally { setBusy(false); }
   };
 
+  const startNew = () => setEditing({ id: null, name: '', html: '', is_default: list.length === 0 });
+  const startEdit = (s) => setEditing({ ...s });
+  const cancelEdit = () => setEditing(null);
+
+  const saveDraft = async () => {
+    if (!editing) return;
+    if (!editing.name.trim()) { alert('Введите название шаблона'); return; }
+    let next;
+    if (editing.id) {
+      next = list.map(s => s.id === editing.id ? { ...editing } : s);
+    } else {
+      next = [...list, { ...editing, id: newId() }];
+    }
+    // Только один может быть default
+    if (editing.is_default) {
+      next = next.map(s => ({ ...s, is_default: s.id === (editing.id || next[next.length - 1].id) }));
+    }
+    await saveAll(next);
+    setEditing(null);
+  };
+
+  const deleteOne = async (id) => {
+    if (!confirm('Удалить шаблон подписи?')) return;
+    await saveAll(list.filter(s => s.id !== id));
+  };
+
+  const setDefault = async (id) => {
+    await saveAll(list.map(s => ({ ...s, is_default: s.id === id })));
+  };
+
+  const Wrapper = ({ children }) => compact
+    ? <div className="space-y-3">{children}</div>
+    : <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3">{children}</div>;
+
   return (
-    <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3">
+    <Wrapper>
       <div className="flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-pink-100 flex items-center justify-center">
-          <Palette size={16} className="text-pink-600" />
+        <div className="w-7 h-7 rounded-xl bg-pink-100 flex items-center justify-center">
+          <Palette size={14} className="text-pink-600" />
         </div>
-        <div className="flex-1">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-900">Подпись и брендинг</h2>
+        <div className="flex-1 min-w-0">
+          <h2 className="text-xs font-black uppercase tracking-widest text-gray-900">Шаблоны подписей</h2>
           <p className="text-[10px] text-gray-400 mt-0.5">
-            Кастомная подпись добавляется в конец пресс-релиза, если включён тумблер «Добавить подпись»
+            Можно создать несколько вариантов брендинга и переключаться при создании пресс-релиза
           </p>
         </div>
         {savedAt && (
@@ -46,33 +106,93 @@ export default function BrandingPanel({ token }) {
         )}
       </div>
 
-      <textarea
-        value={signature}
-        onChange={(e) => setSignature(e.target.value)}
-        placeholder='— <b>Pulse Community</b> | @pulse_chat'
-        rows={3}
-        className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-mono focus:outline-none focus:border-blue-200 resize-y"
-      />
-      <p className="text-[10px] text-gray-400">
-        Поддерживается HTML: <code className="bg-gray-100 px-1 rounded">&lt;b&gt;</code>{' '}
-        <code className="bg-gray-100 px-1 rounded">&lt;i&gt;</code>{' '}
-        <code className="bg-gray-100 px-1 rounded">&lt;a href&gt;</code>
-      </p>
-
-      {/* Превью */}
-      {signature.trim() && (
-        <div className="bg-gray-50 border border-gray-100 rounded-xl p-3">
-          <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Превью</div>
-          <div className="text-sm text-gray-700" dangerouslySetInnerHTML={{ __html: signature }} />
+      {/* List */}
+      {list.length > 0 && (
+        <div className="space-y-1.5">
+          {list.map(s => (
+            <div key={s.id} className={`bg-gray-50 border rounded-xl p-2.5 ${s.is_default ? 'border-amber-300 bg-amber-50' : 'border-gray-100'}`}>
+              <div className="flex items-center gap-2 mb-1">
+                {s.is_default && <Star size={12} className="text-amber-500 fill-amber-400" />}
+                <div className="text-xs font-black text-gray-800 truncate flex-1">{s.name}</div>
+                {!s.is_default && (
+                  <button onClick={() => setDefault(s.id)} title="Сделать дефолтом"
+                    className="p-1 text-gray-400 hover:text-amber-500 hover:bg-amber-50 rounded">
+                    <Star size={11} />
+                  </button>
+                )}
+                <button onClick={() => startEdit(s)} title="Редактировать"
+                  className="p-1 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded">
+                  <Edit3 size={11} />
+                </button>
+                <button onClick={() => deleteOne(s.id)} title="Удалить"
+                  className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded">
+                  <Trash2 size={11} />
+                </button>
+              </div>
+              <div className="text-xs text-gray-600 leading-snug [&_b]:font-bold [&_strong]:font-bold [&_i]:italic"
+                   dangerouslySetInnerHTML={{ __html: s.html || '<span class="text-gray-300 italic">(пусто)</span>' }} />
+            </div>
+          ))}
         </div>
       )}
 
-      <div className="flex justify-end">
-        <button onClick={save} disabled={busy}
-          className="px-4 py-2.5 bg-blue-500 text-white rounded-2xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 disabled:opacity-50 flex items-center gap-1.5">
-          <Save size={13}/> Сохранить подпись
+      {/* Editor inline */}
+      {editing && (
+        <div className="bg-white border-2 border-pink-100 rounded-2xl p-3 space-y-2">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] font-black uppercase tracking-widest text-pink-600">
+              {editing.id ? 'Редактирование' : 'Новый шаблон'}
+            </span>
+            <button onClick={cancelEdit} className="ml-auto text-gray-300 hover:text-gray-500">
+              <X size={14}/>
+            </button>
+          </div>
+          <input
+            value={editing.name}
+            onChange={(e) => setEditing(s => ({ ...s, name: e.target.value }))}
+            placeholder="Название (например: Основная)"
+            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-pink-300"
+          />
+          <textarea
+            value={editing.html}
+            onChange={(e) => setEditing(s => ({ ...s, html: e.target.value }))}
+            placeholder='— <b>Pulse Community</b> | @pulse_chat'
+            rows={3}
+            className="w-full px-3 py-2 bg-gray-50 border border-gray-100 rounded-lg text-xs font-mono focus:outline-none focus:border-pink-300 resize-y"
+          />
+          {editing.html.trim() && (
+            <div className="bg-gray-50 border border-gray-100 rounded-lg px-3 py-2 [&_b]:font-bold [&_i]:italic">
+              <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">Превью</div>
+              <div className="text-xs text-gray-700" dangerouslySetInnerHTML={{ __html: editing.html }} />
+            </div>
+          )}
+          <label className="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" checked={editing.is_default}
+              onChange={(e) => setEditing(s => ({ ...s, is_default: e.target.checked }))}
+              className="w-4 h-4 accent-amber-500" />
+            <span className="text-[11px] font-bold text-gray-700">Сделать дефолтом</span>
+          </label>
+          <div className="flex gap-2">
+            <button onClick={saveDraft} disabled={busy}
+              className="flex-1 py-2 bg-pink-500 text-white rounded-lg text-xs font-black hover:bg-pink-600 disabled:opacity-40 flex items-center justify-center gap-1">
+              <Save size={11}/> Сохранить
+            </button>
+            <button onClick={cancelEdit}
+              className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-black hover:bg-gray-300">
+              Отмена
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!editing && (
+        <button onClick={startNew}
+          className="w-full py-2.5 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl text-xs font-black text-gray-600 hover:bg-pink-50 hover:border-pink-200 hover:text-pink-600 flex items-center justify-center gap-1.5">
+          <Plus size={12}/> Добавить шаблон подписи
         </button>
-      </div>
-    </div>
+      )}
+    </Wrapper>
   );
 }
+
+export { parseList as parseSignatures };

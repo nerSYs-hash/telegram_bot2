@@ -1,22 +1,34 @@
-import { useState } from 'react';
-import { Image as ImageIcon, Video, FileImage, Trash2, Plus, ArrowUp, ArrowDown, Reply } from 'lucide-react';
+import { useState, useRef } from 'react';
+import {
+  Image as ImageIcon, Video, FileImage, Trash2,
+  Plus, ArrowUp, ArrowDown, Reply, Loader2, Upload,
+} from 'lucide-react';
 
 /**
  * Универсальный блок управления медиа.
  *
+ * Хранение в БД (поле photo_file_id):
+ *   - "photo:URL_OR_FID|video:URL_OR_FID|animation:URL_OR_FID"
+ *   - URL_OR_FID — либо file_id (старая схема, начинается с букв),
+ *                   либо локальный путь с /media/ или server_path после загрузки.
+ *
+ * При публикации publisher.py:
+ *   - Если значение начинается с '/' или 'http' → открыть файл/скачать и отправить.
+ *   - Иначе → отправить как file_id.
+ *
  * props:
- *   value          — строка вида "photo:fid|video:fid|..."
+ *   value          — строка
  *   onChange(str)  — колбэк
  *   maxItems       — макс. число медиа (по умолчанию 5)
  *   position       — 'above' | 'below' | 'reply'
  *   onPositionChange(pos)
- *   showPosition   — показывать ли селектор позиции (по умолчанию true)
+ *   showPosition   — показывать ли селектор позиции
  */
 
 const KIND_META = {
-  photo:     { Icon: ImageIcon,  label: 'Фото',  color: 'blue'   },
-  video:     { Icon: Video,      label: 'Видео', color: 'purple' },
-  animation: { Icon: FileImage,  label: 'GIF',   color: 'pink'   },
+  photo:     { Icon: ImageIcon,  label: 'Фото',  color: 'blue',   accept: 'image/jpeg,image/png,image/webp' },
+  video:     { Icon: Video,      label: 'Видео', color: 'purple', accept: 'video/mp4,video/quicktime'        },
+  animation: { Icon: FileImage,  label: 'GIF',   color: 'pink',   accept: 'image/gif'                        },
 };
 
 function parseMedia(value) {
@@ -25,12 +37,16 @@ function parseMedia(value) {
     if (p.startsWith('video:'))     return { kind: 'video',     fid: p.slice(6) };
     if (p.startsWith('animation:')) return { kind: 'animation', fid: p.slice(10) };
     if (p.startsWith('photo:'))     return { kind: 'photo',     fid: p.slice(6) };
-    return { kind: 'photo', fid: p };  // legacy
+    return { kind: 'photo', fid: p };
   });
 }
 
 function packMedia(items) {
   return items.map(i => `${i.kind}:${i.fid}`).join('|');
+}
+
+function isUrl(fid) {
+  return fid?.startsWith('/') || fid?.startsWith('http');
 }
 
 const POSITIONS = [
@@ -44,23 +60,51 @@ export default function MediaBlock({
   position = 'above', onPositionChange, showPosition = true,
 }) {
   const items = parseMedia(value);
-  const [adding, setAdding] = useState(false);
-  const [draftKind, setDraftKind] = useState('photo');
-  const [draftFid,  setDraftFid]  = useState('');
+  const [uploading, setUploading] = useState(false);
+  const [error, setError]         = useState(null);
+  const fileInputRef = useRef(null);
+  const pendingKindRef = useRef(null);
 
-  const addItem = () => {
-    const fid = draftFid.trim();
-    if (!fid) return;
-    if (items.length >= maxItems) return;
-    onChange(packMedia([...items, { kind: draftKind, fid }]));
-    setDraftFid('');
-    setAdding(false);
+  const startUpload = async (file, kind) => {
+    setError(null);
+    setUploading(true);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
+      if (!res.ok) {
+        const err = await res.text();
+        throw new Error(err || 'Ошибка загрузки');
+      }
+      const data = await res.json();
+      // Сервер сам определит media_type — но мы доверяем выбору пользователя
+      const finalKind = kind || data.media_type || 'photo';
+      const newItems = [...items, { kind: finalKind, fid: data.url }];
+      onChange(packMedia(newItems));
+    } catch (e) {
+      setError(e.message || String(e));
+    } finally {
+      setUploading(false);
+    }
   };
 
-  const removeItem = (idx) => {
-    onChange(packMedia(items.filter((_, i) => i !== idx)));
+  const pickFile = (kind) => {
+    pendingKindRef.current = kind;
+    if (fileInputRef.current) {
+      fileInputRef.current.accept = KIND_META[kind]?.accept || '*/*';
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
   };
 
+  const onFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await startUpload(file, pendingKindRef.current);
+    pendingKindRef.current = null;
+  };
+
+  const removeItem = (idx) => onChange(packMedia(items.filter((_, i) => i !== idx)));
   const moveItem = (idx, dir) => {
     const next = [...items];
     const target = idx + dir;
@@ -71,6 +115,8 @@ export default function MediaBlock({
 
   return (
     <div className="space-y-3">
+      <input ref={fileInputRef} type="file" className="hidden" onChange={onFileChange} />
+
       {/* Position selector */}
       {showPosition && items.length > 0 && (
         <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-xl">
@@ -89,19 +135,31 @@ export default function MediaBlock({
         </div>
       )}
 
-      {/* List */}
+      {/* List with previews */}
       {items.length > 0 && (
         <div className="space-y-1.5">
           {items.map((it, i) => {
             const meta = KIND_META[it.kind] || KIND_META.photo;
+            const url = isUrl(it.fid) ? it.fid : null;
             return (
               <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2">
-                <div className={`w-8 h-8 rounded-lg flex items-center justify-center bg-${meta.color}-100`}>
-                  <meta.Icon size={14} className={`text-${meta.color}-600`} />
+                {/* Preview */}
+                <div className={`w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-${meta.color}-100 flex-shrink-0`}>
+                  {url ? (
+                    it.kind === 'video' ? (
+                      <video src={url} className="w-full h-full object-cover" muted />
+                    ) : (
+                      <img src={url} alt="" className="w-full h-full object-cover" />
+                    )
+                  ) : (
+                    <meta.Icon size={16} className={`text-${meta.color}-600`} />
+                  )}
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="text-[11px] font-black text-gray-800">{meta.label}</div>
-                  <div className="text-[10px] text-gray-400 font-mono truncate">{it.fid}</div>
+                  <div className="text-[10px] text-gray-400 font-mono truncate">
+                    {url ? url.split('/').pop() : it.fid}
+                  </div>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button onClick={() => moveItem(i, -1)} disabled={i === 0}
@@ -123,48 +181,36 @@ export default function MediaBlock({
         </div>
       )}
 
-      {/* Add form */}
+      {error && (
+        <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+          {error}
+        </div>
+      )}
+
+      {/* Upload buttons */}
       {items.length < maxItems && (
-        adding ? (
-          <div className="bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl p-3 space-y-2">
-            <div className="flex gap-1">
-              {Object.entries(KIND_META).map(([k, m]) => (
-                <button key={k} onClick={() => setDraftKind(k)}
-                  className={`flex-1 flex items-center justify-center gap-1 py-1.5 rounded-lg text-[10px] font-black uppercase ${
-                    draftKind === k ? `bg-${m.color}-500 text-white` : 'bg-white text-gray-500 border border-gray-100'
-                  }`}>
-                  <m.Icon size={11} /> {m.label}
-                </button>
-              ))}
-            </div>
-            <input
-              value={draftFid}
-              onChange={(e) => setDraftFid(e.target.value)}
-              placeholder="file_id из Telegram (например: AgACAgIA...)"
-              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs font-mono focus:outline-none focus:border-blue-300"
-              onKeyDown={(e) => { if (e.key === 'Enter') addItem(); }}
-              autoFocus
-            />
-            <div className="flex gap-2">
-              <button onClick={addItem} disabled={!draftFid.trim()}
-                className="flex-1 py-2 bg-blue-500 text-white rounded-lg text-xs font-black hover:bg-blue-600 disabled:opacity-40">
-                Добавить
-              </button>
-              <button onClick={() => { setAdding(false); setDraftFid(''); }}
-                className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-black hover:bg-gray-300">
-                Отмена
-              </button>
-            </div>
-            <p className="text-[10px] text-gray-400">
-              Загрузка файлов с компьютера будет в следующей версии. Пока — file_id из Telegram.
-            </p>
+        uploading ? (
+          <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-blue-200 rounded-xl">
+            <Loader2 size={14} className="animate-spin text-blue-500"/>
+            <span className="text-sm text-blue-500 font-bold">Загрузка…</span>
           </div>
         ) : (
-          <button onClick={() => setAdding(true)}
-            className="w-full py-2.5 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl text-xs font-black text-gray-500 hover:bg-gray-100 hover:border-gray-300 flex items-center justify-center gap-1.5">
-            <Plus size={12} /> Добавить медиа ({items.length}/{maxItems})
-          </button>
+          <div className="grid grid-cols-3 gap-2">
+            {Object.entries(KIND_META).map(([k, m]) => (
+              <button key={k} onClick={() => pickFile(k)}
+                className={`flex flex-col items-center justify-center gap-1 py-3 border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:border-${m.color}-300 hover:bg-${m.color}-50 transition-all active:scale-95`}>
+                <m.Icon size={18} className={`text-${m.color}-500`} />
+                <span>{m.label}</span>
+              </button>
+            ))}
+          </div>
         )
+      )}
+
+      {items.length < maxItems && !uploading && (
+        <p className="text-[10px] text-gray-400 text-center">
+          Загружено: {items.length}/{maxItems}. Поддерживается: JPG, PNG, WEBP, MP4, GIF.
+        </p>
       )}
     </div>
   );

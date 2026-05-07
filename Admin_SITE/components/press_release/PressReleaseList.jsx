@@ -19,6 +19,32 @@ function fmtDate(iso) {
   return d.toLocaleString('ru-RU', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+// Безопасный HTML-превью: обрезаем по тексту, оставляем только разрешённые теги
+const ALLOWED_TAGS = /<\/?(?:b|strong|i|em|u|s|del|code|a|tg-spoiler|blockquote)(?:\s[^>]*)?>/gi;
+
+function richPreview(html, maxChars = 100) {
+  if (!html) return '';
+  // Считаем длину текста без тегов и обрезаем
+  const plain = html.replace(/<[^>]+>/g, '');
+  const truncate = plain.length > maxChars;
+  if (!truncate) return html;
+  // Обрезаем сам HTML на N видимых символов
+  let visibleLen = 0, out = '';
+  for (let i = 0; i < html.length; i++) {
+    if (html[i] === '<') {
+      const close = html.indexOf('>', i);
+      if (close === -1) break;
+      out += html.slice(i, close + 1);
+      i = close;
+      continue;
+    }
+    if (visibleLen >= maxChars) break;
+    out += html[i];
+    visibleLen++;
+  }
+  return out + '…';
+}
+
 function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
   const targets = post.targets || [];
   const targetSummary = targets.length === 0 ? '—' :
@@ -36,9 +62,10 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <div className="text-sm font-black text-gray-800 truncate">
             {post.title || <span className="text-gray-400 italic">(без имени)</span>}
           </div>
-          <div className="text-[11px] text-gray-500 truncate mt-0.5">
-            {(post.text || '').slice(0, 80)}{(post.text || '').length > 80 ? '…' : ''}
-          </div>
+          <div
+            className="text-[11px] text-gray-500 truncate mt-0.5 [&_b]:font-bold [&_strong]:font-bold [&_i]:italic [&_em]:italic [&_u]:underline [&_s]:line-through"
+            dangerouslySetInnerHTML={{ __html: richPreview(post.text || '', 100) }}
+          />
           <div className="flex items-center gap-2 mt-1.5 text-[10px] text-gray-400">
             <Calendar size={10} />
             <span>{fmtDate(post.publish_at)}</span>
@@ -131,34 +158,30 @@ export default function PressReleaseList({
     return c;
   }, [posts]);
 
+  const currentTab = TABS.find(t => t.id === tab) || TABS[0];
+
   return (
     <div className="space-y-3">
-      {/* Кнопка нового */}
-      <button onClick={onCreate}
-        className="w-full py-3 bg-blue-500 text-white rounded-2xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all flex items-center justify-center gap-2">
-        <Plus size={14}/> Новый пресс-релиз
-      </button>
-
-      {/* Tabs */}
-      <div className="flex gap-1 overflow-x-auto scrollbar-hide -mx-1 px-1">
-        {TABS.map(t => {
-          const active = t.id === tab;
-          const cnt = counts[t.id] || 0;
-          return (
-            <button key={t.id} onClick={() => setTab(t.id)}
-              className={`flex-shrink-0 px-3 py-2 rounded-xl text-[10px] font-black uppercase tracking-wide flex items-center gap-1.5 transition-all ${
-                active ? 'bg-gray-900 text-white' : 'bg-white text-gray-500 border border-gray-100'
-              }`}>
-              <t.icon size={11} />
-              {t.label}
-              {cnt > 0 && (
-                <span className={`px-1.5 py-0.5 rounded-full text-[9px] ${active ? 'bg-white/20' : `bg-${t.color}-100 text-${t.color}-700`}`}>
-                  {cnt}
-                </span>
-              )}
-            </button>
-          );
-        })}
+      {/* Dropdown tabs */}
+      <div className="relative">
+        <select
+          value={tab}
+          onChange={(e) => setTab(e.target.value)}
+          className="w-full appearance-none px-4 py-3 pr-10 bg-white border border-gray-100 rounded-2xl text-sm font-black uppercase tracking-wide text-gray-800 focus:outline-none focus:border-blue-200 cursor-pointer"
+        >
+          {TABS.map(t => {
+            const cnt = counts[t.id] || 0;
+            return (
+              <option key={t.id} value={t.id}>
+                {t.label}{cnt > 0 ? ` (${cnt})` : ''}
+              </option>
+            );
+          })}
+        </select>
+        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
+          <currentTab.icon size={12} className="text-gray-400" />
+          <span className="text-gray-300">▾</span>
+        </div>
       </div>
 
       {/* Search */}

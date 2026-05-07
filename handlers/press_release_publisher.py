@@ -35,7 +35,8 @@ CAPTION_LIMIT = 1024
 # ────────────────────────────────────────────────────────────────────
 
 def _parse_media(photo_file_id: str) -> list:
-    """Формат поля photo_file_id: 'photo:fid|video:fid|...' или legacy bare fid."""
+    """Формат: 'photo:VAL|video:VAL|animation:VAL|...'
+       VAL — file_id, либо локальный путь (/media/...), либо HTTP URL."""
     if not photo_file_id:
         return []
     items = []
@@ -45,11 +46,39 @@ def _parse_media(photo_file_id: str) -> list:
             continue
         if part.startswith('video:'):
             items.append(('video', part[6:]))
+        elif part.startswith('animation:'):
+            items.append(('animation', part[10:]))
         elif part.startswith('photo:'):
             items.append(('photo', part[6:]))
         else:
             items.append(('photo', part))
     return items
+
+
+def _resolve_media_input(value: str):
+    """Возвращает file_id-строку или открытый файл для отправки в Telegram.
+       Для /media/... ищем файл в Admin_SITE/media_uploads/."""
+    import os
+    if not value:
+        return value
+    # HTTP URL — Telegram его сам скачает
+    if value.startswith('http://') or value.startswith('https://'):
+        return value
+    # Локальный URL /media/<filename>
+    if value.startswith('/media/'):
+        fname = value[len('/media/'):]
+        # Корень проекта
+        here = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        path = os.path.join(here, 'Admin_SITE', 'media_uploads', fname)
+        if os.path.exists(path):
+            return open(path, 'rb')
+        logger.warning(f"media file not found: {path}")
+        return value  # fallback
+    # Абсолютный путь
+    if value.startswith('/') and os.path.exists(value):
+        return open(value, 'rb')
+    # Иначе — file_id
+    return value
 
 
 def _build_text(post: dict, signature_default: str = '') -> str:
@@ -159,6 +188,7 @@ async def _send_to_target(bot, chat_id: int, thread_id: Optional[int],
 
     elif len(media_list) == 1:
         kind, fid = media_list[0]
+        media_input = _resolve_media_input(fid)
         send_kw = {'chat_id': chat_id, 'parse_mode': 'HTML', **extra}
         if thread_id:
             send_kw['message_thread_id'] = thread_id
@@ -166,33 +196,39 @@ async def _send_to_target(bot, chat_id: int, thread_id: Optional[int],
             send_kw['caption'] = text
             send_kw['reply_markup'] = reply_markup
             if kind == 'video':
-                m = await bot.send_video(video=fid, **send_kw)
+                m = await bot.send_video(video=media_input, **send_kw)
+            elif kind == 'animation':
+                m = await bot.send_animation(animation=media_input, **send_kw)
             else:
-                m = await bot.send_photo(photo=fid, **send_kw)
+                m = await bot.send_photo(photo=media_input, **send_kw)
             msg_ids.append(m.message_id)
         else:
-            # медиа без подписи + текст отдельно
+            kw_no_caption = {'chat_id': chat_id, **extra}
+            if thread_id:
+                kw_no_caption['message_thread_id'] = thread_id
             if kind == 'video':
-                m = await bot.send_video(video=fid, chat_id=chat_id,
-                                         message_thread_id=thread_id, **extra)
+                m = await bot.send_video(video=media_input, **kw_no_caption)
+            elif kind == 'animation':
+                m = await bot.send_animation(animation=media_input, **kw_no_caption)
             else:
-                m = await bot.send_photo(photo=fid, chat_id=chat_id,
-                                         message_thread_id=thread_id, **extra)
+                m = await bot.send_photo(photo=media_input, **kw_no_caption)
             msg_ids.append(m.message_id)
             text_ids = await _send_long(bot, chat_id, text, thread_id=thread_id,
                                         reply_markup=reply_markup, **extra)
             msg_ids.extend(text_ids)
 
     else:
-        # 2-5 медиа: media_group
+        # 2-5 медиа: media_group (animation в группе нельзя — пропускаем)
         group = []
         for i, (kind, fid) in enumerate(media_list):
             cap = text if i == 0 and len(text) <= CAPTION_LIMIT else None
             pm = 'HTML' if cap else None
+            media_input = _resolve_media_input(fid)
             if kind == 'video':
-                group.append(InputMediaVideo(media=fid, caption=cap, parse_mode=pm))
+                group.append(InputMediaVideo(media=media_input, caption=cap, parse_mode=pm))
             else:
-                group.append(InputMediaPhoto(media=fid, caption=cap, parse_mode=pm))
+                # animation внутри группы Telegram не поддерживает — отправляем как photo
+                group.append(InputMediaPhoto(media=media_input, caption=cap, parse_mode=pm))
         send_kw = {'chat_id': chat_id, 'media': group}
         if thread_id:
             send_kw['message_thread_id'] = thread_id

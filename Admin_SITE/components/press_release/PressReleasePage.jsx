@@ -5,7 +5,7 @@ import PressReleaseEditor from './PressReleaseEditor';
 import PressReleaseList from './PressReleaseList';
 import BrandingPanel from './BrandingPanel';
 
-export default function PressReleasePage({ token, userPermissions }) {
+export default function PressReleasePage({ token, userPermissions, userId }) {
   const api = makeApi(token);
 
   const [chats, setChats]     = useState([]);
@@ -13,7 +13,6 @@ export default function PressReleasePage({ token, userPermissions }) {
   const [branding, setBrand]  = useState({});
   const [selected, setSelected] = useState(null);  // post или 'new'
   const [loading, setLoading] = useState(true);
-  const [showBranding, setShowBranding] = useState(false);
   const editorRef             = useRef(null);
 
   /** Спросить «сохранить?» если черновик грязный. Возвращает true если можно идти дальше. */
@@ -142,12 +141,15 @@ export default function PressReleasePage({ token, userPermissions }) {
             <PressReleaseEditor
               ref={editorRef}
               api={api}
+              token={token}
+              userId={userId}
               chats={chats}
               branding={branding}
               post={selected.id ? selected : null}
               onSaved={handleSaved}
               onClose={handleClose}
               userCan={userCan}
+              onBrandingChange={refresh}
             />
           ) : (
             <EmptyEditor onCreate={handleCreate} />
@@ -166,16 +168,6 @@ export default function PressReleasePage({ token, userPermissions }) {
             userCan={userCan}
           />
         </div>
-      </div>
-
-      {/* Брендинг — внизу страницы */}
-      <div className="pt-2">
-        <button onClick={() => setShowBranding(s => !s)}
-          className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-black uppercase tracking-widest text-pink-600 hover:bg-pink-50 transition-all">
-          🎨 Подпись и брендинг
-          <span className="text-gray-300">{showBranding ? '▲' : '▼'}</span>
-        </button>
-        {showBranding && <div className="mt-3"><BrandingPanel token={token} /></div>}
       </div>
     </div>
   );

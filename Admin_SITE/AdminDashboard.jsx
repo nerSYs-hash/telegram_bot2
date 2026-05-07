@@ -5485,6 +5485,7 @@ export default function App() {
           <PressReleasePage
             token={localStorage.getItem('auth_token')}
             userPermissions={authUser?.permissions || []}
+            userId={authUser?.user_id}
           />
         );
 

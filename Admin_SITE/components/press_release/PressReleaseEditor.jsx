@@ -1,13 +1,14 @@
 import { useState, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
-  Save, X, Send, Trash2, Copy, RotateCcw, FileText,
+  Save, X, Send, Trash2, Copy, RotateCcw, FileText, Palette,
   Image as ImageIcon, Calendar, Settings as SettingsIcon, ChevronDown, ChevronUp,
   Bold, Plus, GripVertical, Link as LinkIcon, MousePointerClick, AlertTriangle,
-  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone, Eye,
+  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone, Eye, RefreshCw,
 } from 'lucide-react';
 import DateTimePicker from '../shared/DateTimePicker';
 import RichTextEditor from '../shared/RichTextEditor';
 import MediaBlock from '../shared/MediaBlock';
+import BrandingPanel, { parseSignatures } from './BrandingPanel';
 
 const TEXT_LIMIT      = 4096;
 const CAPTION_LIMIT   = 1024;
@@ -45,10 +46,11 @@ function makeBlankPost() {
 }
 
 // ── Section wrapper ──────────────────────────────────────────────
-function Section({ icon: Icon, title, children, right }) {
+function Section({ icon: Icon, title, children, right, dragHandle }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
       <div className="flex items-center gap-2">
+        {dragHandle}
         {Icon && <Icon size={16} className="text-blue-500" />}
         <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">{title}</h3>
         {right && <div className="ml-auto">{right}</div>}
@@ -56,6 +58,41 @@ function Section({ icon: Icon, title, children, right }) {
       {children}
     </div>
   );
+}
+
+// ── Draggable wrapper ────────────────────────────────────────────
+function DraggableSection({ id, index, onDragStart, onDragOver, onDrop, isDraggingOver, children }) {
+  return (
+    <div
+      draggable
+      onDragStart={(e) => onDragStart(e, id, index)}
+      onDragOver={(e) => onDragOver(e, id, index)}
+      onDragEnd={() => {}}
+      onDrop={(e) => onDrop(e, id, index)}
+      className={`transition-all ${isDraggingOver ? 'ring-2 ring-blue-300 rounded-2xl' : ''}`}
+    >
+      {children}
+    </div>
+  );
+}
+
+const DEFAULT_SECTION_ORDER = ['name', 'media', 'content', 'branding', 'publish', 'keyboard', 'settings'];
+
+function getStoredOrder(userId) {
+  try {
+    const raw = localStorage.getItem(`pr_section_order_${userId || 'guest'}`);
+    if (!raw) return DEFAULT_SECTION_ORDER;
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr)) return DEFAULT_SECTION_ORDER;
+    // Сливаем с дефолтом — добавляем недостающие в конец, отбрасываем неизвестные
+    const known = arr.filter(id => DEFAULT_SECTION_ORDER.includes(id));
+    const missing = DEFAULT_SECTION_ORDER.filter(id => !known.includes(id));
+    return [...known, ...missing];
+  } catch { return DEFAULT_SECTION_ORDER; }
+}
+
+function saveOrder(userId, order) {
+  try { localStorage.setItem(`pr_section_order_${userId || 'guest'}`, JSON.stringify(order)); } catch {}
 }
 
 // ── Toggle ───────────────────────────────────────────────────────
@@ -216,8 +253,47 @@ function KeyboardEditor({ keyboard, onChange }) {
 
 // ── Главный компонент ───────────────────────────────────────────
 const PressReleaseEditor = forwardRef(function PressReleaseEditor({
-  api, chats, branding, post, onSaved, onClose, userCan,
+  api, chats, branding, post, onSaved, onClose, userCan, token, onBrandingChange, userId,
 }, ref) {
+  const [sectionOrder, setSectionOrder] = useState(() => getStoredOrder(userId));
+  const [dragOverId, setDragOverId]     = useState(null);
+  const draggedIdRef = useRef(null);
+
+  const handleDragStart = (e, id) => {
+    draggedIdRef.current = id;
+    try { e.dataTransfer.effectAllowed = 'move'; } catch {}
+  };
+  const handleDragOver = (e, id) => {
+    e.preventDefault();
+    if (dragOverId !== id) setDragOverId(id);
+  };
+  const handleDrop = (e, id) => {
+    e.preventDefault();
+    const from = draggedIdRef.current;
+    setDragOverId(null);
+    draggedIdRef.current = null;
+    if (!from || from === id) return;
+    setSectionOrder(prev => {
+      const next = [...prev];
+      const fromIdx = next.indexOf(from);
+      const toIdx   = next.indexOf(id);
+      if (fromIdx < 0 || toIdx < 0) return prev;
+      next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, from);
+      saveOrder(userId, next);
+      return next;
+    });
+  };
+  const resetOrder = () => {
+    setSectionOrder(DEFAULT_SECTION_ORDER);
+    saveOrder(userId, DEFAULT_SECTION_ORDER);
+  };
+
+  const dragHandleEl = (
+    <span className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500" title="Перетащить">
+      <GripVertical size={14}/>
+    </span>
+  );
   const [draft, setDraft] = useState(() => post || makeBlankPost());
   const [saving, setSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -337,6 +413,190 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
     upd({ text: placeholder + cur });
   };
 
+  // ── Рендер секции по id ──
+  const renderSection = (sid) => {
+    switch (sid) {
+      case 'name':
+        return (
+          <Section icon={FileText} title="Внутреннее имя" dragHandle={dragHandleEl}>
+            <input
+              value={draft.title || ''}
+              onChange={(e) => upd({ title: e.target.value })}
+              placeholder="Например: Анонс эфира 7 мая"
+              className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-200"
+            />
+            <p className="text-[10px] text-gray-400">Только для админки. В чате не отображается.</p>
+          </Section>
+        );
+
+      case 'media':
+        return (
+          <Section
+            icon={ImageIcon} title="Медиа" dragHandle={dragHandleEl}
+            right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
+          >
+            <MediaBlock
+              value={draft.photo_file_id || ''}
+              onChange={(s) => upd({ photo_file_id: s })}
+              maxItems={MAX_MEDIA}
+              position={settings.media_position || 'above'}
+              onPositionChange={(p) => updSettings({ media_position: p })}
+              showPosition={mediaList.length > 0}
+            />
+          </Section>
+        );
+
+      case 'content':
+        return (
+          <Section
+            icon={FileText} title="Содержимое" dragHandle={dragHandleEl}
+            right={
+              <button onClick={() => setShowPreview(true)}
+                className="px-2 py-1 text-[10px] font-black uppercase rounded-lg text-blue-500 border border-blue-100 hover:bg-blue-50 flex items-center gap-1">
+                <Eye size={11}/> Превью
+              </button>
+            }
+          >
+            <RichTextEditor
+              value={draft.text || ''}
+              onChange={(html) => upd({ text: html })}
+              placeholder="Введите текст пресс-релиза…"
+              maxLength={mediaList.length > 0 ? CAPTION_LIMIT : TEXT_LIMIT}
+              showHeaderButton
+              onInsertHeader={insertHeader}
+              onPreview={() => setShowPreview(true)}
+              minHeight={200}
+            />
+            {(isOverLimit || isOverCaption) && (
+              <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700 mt-2">
+                <AlertTriangle size={12} className="flex-shrink-0 mt-0.5"/>
+                <div>
+                  {isOverLimit
+                    ? `Текст ${textLen} симв. > ${TEXT_LIMIT} — Telegram разделит на части по абзацам.`
+                    : `Текст ${textLen} симв. > ${CAPTION_LIMIT} (caption под медиа) — пойдёт отдельным сообщением после медиа.`}
+                </div>
+              </div>
+            )}
+          </Section>
+        );
+
+      case 'branding':
+        return (
+          <Section icon={Palette} title="Подпись и брендинг" dragHandle={dragHandleEl}>
+            <BrandingPanel token={token} onChange={onBrandingChange} compact />
+          </Section>
+        );
+
+      case 'publish':
+        return (
+          <PublishBlock
+            dragHandle={dragHandleEl}
+            chats={chats}
+            targets={draft.targets || []}
+            onTargetsChange={(t) => upd({ targets: t })}
+            publishAt={draft.publish_at}
+            onPublishAtChange={(iso) => upd({ publish_at: iso })}
+            reminder={draft.pre_publish_reminder || 0}
+            onReminderChange={(v) => upd({ pre_publish_reminder: v })}
+          />
+        );
+
+      case 'keyboard':
+        return (
+          <Section icon={MousePointerClick} title="Inline-клавиатура" dragHandle={dragHandleEl}>
+            <KeyboardEditor
+              keyboard={draft.inline_keyboard || []}
+              onChange={(kb) => upd({ inline_keyboard: kb })}
+            />
+          </Section>
+        );
+
+      case 'settings':
+        return (
+          <Section
+            icon={SettingsIcon} title="Настройки публикации" dragHandle={dragHandleEl}
+            right={
+              <button onClick={() => setShowSettings(s => !s)} className="text-gray-400 hover:text-gray-600">
+                {showSettings ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
+              </button>
+            }
+          >
+            {showSettings && (
+              <div className="space-y-1">
+                <Toggle icon={Pin}     label="Закрепить после публикации"  checked={settings.pin}                 onChange={(v) => updSettings({ pin: v })} />
+                <Toggle icon={EyeOff}  label="Без превью ссылок"            checked={settings.disable_preview}     onChange={(v) => updSettings({ disable_preview: v })} />
+                <Toggle icon={BellOff} label="Тихая отправка (без звука)"   checked={settings.disable_notify}      onChange={(v) => updSettings({ disable_notify: v })} />
+                <Toggle icon={Lock}    label="Защита контента (запрет копирования)" checked={settings.content_protection}  onChange={(v) => updSettings({ content_protection: v })} />
+                <div className="border-t border-gray-100 my-2" />
+                <Toggle label="Жирная шапка"
+                  hint="Первая строка текста выделяется жирным"
+                  checked={!!draft.bold_header} onChange={(v) => upd({ bold_header: v ? 1 : 0 })} />
+                <Toggle label="Добавить подпись"
+                  hint={branding?.signature ? `Дефолт: ${branding.signature.replace(/<[^>]+>/g, '').slice(0,40)}…` : 'Дефолтная подпись не задана'}
+                  checked={!!draft.add_signature} onChange={(v) => upd({ add_signature: v ? 1 : 0 })} />
+                {!!draft.add_signature && (() => {
+                  const sigList = parseSignatures(branding?.signatures);
+                  if (!sigList.length) return null;
+                  return (
+                    <div className="ml-12 flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-700">Шаблон:</span>
+                      <select
+                        value={draft.signature || ''}
+                        onChange={(e) => upd({ signature: e.target.value })}
+                        className="flex-1 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200"
+                      >
+                        <option value="">— Использовать дефолтный —</option>
+                        {sigList.map(s => (
+                          <option key={s.id} value={s.html}>
+                            {s.is_default ? '★ ' : ''}{s.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
+                <div className="border-t border-gray-100 my-2" />
+                <Toggle label="Авто-удаление из Telegram"
+                  checked={settings.delete_after_publish?.enabled}
+                  onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, enabled: v }})} />
+                {settings.delete_after_publish?.enabled && (
+                  <div className="ml-12 flex items-center gap-2">
+                    <input type="number" min="1" value={settings.delete_after_publish?.value || 1}
+                      onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, value: parseInt(e.target.value, 10) || 1 }})}
+                      className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
+                    <select value={settings.delete_after_publish?.unit || 'days'}
+                      onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: e.target.value }})}
+                      className="px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200">
+                      <option value="minutes">минут</option>
+                      <option value="hours">часов</option>
+                      <option value="days">дней</option>
+                    </select>
+                  </div>
+                )}
+                <div className="border-t border-gray-100 my-2" />
+                <Toggle label="Throttling (не спамить)"
+                  hint="Лимит N релизов в час от одного автора"
+                  checked={settings.throttle?.enabled}
+                  onChange={(v) => updSettings({ throttle: { ...settings.throttle, enabled: v }})} />
+                {settings.throttle?.enabled && (
+                  <div className="ml-12 flex items-center gap-2">
+                    <span className="text-xs font-bold text-gray-700">Не более</span>
+                    <input type="number" min="1" value={settings.throttle?.limit_per_hour || 5}
+                      onChange={(e) => updSettings({ throttle: { ...settings.throttle, limit_per_hour: parseInt(e.target.value, 10) || 5 }})}
+                      className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
+                    <span className="text-xs font-bold text-gray-700">в час</span>
+                  </div>
+                )}
+              </div>
+            )}
+          </Section>
+        );
+
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="space-y-3 pb-24">
       {/* ── Шапка действий ── */}
@@ -376,143 +636,31 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         )}
       </div>
 
-      {/* Имя */}
-      <Section icon={FileText} title="Внутреннее имя">
-        <input
-          value={draft.title || ''}
-          onChange={(e) => upd({ title: e.target.value })}
-          placeholder="Например: Анонс эфира 7 мая"
-          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-200"
-        />
-        <p className="text-[10px] text-gray-400">Только для админки. В чате не отображается.</p>
-      </Section>
+      {/* Подсказка о drag&drop + сброс */}
+      <div className="flex items-center justify-between bg-blue-50/60 border border-blue-100 rounded-xl px-3 py-2">
+        <span className="text-[10px] text-blue-700 font-bold">
+          🎯 Перетащите секции за иконку <GripVertical size={10} className="inline"/> чтобы расположить как удобно
+        </span>
+        <button onClick={resetOrder} className="text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 flex items-center gap-1">
+          <RefreshCw size={10}/> сброс
+        </button>
+      </div>
 
-      {/* ── Медиа (выше контента) ── */}
-      <Section
-        icon={ImageIcon}
-        title="Медиа"
-        right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
-      >
-        <MediaBlock
-          value={draft.photo_file_id || ''}
-          onChange={(s) => upd({ photo_file_id: s })}
-          maxItems={MAX_MEDIA}
-          position={settings.media_position || 'above'}
-          onPositionChange={(p) => updSettings({ media_position: p })}
-          showPosition={mediaList.length > 0}
-        />
-      </Section>
-
-      {/* ── Содержимое (текст с WYSIWYG) ── */}
-      <Section
-        icon={FileText}
-        title="Содержимое"
-        right={
-          <button onClick={() => setShowPreview(true)}
-            className="px-2 py-1 text-[10px] font-black uppercase rounded-lg text-blue-500 border border-blue-100 hover:bg-blue-50 flex items-center gap-1">
-            <Eye size={11}/> Превью
-          </button>
-        }
-      >
-        <RichTextEditor
-          value={draft.text || ''}
-          onChange={(html) => upd({ text: html })}
-          placeholder="Введите текст пресс-релиза…"
-          maxLength={mediaList.length > 0 ? CAPTION_LIMIT : TEXT_LIMIT}
-          showHeaderButton
-          onInsertHeader={insertHeader}
-          onPreview={() => setShowPreview(true)}
-          minHeight={200}
-        />
-        {(isOverLimit || isOverCaption) && (
-          <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700 mt-2">
-            <AlertTriangle size={12} className="flex-shrink-0 mt-0.5"/>
-            <div>
-              {isOverLimit
-                ? `Текст ${textLen} симв. > ${TEXT_LIMIT} — Telegram разделит на части по абзацам.`
-                : `Текст ${textLen} симв. > ${CAPTION_LIMIT} (caption под медиа) — пойдёт отдельным сообщением после медиа.`}
-            </div>
-          </div>
-        )}
-      </Section>
-
-      {/* ── Куда + Когда (компактный объединённый блок) ── */}
-      <PublishBlock
-        chats={chats}
-        targets={draft.targets || []}
-        onTargetsChange={(t) => upd({ targets: t })}
-        publishAt={draft.publish_at}
-        onPublishAtChange={(iso) => upd({ publish_at: iso })}
-        reminder={draft.pre_publish_reminder || 0}
-        onReminderChange={(v) => upd({ pre_publish_reminder: v })}
-      />
-
-      {/* Inline keyboard */}
-      <Section icon={MousePointerClick} title="Inline-клавиатура">
-        <KeyboardEditor
-          keyboard={draft.inline_keyboard || []}
-          onChange={(kb) => upd({ inline_keyboard: kb })}
-        />
-      </Section>
-
-      {/* Settings */}
-      <Section
-        icon={SettingsIcon}
-        title="Настройки публикации"
-        right={
-          <button onClick={() => setShowSettings(s => !s)} className="text-gray-400 hover:text-gray-600">
-            {showSettings ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-          </button>
-        }
-      >
-        {showSettings && (
-          <div className="space-y-1">
-            <Toggle icon={Pin}     label="Закрепить после публикации"  checked={settings.pin}                 onChange={(v) => updSettings({ pin: v })} />
-            <Toggle icon={EyeOff}  label="Без превью ссылок"            checked={settings.disable_preview}     onChange={(v) => updSettings({ disable_preview: v })} />
-            <Toggle icon={BellOff} label="Тихая отправка (без звука)"   checked={settings.disable_notify}      onChange={(v) => updSettings({ disable_notify: v })} />
-            <Toggle icon={Lock}    label="Защита контента (запрет копирования)" checked={settings.content_protection}  onChange={(v) => updSettings({ content_protection: v })} />
-            <div className="border-t border-gray-100 my-2" />
-            <Toggle label="Жирная шапка"
-              hint="Первая строка текста выделяется жирным"
-              checked={!!draft.bold_header} onChange={(v) => upd({ bold_header: v ? 1 : 0 })} />
-            <Toggle label="Добавить подпись"
-              hint={branding?.signature ? `Текущая: ${branding.signature.slice(0,40)}…` : 'Подпись не задана в брендинге'}
-              checked={!!draft.add_signature} onChange={(v) => upd({ add_signature: v ? 1 : 0 })} />
-            <div className="border-t border-gray-100 my-2" />
-            <Toggle label="Авто-удаление из Telegram"
-              checked={settings.delete_after_publish?.enabled}
-              onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, enabled: v }})} />
-            {settings.delete_after_publish?.enabled && (
-              <div className="ml-12 flex items-center gap-2">
-                <input type="number" min="1" value={settings.delete_after_publish?.value || 1}
-                  onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, value: parseInt(e.target.value, 10) || 1 }})}
-                  className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
-                <select value={settings.delete_after_publish?.unit || 'days'}
-                  onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: e.target.value }})}
-                  className="px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200">
-                  <option value="minutes">минут</option>
-                  <option value="hours">часов</option>
-                  <option value="days">дней</option>
-                </select>
-              </div>
-            )}
-            <div className="border-t border-gray-100 my-2" />
-            <Toggle label="Throttling (не спамить)"
-              hint="Лимит N релизов в час от одного автора"
-              checked={settings.throttle?.enabled}
-              onChange={(v) => updSettings({ throttle: { ...settings.throttle, enabled: v }})} />
-            {settings.throttle?.enabled && (
-              <div className="ml-12 flex items-center gap-2">
-                <span className="text-xs font-bold text-gray-700">Не более</span>
-                <input type="number" min="1" value={settings.throttle?.limit_per_hour || 5}
-                  onChange={(e) => updSettings({ throttle: { ...settings.throttle, limit_per_hour: parseInt(e.target.value, 10) || 5 }})}
-                  className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
-                <span className="text-xs font-bold text-gray-700">в час</span>
-              </div>
-            )}
-          </div>
-        )}
-      </Section>
+      {sectionOrder.map((sid) => {
+        const draggable = (
+          <DraggableSection
+            key={sid}
+            id={sid}
+            onDragStart={handleDragStart}
+            onDragOver={handleDragOver}
+            onDrop={handleDrop}
+            isDraggingOver={dragOverId === sid}
+          >
+            {renderSection(sid)}
+          </DraggableSection>
+        );
+        return draggable;
+      })}
 
       {/* Preview modal */}
       {showPreview && (
@@ -593,7 +741,7 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
 }
 
 // ── Компактный блок «Куда + Когда» (collapsible) ──────────────
-function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtChange, reminder, onReminderChange }) {
+function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtChange, reminder, onReminderChange, dragHandle }) {
   const [tab, setTab] = useState(null);  // null / 'where' / 'when'
   const targetsCnt = targets?.length || 0;
   const dateLabel = publishAt
@@ -602,6 +750,12 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
 
   return (
     <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      {dragHandle && (
+        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 bg-gray-50/50">
+          {dragHandle}
+          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Куда + Когда</span>
+        </div>
+      )}
       <div className="grid grid-cols-2">
         <button
           onClick={() => setTab(tab === 'where' ? null : 'where')}
