@@ -61,17 +61,36 @@ function Section({ icon: Icon, title, children, right, dragHandle }) {
 }
 
 // ── Draggable wrapper ────────────────────────────────────────────
-function DraggableSection({ id, index, onDragStart, onDragOver, onDrop, isDraggingOver, children }) {
+// draggable=true появляется только когда пользователь нажал на drag-handle
+// (иначе текстовые поля внутри секции теряют возможность ввода/выделения).
+function DraggableSection({ id, onDragStart, onDragOver, onDrop, isDraggingOver, children }) {
+  const [isDraggable, setIsDraggable] = useState(false);
+  const enable  = () => setIsDraggable(true);
+  const disable = () => setIsDraggable(false);
+
+  const handle = (
+    <span
+      onMouseDown={enable}
+      onMouseUp={disable}
+      onTouchStart={enable}
+      onTouchEnd={disable}
+      className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 select-none"
+      title="Перетащить (зажмите и тяните)"
+    >
+      <GripVertical size={14}/>
+    </span>
+  );
+
   return (
     <div
-      draggable
-      onDragStart={(e) => onDragStart(e, id, index)}
-      onDragOver={(e) => onDragOver(e, id, index)}
-      onDragEnd={() => {}}
-      onDrop={(e) => onDrop(e, id, index)}
+      draggable={isDraggable}
+      onDragStart={(e) => onDragStart(e, id)}
+      onDragOver={(e) => onDragOver(e, id)}
+      onDragEnd={disable}
+      onDrop={(e) => { onDrop(e, id); disable(); }}
       className={`transition-all ${isDraggingOver ? 'ring-2 ring-blue-300 rounded-2xl' : ''}`}
     >
-      {children}
+      {typeof children === 'function' ? children(handle) : children}
     </div>
   );
 }
@@ -288,12 +307,6 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
     setSectionOrder(DEFAULT_SECTION_ORDER);
     saveOrder(userId, DEFAULT_SECTION_ORDER);
   };
-
-  const dragHandleEl = (
-    <span className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500" title="Перетащить">
-      <GripVertical size={14}/>
-    </span>
-  );
   const [draft, setDraft] = useState(() => post || makeBlankPost());
   const [saving, setSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -414,11 +427,11 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
   };
 
   // ── Рендер секции по id ──
-  const renderSection = (sid) => {
+  const renderSection = (sid, handle = null) => {
     switch (sid) {
       case 'name':
         return (
-          <Section icon={FileText} title="Внутреннее имя" dragHandle={dragHandleEl}>
+          <Section icon={FileText} title="Внутреннее имя" dragHandle={handle}>
             <input
               value={draft.title || ''}
               onChange={(e) => upd({ title: e.target.value })}
@@ -432,7 +445,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       case 'media':
         return (
           <Section
-            icon={ImageIcon} title="Медиа" dragHandle={dragHandleEl}
+            icon={ImageIcon} title="Медиа" dragHandle={handle}
             right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
           >
             <MediaBlock
@@ -449,7 +462,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       case 'content':
         return (
           <Section
-            icon={FileText} title="Содержимое" dragHandle={dragHandleEl}
+            icon={FileText} title="Содержимое" dragHandle={handle}
             right={
               <button onClick={() => setShowPreview(true)}
                 className="px-2 py-1 text-[10px] font-black uppercase rounded-lg text-blue-500 border border-blue-100 hover:bg-blue-50 flex items-center gap-1">
@@ -482,7 +495,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
 
       case 'branding':
         return (
-          <Section icon={Palette} title="Подпись и брендинг" dragHandle={dragHandleEl}>
+          <Section icon={Palette} title="Подпись и брендинг" dragHandle={handle}>
             <BrandingPanel token={token} onChange={onBrandingChange} compact />
           </Section>
         );
@@ -490,7 +503,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       case 'publish':
         return (
           <PublishBlock
-            dragHandle={dragHandleEl}
+            dragHandle={handle}
             chats={chats}
             targets={draft.targets || []}
             onTargetsChange={(t) => upd({ targets: t })}
@@ -503,7 +516,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
 
       case 'keyboard':
         return (
-          <Section icon={MousePointerClick} title="Inline-клавиатура" dragHandle={dragHandleEl}>
+          <Section icon={MousePointerClick} title="Inline-клавиатура" dragHandle={handle}>
             <KeyboardEditor
               keyboard={draft.inline_keyboard || []}
               onChange={(kb) => upd({ inline_keyboard: kb })}
@@ -514,7 +527,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       case 'settings':
         return (
           <Section
-            icon={SettingsIcon} title="Настройки публикации" dragHandle={dragHandleEl}
+            icon={SettingsIcon} title="Настройки публикации" dragHandle={handle}
             right={
               <button onClick={() => setShowSettings(s => !s)} className="text-gray-400 hover:text-gray-600">
                 {showSettings ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
@@ -646,21 +659,18 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         </button>
       </div>
 
-      {sectionOrder.map((sid) => {
-        const draggable = (
-          <DraggableSection
-            key={sid}
-            id={sid}
-            onDragStart={handleDragStart}
-            onDragOver={handleDragOver}
-            onDrop={handleDrop}
-            isDraggingOver={dragOverId === sid}
-          >
-            {renderSection(sid)}
-          </DraggableSection>
-        );
-        return draggable;
-      })}
+      {sectionOrder.map((sid) => (
+        <DraggableSection
+          key={sid}
+          id={sid}
+          onDragStart={handleDragStart}
+          onDragOver={handleDragOver}
+          onDrop={handleDrop}
+          isDraggingOver={dragOverId === sid}
+        >
+          {(handle) => renderSection(sid, handle)}
+        </DraggableSection>
+      ))}
 
       {/* Preview modal */}
       {showPreview && (
