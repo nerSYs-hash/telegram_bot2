@@ -302,6 +302,13 @@ export default function RichTextEditor({
               id={ceId}
               contentEditable
               suppressContentEditableWarning
+              onKeyDown={(e) => {
+                // Enter без Shift → вставляем перенос строки текстом, не <br>/<div>
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  document.execCommand('insertText', false, '\n');
+                }
+              }}
               onInput={(e) => onChange?.(e.currentTarget.innerHTML)}
               onKeyUp={() => {
                 try {
@@ -314,7 +321,7 @@ export default function RichTextEditor({
                 } catch {}
               }}
               className="w-full px-4 py-3 text-sm font-medium text-gray-700 outline-none bg-white"
-              style={{ minHeight, wordBreak: 'break-word' }}
+              style={{ minHeight, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
             />
             <span className={`absolute bottom-2 right-3 text-[10px] font-black bg-white px-1 ${isOver ? 'text-red-500' : 'text-blue-500'}`}>
               {textLen}/{maxLength}

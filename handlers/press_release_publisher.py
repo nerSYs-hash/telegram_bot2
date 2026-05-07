@@ -81,18 +81,48 @@ def _resolve_media_input(value: str):
     return value
 
 
+def _sanitize_html_for_telegram(html: str) -> str:
+    """Чистит HTML из WYSIWYG-редактора браузера под parse_mode=HTML Telegram.
+
+    Telegram поддерживает только: b/strong i/em u/ins s/strike/del code pre
+    a tg-spoiler blockquote tg-emoji span(class=tg-spoiler).
+    Все остальные теги (br, div, p, span без class, font, h1..) — конвертируем в \\n или удаляем.
+    """
+    import re
+    if not html:
+        return ''
+    s = html
+    # HTML-комментарии (например наш HEADER-заглушка) — выкидываем
+    s = re.sub(r'<!--.*?-->', '', s, flags=re.DOTALL)
+    # <br> и <br/> → перенос строки
+    s = re.sub(r'<br\s*/?>', '\n', s, flags=re.IGNORECASE)
+    # </p>, </div> → перенос. Открывающие <p>, <div> вырезаем.
+    s = re.sub(r'</(p|div)\s*>', '\n', s, flags=re.IGNORECASE)
+    s = re.sub(r'<(p|div)(\s[^>]*)?>', '', s, flags=re.IGNORECASE)
+    # <span> и font без полезных атрибутов — снимаем теги, оставляем содержимое
+    s = re.sub(r'</?(span|font|h\d|ul|ol|li)(\s[^>]*)?>', '', s, flags=re.IGNORECASE)
+    # &nbsp; → пробел
+    s = s.replace('&nbsp;', ' ')
+    # Лишние пустые строки (3+) → 2
+    s = re.sub(r'\n{3,}', '\n\n', s)
+    return s.strip()
+
+
 def _build_text(post: dict, signature_default: str = '') -> str:
-    """Применяет bold_header, добавляет signature."""
-    text = (post.get('text') or '').strip()
+    """Применяет bold_header, добавляет signature, санитизирует HTML."""
+    text = _sanitize_html_for_telegram(post.get('text') or '')
     bold_header = post.get('bold_header', 1)
     if bold_header and text:
         lines = text.split('\n', 1)
         if len(lines) > 1 and lines[0].strip():
-            text = f"<b>{lines[0]}</b>\n{lines[1]}"
+            # Не оборачиваем дважды если уже <b>
+            if not lines[0].lstrip().lower().startswith('<b>'):
+                text = f"<b>{lines[0]}</b>\n{lines[1]}"
         else:
-            text = f"<b>{text}</b>"
+            if not text.lstrip().lower().startswith('<b>'):
+                text = f"<b>{text}</b>"
     if post.get('add_signature', 1):
-        sig = (post.get('signature') or signature_default or '').strip()
+        sig = _sanitize_html_for_telegram(post.get('signature') or signature_default or '')
         if sig:
             text = f"{text}\n\n{sig}" if text else sig
     return text

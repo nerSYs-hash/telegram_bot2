@@ -82,18 +82,26 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
     emit(d, hh, mm);
   };
 
+  // При вводе: оставляем только цифры. Если длина > 2 — берём ПОСЛЕДНИЕ 2 цифры
+  // (а не первые), это позволяет естественно вводить новое значение поверх старого.
+  const sanitize = (v, max) => {
+    const digits = (v || '').replace(/\D/g, '');
+    let n = digits.length > 2 ? digits.slice(-2) : digits;
+    if (n && parseInt(n, 10) > max) n = String(max);
+    return n;
+  };
   const handleHhChange = (v) => {
-    let n = v.replace(/\D/g, '').slice(0, 2);
-    if (n && parseInt(n, 10) > 23) n = '23';
+    const n = sanitize(v, 23);
     setHh(n);
-    if (selected) emit(selected, n, mm);
+    if (selected) emit(selected, n || '0', mm || '0');
   };
   const handleMmChange = (v) => {
-    let n = v.replace(/\D/g, '').slice(0, 2);
-    if (n && parseInt(n, 10) > 59) n = '59';
+    const n = sanitize(v, 59);
     setMm(n);
-    if (selected) emit(selected, hh, n);
+    if (selected) emit(selected, hh || '0', n || '0');
   };
+  const handleHhBlur = () => { if (hh) setHh(pad(parseInt(hh, 10))); else setHh('00'); };
+  const handleMmBlur = () => { if (mm) setMm(pad(parseInt(mm, 10))); else setMm('00'); };
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
@@ -192,15 +200,21 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
         <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">МСК</span>
         <div className="ml-auto flex items-center gap-1">
           <input
+            type="text" inputMode="numeric"
             value={hh}
             onChange={(e) => handleHhChange(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onBlur={handleHhBlur}
             placeholder="чч"
             className="w-12 text-center px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-sm font-black focus:outline-none focus:border-blue-200"
           />
           <span className="font-black text-gray-400">:</span>
           <input
+            type="text" inputMode="numeric"
             value={mm}
             onChange={(e) => handleMmChange(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            onBlur={handleMmBlur}
             placeholder="мм"
             className="w-12 text-center px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-sm font-black focus:outline-none focus:border-blue-200"
           />
