@@ -4,6 +4,7 @@ import { makeApi } from './useApi';
 import PressReleaseEditor from './PressReleaseEditor';
 import PressReleaseList from './PressReleaseList';
 import BrandingPanel from './BrandingPanel';
+import ConfirmDialog from '../shared/ConfirmDialog';
 
 export default function PressReleasePage({ token, userPermissions, userId }) {
   const api = makeApi(token);
@@ -14,26 +15,26 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
   const [selected, setSelected] = useState(null);  // post или 'new'
   const [loading, setLoading] = useState(true);
   const editorRef             = useRef(null);
+  const [leaveDialog, setLeaveDialog] = useState(null);  // { resolve }
 
   /** Спросить «сохранить?» если черновик грязный. Возвращает true если можно идти дальше. */
-  const confirmDiscard = useCallback(async () => {
-    if (!editorRef.current?.isDirty?.()) return true;
-    const choice = window.confirm(
-      '⚠️ Есть несохранённые изменения.\n\nOK — сохранить и продолжить\nОтмена — отбросить изменения'
-    );
-    if (choice) {
-      const ok = await editorRef.current.saveCurrent();
-      if (!ok) {
-        alert('Не удалось сохранить. Останьтесь на странице и попробуйте ещё раз.');
-        return false;
-      }
-      return true;
-    } else {
-      // Отбрасываем
-      editorRef.current.discardChanges();
-      return true;
-    }
-  }, []);
+  const confirmDiscard = useCallback(() => new Promise((resolve) => {
+    if (!editorRef.current?.isDirty?.()) { resolve(true); return; }
+    setLeaveDialog({ resolve });
+  }), []);
+
+  const dialogConfirm = useCallback(async () => {
+    // «Продолжить настройку» — остаться, не уходить
+    leaveDialog?.resolve?.(false);
+    setLeaveDialog(null);
+  }, [leaveDialog]);
+
+  const dialogCancel = useCallback(() => {
+    // «Выйти» — отбросить изменения и уйти
+    editorRef.current?.discardChanges?.();
+    leaveDialog?.resolve?.(true);
+    setLeaveDialog(null);
+  }, [leaveDialog]);
 
   const userCan = useCallback((perm) =>
     Array.isArray(userPermissions) ? userPermissions.includes(perm) || userPermissions.includes('*') : false,
@@ -169,6 +170,17 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
           />
         </div>
       </div>
+
+      {/* Модал подтверждения выхода с несохранёнными изменениями */}
+      <ConfirmDialog
+        open={!!leaveDialog}
+        title="Внимание"
+        message={<>Вы уверены, что хотите покинуть раздел?<br/>Несохранённые изменения пресс-релиза будут потеряны.</>}
+        cancelLabel="Выйти"
+        confirmLabel="Продолжить настройку"
+        onCancel={dialogCancel}
+        onConfirm={dialogConfirm}
+      />
     </div>
   );
 }
