@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { Megaphone, Loader2 } from 'lucide-react';
 import { makeApi } from './useApi';
 import PressReleaseEditor from './PressReleaseEditor';
@@ -14,6 +14,27 @@ export default function PressReleasePage({ token, userPermissions }) {
   const [selected, setSelected] = useState(null);  // post или 'new'
   const [loading, setLoading] = useState(true);
   const [showBranding, setShowBranding] = useState(false);
+  const editorRef             = useRef(null);
+
+  /** Спросить «сохранить?» если черновик грязный. Возвращает true если можно идти дальше. */
+  const confirmDiscard = useCallback(async () => {
+    if (!editorRef.current?.isDirty?.()) return true;
+    const choice = window.confirm(
+      '⚠️ Есть несохранённые изменения.\n\nOK — сохранить и продолжить\nОтмена — отбросить изменения'
+    );
+    if (choice) {
+      const ok = await editorRef.current.saveCurrent();
+      if (!ok) {
+        alert('Не удалось сохранить. Останьтесь на странице и попробуйте ещё раз.');
+        return false;
+      }
+      return true;
+    } else {
+      // Отбрасываем
+      editorRef.current.discardChanges();
+      return true;
+    }
+  }, []);
 
   const userCan = useCallback((perm) =>
     Array.isArray(userPermissions) ? userPermissions.includes(perm) || userPermissions.includes('*') : false,
@@ -34,13 +55,20 @@ export default function PressReleasePage({ token, userPermissions }) {
 
   useEffect(() => { refresh(); }, [refresh]);
 
-  const handleSelect = (post) => {
+  const handleSelect = async (post) => {
+    if (!(await confirmDiscard())) return;
     if (!post) { setSelected(null); return; }
     setSelected(post);
   };
 
-  const handleCreate = () => {
+  const handleCreate = async () => {
+    if (!(await confirmDiscard())) return;
     setSelected({ id: null, status: 'draft', targets: [] });
+  };
+
+  const handleClose = async () => {
+    if (!(await confirmDiscard())) return;
+    setSelected(null);
   };
 
   const handleAction = async (action, post) => {
@@ -104,14 +132,7 @@ export default function PressReleasePage({ token, userPermissions }) {
             Создание, планирование и история публикаций в чаты/каналы
           </p>
         </div>
-        <button onClick={() => setShowBranding(s => !s)}
-          className="px-3 py-2 bg-pink-50 text-pink-700 rounded-xl text-xs font-black hover:bg-pink-100">
-          🎨 Брендинг
-        </button>
       </div>
-
-      {/* Брендинг (раскрывающийся) */}
-      {showBranding && <BrandingPanel token={token} />}
 
       {/* Split layout: editor (left) + list (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
@@ -119,12 +140,13 @@ export default function PressReleasePage({ token, userPermissions }) {
         <div className="min-w-0">
           {selected ? (
             <PressReleaseEditor
+              ref={editorRef}
               api={api}
               chats={chats}
               branding={branding}
               post={selected.id ? selected : null}
               onSaved={handleSaved}
-              onClose={() => setSelected(null)}
+              onClose={handleClose}
               userCan={userCan}
             />
           ) : (
@@ -144,6 +166,16 @@ export default function PressReleasePage({ token, userPermissions }) {
             userCan={userCan}
           />
         </div>
+      </div>
+
+      {/* Брендинг — внизу страницы */}
+      <div className="pt-2">
+        <button onClick={() => setShowBranding(s => !s)}
+          className="w-full flex items-center justify-center gap-2 py-3 bg-white border border-gray-100 rounded-2xl text-xs font-black uppercase tracking-widest text-pink-600 hover:bg-pink-50 transition-all">
+          🎨 Подпись и брендинг
+          <span className="text-gray-300">{showBranding ? '▲' : '▼'}</span>
+        </button>
+        {showBranding && <div className="mt-3"><BrandingPanel token={token} /></div>}
       </div>
     </div>
   );

@@ -1,11 +1,13 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   Save, X, Send, Trash2, Copy, RotateCcw, FileText,
   Image as ImageIcon, Calendar, Settings as SettingsIcon, ChevronDown, ChevronUp,
   Bold, Plus, GripVertical, Link as LinkIcon, MousePointerClick, AlertTriangle,
-  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone,
+  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone, Eye,
 } from 'lucide-react';
 import DateTimePicker from '../shared/DateTimePicker';
+import RichTextEditor from '../shared/RichTextEditor';
+import MediaBlock from '../shared/MediaBlock';
 
 const TEXT_LIMIT      = 4096;
 const CAPTION_LIMIT   = 1024;
@@ -18,6 +20,7 @@ const SETTINGS_DEFAULTS = {
   disable_preview: false,
   disable_notify: false,
   content_protection: false,
+  media_position: 'above',                // above / below / reply
   delete_after_publish: { enabled: false, value: 1, unit: 'days' },
   throttle: { enabled: false, limit_per_hour: 5 },
 };
@@ -212,17 +215,49 @@ function KeyboardEditor({ keyboard, onChange }) {
 }
 
 // ── Главный компонент ───────────────────────────────────────────
-export default function PressReleaseEditor({
+const PressReleaseEditor = forwardRef(function PressReleaseEditor({
   api, chats, branding, post, onSaved, onClose, userCan,
-}) {
+}, ref) {
   const [draft, setDraft] = useState(() => post || makeBlankPost());
   const [saving, setSaving] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('idle'); // idle/saving/saved
   const lastSavedRef = useRef(null);
+  const initialRef   = useRef(JSON.stringify(post || makeBlankPost()));
+
+  const isDirty = JSON.stringify(draft) !== initialRef.current;
+
+  // Прокидываем наверх возможность спросить «сохранить?»
+  useImperativeHandle(ref, () => ({
+    isDirty: () => isDirty,
+    saveCurrent: async () => {
+      if (!isDirty) return true;
+      try {
+        await handleSave(draft.status || 'draft');
+        return true;
+      } catch { return false; }
+    },
+    discardChanges: () => {
+      initialRef.current = JSON.stringify(draft);
+    },
+  }), [isDirty, draft]);
 
   // Подгружаем post если выбран существующий
-  useEffect(() => { setDraft(post || makeBlankPost()); }, [post?.id]);
+  useEffect(() => {
+    const next = post || makeBlankPost();
+    setDraft(next);
+    initialRef.current = JSON.stringify(next);
+  }, [post?.id]);
+
+  // Защита от закрытия вкладки браузера
+  useEffect(() => {
+    const handler = (e) => {
+      if (isDirty) { e.preventDefault(); e.returnValue = ''; }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [isDirty]);
 
   const settings = { ...SETTINGS_DEFAULTS, ...(draft.settings_json || {}) };
   const upd = (patch) => setDraft(prev => ({ ...prev, ...patch }));
@@ -352,68 +387,45 @@ export default function PressReleaseEditor({
         <p className="text-[10px] text-gray-400">Только для админки. В чате не отображается.</p>
       </Section>
 
-      {/* Targets */}
+      {/* ── Медиа (выше контента) ── */}
       <Section
-        icon={Megaphone}
-        title="Куда публикуем"
-        right={<span className="text-[10px] font-black text-gray-400">{draft.targets?.length || 0} выбрано</span>}
+        icon={ImageIcon}
+        title="Медиа"
+        right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
       >
-        <TargetsPicker
-          chats={chats}
-          value={draft.targets || []}
-          onChange={(targets) => upd({ targets })}
+        <MediaBlock
+          value={draft.photo_file_id || ''}
+          onChange={(s) => upd({ photo_file_id: s })}
+          maxItems={MAX_MEDIA}
+          position={settings.media_position || 'above'}
+          onPositionChange={(p) => updSettings({ media_position: p })}
+          showPosition={mediaList.length > 0}
         />
       </Section>
 
-      {/* Дата */}
-      <Section icon={Calendar} title="Когда публикуем">
-        <DateTimePicker
-          value={draft.publish_at}
-          onChange={(iso) => upd({ publish_at: iso })}
-        />
-        <div className="pt-2 flex items-center gap-3">
-          <label className="text-xs font-bold text-gray-700">Напомнить за:</label>
-          <select
-            value={draft.pre_publish_reminder || 0}
-            onChange={(e) => upd({ pre_publish_reminder: parseInt(e.target.value, 10) })}
-            className="px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200"
-          >
-            <option value={0}>Не напоминать</option>
-            <option value={5}>5 минут</option>
-            <option value={15}>15 минут</option>
-            <option value={60}>1 час</option>
-          </select>
-        </div>
-      </Section>
-
-      {/* Текст */}
+      {/* ── Содержимое (текст с WYSIWYG) ── */}
       <Section
         icon={FileText}
         title="Содержимое"
         right={
-          <span className={`text-[10px] font-black ${isOverLimit ? 'text-red-500' : isOverCaption ? 'text-amber-500' : 'text-gray-400'}`}>
-            {textLen}/{mediaList.length > 0 ? CAPTION_LIMIT : TEXT_LIMIT}
-            {isOverCaption && !isOverLimit && ' · текст пойдёт отдельным сообщением'}
-            {isOverLimit && ' · разделится на несколько сообщений'}
-          </span>
+          <button onClick={() => setShowPreview(true)}
+            className="px-2 py-1 text-[10px] font-black uppercase rounded-lg text-blue-500 border border-blue-100 hover:bg-blue-50 flex items-center gap-1">
+            <Eye size={11}/> Превью
+          </button>
         }
       >
-        <div className="flex items-center gap-1.5 mb-2">
-          <button onClick={insertHeader}
-            className="px-2.5 py-1.5 bg-amber-50 text-amber-700 rounded-lg text-[10px] font-black uppercase hover:bg-amber-100 flex items-center gap-1">
-            <Bold size={11}/> Шапка
-          </button>
-          <span className="text-[10px] text-gray-400 ml-1">— блок шапки выделится пунктиром</span>
-        </div>
-        <textarea
+        <RichTextEditor
           value={draft.text || ''}
-          onChange={(e) => upd({ text: e.target.value })}
-          placeholder="Текст пресс-релиза. HTML поддерживается: <b>, <i>, <u>, <s>, <code>, <a href>"
-          rows={10}
-          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-mono focus:outline-none focus:border-blue-200 resize-y"
+          onChange={(html) => upd({ text: html })}
+          placeholder="Введите текст пресс-релиза…"
+          maxLength={mediaList.length > 0 ? CAPTION_LIMIT : TEXT_LIMIT}
+          showHeaderButton
+          onInsertHeader={insertHeader}
+          onPreview={() => setShowPreview(true)}
+          minHeight={200}
         />
         {(isOverLimit || isOverCaption) && (
-          <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700">
+          <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700 mt-2">
             <AlertTriangle size={12} className="flex-shrink-0 mt-0.5"/>
             <div>
               {isOverLimit
@@ -424,23 +436,16 @@ export default function PressReleaseEditor({
         )}
       </Section>
 
-      {/* Медиа (file_id, до 5) */}
-      <Section
-        icon={ImageIcon}
-        title="Медиа"
-        right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
-      >
-        <textarea
-          value={draft.photo_file_id || ''}
-          onChange={(e) => upd({ photo_file_id: e.target.value })}
-          placeholder='Формат: photo:AgACAg...|video:BAACAg... (можно оставить пустым)'
-          rows={2}
-          className="w-full px-4 py-2 bg-gray-50 border-2 border-gray-100 rounded-xl text-xs font-mono focus:outline-none focus:border-blue-200"
-        />
-        <p className="text-[10px] text-gray-400">
-          file_id из Telegram. До {MAX_MEDIA} файлов через «|». Загрузка медиа с сайта — V2.
-        </p>
-      </Section>
+      {/* ── Куда + Когда (компактный объединённый блок) ── */}
+      <PublishBlock
+        chats={chats}
+        targets={draft.targets || []}
+        onTargetsChange={(t) => upd({ targets: t })}
+        publishAt={draft.publish_at}
+        onPublishAtChange={(iso) => upd({ publish_at: iso })}
+        reminder={draft.pre_publish_reminder || 0}
+        onReminderChange={(v) => upd({ pre_publish_reminder: v })}
+      />
 
       {/* Inline keyboard */}
       <Section icon={MousePointerClick} title="Inline-клавиатура">
@@ -508,6 +513,137 @@ export default function PressReleaseEditor({
           </div>
         )}
       </Section>
+
+      {/* Preview modal */}
+      {showPreview && (
+        <PreviewModal
+          draft={draft}
+          settings={settings}
+          mediaList={mediaList}
+          branding={branding}
+          onClose={() => setShowPreview(false)}
+        />
+      )}
+    </div>
+  );
+});
+
+export default PressReleaseEditor;
+
+function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
+  const sig = draft.add_signature ? (draft.signature || branding?.signature || '') : '';
+  let textHtml = draft.text || '';
+  if (draft.bold_header && textHtml) {
+    const lines = textHtml.split('\n');
+    if (lines[0] && !lines[0].startsWith('<b>')) {
+      textHtml = `<b>${lines[0]}</b>${lines.length > 1 ? '\n' + lines.slice(1).join('\n') : ''}`;
+    }
+  }
+  const fullHtml = sig ? `${textHtml}\n\n${sig}` : textHtml;
+  const pos = settings.media_position || 'above';
+
+  return (
+    <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+          <div className="flex items-center gap-2">
+            <Eye size={14} className="text-blue-500" />
+            <span className="text-xs font-black uppercase tracking-widest text-gray-700">Превью</span>
+          </div>
+          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+            <X size={16}/>
+          </button>
+        </div>
+        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
+          <div className="bg-white rounded-2xl shadow-md p-3 space-y-2">
+            {pos === 'above' && mediaList.length > 0 && (
+              <div className="flex items-center justify-center bg-gray-100 rounded-xl py-6 text-xs text-gray-400 font-bold">
+                🖼 {mediaList.length} медиа · выше текста
+              </div>
+            )}
+            <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: fullHtml || '<i class="text-gray-400">Пусто…</i>' }} />
+            {pos === 'below' && mediaList.length > 0 && (
+              <div className="flex items-center justify-center bg-gray-100 rounded-xl py-6 text-xs text-gray-400 font-bold">
+                🖼 {mediaList.length} медиа · ниже текста
+              </div>
+            )}
+            {(draft.inline_keyboard || []).length > 0 && (
+              <div className="space-y-1 pt-2">
+                {(draft.inline_keyboard || []).map((row, ri) => (
+                  <div key={ri} className="flex gap-1">
+                    {row.map((b, bi) => (
+                      <button key={bi} className="flex-1 py-2 px-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-100">
+                        {b.text || '(без текста)'}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="mt-3 text-[10px] text-gray-400 leading-relaxed space-y-1">
+            <div>📍 {(draft.targets || []).length} получателей</div>
+            <div>📏 {(draft.text || '').replace(/<[^>]+>/g, '').length} симв.</div>
+            {pos === 'reply' && <div>💬 Медиа отправится отдельным реплаем</div>}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Компактный блок «Куда + Когда» (collapsible) ──────────────
+function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtChange, reminder, onReminderChange }) {
+  const [tab, setTab] = useState(null);  // null / 'where' / 'when'
+  const targetsCnt = targets?.length || 0;
+  const dateLabel = publishAt
+    ? new Date(publishAt).toLocaleString('ru-RU', { day: '2-digit', month: 'short', hour: '2-digit', minute: '2-digit' })
+    : 'не задано';
+
+  return (
+    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="grid grid-cols-2">
+        <button
+          onClick={() => setTab(tab === 'where' ? null : 'where')}
+          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+          <Megaphone size={14} className={tab === 'where' ? 'text-blue-600' : 'text-gray-400'} />
+          <div className="flex-1 text-left min-w-0">
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Куда</div>
+            <div className="text-xs font-black text-gray-800 truncate">
+              {targetsCnt === 0 ? <span className="text-red-400">не выбрано</span> : `${targetsCnt} получателей`}
+            </div>
+          </div>
+        </button>
+        <button
+          onClick={() => setTab(tab === 'when' ? null : 'when')}
+          className={`flex items-center gap-2 p-3 border-l border-gray-100 transition-all ${tab === 'when' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
+          <Calendar size={14} className={tab === 'when' ? 'text-blue-600' : 'text-gray-400'} />
+          <div className="flex-1 text-left min-w-0">
+            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Когда</div>
+            <div className="text-xs font-black text-gray-800 truncate">{dateLabel}</div>
+          </div>
+        </button>
+      </div>
+      {tab === 'where' && (
+        <div className="border-t border-gray-100 p-3">
+          <TargetsPicker chats={chats} value={targets} onChange={onTargetsChange} />
+        </div>
+      )}
+      {tab === 'when' && (
+        <div className="border-t border-gray-100 p-3 space-y-2">
+          <DateTimePicker value={publishAt} onChange={onPublishAtChange} />
+          <div className="flex items-center gap-2 pt-1">
+            <label className="text-xs font-bold text-gray-700">Напомнить за:</label>
+            <select value={reminder} onChange={(e) => onReminderChange(parseInt(e.target.value, 10))}
+              className="px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200">
+              <option value={0}>Не напоминать</option>
+              <option value={5}>5 минут</option>
+              <option value={15}>15 минут</option>
+              <option value={60}>1 час</option>
+            </select>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
