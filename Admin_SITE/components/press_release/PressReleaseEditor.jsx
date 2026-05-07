@@ -8,6 +8,7 @@ import {
 import DateTimePicker from '../shared/DateTimePicker';
 import RichTextEditor from '../shared/RichTextEditor';
 import MediaBlock from '../shared/MediaBlock';
+import StyledSelect from '../shared/StyledSelect';
 import BrandingPanel, { parseSignatures } from './BrandingPanel';
 
 const TEXT_LIMIT      = 4096;
@@ -129,8 +130,8 @@ function Toggle({ checked, onChange, label, hint, icon: Icon }) {
         <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-          {Icon && <Icon size={13} className="text-gray-500" />}
+        <div className={`text-sm font-bold flex items-center gap-1.5 transition-all ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
+          {Icon && <Icon size={13} className={checked ? 'text-gray-300' : 'text-gray-500'} />}
           {label}
         </div>
         {hint && <div className="text-[10px] text-gray-400 mt-0.5">{hint}</div>}
@@ -245,11 +246,15 @@ function KeyboardEditor({ keyboard, onChange }) {
           {row.map((btn, bi) => (
             <div key={bi} className="flex-1 min-w-[200px] bg-gray-50 rounded-xl p-2 border border-gray-100 space-y-1.5">
               <div className="flex items-center gap-1.5">
-                <select value={btn.type} onChange={(e) => updBtn(ri, bi, { type: e.target.value })}
-                  className="text-[10px] font-black uppercase px-1.5 py-1 bg-white rounded border border-gray-100 focus:outline-none focus:border-blue-200">
-                  <option value="url">URL</option>
-                  <option value="callback">Callback (бета)</option>
-                </select>
+                <StyledSelect
+                  value={btn.type}
+                  onChange={(v) => updBtn(ri, bi, { type: v })}
+                  options={[
+                    { value: 'url',      label: 'URL' },
+                    { value: 'callback', label: 'Callback (бета)' },
+                  ]}
+                  size="sm"
+                />
                 <button onClick={() => remove(ri, bi)} className="ml-auto text-gray-300 hover:text-red-400">
                   <X size={12} />
                 </button>
@@ -508,16 +513,17 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
 
       case 'publish':
         return (
-          <PublishBlock
-            dragHandle={handle}
-            chats={chats}
-            targets={draft.targets || []}
-            onTargetsChange={(t) => upd({ targets: t })}
-            publishAt={draft.publish_at}
-            onPublishAtChange={(iso) => upd({ publish_at: iso })}
-            reminder={draft.pre_publish_reminder || 0}
-            onReminderChange={(v) => upd({ pre_publish_reminder: v })}
-          />
+          <Section icon={Calendar} title="Куда + Когда" dragHandle={handle}>
+            <PublishBlock
+              chats={chats}
+              targets={draft.targets || []}
+              onTargetsChange={(t) => upd({ targets: t })}
+              publishAt={draft.publish_at}
+              onPublishAtChange={(iso) => upd({ publish_at: iso })}
+              reminder={draft.pre_publish_reminder || 0}
+              onReminderChange={(v) => upd({ pre_publish_reminder: v })}
+            />
+          </Section>
         );
 
       case 'keyboard':
@@ -559,18 +565,18 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                   return (
                     <div className="ml-12 flex items-center gap-2">
                       <span className="text-xs font-bold text-gray-700">Шаблон:</span>
-                      <select
+                      <StyledSelect
                         value={draft.signature || ''}
-                        onChange={(e) => upd({ signature: e.target.value })}
-                        className="flex-1 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200"
-                      >
-                        <option value="">— Использовать дефолтный —</option>
-                        {sigList.map(s => (
-                          <option key={s.id} value={s.html}>
-                            {s.is_default ? '★ ' : ''}{s.name}
-                          </option>
-                        ))}
-                      </select>
+                        onChange={(v) => upd({ signature: v })}
+                        options={[
+                          { value: '', label: '— Использовать дефолтный —' },
+                          ...sigList.map(s => ({
+                            value: s.html,
+                            label: `${s.is_default ? '★ ' : ''}${s.name}`,
+                          })),
+                        ]}
+                        className="flex-1"
+                      />
                     </div>
                   );
                 })()}
@@ -583,13 +589,16 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                     <input type="number" min="1" value={settings.delete_after_publish?.value || 1}
                       onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, value: parseInt(e.target.value, 10) || 1 }})}
                       className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
-                    <select value={settings.delete_after_publish?.unit || 'days'}
-                      onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: e.target.value }})}
-                      className="px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200">
-                      <option value="minutes">минут</option>
-                      <option value="hours">часов</option>
-                      <option value="days">дней</option>
-                    </select>
+                    <StyledSelect
+                      value={settings.delete_after_publish?.unit || 'days'}
+                      onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: v }})}
+                      options={[
+                        { value: 'minutes', label: 'минут' },
+                        { value: 'hours',   label: 'часов' },
+                        { value: 'days',    label: 'дней'  },
+                      ]}
+                      size="sm"
+                    />
                   </div>
                 )}
                 <div className="border-t border-gray-100 my-2" />
@@ -619,32 +628,32 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
   return (
     <div className="space-y-3 pb-24">
       {/* ── Шапка действий ── */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-2 sticky top-0 z-10">
+      {/* before-псевдоэлемент закрывает «прозрачную» полосу над sticky-карточкой:
+          скролл-контейнер AdminDashboard имеет p-4..p-8 сверху, через который
+          контент мог просвечивать из-за rounded-углов. */}
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
         <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
           <X size={18} />
         </button>
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 flex items-center gap-2">
           <div className="text-sm font-black text-gray-800 truncate">
             {draft.title || 'Новый пресс-релиз'}
           </div>
-          <div className="flex items-center gap-2 text-[10px]">
-            <StatusBadge status={draft.status} />
-            {autosaveStatus === 'saving' && <span className="text-gray-400">сохранение…</span>}
-            {autosaveStatus === 'saved'   && <span className="text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
-          </div>
+          {autosaveStatus === 'saving' && <span className="text-[10px] text-gray-400">сохранение…</span>}
+          {autosaveStatus === 'saved'   && <span className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
         </div>
         <button onClick={() => handleSave('draft')} disabled={saving}
           className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-200 flex items-center gap-1">
           <Save size={12}/> Черновик
         </button>
         <button onClick={() => handleSave('scheduled')} disabled={saving || !draft.publish_at || draft.targets?.length === 0}
-          className="px-3 py-2 bg-blue-500 text-white rounded-xl text-xs font-black hover:bg-blue-600 disabled:opacity-40 flex items-center gap-1">
-          <Calendar size={12}/> Запланировать
+          className={`px-3 py-2 bg-blue-500 text-white rounded-xl text-xs font-black hover:bg-blue-600 disabled:opacity-40 flex items-center gap-1 transition-all ${draft.status === 'scheduled' ? 'ring-2 ring-blue-300 ring-offset-2 shadow-lg shadow-blue-200 scale-[1.02]' : ''}`}>
+          <Calendar size={12}/> {draft.status === 'scheduled' ? 'Запланирован' : 'Запланировать'}
         </button>
         {userCan('press_release.publish_now') && (
           <button onClick={handlePublishNow} disabled={saving || draft.targets?.length === 0}
-            className="px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black hover:bg-emerald-600 disabled:opacity-40 flex items-center gap-1">
-            <Send size={12}/> Сейчас
+            className={`px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black hover:bg-emerald-600 disabled:opacity-40 flex items-center gap-1 transition-all ${draft.status === 'published' ? 'ring-2 ring-emerald-300 ring-offset-2 shadow-lg shadow-emerald-200 scale-[1.02]' : ''}`}>
+            <Send size={12}/> {draft.status === 'published' ? 'Опубликован' : 'Сейчас'}
           </button>
         )}
         {draft.id && userCan('press_release.delete') && (
@@ -698,9 +707,14 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
   const sig = draft.add_signature ? (draft.signature || branding?.signature || '') : '';
   let textHtml = draft.text || '';
   if (draft.bold_header && textHtml) {
-    const lines = textHtml.split('\n');
-    if (lines[0] && !lines[0].startsWith('<b>')) {
-      textHtml = `<b>${lines[0]}</b>${lines.length > 1 ? '\n' + lines.slice(1).join('\n') : ''}`;
+    // Первый разрыв строки может быть \n, <br>, </div>, </p> — в зависимости
+    // от того, что вставил contentEditable. Берём всё до первого такого разрыва.
+    const m = textHtml.match(/\n|<br\s*\/?>|<\/div>|<\/p>/i);
+    const cut   = m ? m.index : textHtml.length;
+    const first = textHtml.slice(0, cut);
+    const rest  = textHtml.slice(cut);
+    if (first.replace(/<[^>]+>/g, '').trim() && !/<(b|strong)\b/i.test(first)) {
+      textHtml = `<b>${first}</b>${rest}`;
     }
   }
   const fullHtml = sig ? `${textHtml}\n\n${sig}` : textHtml;
@@ -756,8 +770,9 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
   );
 }
 
-// ── Компактный блок «Куда + Когда» (collapsible) ──────────────
-function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtChange, reminder, onReminderChange, dragHandle }) {
+// ── Блок «Куда + Когда» (две вкладки) ──────────────
+// Внешняя обёртка-карточка приходит от Section — здесь только содержимое.
+function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtChange, reminder, onReminderChange }) {
   const [tab, setTab] = useState(null);  // null / 'where' / 'when'
   const targetsCnt = targets?.length || 0;
   const dateLabel = publishAt
@@ -765,21 +780,15 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
     : 'не задано';
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-      {dragHandle && (
-        <div className="flex items-center gap-2 px-3 py-1.5 border-b border-gray-50 bg-gray-50/50">
-          {dragHandle}
-          <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">Куда + Когда</span>
-        </div>
-      )}
+    <div className="rounded-xl border border-gray-100 overflow-hidden">
       <div className="grid grid-cols-2">
         <button
           onClick={() => setTab(tab === 'where' ? null : 'where')}
           className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
           <Megaphone size={14} className={tab === 'where' ? 'text-blue-600' : 'text-gray-400'} />
           <div className="flex-1 text-left min-w-0">
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Куда</div>
-            <div className="text-xs font-black text-gray-800 truncate">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Куда</div>
+            <div className="text-sm font-black text-gray-800 truncate">
               {targetsCnt === 0 ? <span className="text-red-400">не выбрано</span> : `${targetsCnt} получателей`}
             </div>
           </div>
@@ -789,8 +798,8 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
           className={`flex items-center gap-2 p-3 border-l border-gray-100 transition-all ${tab === 'when' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
           <Calendar size={14} className={tab === 'when' ? 'text-blue-600' : 'text-gray-400'} />
           <div className="flex-1 text-left min-w-0">
-            <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Когда</div>
-            <div className="text-xs font-black text-gray-800 truncate">{dateLabel}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Когда</div>
+            <div className="text-sm font-black text-gray-800 truncate">{dateLabel}</div>
           </div>
         </button>
       </div>
@@ -804,13 +813,16 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
           <DateTimePicker value={publishAt} onChange={onPublishAtChange} />
           <div className="flex items-center gap-2 pt-1">
             <label className="text-xs font-bold text-gray-700">Напомнить за:</label>
-            <select value={reminder} onChange={(e) => onReminderChange(parseInt(e.target.value, 10))}
-              className="px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200">
-              <option value={0}>Не напоминать</option>
-              <option value={5}>5 минут</option>
-              <option value={15}>15 минут</option>
-              <option value={60}>1 час</option>
-            </select>
+            <StyledSelect
+              value={reminder}
+              onChange={(v) => onReminderChange(parseInt(v, 10))}
+              options={[
+                { value: 0,  label: 'Не напоминать' },
+                { value: 5,  label: '5 минут'       },
+                { value: 15, label: '15 минут'      },
+                { value: 60, label: '1 час'         },
+              ]}
+            />
           </div>
         </div>
       )}

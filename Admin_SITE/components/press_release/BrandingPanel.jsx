@@ -83,28 +83,42 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
     await saveAll(list.map(s => ({ ...s, is_default: s.id === id })));
   };
 
-  const Wrapper = ({ children }) => compact
-    ? <div className="space-y-3">{children}</div>
-    : <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3">{children}</div>;
+  // ВАЖНО: НЕ объявлять Wrapper-компонент внутри функции — каждый ререндер
+  // создаёт новую ссылку на тип, React размонтирует поддерево и теряет фокус
+  // input/textarea (баг V1.16.14n: «курсор не встаёт в карточку подписи»).
+  const wrapperCls = compact
+    ? 'space-y-3'
+    : 'bg-white rounded-3xl border border-gray-100 shadow-sm p-5 space-y-3';
 
   return (
-    <Wrapper>
-      <div className="flex items-center gap-2.5">
-        <div className="w-7 h-7 rounded-xl bg-pink-100 flex items-center justify-center">
-          <Palette size={14} className="text-pink-600" />
+    <div className={wrapperCls}>
+      {/* В compact-режиме (внутри редактора пресс-релиза) свой заголовок не
+          рисуем — он дублирует обёртку Section «Подпись и брендинг». */}
+      {!compact && (
+        <div className="flex items-center gap-2.5">
+          <div className="w-7 h-7 rounded-xl bg-pink-100 flex items-center justify-center">
+            <Palette size={14} className="text-pink-600" />
+          </div>
+          <div className="flex-1 min-w-0">
+            <h2 className="text-xs font-black uppercase tracking-widest text-gray-900">Шаблоны подписей</h2>
+            <p className="text-[10px] text-gray-400 mt-0.5">
+              Можно создать несколько вариантов брендинга и переключаться при создании пресс-релиза
+            </p>
+          </div>
+          {savedAt > 0 && (
+            <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500">
+              <CheckCircle2 size={12}/> сохранено
+            </span>
+          )}
         </div>
-        <div className="flex-1 min-w-0">
-          <h2 className="text-xs font-black uppercase tracking-widest text-gray-900">Шаблоны подписей</h2>
-          <p className="text-[10px] text-gray-400 mt-0.5">
-            Можно создать несколько вариантов брендинга и переключаться при создании пресс-релиза
-          </p>
-        </div>
-        {savedAt && (
+      )}
+      {compact && savedAt > 0 && (
+        <div className="flex justify-end">
           <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500">
             <CheckCircle2 size={12}/> сохранено
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* List */}
       {list.length > 0 && (
@@ -191,7 +205,7 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
           <Plus size={12}/> Добавить шаблон подписи
         </button>
       )}
-    </Wrapper>
+    </div>
   );
 }
 
