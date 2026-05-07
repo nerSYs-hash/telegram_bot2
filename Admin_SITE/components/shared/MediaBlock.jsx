@@ -3,6 +3,7 @@ import {
   Image as ImageIcon, Video, FileImage, Trash2,
   Plus, ArrowUp, ArrowDown, Reply, Loader2, Upload,
 } from 'lucide-react';
+import ButtonGroup from './ButtonGroup';
 
 /**
  * Универсальный блок управления медиа.
@@ -119,20 +120,12 @@ export default function MediaBlock({
 
       {/* Position selector */}
       {showPosition && items.length > 0 && (
-        <div className="flex items-center gap-1 p-1 bg-gray-50 rounded-xl">
-          {POSITIONS.map(p => {
-            const active = position === p.v;
-            return (
-              <button key={p.v}
-                onClick={() => onPositionChange?.(p.v)}
-                className={`flex-1 flex items-center justify-center gap-1 py-1.5 px-2 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all ${
-                  active ? 'bg-white text-blue-600 shadow-sm' : 'text-gray-500 hover:text-gray-700'
-                }`}>
-                <p.Icon size={11} /> {p.label}
-              </button>
-            );
-          })}
-        </div>
+        <ButtonGroup
+          value={position}
+          onChange={(v) => onPositionChange?.(v)}
+          options={POSITIONS.map(p => ({ value: p.v, label: p.label, icon: p.Icon }))}
+          block
+        />
       )}
 
       {/* List with previews */}

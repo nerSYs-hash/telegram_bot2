@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { Megaphone, Loader2 } from 'lucide-react';
+import { Megaphone, Loader2, Plus } from 'lucide-react';
 import { makeApi } from './useApi';
 import PressReleaseEditor from './PressReleaseEditor';
 import PressReleaseList from './PressReleaseList';
 import BrandingPanel from './BrandingPanel';
 import ConfirmDialog from '../shared/ConfirmDialog';
+import Button from '../shared/Button';
 
 export default function PressReleasePage({ token, userPermissions, userId }) {
   const api = makeApi(token);
@@ -191,10 +192,9 @@ function EmptyEditor({ onCreate }) {
       <Megaphone size={40} className="text-gray-300 mb-3" />
       <h3 className="text-sm font-black text-gray-700 mb-1">Выберите пресс-релиз справа</h3>
       <p className="text-xs text-gray-400 mb-4">или создайте новый</p>
-      <button onClick={onCreate}
-        className="px-5 py-2.5 bg-blue-500 text-white rounded-2xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 transition-all">
-        + Новый пресс-релиз
-      </button>
+      <Button variant="primary" size="md" icon={Plus} onClick={onCreate}>
+        Новый пресс-релиз
+      </Button>
     </div>
   );
 }

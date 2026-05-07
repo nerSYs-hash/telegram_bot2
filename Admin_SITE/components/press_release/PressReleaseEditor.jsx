@@ -10,6 +10,8 @@ import RichTextEditor from '../shared/RichTextEditor';
 import MediaBlock from '../shared/MediaBlock';
 import StyledSelect from '../shared/StyledSelect';
 import Button from '../shared/Button';
+import ButtonGroup from '../shared/ButtonGroup';
+import Toggle from '../shared/Toggle';
 import BrandingPanel, { parseSignatures } from './BrandingPanel';
 
 const TEXT_LIMIT      = 4096;
@@ -120,25 +122,6 @@ function getStoredOrder(userId) {
 
 function saveOrder(userId, order) {
   try { localStorage.setItem(`pr_section_order_${userId || 'guest'}`, JSON.stringify(order)); } catch {}
-}
-
-// ── Toggle ───────────────────────────────────────────────────────
-function Toggle({ checked, onChange, label, hint, icon: Icon }) {
-  return (
-    <label className="flex items-start gap-3 cursor-pointer py-1">
-      <input type="checkbox" checked={!!checked} onChange={(e) => onChange?.(e.target.checked)} className="hidden" />
-      <div className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 ${checked ? 'bg-blue-500' : 'bg-gray-200'}`}>
-        <div className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-[18px]' : 'translate-x-0.5'}`} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className={`text-sm font-bold flex items-center gap-1.5 transition-all ${checked ? 'line-through text-gray-400' : 'text-gray-800'}`}>
-          {Icon && <Icon size={13} className={checked ? 'text-gray-300' : 'text-gray-500'} />}
-          {label}
-        </div>
-        {hint && <div className="text-[10px] text-gray-400 mt-0.5">{hint}</div>}
-      </div>
-    </label>
-  );
 }
 
 // ── Targets (multi-select) ───────────────────────────────────────
