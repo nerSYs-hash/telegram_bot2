@@ -2,6 +2,51 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Aceternity-style вращающийся glow-бордер ── */
+@property --pulse-btn-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes pulse-btn-rotate {
+  to { --pulse-btn-angle: 360deg; }
+}
+.pulse-btn-glow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--pulse-btn-angle),
+    var(--glow-from, #3b82f6),
+    var(--glow-via,  #a855f7),
+    var(--glow-to,   #3b82f6)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 200ms ease;
+  pointer-events: none;
+}
+.pulse-btn-glow:hover::before,
+.pulse-btn-glow:focus-visible::before {
+  opacity: 1;
+  animation: pulse-btn-rotate 2.4s linear infinite;
+}
+
+/* ── Pop-анимация галочки success ── */
+@keyframes pulse-btn-pop {
+  0%   { transform: scale(0)   rotate(-45deg); opacity: 0; }
+  60%  { transform: scale(1.2) rotate(0deg);   opacity: 1; }
+  100% { transform: scale(1)   rotate(0deg);   opacity: 1; }
+}
+.pulse-btn-check {
+  animation: pulse-btn-pop 350ms cubic-bezier(.34, 1.56, .64, 1) forwards;
+}
+
 @keyframes tag-jiggle {
   0%   { transform: scale(1)    rotate(0deg);   }
   15%  { transform: scale(1.25) rotate(-12deg); }

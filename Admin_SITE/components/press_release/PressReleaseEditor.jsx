@@ -9,6 +9,7 @@ import DateTimePicker from '../shared/DateTimePicker';
 import RichTextEditor from '../shared/RichTextEditor';
 import MediaBlock from '../shared/MediaBlock';
 import StyledSelect from '../shared/StyledSelect';
+import Button from '../shared/Button';
 import BrandingPanel, { parseSignatures } from './BrandingPanel';
 
 const TEXT_LIMIT      = 4096;
@@ -319,7 +320,10 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
     saveOrder(userId, DEFAULT_SECTION_ORDER);
   };
   const [draft, setDraft] = useState(() => post || makeBlankPost());
-  const [saving, setSaving] = useState(false);
+  // savingAction/doneAction — для stateful-кнопок (loading/done на конкретной кнопке)
+  const [savingAction, setSavingAction] = useState(null);   // 'draft' | 'scheduled' | 'published' | null
+  const [doneAction, setDoneAction]     = useState(null);   // то же
+  const saving = savingAction !== null;
   const [showSettings, setShowSettings] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [autosaveStatus, setAutosaveStatus] = useState('idle'); // idle/saving/saved
@@ -392,9 +396,10 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
 
   // Ручное сохранение
   const handleSave = async (newStatus) => {
-    setSaving(true);
+    const action = newStatus || draft.status || 'draft';
+    setSavingAction(action);
     try {
-      const body = { ...draftToBody(draft), status: newStatus || draft.status };
+      const body = { ...draftToBody(draft), status: action };
       let saved;
       if (draft.id) {
         saved = await api.update(draft.id, body);
@@ -403,10 +408,13 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       }
       onSaved?.(saved);
       setDraft(saved);
+      // Pop-галочка на 1.5с
+      setDoneAction(action);
+      setTimeout(() => setDoneAction(null), 1500);
     } catch (e) {
       alert('Ошибка сохранения: ' + (e?.detail || e?.message || e));
     } finally {
-      setSaving(false);
+      setSavingAction(null);
     }
   };
 
@@ -416,10 +424,14 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       if (!saved) return;
     }
     if (!confirm('Опубликовать сейчас?')) return;
+    setSavingAction('published');
     try {
       await api.publishNow(draft.id);
       onSaved?.({ ...draft, status: 'published' });
+      setDoneAction('published');
+      setTimeout(() => setDoneAction(null), 1500);
     } catch (e) { alert('Ошибка: ' + (e?.detail || e)); }
+    finally { setSavingAction(null); }
   };
 
   const handleDelete = async () => {
@@ -631,10 +643,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       {/* before-псевдоэлемент закрывает «прозрачную» полосу над sticky-карточкой:
           скролл-контейнер AdminDashboard имеет p-4..p-8 сверху, через который
           контент мог просвечивать из-за rounded-углов. */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
-        <button onClick={onClose} className="p-2 text-gray-400 hover:text-gray-600">
-          <X size={18} />
-        </button>
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
+        <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Закрыть" />
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <div className="text-sm font-black text-gray-800 truncate">
             {draft.title || 'Новый пресс-релиз'}
@@ -642,25 +652,40 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           {autosaveStatus === 'saving' && <span className="text-[10px] text-gray-400">сохранение…</span>}
           {autosaveStatus === 'saved'   && <span className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
         </div>
-        <button onClick={() => handleSave('draft')} disabled={saving}
-          className="px-3 py-2 bg-gray-100 text-gray-700 rounded-xl text-xs font-black hover:bg-gray-200 flex items-center gap-1">
-          <Save size={12}/> Черновик
-        </button>
-        <button onClick={() => handleSave('scheduled')} disabled={saving || !draft.publish_at || draft.targets?.length === 0}
-          className={`px-3 py-2 bg-blue-500 text-white rounded-xl text-xs font-black hover:bg-blue-600 disabled:opacity-40 flex items-center gap-1 transition-all ${draft.status === 'scheduled' ? 'ring-2 ring-blue-300 ring-offset-2 shadow-lg shadow-blue-200 scale-[1.02]' : ''}`}>
-          <Calendar size={12}/> {draft.status === 'scheduled' ? 'Запланирован' : 'Запланировать'}
-        </button>
+        <Button
+          variant="secondary" size="sm" icon={Save}
+          state={savingAction === 'draft' ? 'loading' : doneAction === 'draft' ? 'done' : 'idle'}
+          loadingLabel="Сохраняю…"
+          onClick={() => handleSave('draft')}
+          disabled={saving}
+        >
+          Черновик
+        </Button>
+        <Button
+          variant="primary" size="sm" icon={Calendar}
+          state={savingAction === 'scheduled' ? 'loading' : doneAction === 'scheduled' ? 'done' : 'idle'}
+          loadingLabel="Сохраняю…"
+          onClick={() => handleSave('scheduled')}
+          disabled={saving || !draft.publish_at || draft.targets?.length === 0}
+          className={draft.status === 'scheduled' ? 'ring-2 ring-blue-300 ring-offset-2' : ''}
+        >
+          {draft.status === 'scheduled' ? 'Запланирован' : 'Запланировать'}
+        </Button>
         {userCan('press_release.publish_now') && (
-          <button onClick={handlePublishNow} disabled={saving || draft.targets?.length === 0}
-            className={`px-3 py-2 bg-emerald-500 text-white rounded-xl text-xs font-black hover:bg-emerald-600 disabled:opacity-40 flex items-center gap-1 transition-all ${draft.status === 'published' ? 'ring-2 ring-emerald-300 ring-offset-2 shadow-lg shadow-emerald-200 scale-[1.02]' : ''}`}>
-            <Send size={12}/> {draft.status === 'published' ? 'Опубликован' : 'Сейчас'}
-          </button>
+          <Button
+            variant="success" size="sm" icon={Send}
+            state={savingAction === 'published' ? 'loading' : doneAction === 'published' ? 'done' : 'idle'}
+            loadingLabel="Публикую…"
+            onClick={handlePublishNow}
+            disabled={saving || draft.targets?.length === 0}
+            className={draft.status === 'published' ? 'ring-2 ring-emerald-300 ring-offset-2' : ''}
+          >
+            {draft.status === 'published' ? 'Опубликован' : 'Сейчас'}
+          </Button>
         )}
         {draft.id && userCan('press_release.delete') && (
-          <button onClick={handleDelete}
-            className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl">
-            <Trash2 size={14}/>
-          </button>
+          <Button variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}
+            aria-label="Удалить" className="text-red-400 hover:text-red-600 hover:bg-red-50" />
         )}
       </div>
 
