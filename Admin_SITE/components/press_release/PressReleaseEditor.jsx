@@ -61,21 +61,23 @@ function Section({ icon: Icon, title, children, right, dragHandle }) {
 }
 
 // ── Draggable wrapper ────────────────────────────────────────────
-// draggable=true появляется только когда пользователь нажал на drag-handle
-// (иначе текстовые поля внутри секции теряют возможность ввода/выделения).
+// Делаем draggable ТОЛЬКО саму иконку-ручку (GripVertical), а не
+// родительский div. Это предотвращает любые проблемы с фокусом и
+// текстовым вводом в input/textarea/contentEditable внутри секции.
 function DraggableSection({ id, onDragStart, onDragOver, onDrop, isDraggingOver, children }) {
-  const [isDraggable, setIsDraggable] = useState(false);
-  const enable  = () => setIsDraggable(true);
-  const disable = () => setIsDraggable(false);
-
   const handle = (
     <span
-      onMouseDown={enable}
-      onMouseUp={disable}
-      onTouchStart={enable}
-      onTouchEnd={disable}
+      draggable
+      onDragStart={(e) => {
+        try {
+          e.dataTransfer.effectAllowed = 'move';
+          e.dataTransfer.setData('text/plain', id);
+        } catch {}
+        onDragStart(e, id);
+      }}
+      onDragEnd={(e) => { e.preventDefault(); }}
       className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 select-none"
-      title="Перетащить (зажмите и тяните)"
+      title="Перетащить за иконку"
     >
       <GripVertical size={14}/>
     </span>
@@ -83,11 +85,15 @@ function DraggableSection({ id, onDragStart, onDragOver, onDrop, isDraggingOver,
 
   return (
     <div
-      draggable={isDraggable}
-      onDragStart={(e) => onDragStart(e, id)}
-      onDragOver={(e) => onDragOver(e, id)}
-      onDragEnd={disable}
-      onDrop={(e) => { onDrop(e, id); disable(); }}
+      onDragOver={(e) => {
+        // Принимаем drop только если идёт перетаскивание секции
+        e.preventDefault();
+        onDragOver(e, id);
+      }}
+      onDrop={(e) => {
+        e.preventDefault();
+        onDrop(e, id);
+      }}
       className={`transition-all ${isDraggingOver ? 'ring-2 ring-blue-300 rounded-2xl' : ''}`}
     >
       {typeof children === 'function' ? children(handle) : children}
