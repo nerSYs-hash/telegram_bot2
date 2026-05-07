@@ -1,5 +1,6 @@
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Calendar, Clock } from 'lucide-react';
+import StyledSelect from './StyledSelect';
 
 const MONTHS = [
   'Январь', 'Февраль', 'Март',    'Апрель', 'Май',    'Июнь',
@@ -141,20 +142,18 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
           <ChevronLeft size={16} className="text-gray-500" />
         </button>
         <div className="flex items-center gap-2">
-          <select
+          <StyledSelect
             value={month}
-            onChange={(e) => setMonth(parseInt(e.target.value, 10))}
-            className="px-2 py-1 rounded-lg bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-200"
-          >
-            {MONTHS.map((m, i) => <option key={m} value={i}>{m}</option>)}
-          </select>
-          <select
+            onChange={(v) => setMonth(parseInt(v, 10))}
+            options={MONTHS.map((m, i) => ({ value: i, label: m }))}
+            size="sm"
+          />
+          <StyledSelect
             value={year}
-            onChange={(e) => setYear(parseInt(e.target.value, 10))}
-            className="px-2 py-1 rounded-lg bg-gray-50 border border-gray-100 text-sm font-bold text-gray-700 focus:outline-none focus:border-blue-200"
-          >
-            {yearOptions.map(y => <option key={y} value={y}>{y}</option>)}
-          </select>
+            onChange={(v) => setYear(parseInt(v, 10))}
+            options={yearOptions.map(y => ({ value: y, label: String(y) }))}
+            size="sm"
+          />
         </div>
         <button onClick={nextMonth} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
           <ChevronRight size={16} className="text-gray-500" />

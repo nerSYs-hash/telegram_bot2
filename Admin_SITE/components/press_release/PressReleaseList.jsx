@@ -3,6 +3,7 @@ import {
   FileText, Calendar, CheckCircle2, XCircle, AlertTriangle, Trash2,
   Send, Copy, RotateCcw, Edit3, Eye, Plus, Search,
 } from 'lucide-react';
+import StyledSelect from '../shared/StyledSelect';
 
 const TABS = [
   { id: 'scheduled', label: 'Запланированные', icon: Calendar,      color: 'blue'    },
@@ -164,24 +165,15 @@ export default function PressReleaseList({
     <div className="space-y-3">
       {/* Dropdown tabs */}
       <div className="relative">
-        <select
+        <StyledSelect
           value={tab}
-          onChange={(e) => setTab(e.target.value)}
-          className="w-full appearance-none px-4 py-3 pr-10 bg-white border border-gray-100 rounded-2xl text-sm font-black uppercase tracking-wide text-gray-800 focus:outline-none focus:border-blue-200 cursor-pointer"
-        >
-          {TABS.map(t => {
-            const cnt = counts[t.id] || 0;
-            return (
-              <option key={t.id} value={t.id}>
-                {t.label}{cnt > 0 ? ` (${cnt})` : ''}
-              </option>
-            );
-          })}
-        </select>
-        <div className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-1.5">
-          <currentTab.icon size={12} className="text-gray-400" />
-          <span className="text-gray-300">▾</span>
-        </div>
+          onChange={(v) => setTab(v)}
+          options={TABS.map(t => ({
+            value: t.id,
+            label: `${t.label}${(counts[t.id] || 0) > 0 ? ` (${counts[t.id]})` : ''}`,
+          }))}
+          className="w-full uppercase tracking-wide"
+        />
       </div>
 
       {/* Search */}

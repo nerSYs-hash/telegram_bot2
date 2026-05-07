@@ -7,7 +7,6 @@
  *   label         — основной текст
  *   hint          — подсказка под лейблом
  *   icon          — Lucide-компонент иконки слева от лейбла
- *   strikeOnCheck — зачёркивать ли лейбл при ВКЛ (по умолчанию true)
  *   className     — доп. классы
  */
 export default function Toggle({
@@ -16,7 +15,6 @@ export default function Toggle({
   label,
   hint,
   icon: Icon,
-  strikeOnCheck = true,
   className = '',
 }) {
   return (
@@ -41,17 +39,8 @@ export default function Toggle({
       {(label || hint) && (
         <div className="flex-1 min-w-0">
           {label && (
-            <div
-              className={`text-sm font-bold flex items-center gap-1.5 transition-all ${
-                checked && strikeOnCheck ? 'line-through text-gray-400' : 'text-gray-800'
-              }`}
-            >
-              {Icon && (
-                <Icon
-                  size={13}
-                  className={checked && strikeOnCheck ? 'text-gray-300' : 'text-gray-500'}
-                />
-              )}
+            <div className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
+              {Icon && <Icon size={13} className="text-gray-500" />}
               {label}
             </div>
           )}
