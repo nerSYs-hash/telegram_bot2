@@ -1,5 +1,6 @@
 """
 История изменений настроек экономики + данные для мини-графика.
+Все функции принимают workspace_id первым аргументом после db.
 """
 
 import logging
@@ -7,24 +8,24 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def get_history_for_key(db, key: str, limit: int = 20, offset: int = 0) -> dict:
+def get_history_for_key(db, workspace_id: int, key: str, limit: int = 20, offset: int = 0) -> dict:
     """Возвращает историю изменений строки + данные для графика."""
     try:
-        # Записи истории с инфо о пользователе
         db.cursor.execute(
             """
             SELECT h.id, h.action, h.old_value, h.new_value,
                    h.old_enabled, h.new_enabled, h.comment,
                    h.changed_by, h.changed_by_role, h.rollback_of, h.changed_at,
                    u.username, u.first_name,
-                   (SELECT COUNT(*) FROM economy_history r WHERE r.rollback_of = h.id) as is_rolled_back
+                   (SELECT COUNT(*) FROM economy_history r
+                    WHERE r.workspace_id = h.workspace_id AND r.rollback_of = h.id) as is_rolled_back
             FROM economy_history h
             LEFT JOIN users u ON u.user_id = h.changed_by
-            WHERE h.setting_key = ?
+            WHERE h.workspace_id = ? AND h.setting_key = ?
             ORDER BY h.changed_at DESC
             LIMIT ? OFFSET ?
             """,
-            (key, limit, offset)
+            (workspace_id, key, limit, offset)
         )
         rows = db.cursor.fetchall()
 
@@ -50,7 +51,7 @@ def get_history_for_key(db, key: str, limit: int = 20, offset: int = 0) -> dict:
                 "can_rollback":  r['action'] != 'toggle' and not bool(r['is_rolled_back']),
             })
 
-        chart_data = get_history_chart_data(db, key)
+        chart_data = get_history_chart_data(db, workspace_id, key)
 
         return {"entries": entries, "chart_data": chart_data}
     except Exception as e:
@@ -58,12 +59,12 @@ def get_history_for_key(db, key: str, limit: int = 20, offset: int = 0) -> dict:
         return {"entries": [], "chart_data": []}
 
 
-def get_history_chart_data(db, key: str) -> list:
+def get_history_chart_data(db, workspace_id: int, key: str) -> list:
     """Данные для мини-графика: дата + значение (только edit и rollback)."""
     try:
-        # Получаем тип значения
         db.cursor.execute(
-            "SELECT value_type FROM economy_settings WHERE key = ?", (key,)
+            "SELECT value_type FROM economy_settings WHERE workspace_id = ? AND key = ?",
+            (workspace_id, key)
         )
         row = db.cursor.fetchone()
         vt = row['value_type'] if row else 'float'
@@ -72,10 +73,11 @@ def get_history_chart_data(db, key: str) -> list:
             """
             SELECT DATE(changed_at) as date, new_value
             FROM economy_history
-            WHERE setting_key = ? AND action IN ('edit', 'rollback') AND new_value IS NOT NULL
+            WHERE workspace_id = ? AND setting_key = ?
+              AND action IN ('edit', 'rollback') AND new_value IS NOT NULL
             ORDER BY changed_at ASC
             """,
-            (key,)
+            (workspace_id, key)
         )
         rows = db.cursor.fetchall()
 
@@ -97,11 +99,12 @@ def get_history_chart_data(db, key: str) -> list:
         return []
 
 
-def get_cancellations(db, limit: int = 50, offset: int = 0) -> list:
+def get_cancellations(db, workspace_id: int, limit: int = 50, offset: int = 0) -> list:
     try:
         db.cursor.execute(
-            "SELECT * FROM economy_cancellations ORDER BY executed_at DESC LIMIT ? OFFSET ?",
-            (limit, offset)
+            "SELECT * FROM economy_cancellations "
+            "WHERE workspace_id = ? ORDER BY executed_at DESC LIMIT ? OFFSET ?",
+            (workspace_id, limit, offset)
         )
         rows = db.cursor.fetchall()
         return [dict(r) for r in rows]
