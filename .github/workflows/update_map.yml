@@ -8,7 +8,8 @@ on:
       - '**.py'
       - '**.js'
       - '**.jsx'
-
+  workflow_dispatch:
+   
 jobs:
   update-excel:
     runs-on: ubuntu-latest
