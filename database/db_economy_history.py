@@ -1,7 +1,7 @@
 """
 История изменений настроек экономики + данные для мини-графика.
 """
-
+#test
 import logging
 
 logger = logging.getLogger(__name__)
