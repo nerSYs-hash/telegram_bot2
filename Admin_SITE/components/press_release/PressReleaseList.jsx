@@ -4,6 +4,7 @@ import {
   Send, Copy, RotateCcw, Edit3, Eye, Plus, Search,
 } from 'lucide-react';
 import StyledSelect from '../shared/StyledSelect';
+import Card from '../shared/Card';
 
 const TABS = [
   { id: 'scheduled', label: 'Запланированные', icon: Calendar,      color: 'blue'    },
@@ -52,11 +53,14 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
     targets.length === 1 ? `1 чат` : `${targets.length} чатов`;
 
   return (
-    <div
+    <Card
+      padding="sm"
       onClick={() => onSelect(post)}
-      className={`rounded-2xl border p-3 cursor-pointer transition-all ${
-        isSelected ? 'bg-blue-50 border-blue-200 shadow-sm' : 'bg-white border-gray-100 hover:border-gray-200'
-      }`}
+      active={isSelected}
+      hoverable={!isSelected}
+      glow={isSelected}
+      accent="blue"
+      className="cursor-pointer"
     >
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
@@ -133,7 +137,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           </button>
         )}
       </div>
-    </div>
+    </Card>
   );
 }
 

@@ -58,6 +58,43 @@
   animation: pulse-step 1.8s ease-in-out infinite;
 }
 
+/* ── Aceternity-style вращающийся glow-бордер для карточек ── */
+@property --pulse-card-angle {
+  syntax: '<angle>';
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes pulse-card-rotate {
+  to { --pulse-card-angle: 360deg; }
+}
+.pulse-card-glow::before {
+  content: '';
+  position: absolute;
+  inset: -2px;
+  /* radius = card-radius (rounded-2xl=16px) + |inset|=2px → 18px */
+  border-radius: 18px;
+  padding: 2px;
+  background: conic-gradient(
+    from var(--pulse-card-angle),
+    var(--card-glow-from, #60a5fa),
+    var(--card-glow-via,  #a855f7),
+    var(--card-glow-to,   #60a5fa)
+  );
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+          mask-composite: exclude;
+  opacity: 0;
+  transition: opacity 300ms ease;
+  pointer-events: none;
+}
+.pulse-card-glow:hover::before,
+.pulse-card-glow:focus-within::before {
+  opacity: 1;
+  /* Карточки больше → вращение медленнее, чтобы не было «дёрганого» ощущения. */
+  animation: pulse-card-rotate 4s linear infinite;
+}
+
 @keyframes tag-jiggle {
   0%   { transform: scale(1)    rotate(0deg);   }
   15%  { transform: scale(1.25) rotate(-12deg); }

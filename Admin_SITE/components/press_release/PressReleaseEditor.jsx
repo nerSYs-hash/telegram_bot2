@@ -13,6 +13,7 @@ import Button from '../shared/Button';
 import ButtonGroup from '../shared/ButtonGroup';
 import Toggle from '../shared/Toggle';
 import Stepper from '../shared/Stepper';
+import Card from '../shared/Card';
 import BrandingPanel, { parseSignatures } from './BrandingPanel';
 
 // Этапы пресс-релиза для Stepper. Edge-кейсы (failed/cancelled) показываем
@@ -59,9 +60,10 @@ function makeBlankPost() {
 }
 
 // ── Section wrapper ──────────────────────────────────────────────
+// Использует общий Card как обёртку — единый радиус/тень/бордер всей DS.
 function Section({ icon: Icon, title, children, right, dragHandle }) {
   return (
-    <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-5 space-y-3">
+    <Card padding="md" className="space-y-3">
       <div className="flex items-center gap-2">
         {dragHandle}
         {Icon && <Icon size={16} className="text-blue-500" />}
@@ -69,7 +71,7 @@ function Section({ icon: Icon, title, children, right, dragHandle }) {
         {right && <div className="ml-auto">{right}</div>}
       </div>
       {children}
-    </div>
+    </Card>
   );
 }
 
