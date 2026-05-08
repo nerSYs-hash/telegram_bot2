@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { Palette, Save, CheckCircle2, Plus, Trash2, Edit3, Star, X } from 'lucide-react';
 import { makeApi } from './useApi';
+import Button from '../shared/Button';
 
 /**
  * Менеджер шаблонов подписей.
@@ -187,14 +188,12 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
             <span className="text-[11px] font-bold text-gray-700">Сделать дефолтом</span>
           </label>
           <div className="flex gap-2">
-            <button onClick={saveDraft} disabled={busy}
-              className="flex-1 py-2 bg-pink-500 text-white rounded-lg text-xs font-black hover:bg-pink-600 disabled:opacity-40 flex items-center justify-center gap-1">
-              <Save size={11}/> Сохранить
-            </button>
-            <button onClick={cancelEdit}
-              className="px-3 py-2 bg-gray-200 text-gray-700 rounded-lg text-xs font-black hover:bg-gray-300">
+            <Button variant="primary" size="sm" icon={Save} block disabled={busy} onClick={saveDraft}>
+              Сохранить
+            </Button>
+            <Button variant="secondary" size="sm" onClick={cancelEdit}>
               Отмена
-            </button>
+            </Button>
           </div>
         </div>
       )}

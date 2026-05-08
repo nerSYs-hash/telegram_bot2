@@ -481,10 +481,9 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           <Section
             icon={FileText} title="Содержимое" dragHandle={handle}
             right={
-              <button onClick={() => setShowPreview(true)}
-                className="px-2 py-1 text-[10px] font-black uppercase rounded-lg text-blue-500 border border-blue-100 hover:bg-blue-50 flex items-center gap-1">
-                <Eye size={11}/> Превью
-              </button>
+              <Button variant="outlined" size="sm" icon={Eye} onClick={() => setShowPreview(true)}>
+                Превью
+              </Button>
             }
           >
             <RichTextEditor
@@ -547,9 +546,9 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           <Section
             icon={SettingsIcon} title="Настройки публикации" dragHandle={handle}
             right={
-              <button onClick={() => setShowSettings(s => !s)} className="text-gray-400 hover:text-gray-600">
-                {showSettings ? <ChevronUp size={14}/> : <ChevronDown size={14}/>}
-              </button>
+              <Button variant="ghost" size="sm" icon={showSettings ? ChevronUp : ChevronDown}
+                onClick={() => setShowSettings(s => !s)}
+                aria-label={showSettings ? 'Свернуть настройки' : 'Развернуть настройки'} />
             }
           >
             {showSettings && (
@@ -714,9 +713,9 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         <span className="text-[10px] text-blue-700 font-bold">
           🎯 Перетащите секции за иконку <GripVertical size={10} className="inline"/> чтобы расположить как удобно
         </span>
-        <button onClick={resetOrder} className="text-[10px] font-black uppercase text-blue-500 hover:text-blue-700 flex items-center gap-1">
-          <RefreshCw size={10}/> сброс
-        </button>
+        <Button variant="link" size="sm" icon={RefreshCw} onClick={resetOrder}>
+          сброс
+        </Button>
       </div>
 
       {sectionOrder.map((sid) => (

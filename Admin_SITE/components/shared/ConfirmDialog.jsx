@@ -1,4 +1,5 @@
 import { Info, AlertTriangle } from 'lucide-react';
+import Button from './Button';
 
 /**
  * Унифицированный модал подтверждения в стиле триггеров.
@@ -31,9 +32,6 @@ export default function ConfirmDialog({
   const Icon = variant === 'danger' ? AlertTriangle : Info;
   const iconBg = variant === 'danger' ? 'bg-red-100'    : 'bg-amber-100';
   const iconFg = variant === 'danger' ? 'text-red-600'  : 'text-amber-600';
-  const okBg   = variant === 'danger'
-    ? 'bg-red-500 hover:bg-red-600 shadow-red-200'
-    : 'bg-blue-500 hover:bg-blue-600 shadow-blue-200';
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
@@ -52,16 +50,12 @@ export default function ConfirmDialog({
           </div>
         </div>
         <div className="flex gap-2 pt-1">
-          <button
-            onClick={onCancel}
-            className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all">
+          <Button variant="secondary" size="md" block onClick={onCancel}>
             {cancelLabel}
-          </button>
-          <button
-            onClick={onConfirm}
-            className={`flex-1 py-2.5 rounded-xl text-sm font-bold text-white active:scale-95 transition-all shadow-md ${okBg}`}>
+          </Button>
+          <Button variant={variant === 'danger' ? 'danger' : 'primary'} size="md" block onClick={onConfirm}>
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>
