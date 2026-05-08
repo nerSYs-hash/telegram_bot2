@@ -43,21 +43,20 @@ jobs:
           git config --global user.email "scanner@pulse.bot"
 
           if [ -f "Pulse_Auto_Map.xlsx" ]; then
-            # Берем имя ветки, в которой сработал экшен (main или dev)
             CURRENT_BRANCH=${GITHUB_REF_NAME}
-            # Формируем имя для нашей новой подветки
             MAP_BRANCH="${CURRENT_BRANCH}-map"
 
-            # Отщепляемся в локальную подветку
+            # 1. Переходим в отдельную ветку для карты
             git checkout -b $MAP_BRANCH
 
-            # Принудительно добавляем сгенерированный файл
+            # 2. Добавляем файл
             git add -f Pulse_Auto_Map.xlsx
             
-            # Сохраняем и принудительно отправляем на сервер (-f)
-            # Флаг -f (force) нужен, чтобы ветка не копила бесконечную историю Excel-файлов,
-            # а всегда просто указывала на самую свежую версию карты для текущего кода.
-            git diff --quiet && git diff --staged --quiet || (git commit -m "🗺 Карта проекта для $CURRENT_BRANCH" && git push -f origin $MAP_BRANCH)
+            # 3. Делаем коммит (если файл не изменился, || true не даст экшену упасть)
+            git commit -m "🗺 Карта проекта PULSE для $CURRENT_BRANCH" || true
+            
+            # 4. ПРИНУДИТЕЛЬНО отправляем именно в ветку-карту
+            git push -f origin $MAP_BRANCH
           else
             echo "⚠️ Файл Pulse_Auto_Map.xlsx не был создан"
           fi
