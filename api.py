@@ -18,7 +18,7 @@ import jwt
 from datetime import datetime, timedelta
 import logging
 from decimal import Decimal
-
+#Тест
 # Настройка логирования
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("PulseApi")
