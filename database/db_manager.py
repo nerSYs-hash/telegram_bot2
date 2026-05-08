@@ -631,47 +631,52 @@ class Database:
             logging.getLogger(__name__).error(f"init_press_release_tables: {e}")
 
     # ── Economy ──
+    # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
+    # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.
+    # Сейчас Pulse Москва — единственный workspace, поэтому хардкод 1 безопасен.
+    _DEFAULT_WS_ID = 1
+
     def get_econ(self, key, default=None, value_type='float'):
-        return _get_econ(self, key, default, value_type)
+        return _get_econ(self, self._DEFAULT_WS_ID, key, default, value_type)
 
     def set_econ(self, key, value, comment, changed_by, changed_by_role):
-        return _set_econ(self, key, value, comment, changed_by, changed_by_role)
+        return _set_econ(self, self._DEFAULT_WS_ID, key, value, comment, changed_by, changed_by_role)
 
     def toggle_econ(self, key, comment, changed_by, changed_by_role):
-        return _toggle_econ(self, key, comment, changed_by, changed_by_role)
+        return _toggle_econ(self, self._DEFAULT_WS_ID, key, comment, changed_by, changed_by_role)
 
     def toggle_econ_section(self, category, comment, changed_by, changed_by_role):
-        return _toggle_econ_section(self, category, comment, changed_by, changed_by_role)
+        return _toggle_econ_section(self, self._DEFAULT_WS_ID, category, comment, changed_by, changed_by_role)
 
     def is_econ_section_enabled(self, category):
-        return _is_econ_section_enabled(self, category)
+        return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
 
     def get_econ_categories(self):
-        return _get_econ_categories(self)
+        return _get_econ_categories(self, self._DEFAULT_WS_ID)
 
     def get_econ_settings(self, category=None, subcategory=None):
-        return _get_econ_settings(self, category=category, subcategory=subcategory)
+        return _get_econ_settings(self, self._DEFAULT_WS_ID, category=category, subcategory=subcategory)
 
     def rollback_econ(self, history_id, comment, changed_by, changed_by_role):
-        return _rollback_econ(self, history_id, comment, changed_by, changed_by_role)
+        return _rollback_econ(self, self._DEFAULT_WS_ID, history_id, comment, changed_by, changed_by_role)
 
     def get_econ_history(self, key, limit=20, offset=0):
-        return _get_econ_history(self, key, limit=limit, offset=offset)
+        return _get_econ_history(self, self._DEFAULT_WS_ID, key, limit=limit, offset=offset)
 
     def get_econ_chart_data(self, key):
-        return _get_econ_chart_data(self, key)
+        return _get_econ_chart_data(self, self._DEFAULT_WS_ID, key)
 
     def cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role):
-        return _cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role)
+        return _cancel_pointwise(self, self._DEFAULT_WS_ID, tx_id, mode, comment, executed_by, executed_by_role)
 
     def cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role):
-        return _cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role)
+        return _cancel_mass(self, self._DEFAULT_WS_ID, filter_dict, mode, comment, executed_by, executed_by_role)
 
     def get_economy_cancellations(self, limit=50, offset=0):
-        return _get_economy_cancellations(self, limit=limit, offset=offset)
+        return _get_economy_cancellations(self, self._DEFAULT_WS_ID, limit=limit, offset=offset)
 
     def get_economy_metrics(self):
-        return _get_economy_metrics(self)
+        return _get_economy_metrics(self, self._DEFAULT_WS_ID)
 
     # ── Titles (V1.16.0) ──
     def list_title_packages(self, only_enabled=False):

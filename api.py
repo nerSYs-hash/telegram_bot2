@@ -1928,7 +1928,7 @@ async def _metrics_broadcaster():
         try:
             if _economy_ws_manager and db:
                 from database.db_economy import get_economy_metrics
-                metrics = get_economy_metrics(db)
+                metrics = get_economy_metrics(db, 1)  # TODO(multi-tenancy): workspace_id placeholder
                 await _economy_ws_manager.broadcast({"event": "metrics_update", **metrics})
         except Exception as e:
             logger.error(f"_metrics_broadcaster error: {e}")
