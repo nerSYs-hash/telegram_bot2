@@ -61,3 +61,14 @@ jobs:
           else
             echo "⚠️ Файл Pulse_Auto_Map.xlsx не был создан"
           fi
+
+      - name: Отправка файла в Telegram
+        run: |
+          if [ -f "Pulse_Auto_Map.xlsx" ]; then
+            curl -F document=@"Pulse_Auto_Map.xlsx" \
+                 -F caption="✅ Карта проекта **PULSE** обновлена!" \
+                 -F parse_mode="Markdown" \
+                 https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
+          else
+            echo "⚠️ Файл для отправки не найден"
+          fi
