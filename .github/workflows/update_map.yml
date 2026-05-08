@@ -8,7 +8,7 @@ on:
       - '**.py'
       - '**.js'
       - '**.jsx'
-
+  workflow_dispatch:
 jobs:
   update-excel:
     runs-on: ubuntu-latest
@@ -37,15 +37,27 @@ jobs:
         run: python scanner_to_excel.py # Убедись, что файл сканера называется именно так
         continue-on-error: true
 
-      - name: Сохраняем новый Excel в GitHub
+      - name: Сохраняем новый Excel в подветку
         run: |
           git config --global user.name "Pulse Bot Auto-Scanner"
           git config --global user.email "scanner@pulse.bot"
 
           if [ -f "Pulse_Auto_Map.xlsx" ]; then
-            git add Pulse_Auto_Map.xlsx
-            # Проверяем, изменился ли файл. Если да - сохраняем (commit) и отправляем (push)
-            git diff --quiet && git diff --staged --quiet || (git commit -m "🗺 Авто-обновление карты проекта (Excel)" && git push)
+            # Берем имя ветки, в которой сработал экшен (main или dev)
+            CURRENT_BRANCH=${GITHUB_REF_NAME}
+            # Формируем имя для нашей новой подветки
+            MAP_BRANCH="${CURRENT_BRANCH}-map"
+
+            # Отщепляемся в локальную подветку
+            git checkout -b $MAP_BRANCH
+
+            # Принудительно добавляем сгенерированный файл
+            git add -f Pulse_Auto_Map.xlsx
+            
+            # Сохраняем и принудительно отправляем на сервер (-f)
+            # Флаг -f (force) нужен, чтобы ветка не копила бесконечную историю Excel-файлов,
+            # а всегда просто указывала на самую свежую версию карты для текущего кода.
+            git diff --quiet && git diff --staged --quiet || (git commit -m "🗺 Карта проекта для $CURRENT_BRANCH" && git push -f origin $MAP_BRANCH)
           else
             echo "⚠️ Файл Pulse_Auto_Map.xlsx не был создан"
           fi
