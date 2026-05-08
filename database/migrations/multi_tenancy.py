@@ -2,6 +2,16 @@
 Миграция: добавление мультитенантности.
 ID: 2026-05-08-multi-tenancy
 Spec: docs/superpowers/specs/2026-05-08-multi-tenancy-foundation-design.md
+
+TODO(multi-tenancy-pk): Composite PRIMARY KEY долг.
+    Таблицы economy_settings (PK=key), economy_section_toggles (PK=category)
+    и возможно branding_settings/bot_chats имеют ГЛОБАЛЬНО уникальный PK.
+    После добавления workspace_id два workspace не смогут иметь одинаковые
+    ключи настроек. Сейчас работает потому что workspace=1 единственный.
+    ФИКСИТЬ В ПОДПРОЕКТЕ #2 (onboarding нового чата) — перед первым seed
+    для workspace_id != 1 пересоздать эти таблицы с PK (workspace_id, key)
+    через rebuild-pattern (CREATE…AS SELECT, DROP, RENAME).
+    Подробности: ~/.claude/.../memory/multi_tenancy_pk_debt.md
 """
 import os
 import shutil
