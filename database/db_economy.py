@@ -1,6 +1,9 @@
 """
 Модуль управления настройками экономики.
 4 таблицы: economy_settings, economy_section_toggles, economy_history, economy_cancellations
+
+Все публичные DB-функции принимают workspace_id первым аргументом после db.
+TODO(multi-tenancy-pk): см. database/migrations/multi_tenancy.py — composite PK долг.
 """
 
 import json
@@ -175,7 +178,8 @@ CATEGORIES_META = [
 # ── INIT ─────────────────────────────────────────────────────────────────────
 
 def init_economy_tables(db) -> None:
-    """Создаёт 4 таблицы и сидирует дефолтные значения. Безопасно вызывать многократно."""
+    """Создаёт 4 таблицы и сидирует дефолтные значения. Безопасно вызывать многократно.
+    Сидинг идёт без явного workspace_id → попадает в DEFAULT 1 (Pulse Москва)."""
     try:
         for statement in ECONOMY_TABLES_SQL.strip().split(';'):
             s = statement.strip()
@@ -211,11 +215,13 @@ def _seed_section_toggles(db) -> None:
 
 # ── READ ──────────────────────────────────────────────────────────────────────
 
-def get_econ(db, key: str, default=None, value_type: str = 'float'):
+def get_econ(db, workspace_id: int, key: str, default=None, value_type: str = 'float'):
     """Читает значение настройки экономики. Без кеша — всегда актуальное."""
     try:
         db.cursor.execute(
-            "SELECT value, value_type, is_enabled FROM economy_settings WHERE key = ?", (key,)
+            "SELECT value, value_type, is_enabled FROM economy_settings "
+            "WHERE workspace_id = ? AND key = ?",
+            (workspace_id, key)
         )
         row = db.cursor.fetchone()
         if not row or not row['is_enabled']:
@@ -231,11 +237,13 @@ def get_econ(db, key: str, default=None, value_type: str = 'float'):
         return default
 
 
-def is_section_enabled(db, category: str) -> bool:
+def is_section_enabled(db, workspace_id: int, category: str) -> bool:
     """Проверяет мастер-свич раздела. По умолчанию True если записи нет."""
     try:
         db.cursor.execute(
-            "SELECT is_enabled FROM economy_section_toggles WHERE category = ?", (category,)
+            "SELECT is_enabled FROM economy_section_toggles "
+            "WHERE workspace_id = ? AND category = ?",
+            (workspace_id, category)
         )
         row = db.cursor.fetchone()
         return row['is_enabled'] == 1 if row else True
@@ -243,28 +251,32 @@ def is_section_enabled(db, category: str) -> bool:
         return True
 
 
-def get_econ_categories(db) -> list:
+def get_econ_categories(db, workspace_id: int) -> list:
     """Список категорий с метаданными для аккордеона."""
     result = []
     try:
         for key, label, icon, sort_order in CATEGORIES_META:
             db.cursor.execute(
-                "SELECT COUNT(*) as cnt FROM economy_settings WHERE category = ?", (key,)
+                "SELECT COUNT(*) as cnt FROM economy_settings "
+                "WHERE workspace_id = ? AND category = ?",
+                (workspace_id, key)
             )
             cnt_row = db.cursor.fetchone()
             rows_count = cnt_row['cnt'] if cnt_row else 0
 
             db.cursor.execute(
-                "SELECT is_enabled FROM economy_section_toggles WHERE category = ?", (key,)
+                "SELECT is_enabled FROM economy_section_toggles "
+                "WHERE workspace_id = ? AND category = ?",
+                (workspace_id, key)
             )
             toggle_row = db.cursor.fetchone()
             is_enabled = toggle_row['is_enabled'] == 1 if toggle_row else True
 
-            # Subcategories
             db.cursor.execute(
                 "SELECT subcategory, COUNT(*) as cnt FROM economy_settings "
-                "WHERE category = ? GROUP BY subcategory ORDER BY MIN(sort_order)",
-                (key,)
+                "WHERE workspace_id = ? AND category = ? "
+                "GROUP BY subcategory ORDER BY MIN(sort_order)",
+                (workspace_id, key)
             )
             subs = []
             for sub_row in db.cursor.fetchall():
@@ -287,26 +299,26 @@ def get_econ_categories(db) -> list:
     return result
 
 
-def get_econ_settings(db, category: str = None, subcategory: str = None) -> list:
+def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: str = None) -> list:
     """Настройки по категории (и опционально подкатегории)."""
     try:
         sql = """
             SELECT s.*,
-                   (SELECT COUNT(*) FROM economy_history h WHERE h.setting_key = s.key) as history_count,
+                   (SELECT COUNT(*) FROM economy_history h
+                    WHERE h.workspace_id = s.workspace_id AND h.setting_key = s.key) as history_count,
                    (SELECT h2.changed_at FROM economy_history h2
-                    WHERE h2.setting_key = s.key ORDER BY h2.changed_at DESC LIMIT 1) as last_change
+                    WHERE h2.workspace_id = s.workspace_id AND h2.setting_key = s.key
+                    ORDER BY h2.changed_at DESC LIMIT 1) as last_change
             FROM economy_settings s
+            WHERE s.workspace_id = ?
         """
-        params = []
-        conditions = []
+        params = [workspace_id]
         if category:
-            conditions.append("s.category = ?")
+            sql += " AND s.category = ?"
             params.append(category)
         if subcategory:
-            conditions.append("s.subcategory = ?")
+            sql += " AND s.subcategory = ?"
             params.append(subcategory)
-        if conditions:
-            sql += " WHERE " + " AND ".join(conditions)
         sql += " ORDER BY s.sort_order"
 
         db.cursor.execute(sql, params)
@@ -340,10 +352,12 @@ def get_econ_settings(db, category: str = None, subcategory: str = None) -> list
 
 # ── WRITE ─────────────────────────────────────────────────────────────────────
 
-def set_econ(db, key: str, value, comment: str, changed_by: int, changed_by_role: str) -> dict:
+def set_econ(db, workspace_id: int, key: str, value, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Обновляет значение настройки + пишет историю. Атомарно."""
     db.cursor.execute(
-        "SELECT value, value_type, min_value, max_value FROM economy_settings WHERE key = ?", (key,)
+        "SELECT value, value_type, min_value, max_value FROM economy_settings "
+        "WHERE workspace_id = ? AND key = ?",
+        (workspace_id, key)
     )
     row = db.cursor.fetchone()
     if not row:
@@ -356,13 +370,15 @@ def set_econ(db, key: str, value, comment: str, changed_by: int, changed_by_role
     db.cursor.execute("BEGIN IMMEDIATE")
     try:
         db.cursor.execute(
-            "UPDATE economy_settings SET value = ?, updated_at = datetime('now') WHERE key = ?",
-            (new_value_str, key)
+            "UPDATE economy_settings SET value = ?, updated_at = datetime('now') "
+            "WHERE workspace_id = ? AND key = ?",
+            (new_value_str, workspace_id, key)
         )
         db.cursor.execute(
-            "INSERT INTO economy_history (setting_key, action, old_value, new_value, comment, changed_by, changed_by_role) "
-            "VALUES (?, 'edit', ?, ?, ?, ?, ?)",
-            (key, old_value, new_value_str, comment, changed_by, changed_by_role)
+            "INSERT INTO economy_history "
+            "(workspace_id, setting_key, action, old_value, new_value, comment, changed_by, changed_by_role) "
+            "VALUES (?, ?, 'edit', ?, ?, ?, ?, ?)",
+            (workspace_id, key, old_value, new_value_str, comment, changed_by, changed_by_role)
         )
         db.conn.commit()
     except Exception:
@@ -376,10 +392,11 @@ def set_econ(db, key: str, value, comment: str, changed_by: int, changed_by_role
     }
 
 
-def toggle_econ(db, key: str, comment: str, changed_by: int, changed_by_role: str) -> dict:
+def toggle_econ(db, workspace_id: int, key: str, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Переключает is_enabled строки настройки."""
     db.cursor.execute(
-        "SELECT is_enabled FROM economy_settings WHERE key = ?", (key,)
+        "SELECT is_enabled FROM economy_settings WHERE workspace_id = ? AND key = ?",
+        (workspace_id, key)
     )
     row = db.cursor.fetchone()
     if not row:
@@ -391,13 +408,15 @@ def toggle_econ(db, key: str, comment: str, changed_by: int, changed_by_role: st
     db.cursor.execute("BEGIN IMMEDIATE")
     try:
         db.cursor.execute(
-            "UPDATE economy_settings SET is_enabled = ?, updated_at = datetime('now') WHERE key = ?",
-            (new_enabled, key)
+            "UPDATE economy_settings SET is_enabled = ?, updated_at = datetime('now') "
+            "WHERE workspace_id = ? AND key = ?",
+            (new_enabled, workspace_id, key)
         )
         db.cursor.execute(
-            "INSERT INTO economy_history (setting_key, action, old_enabled, new_enabled, comment, changed_by, changed_by_role) "
-            "VALUES (?, 'toggle', ?, ?, ?, ?, ?)",
-            (key, old_enabled, new_enabled, comment, changed_by, changed_by_role)
+            "INSERT INTO economy_history "
+            "(workspace_id, setting_key, action, old_enabled, new_enabled, comment, changed_by, changed_by_role) "
+            "VALUES (?, ?, 'toggle', ?, ?, ?, ?, ?)",
+            (workspace_id, key, old_enabled, new_enabled, comment, changed_by, changed_by_role)
         )
         db.conn.commit()
     except Exception:
@@ -407,10 +426,12 @@ def toggle_econ(db, key: str, comment: str, changed_by: int, changed_by_role: st
     return {"key": key, "is_enabled": bool(new_enabled)}
 
 
-def toggle_section(db, category: str, comment: str, changed_by: int, changed_by_role: str) -> dict:
+def toggle_section(db, workspace_id: int, category: str, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Мастер-свич раздела."""
     db.cursor.execute(
-        "SELECT is_enabled FROM economy_section_toggles WHERE category = ?", (category,)
+        "SELECT is_enabled FROM economy_section_toggles "
+        "WHERE workspace_id = ? AND category = ?",
+        (workspace_id, category)
     )
     row = db.cursor.fetchone()
     old_enabled = row['is_enabled'] if row else 1
@@ -419,15 +440,17 @@ def toggle_section(db, category: str, comment: str, changed_by: int, changed_by_
     db.cursor.execute("BEGIN IMMEDIATE")
     try:
         db.cursor.execute(
-            "INSERT OR REPLACE INTO economy_section_toggles (category, is_enabled, updated_by, updated_at) "
-            "VALUES (?, ?, ?, datetime('now'))",
-            (category, new_enabled, changed_by)
+            "INSERT OR REPLACE INTO economy_section_toggles "
+            "(workspace_id, category, is_enabled, updated_by, updated_at) "
+            "VALUES (?, ?, ?, ?, datetime('now'))",
+            (workspace_id, category, new_enabled, changed_by)
         )
         setting_key = f"@category.{category}"
         db.cursor.execute(
-            "INSERT INTO economy_history (setting_key, action, old_enabled, new_enabled, comment, changed_by, changed_by_role) "
-            "VALUES (?, 'toggle', ?, ?, ?, ?, ?)",
-            (setting_key, old_enabled, new_enabled, comment, changed_by, changed_by_role)
+            "INSERT INTO economy_history "
+            "(workspace_id, setting_key, action, old_enabled, new_enabled, comment, changed_by, changed_by_role) "
+            "VALUES (?, ?, 'toggle', ?, ?, ?, ?, ?)",
+            (workspace_id, setting_key, old_enabled, new_enabled, comment, changed_by, changed_by_role)
         )
         db.conn.commit()
     except Exception:
@@ -437,13 +460,13 @@ def toggle_section(db, category: str, comment: str, changed_by: int, changed_by_
     return {"category": category, "is_enabled": bool(new_enabled)}
 
 
-def rollback_econ(db, history_id: int, comment: str, changed_by: int, changed_by_role: str) -> dict:
+def rollback_econ(db, workspace_id: int, history_id: int, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Откат к old_value конкретной записи истории."""
     db.cursor.execute(
         "SELECT h.*, s.value_type FROM economy_history h "
-        "LEFT JOIN economy_settings s ON s.key = h.setting_key "
-        "WHERE h.id = ?",
-        (history_id,)
+        "LEFT JOIN economy_settings s ON s.key = h.setting_key AND s.workspace_id = h.workspace_id "
+        "WHERE h.workspace_id = ? AND h.id = ?",
+        (workspace_id, history_id)
     )
     h_row = db.cursor.fetchone()
     if not h_row:
@@ -456,7 +479,8 @@ def rollback_econ(db, history_id: int, comment: str, changed_by: int, changed_by
     vt = h_row['value_type'] or 'float'
 
     db.cursor.execute(
-        "SELECT value FROM economy_settings WHERE key = ?", (key,)
+        "SELECT value FROM economy_settings WHERE workspace_id = ? AND key = ?",
+        (workspace_id, key)
     )
     cur_row = db.cursor.fetchone()
     if not cur_row:
@@ -466,13 +490,15 @@ def rollback_econ(db, history_id: int, comment: str, changed_by: int, changed_by
     db.cursor.execute("BEGIN IMMEDIATE")
     try:
         db.cursor.execute(
-            "UPDATE economy_settings SET value = ?, updated_at = datetime('now') WHERE key = ?",
-            (restore_value, key)
+            "UPDATE economy_settings SET value = ?, updated_at = datetime('now') "
+            "WHERE workspace_id = ? AND key = ?",
+            (restore_value, workspace_id, key)
         )
         db.cursor.execute(
-            "INSERT INTO economy_history (setting_key, action, old_value, new_value, comment, changed_by, changed_by_role, rollback_of) "
-            "VALUES (?, 'rollback', ?, ?, ?, ?, ?, ?)",
-            (key, current_value, restore_value, comment, changed_by, changed_by_role, history_id)
+            "INSERT INTO economy_history "
+            "(workspace_id, setting_key, action, old_value, new_value, comment, changed_by, changed_by_role, rollback_of) "
+            "VALUES (?, ?, 'rollback', ?, ?, ?, ?, ?, ?)",
+            (workspace_id, key, current_value, restore_value, comment, changed_by, changed_by_role, history_id)
         )
         db.conn.commit()
     except Exception:
@@ -488,20 +514,25 @@ def rollback_econ(db, history_id: int, comment: str, changed_by: int, changed_by
 
 # ── CANCELLATIONS ─────────────────────────────────────────────────────────────
 
-def cancel_pointwise(db, tx_id: int, mode: str, comment: str,
+def cancel_pointwise(db, workspace_id: int, tx_id: int, mode: str, comment: str,
                      executed_by: int, executed_by_role: str) -> dict:
-    """Точечная отмена выплаты. mode: deduct / debt / log_only"""
+    """Точечная отмена выплаты. mode: deduct / debt / log_only.
+
+    transactions фильтруется по workspace_id (тенантизированная таблица).
+    users — глобальная таблица, балансы общие. settings — глобальная (банк)."""
     db.cursor.execute(
-        "SELECT id, to_user_id, amount FROM transactions WHERE id = ?", (tx_id,)
+        "SELECT id, to_user_id, amount FROM transactions "
+        "WHERE workspace_id = ? AND id = ?",
+        (workspace_id, tx_id)
     )
     tx = db.cursor.fetchone()
     if not tx:
         raise ValueError(f"Транзакция {tx_id} не найдена")
 
-    # Проверка — не отменять уже отменённые
     db.cursor.execute(
-        "SELECT id FROM economy_cancellations WHERE source_tx_id = ? AND mode != 'log_only'",
-        (tx_id,)
+        "SELECT id FROM economy_cancellations "
+        "WHERE workspace_id = ? AND source_tx_id = ? AND mode != 'log_only'",
+        (workspace_id, tx_id)
     )
     if db.cursor.fetchone():
         raise ValueError("Эта транзакция уже была отменена")
@@ -529,9 +560,10 @@ def cancel_pointwise(db, tx_id: int, mode: str, comment: str,
                 (amount,)
             )
             db.cursor.execute(
-                "INSERT INTO transactions (from_user_id, to_user_id, amount, transaction_type, description) "
-                "VALUES (?, NULL, ?, 'cancel_deduct', ?)",
-                (user_id, amount, comment)
+                "INSERT INTO transactions "
+                "(workspace_id, from_user_id, to_user_id, amount, transaction_type, description) "
+                "VALUES (?, ?, NULL, ?, 'cancel_deduct', ?)",
+                (workspace_id, user_id, amount, comment)
             )
             actually_deducted = amount
 
@@ -544,9 +576,10 @@ def cancel_pointwise(db, tx_id: int, mode: str, comment: str,
                 (amount,)
             )
             db.cursor.execute(
-                "INSERT INTO transactions (from_user_id, to_user_id, amount, transaction_type, description) "
-                "VALUES (?, NULL, ?, 'cancel_debt', ?)",
-                (user_id, amount, comment)
+                "INSERT INTO transactions "
+                "(workspace_id, from_user_id, to_user_id, amount, transaction_type, description) "
+                "VALUES (?, ?, NULL, ?, 'cancel_debt', ?)",
+                (workspace_id, user_id, amount, comment)
             )
             actually_deducted = amount
 
@@ -554,9 +587,11 @@ def cancel_pointwise(db, tx_id: int, mode: str, comment: str,
 
         db.cursor.execute(
             "INSERT INTO economy_cancellations "
-            "(cancellation_type, target_user_id, source_tx_id, amount, mode, actually_deducted, comment, executed_by, executed_by_role) "
-            "VALUES ('pointwise', ?, ?, ?, ?, ?, ?, ?, ?)",
-            (user_id, tx_id, amount, mode, actually_deducted, comment, executed_by, executed_by_role)
+            "(workspace_id, cancellation_type, target_user_id, source_tx_id, amount, mode, "
+            " actually_deducted, comment, executed_by, executed_by_role) "
+            "VALUES (?, 'pointwise', ?, ?, ?, ?, ?, ?, ?, ?)",
+            (workspace_id, user_id, tx_id, amount, mode, actually_deducted,
+             comment, executed_by, executed_by_role)
         )
         db.conn.commit()
     except ValueError:
@@ -568,20 +603,21 @@ def cancel_pointwise(db, tx_id: int, mode: str, comment: str,
     return {"ok": True, "mode": mode, "amount": amount, "actually_deducted": actually_deducted}
 
 
-def cancel_mass(db, filter_dict: dict, mode: str, comment: str,
+def cancel_mass(db, workspace_id: int, filter_dict: dict, mode: str, comment: str,
                 executed_by: int, executed_by_role: str) -> dict:
     """Массовая отмена — только log_only."""
     category = filter_dict.get('category', '')
     date_from = filter_dict.get('date_from', '')
     date_to = filter_dict.get('date_to', '')
-    user_ids = filter_dict.get('user_ids')  # list or None
+    user_ids = filter_dict.get('user_ids')
 
     sql = (
         "SELECT id, to_user_id, amount FROM transactions "
-        "WHERE transaction_type LIKE ? "
+        "WHERE workspace_id = ? "
+        "AND transaction_type LIKE ? "
         "AND DATE(timestamp) BETWEEN ? AND ?"
     )
-    params = [f"{category}_%", date_from, date_to]
+    params = [workspace_id, f"{category}_%", date_from, date_to]
 
     if user_ids:
         placeholders = ','.join('?' * len(user_ids))
@@ -596,20 +632,23 @@ def cancel_mass(db, filter_dict: dict, mode: str, comment: str,
 
     db.cursor.execute(
         "INSERT INTO economy_cancellations "
-        "(cancellation_type, source_filter, amount, affected_users, mode, actually_deducted, comment, executed_by, executed_by_role) "
-        "VALUES ('mass', ?, ?, ?, 'log_only', 0, ?, ?, ?)",
-        (json.dumps(filter_dict), total, affected_users, comment, executed_by, executed_by_role)
+        "(workspace_id, cancellation_type, source_filter, amount, affected_users, mode, "
+        " actually_deducted, comment, executed_by, executed_by_role) "
+        "VALUES (?, 'mass', ?, ?, ?, 'log_only', 0, ?, ?, ?)",
+        (workspace_id, json.dumps(filter_dict), total, affected_users,
+         comment, executed_by, executed_by_role)
     )
     db.conn.commit()
 
     return {"ok": True, "total": total, "affected_users": affected_users, "mode": "log_only"}
 
 
-def get_cancellations(db, limit: int = 50, offset: int = 0) -> list:
+def get_cancellations(db, workspace_id: int, limit: int = 50, offset: int = 0) -> list:
     try:
         db.cursor.execute(
-            "SELECT * FROM economy_cancellations ORDER BY executed_at DESC LIMIT ? OFFSET ?",
-            (limit, offset)
+            "SELECT * FROM economy_cancellations "
+            "WHERE workspace_id = ? ORDER BY executed_at DESC LIMIT ? OFFSET ?",
+            (workspace_id, limit, offset)
         )
         rows = db.cursor.fetchall()
         return [dict(r) for r in rows]
@@ -620,47 +659,50 @@ def get_cancellations(db, limit: int = 50, offset: int = 0) -> list:
 
 # ── METRICS ───────────────────────────────────────────────────────────────────
 
-def get_economy_metrics(db) -> dict:
-    """Live-метрики для шапки: курс, банк, суммы балансов, эмиссия."""
+def get_economy_metrics(db, workspace_id: int) -> dict:
+    """Live-метрики для шапки: курс, банк, суммы балансов, эмиссия.
+
+    settings, users — глобальные таблицы (курс/банк/балансы общие).
+    transactions фильтруется по workspace_id."""
     try:
-        # Курс пульса
         db.cursor.execute("SELECT value FROM settings WHERE key = 'pulse_rate'")
         r = db.cursor.fetchone()
         pulse_rate = float(r['value']) if r else 0.0
 
-        # Банк
         db.cursor.execute("SELECT value FROM settings WHERE key = 'bank_balance'")
         r = db.cursor.fetchone()
         bank_balance = float(r['value']) if r else 0.0
 
-        # Суммы балансов юзеров
         db.cursor.execute("SELECT COALESCE(SUM(balance), 0) as total FROM users WHERE is_left = 0")
         r = db.cursor.fetchone()
         users_balance = float(r['total']) if r else 0.0
 
         total_supply = bank_balance + users_balance
 
-        # Эмиссия за 24ч (начисления от системы)
         db.cursor.execute(
             "SELECT COALESCE(SUM(amount), 0) as s FROM transactions "
-            "WHERE from_user_id IS NULL AND timestamp >= datetime('now', '-24 hours')"
+            "WHERE workspace_id = ? AND from_user_id IS NULL "
+            "AND timestamp >= datetime('now', '-24 hours')",
+            (workspace_id,)
         )
         r = db.cursor.fetchone()
         emission_24h = float(r['s']) if r else 0.0
 
-        # Эмиссия за 7д
         db.cursor.execute(
             "SELECT COALESCE(SUM(amount), 0) as s FROM transactions "
-            "WHERE from_user_id IS NULL AND timestamp >= datetime('now', '-7 days')"
+            "WHERE workspace_id = ? AND from_user_id IS NULL "
+            "AND timestamp >= datetime('now', '-7 days')",
+            (workspace_id,)
         )
         r = db.cursor.fetchone()
         emission_7d = float(r['s']) if r else 0.0
 
-        # Топ источников за 7д
         db.cursor.execute(
             "SELECT transaction_type, COALESCE(SUM(amount), 0) as total FROM transactions "
-            "WHERE from_user_id IS NULL AND timestamp >= datetime('now', '-7 days') "
-            "GROUP BY transaction_type ORDER BY total DESC LIMIT 5"
+            "WHERE workspace_id = ? AND from_user_id IS NULL "
+            "AND timestamp >= datetime('now', '-7 days') "
+            "GROUP BY transaction_type ORDER BY total DESC LIMIT 5",
+            (workspace_id,)
         )
         top_sources = [
             {"type": row['transaction_type'], "amount": float(row['total'])}
