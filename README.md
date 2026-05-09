@@ -307,6 +307,12 @@ pip install -r requirements.txt --upgrade
   cp database/bot_database.db database/backup_$(date +%Y%m%d).db
   ```
 
+## AI-ассистент
+
+В проекте используется AI-ассистент **Jules** для помощи в разработке, а также интегрированы функции **Gemini AI** в панель управления.
+
+Подробности о том, как общаться с Jules в VS Code и использовать AI-возможности, читайте в [Руководстве по AI-ассистенту](docs/AI_ASSISTANT.md).
+
 ## Поддержка
 
 ### Проверка статуса:
