@@ -2,6 +2,7 @@
 # -*- coding: utf-8 -*-
 """Панель владельца: управление VIP BBS — прайс, статистика, активные подписки."""
 
+import json
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
@@ -33,13 +34,21 @@ def _is_owner(db, user_id: int, admin_id: int) -> bool:
 
 async def show_vip_root_menu(query, user, db, admin_id):
     """Корневое меню «👑 Управление VIP BBS»."""
+    from database.db_bbs_vip import get_discount
     if not _is_owner(db, user.id, admin_id):
         await query.answer("⛔ Нет доступа.", show_alert=True)
         return
 
+    disc = get_discount(db)
+    disc_label = "🏷 Скидка: нет"
+    if disc:
+        status = "🟢 активна" if disc['is_active'] else "⚪ выключена"
+        disc_label = f"🏷 Скидка: {disc['percent']}% «{disc['theme']}» — {status}"
+
     text = "👑 <b>Управление VIP BBS</b>\n\nВыберите раздел:"
     keyboard = [
         [InlineKeyboardButton("📋 Прайс-лист (RUB / 💎)", callback_data="bbs_vip_pricelist")],
+        [InlineKeyboardButton(disc_label, callback_data="bbs_vip_discount")],
         [InlineKeyboardButton("📊 Статистика", callback_data="bbs_vip_stats")],
         [InlineKeyboardButton("📜 Активные подписки", callback_data="bbs_vip_active_subs")],
         [InlineKeyboardButton("🔙 Назад", callback_data="panel_main")],
@@ -49,6 +58,7 @@ async def show_vip_root_menu(query, user, db, admin_id):
 
 async def show_vip_pricelist(query, user, db, admin_id):
     """Прайс-лист VIP услуг с кнопками ✏️ для каждой позиции."""
+    from database.db_bbs_vip import get_active_discount, is_code_discounted, apply_discount_price
     if not _is_owner(db, user.id, admin_id):
         await query.answer("⛔ Нет доступа.", show_alert=True)
         return
@@ -66,13 +76,18 @@ async def show_vip_pricelist(query, user, db, admin_id):
         await query.answer("❌ Прайс не загружен.", show_alert=True)
         return
 
+    discount = get_active_discount(db)
     by_family = {}
     for row in all_settings:
         by_family.setdefault(row['vip_family'], []).append(row)
 
+    disc_note = ''
+    if discount:
+        disc_note = f"\n🏷 <b>Акция «{discount['theme']}»</b> — скидка {discount['percent']}%\n"
+
     lines = [
         "👑 <b>Управление VIP BBS — Прайс-лист</b>",
-        f"Курс: {rate:.2f} RUB/💎\n",
+        f"Курс: {rate:.2f} RUB/💎{disc_note}",
     ]
     edit_buttons = []
 
@@ -83,9 +98,16 @@ async def show_vip_pricelist(query, user, db, admin_id):
         icon, label = FAMILY_META.get(fam, ('•', fam))
         lines.append(f"{icon} <b>{label}</b>")
         for item in items:
-            pulse_price = round(item['price_rub'] / rate, 2)
+            orig_rub = item['price_rub']
+            disc_rub = apply_discount_price(orig_rub, item['vip_code'], discount)
+            orig_pulses = round(orig_rub / rate, 2)
             dur_str = f"{item['duration_hours']} ч" if item['duration_hours'] else "разовая"
-            lines.append(f"   • {dur_str}  — {item['price_rub']:.2f} RUB ≈ {pulse_price:.2f} 💎")
+            if discount and is_code_discounted(item['vip_code'], discount):
+                disc_pulses = round(disc_rub / rate, 2)
+                price_str = f"<s>{orig_rub:.2f}</s> → <b>{disc_rub:.2f} RUB ≈ {disc_pulses:.2f} 💎</b> -{discount['percent']}%"
+            else:
+                price_str = f"{orig_rub:.2f} RUB ≈ {orig_pulses:.2f} 💎"
+            lines.append(f"   • {dur_str}  — {price_str}")
             vip_num = FAMILY_VIP_NUM.get(fam, '')
             btn_label = f"✏️ {vip_num}·{item['vip_code']}" if vip_num else f"✏️ {item['vip_code']}"
             edit_buttons.append(
@@ -335,3 +357,247 @@ async def cancel_vip_subscription(query, data, user, db, admin_id):
         await query.answer("⚠️ Подписка не найдена или уже отменена.", show_alert=True)
 
     await show_vip_active_subs(query, user, db, admin_id)
+
+
+# ════════════════════════════════════════════════════════════════════
+# УПРАВЛЕНИЕ СКИДКОЙ
+# ════════════════════════════════════════════════════════════════════
+
+_ALL_CODES = [
+    'BUMP', 'SILENT_PIN', 'LOUD_PIN',
+    'CUSTOM_BUMP_72H', 'CUSTOM_BUMP_120H', 'CUSTOM_BUMP_168H',
+    'BUMP_PIN_72H', 'BUMP_PIN_120H', 'BUMP_PIN_168H',
+    'PROMO_CHAT',
+]
+
+
+def _build_discount_menu(disc) -> tuple[str, InlineKeyboardMarkup]:
+    if not disc:
+        text = (
+            "🏷 <b>Скидка VIP BBS</b>\n\n"
+            "Скидки пока нет.\n"
+            "Создайте акцию — она автоматически отобразится\n"
+            "в прайсе и в карточках покупки."
+        )
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton("➕ Создать скидку", callback_data="bbs_vip_disc_create")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="bbs_vip_root")],
+        ])
+    else:
+        active = disc['is_active']
+        apply_to = disc['apply_to']
+        if apply_to == 'ALL':
+            scope_str = "все бандлы"
+        else:
+            try:
+                codes = json.loads(apply_to)
+                scope_str = ", ".join(codes) or "—"
+            except Exception:
+                scope_str = apply_to
+
+        status_icon = "🟢" if active else "⚪"
+        desc_line = f"\nОписание: <i>{disc['description']}</i>" if disc.get('description') else ''
+        text = (
+            f"🏷 <b>Скидка VIP BBS</b>\n\n"
+            f"Тема: <b>{disc['theme']}</b>{desc_line}\n"
+            f"Размер: <b>{disc['percent']}%</b>\n"
+            f"Применяется к: <b>{scope_str}</b>\n"
+            f"Статус: {status_icon} {'активна' if active else 'выключена'}"
+        )
+        toggle_label = "🔴 Выключить" if active else "🟢 Включить"
+        kb = InlineKeyboardMarkup([
+            [InlineKeyboardButton(toggle_label, callback_data="bbs_vip_disc_toggle"),
+             InlineKeyboardButton("✏️ Изменить", callback_data="bbs_vip_disc_create")],
+            [InlineKeyboardButton("🗑 Удалить скидку", callback_data="bbs_vip_disc_delete")],
+            [InlineKeyboardButton("🔙 Назад", callback_data="bbs_vip_root")],
+        ])
+    return text, kb
+
+
+async def show_vip_discount_menu(query, user, db, admin_id):
+    from database.db_bbs_vip import get_discount
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔ Нет доступа.", show_alert=True)
+        return
+    await query.answer()
+    disc = get_discount(db)
+    text, kb = _build_discount_menu(disc)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def cb_disc_toggle(query, user, db, admin_id):
+    from database.db_bbs_vip import toggle_discount_active, get_discount
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    new_state = toggle_discount_active(db)
+    await query.answer("🟢 Скидка активирована" if new_state else "⚪ Скидка выключена")
+    disc = get_discount(db)
+    text, kb = _build_discount_menu(disc)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+async def cb_disc_delete(query, user, db, admin_id):
+    from database.db_bbs_vip import delete_discount
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    delete_discount(db)
+    await query.answer("🗑 Скидка удалена")
+    text, kb = _build_discount_menu(None)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
+
+
+# ── FSM создания/редактирования скидки ───────────────────────────────
+
+async def cb_disc_create_entry(query, user, context, db, admin_id):
+    """Точка входа FSM создания скидки. owner_awaiting = 'vip_disc_theme'."""
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    await query.answer()
+    context.user_data['vip_disc_draft'] = {}
+    context.user_data['owner_awaiting'] = 'vip_disc_theme'
+    await query.edit_message_text(
+        "🏷 <b>Создание скидки — 1/3</b>\n\n"
+        "Введи <b>название акции</b> (до 40 символов).\n"
+        "Пример: «Летняя акция», «Чёрная пятница», «Скидка выходного дня»",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="bbs_vip_discount")
+        ]])
+    )
+
+
+async def handle_disc_theme_input(message, context, db):
+    """owner_awaiting = 'vip_disc_theme' — ввод темы."""
+    theme = (message.text or '').strip()
+    if not (1 <= len(theme) <= 40):
+        await message.reply_text("❌ Длина 1–40 символов. Попробуй ещё.")
+        return
+    context.user_data['vip_disc_draft']['theme'] = theme
+    context.user_data['owner_awaiting'] = 'vip_disc_desc'
+    await message.reply_text(
+        f"🏷 <b>Создание скидки — 2/4</b>\n\n"
+        f"Тема: <b>{theme}</b>\n\n"
+        f"Введи <b>описание акции</b> — в честь чего и почему.\n"
+        f"(до 120 символов, показывается в шапке магазина)\n\n"
+        f"Пример: «В честь лета дарим скидку на все услуги!»",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="bbs_vip_discount")
+        ]])
+    )
+
+
+async def handle_disc_desc_input(message, context, db):
+    """owner_awaiting = 'vip_disc_desc' — ввод описания."""
+    desc = (message.text or '').strip()
+    if len(desc) > 120:
+        await message.reply_text("❌ Не более 120 символов. Попробуй ещё.")
+        return
+    draft = context.user_data.get('vip_disc_draft', {})
+    draft['description'] = desc
+    context.user_data['vip_disc_draft'] = draft
+    context.user_data['owner_awaiting'] = 'vip_disc_percent'
+    await message.reply_text(
+        f"🏷 <b>Создание скидки — 3/4</b>\n\n"
+        f"Тема: <b>{draft['theme']}</b>\n"
+        f"Описание: <i>{desc}</i>\n\n"
+        f"Введи <b>размер скидки в %</b> (целое от 1 до 99).",
+        parse_mode='HTML',
+        reply_markup=InlineKeyboardMarkup([[
+            InlineKeyboardButton("❌ Отмена", callback_data="bbs_vip_discount")
+        ]])
+    )
+
+
+async def handle_disc_percent_input(message, context, db):
+    """owner_awaiting = 'vip_disc_percent' — ввод процента."""
+    try:
+        pct = int((message.text or '').strip())
+        if not (1 <= pct <= 99):
+            raise ValueError
+    except ValueError:
+        await message.reply_text("❌ Введи целое число от 1 до 99.")
+        return
+    draft = context.user_data.get('vip_disc_draft', {})
+    draft['percent'] = pct
+    context.user_data['vip_disc_draft'] = draft
+    context.user_data['owner_awaiting'] = 'vip_disc_scope'
+
+    context.user_data['vip_disc_selected'] = set()
+    await message.reply_text(
+        f"🏷 <b>Создание скидки — 4/4</b>\n\n"
+        f"Тема: <b>{draft['theme']}</b>\n"
+        f"Описание: <i>{draft.get('description', '—')}</i>\n"
+        f"Скидка: <b>{pct}%</b>\n\n"
+        f"Выбери на какие бандлы применить скидку.\n"
+        f"Нажимай коды для выбора, потом «💾 Сохранить».",
+        parse_mode='HTML',
+        reply_markup=_build_scope_kb(set())
+    )
+
+
+def _build_scope_kb(selected: set) -> InlineKeyboardMarkup:
+    rows = [[InlineKeyboardButton("✅ Все бандлы", callback_data="bbs_vip_disc_scope_all")]]
+    btns = []
+    for code in _ALL_CODES:
+        mark = "✅ " if code in selected else ""
+        btns.append(InlineKeyboardButton(f"{mark}{code}", callback_data=f"bbs_vip_disc_tog_{code}"))
+    for i in range(0, len(btns), 2):
+        rows.append(btns[i:i+2])
+    rows.append([InlineKeyboardButton("💾 Сохранить выбранные", callback_data="bbs_vip_disc_save_sel")])
+    rows.append([InlineKeyboardButton("❌ Отмена", callback_data="bbs_vip_discount")])
+    return InlineKeyboardMarkup(rows)
+
+
+async def cb_disc_toggle_code(query, data, user, context, db, admin_id):
+    """Переключает выбор конкретного кода бандла в черновике."""
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    if context.user_data.get('owner_awaiting') != 'vip_disc_scope':
+        await query.answer(); return
+    code = data.removeprefix("bbs_vip_disc_tog_")
+    selected = context.user_data.get('vip_disc_selected', set())
+    if code in selected:
+        selected.discard(code)
+    else:
+        selected.add(code)
+    context.user_data['vip_disc_selected'] = selected
+    await query.answer(f"{'✅' if code in selected else '☑️'} {code}")
+    try:
+        await query.edit_message_reply_markup(reply_markup=_build_scope_kb(selected))
+    except Exception:
+        pass
+
+
+async def cb_disc_scope_all(query, user, context, db, admin_id):
+    """Применить ко ВСЕМ бандлам — сохранить."""
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    await _save_discount(query, context, db, apply_to='ALL')
+
+
+async def cb_disc_save_selected(query, user, context, db, admin_id):
+    """Сохранить скидку для выбранных кодов."""
+    if not _is_owner(db, user.id, admin_id):
+        await query.answer("⛔", show_alert=True); return
+    selected = context.user_data.get('vip_disc_selected', set())
+    if not selected:
+        await query.answer("⚠️ Выбери хотя бы один бандл!", show_alert=True); return
+    apply_to = json.dumps(sorted(selected))
+    await _save_discount(query, context, db, apply_to=apply_to)
+
+
+async def _save_discount(query, context, db, apply_to: str):
+    from database.db_bbs_vip import upsert_discount, get_discount
+    draft = context.user_data.pop('vip_disc_draft', {})
+    context.user_data.pop('owner_awaiting', None)
+    context.user_data.pop('vip_disc_selected', None)
+    theme = draft.get('theme', '?')
+    percent = draft.get('percent', 0)
+    description = draft.get('description', '')
+    upsert_discount(db, theme=theme, percent=percent, apply_to=apply_to,
+                    description=description, created_by=query.from_user.id)
+    await query.answer("✅ Скидка сохранена!")
+    disc = get_discount(db)
+    text, kb = _build_discount_menu(disc)
+    await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
