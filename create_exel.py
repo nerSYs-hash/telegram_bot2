@@ -390,3 +390,4 @@ def create_economy_calculator():
 
 if __name__ == "__main__":
     create_economy_calculator()
+    #Триггер срабатывания
