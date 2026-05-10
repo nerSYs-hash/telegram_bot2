@@ -1,0 +1,89 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "🚀 Git: Force Push",
+            "type": "shell",
+            "command": "git push -f",
+            "problemMatcher": []
+        },
+        {
+            "label": "📊 PULSE: Получить Карту",
+            "type": "shell",
+            "command": "git fetch origin main-map && git restore --source origin/main-map Pulse_Auto_Map.xlsx",
+            "problemMatcher": []
+        },
+        {
+            "label": "🧹 Git: Чистка веток",
+            "type": "shell",
+            "command": "git fetch --prune",
+            "problemMatcher": []
+        },
+        {
+            "label": "🧱 Git: Склеить 5 (Squash)",
+            "type": "shell",
+            "command": "git rebase -i HEAD~5",
+            "problemMatcher": []
+        },
+        {
+            "label": "📜 Git: Статус",
+            "type": "shell",
+            "command": "git status",
+            "problemMatcher": []
+        },
+        {
+            "label": "✏️ Git: Изм. описание (Amend)",
+            "type": "shell",
+            "command": "git commit --amend",
+            "problemMatcher": []
+        },
+        {
+            "label": "↩️ Git: Отменить коммит (Soft Reset)",
+            "type": "shell",
+            "command": "git reset --soft HEAD~1",
+            "problemMatcher": []
+        },
+        {
+            "label": "🚀 Git: Push в Main",
+            "type": "shell",
+            "command": "git push origin main",
+            "problemMatcher": []
+        },
+        {
+            "label": "🌱 Git: Dev ➡️ Main (Sync)",
+            "type": "shell",
+            "command": "git checkout main && git merge dev && git push origin main && git checkout dev",
+            "problemMatcher": []
+        },
+        {
+            "label": "📦 Git: В заначку (Stash)",
+            "type": "shell",
+            "command": "git stash",
+            "problemMatcher": []
+        },
+        {
+            "label": "📥 Git: Из заначки (Stash Pop)",
+            "type": "shell",
+            "command": "git stash pop",
+            "problemMatcher": []
+        },
+        {
+            "label": "🔄 Git: Синхрон (Pull)",
+            "type": "shell",
+            "command": "git pull origin main",
+            "problemMatcher": []
+        },
+        {
+            "label": "⚠️ Git: Сброс (HARD Reset)",
+            "type": "shell",
+            "command": "git reset --hard origin/main",
+            "problemMatcher": []
+        },
+        {
+            "label": "🆕 Git: Новая ветка feature/",
+            "type": "shell",
+            "command": "git checkout -b feature/",
+            "problemMatcher": []
+        }
+    ]
+}
