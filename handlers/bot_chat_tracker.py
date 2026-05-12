@@ -19,6 +19,11 @@ from database.db_press_release import (
 
 logger = logging.getLogger(__name__)
 
+# Multi-tenancy placeholder (V1.17.0a14). При добавлении бота в новый чат
+# workspace=1 (Pulse Москва). Подпроект #2 (Bot connection flow) сделает
+# onboarding нового workspace при добавлении бота владельцем.
+_DEFAULT_WS_ID = 1
+
 
 # ════════════════════════════════════════════════════════════════════
 # my_chat_member — бота добавили / удалили / поменяли права
@@ -47,6 +52,7 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
         if _is_bot_present(new_status):
             upsert_bot_chat(
                 db,
+                _DEFAULT_WS_ID,
                 chat_id=chat.id,
                 chat_type=chat.type,
                 title=chat.title or '',
@@ -88,7 +94,7 @@ def track_topic_from_message(message, db) -> None:
             name = message.forum_topic_created.name
         elif getattr(message, 'forum_topic_edited', None):
             name = message.forum_topic_edited.name
-        upsert_bot_chat_topic(db, chat.id, thread_id, name=name, source='auto')
+        upsert_bot_chat_topic(db, _DEFAULT_WS_ID, chat.id, thread_id, name=name, source='auto')
     except Exception as e:
         logger.debug(f"track_topic_from_message: {e}")
 
@@ -109,6 +115,7 @@ async def backfill_known_chats(application, db, target_chat_id: int) -> None:
         chat = await application.bot.get_chat(target_chat_id)
         upsert_bot_chat(
             db,
+            _DEFAULT_WS_ID,
             chat_id=chat.id,
             chat_type=chat.type,
             title=chat.title or '',
@@ -127,7 +134,7 @@ async def backfill_known_chats(application, db, target_chat_id: int) -> None:
             tid = t.get('thread_id') if isinstance(t, dict) else t['thread_id']
             tname = t.get('thread_name') if isinstance(t, dict) else t['thread_name']
             if tid:
-                upsert_bot_chat_topic(db, target_chat_id, tid, name=tname, source='auto')
+                upsert_bot_chat_topic(db, _DEFAULT_WS_ID, target_chat_id, tid, name=tname, source='auto')
                 cnt += 1
         if cnt:
             logger.info(f"backfill: {cnt} topics → bot_chat_topics")
