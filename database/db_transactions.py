@@ -1,25 +1,32 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Транзакции и Центробанк. Вынесено из Database."""
+"""Транзакции и Центробанк. Вынесено из Database.
+
+V1.17.0a16 (multi-tenancy):
+  • transactions — тенантизирована, add_transaction принимает workspace_id.
+  • bank_balance хранится в settings (key='bank_balance') — ГЛОБАЛЬНЫЙ для
+    Pulse-токена. При multi-tenant модели биллинга бэнк станет per-workspace
+    (TODO в подпроекте #6 биллинга).
+"""
 
 from database.db_settings import get_setting, set_setting
 
 
-def add_transaction(db, from_user_id, to_user_id, amount, transaction_type, description=None):
-    """Record transaction (with decimal support)"""
+def add_transaction(db, workspace_id, from_user_id, to_user_id, amount, transaction_type, description=None):
+    """Record transaction in workspace (with decimal support)."""
     amount = round(float(amount), 2)
 
     db.cursor.execute('''
-        INSERT INTO transactions 
-        (from_user_id, to_user_id, amount, transaction_type, description)
-        VALUES (?, ?, ?, ?, ?)
-    ''', (from_user_id, to_user_id, amount, transaction_type, description))
+        INSERT INTO transactions
+        (workspace_id, from_user_id, to_user_id, amount, transaction_type, description)
+        VALUES (?, ?, ?, ?, ?, ?)
+    ''', (workspace_id, from_user_id, to_user_id, amount, transaction_type, description))
     db.conn.commit()
     return db.cursor.lastrowid
 
 
 def get_bank_balance(db):
-    """Get central bank balance"""
+    """Get central bank balance. ГЛОБАЛЬНО (Pulse-токен)."""
     try:
         val = get_setting(db, 'bank_balance', '10000000')
         return float(val)
@@ -28,7 +35,7 @@ def get_bank_balance(db):
 
 
 def update_bank_balance(db, amount, operation='subtract'):
-    """Update bank balance"""
+    """Update bank balance. ГЛОБАЛЬНО."""
     current = get_bank_balance(db)
     amount = float(amount)
 

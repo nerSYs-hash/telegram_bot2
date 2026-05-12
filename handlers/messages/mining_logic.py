@@ -1239,19 +1239,21 @@ def process_mining_reward(
                 f'Штраф: {reason}'
             )
 
+        # V1.17.0a16: user_stats / chat_stats — тенантизированы.
+        _ws_id = db._DEFAULT_WS_ID
         db.cursor.execute('''
-            INSERT INTO user_stats (user_id, date, pulses_mined)
-            VALUES (?, ?, ?)
+            INSERT INTO user_stats (workspace_id, user_id, date, pulses_mined)
+            VALUES (?, ?, ?, ?)
             ON CONFLICT(user_id, date) DO UPDATE SET
                 pulses_mined = pulses_mined + excluded.pulses_mined
-        ''', (user_id, today_str, total_reward))
+        ''', (_ws_id, user_id, today_str, total_reward))
 
         db.cursor.execute('''
-            INSERT INTO chat_stats (date, total_pulses_mined)
-            VALUES (?, ?)
+            INSERT INTO chat_stats (workspace_id, date, total_pulses_mined)
+            VALUES (?, ?, ?)
             ON CONFLICT(date) DO UPDATE SET
                 total_pulses_mined = total_pulses_mined + excluded.total_pulses_mined
-        ''', (today_str, total_reward))
+        ''', (_ws_id, today_str, total_reward))
 
         db.conn.commit()
 

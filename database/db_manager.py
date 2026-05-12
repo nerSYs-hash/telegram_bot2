@@ -753,14 +753,14 @@ class Database:
         return _get_top_users_by_balance(self, limit, exclude_admins)
 
     def get_top_daily_earners(self, date, limit=5):
-        return _get_top_daily_earners(self, date, limit)
+        return _get_top_daily_earners(self, self._DEFAULT_WS_ID, date, limit)
 
     def get_top_activists(self, date, limit=5):
-        return _get_top_activists(self, date, limit)
+        return _get_top_activists(self, self._DEFAULT_WS_ID, date, limit)
 
     # ── Transactions & Bank ──
     def add_transaction(self, from_user_id, to_user_id, amount, transaction_type, description=None):
-        return _add_transaction(self, from_user_id, to_user_id, amount, transaction_type, description)
+        return _add_transaction(self, self._DEFAULT_WS_ID, from_user_id, to_user_id, amount, transaction_type, description)
 
     def get_bank_balance(self):
         return _get_bank_balance(self)
@@ -770,34 +770,35 @@ class Database:
 
     # ── Stats ──
     def update_user_activity(self, user_id, date, event_id: str = None, **kwargs):
-        _update_user_activity(self, user_id, date, event_id=event_id, **kwargs)
+        _update_user_activity(self, self._DEFAULT_WS_ID, user_id, date, event_id=event_id, **kwargs)
 
     def cleanup_stat_events_log(self, older_than_days: int = 3):
         _cleanup_stat_events_log(self, older_than_days)
 
     def get_active_core_count(self, date):
-        return _get_active_core_count(self, date)
+        return _get_active_core_count(self, self._DEFAULT_WS_ID, date)
 
     def register_topic(self, chat_id, thread_id, thread_name=None):
-        _register_topic(self, chat_id, thread_id, thread_name)
+        _register_topic(self, self._DEFAULT_WS_ID, chat_id, thread_id, thread_name)
 
     def get_all_topics(self, chat_id):
-        return _get_all_topics(self, chat_id)
+        return _get_all_topics(self, self._DEFAULT_WS_ID, chat_id)
 
     def update_topic_name(self, chat_id, thread_id, thread_name):
-        _update_topic_name(self, chat_id, thread_id, thread_name)
+        _update_topic_name(self, self._DEFAULT_WS_ID, chat_id, thread_id, thread_name)
 
     def purge_unnamed_topics(self, chat_id):
-        return _purge_unnamed_topics(self, chat_id)
+        return _purge_unnamed_topics(self, self._DEFAULT_WS_ID, chat_id)
 
     def get_joined_users_count(self, start_date, end_date):
+        # users — GLOBAL, без workspace_id (см. db_stats.py TODO).
         return _get_joined_users_count(self, start_date, end_date)
 
     def get_left_users_count(self, start_date, end_date):
-        return _get_left_users_count(self, start_date, end_date)
+        return _get_left_users_count(self, self._DEFAULT_WS_ID, start_date, end_date)
 
     def get_user_dynamics_stats(self, start_date, end_date):
-        return _get_user_dynamics_stats(self, start_date, end_date)
+        return _get_user_dynamics_stats(self, self._DEFAULT_WS_ID, start_date, end_date)
 
     # ── Exchange Rate ──
     def set_exchange_rate(self, rate, changed_by=None, is_manual=False,
@@ -851,29 +852,31 @@ class Database:
 
     # ── Referrals ──
     def create_referral_link(self, user_id):
-        return _create_referral_link(self, user_id)
+        return _create_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_active_referral_link(self, user_id):
-        return _get_active_referral_link(self, user_id)
+        return _get_active_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_or_create_referral_link(self, user_id):
-        return _get_or_create_referral_link(self, user_id)
+        return _get_or_create_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_referrer_by_token(self, token):
+        # token globally unique — workspace_id берётся из строки
         return _get_referrer_by_token(self, token)
 
     def use_referral_link(self, token, used_by_user_id):
+        # token globally unique — workspace_id берётся из строки
         return _use_referral_link(self, token, used_by_user_id)
 
     def get_referral_link_stats(self, user_id):
-        return _get_referral_link_stats(self, user_id)
+        return _get_referral_link_stats(self, self._DEFAULT_WS_ID, user_id)
 
     def record_user_join(self, user_id, username, first_name, join_method,
                          referrer_id=None, referral_token=None):
-        _record_user_join(self, user_id, username, first_name, join_method, referrer_id, referral_token)
+        _record_user_join(self, self._DEFAULT_WS_ID, user_id, username, first_name, join_method, referrer_id, referral_token)
 
     def get_user_joins(self, start_date=None, end_date=None):
-        return _get_user_joins(self, start_date, end_date)
+        return _get_user_joins(self, self._DEFAULT_WS_ID, start_date, end_date)
 
     # ── Scheduled Posts ──
     def add_scheduled_post(self, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at):
