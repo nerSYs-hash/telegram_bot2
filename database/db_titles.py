@@ -11,6 +11,10 @@ db_titles.py — Кастомные титулы (V1.16.0).
 apply_title_to_user / cleanup_expired_titles / get_user_title.
 Хранение активного титула — в существующей таблице marketplace_services
 (service_type='title').
+
+V1.17.0a17 (multi-tenancy): title_packages и title_rub_requests
+тенантизированы — все функции принимают workspace_id вторым аргументом
+после db.
 """
 
 from __future__ import annotations
@@ -69,8 +73,8 @@ def init_titles_tables(db) -> None:
     db.conn.commit()
 
 
-def seed_default_packages(db) -> None:
-    """Залить дефолтные 5 пакетов и settings ключи (только если пусто)."""
+def seed_default_packages(db, workspace_id: int) -> None:
+    """Залить дефолтные 5 пакетов и settings ключи для workspace (только если пусто)."""
     defaults = [
         # (label, duration_days, price_pulses, price_rub, sort_order)
         ('7 дней',     7,   5000,   100,  10),
@@ -79,19 +83,24 @@ def seed_default_packages(db) -> None:
         ('6 месяцев',  180, 70000,  1300, 40),
         ('1 год',      365, 120000, 2400, 50),
     ]
-    db.cursor.execute('SELECT COUNT(*) AS c FROM title_packages')
+    db.cursor.execute(
+        'SELECT COUNT(*) AS c FROM title_packages WHERE workspace_id = ?',
+        (workspace_id,)
+    )
     row = db.cursor.fetchone()
     if row and row['c'] == 0:
         for label, days, p_pul, p_rub, srt in defaults:
             db.cursor.execute(
                 'INSERT INTO title_packages '
-                '(label, duration_days, price_pulses, price_rub, sort_order) '
-                'VALUES (?, ?, ?, ?, ?)',
-                (label, days, p_pul, p_rub, srt)
+                '(workspace_id, label, duration_days, price_pulses, price_rub, sort_order) '
+                'VALUES (?, ?, ?, ?, ?, ?)',
+                (workspace_id, label, days, p_pul, p_rub, srt)
             )
-        logger.info('🏷 Засеяно %d дефолтных пакетов титулов', len(defaults))
+        logger.info('🏷 Засеяно %d дефолтных пакетов титулов для ws=%s', len(defaults), workspace_id)
 
-    # settings (через сырой SQL — чтобы не зависеть от db.set_setting импорта)
+    # settings (через сырой SQL — чтобы не зависеть от db.set_setting импорта).
+    # ВАЖНО: settings — GLOBAL (общие ключи для всех workspace), TODO в подпроекте #4
+    # сделать settings tenant-overlay (free=global, paid=per-workspace).
     for key, value in (('title_rename_price_pulses', '50'),
                        ('title_request_ttl_hours', '48')):
         db.cursor.execute(
@@ -105,39 +114,48 @@ def seed_default_packages(db) -> None:
 #  CRUD ПАКЕТОВ
 # ════════════════════════════════════════════════════════════════════════════════
 
-def list_title_packages(db, only_enabled: bool = False) -> list[dict]:
+def list_title_packages(db, workspace_id: int, only_enabled: bool = False) -> list[dict]:
     if only_enabled:
         db.cursor.execute(
-            'SELECT * FROM title_packages WHERE is_enabled = 1 '
-            'ORDER BY sort_order, id'
+            'SELECT * FROM title_packages WHERE workspace_id = ? AND is_enabled = 1 '
+            'ORDER BY sort_order, id',
+            (workspace_id,)
         )
     else:
-        db.cursor.execute('SELECT * FROM title_packages ORDER BY sort_order, id')
+        db.cursor.execute(
+            'SELECT * FROM title_packages WHERE workspace_id = ? ORDER BY sort_order, id',
+            (workspace_id,)
+        )
     return [dict(r) for r in db.cursor.fetchall()]
 
 
-def get_title_package(db, pkg_id: int) -> Optional[dict]:
-    db.cursor.execute('SELECT * FROM title_packages WHERE id = ?', (pkg_id,))
+def get_title_package(db, workspace_id: int, pkg_id: int) -> Optional[dict]:
+    db.cursor.execute(
+        'SELECT * FROM title_packages WHERE id = ? AND workspace_id = ?',
+        (pkg_id, workspace_id)
+    )
     row = db.cursor.fetchone()
     return dict(row) if row else None
 
 
-def create_title_package(db, label: str, duration_days: Optional[int],
+def create_title_package(db, workspace_id: int, label: str, duration_days: Optional[int],
                          price_pulses: int, price_rub: Optional[int]) -> int:
-    db.cursor.execute('SELECT COALESCE(MAX(sort_order), 0) + 10 AS s '
-                      'FROM title_packages')
+    db.cursor.execute(
+        'SELECT COALESCE(MAX(sort_order), 0) + 10 AS s FROM title_packages WHERE workspace_id = ?',
+        (workspace_id,)
+    )
     sort_order = db.cursor.fetchone()['s']
     db.cursor.execute(
         'INSERT INTO title_packages '
-        '(label, duration_days, price_pulses, price_rub, sort_order) '
-        'VALUES (?, ?, ?, ?, ?)',
-        (label, duration_days, price_pulses, price_rub, sort_order)
+        '(workspace_id, label, duration_days, price_pulses, price_rub, sort_order) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        (workspace_id, label, duration_days, price_pulses, price_rub, sort_order)
     )
     db.conn.commit()
     return db.cursor.lastrowid
 
 
-def update_title_package(db, pkg_id: int, **fields) -> None:
+def update_title_package(db, workspace_id: int, pkg_id: int, **fields) -> None:
     """fields: label, duration_days, price_pulses, price_rub, is_enabled, sort_order."""
     allowed = {'label', 'duration_days', 'price_pulses', 'price_rub',
                'is_enabled', 'sort_order'}
@@ -149,20 +167,21 @@ def update_title_package(db, pkg_id: int, **fields) -> None:
     if not sets:
         return
     sets.append("updated_at = datetime('now')")
-    vals.append(pkg_id)
+    vals.extend([pkg_id, workspace_id])
     db.cursor.execute(
-        f"UPDATE title_packages SET {', '.join(sets)} WHERE id = ?", vals
+        f"UPDATE title_packages SET {', '.join(sets)} WHERE id = ? AND workspace_id = ?",
+        vals
     )
     db.conn.commit()
 
 
-def toggle_title_package(db, pkg_id: int) -> Optional[bool]:
+def toggle_title_package(db, workspace_id: int, pkg_id: int) -> Optional[bool]:
     """Переключить is_enabled. Возвращает новое значение или None если не найден."""
-    pkg = get_title_package(db, pkg_id)
+    pkg = get_title_package(db, workspace_id, pkg_id)
     if not pkg:
         return None
     new_val = 0 if pkg['is_enabled'] else 1
-    update_title_package(db, pkg_id, is_enabled=new_val)
+    update_title_package(db, workspace_id, pkg_id, is_enabled=new_val)
     return bool(new_val)
 
 
@@ -170,63 +189,65 @@ def toggle_title_package(db, pkg_id: int) -> Optional[bool]:
 #  CRUD ЗАЯВОК НА РУБЛЁВУЮ ОПЛАТУ
 # ════════════════════════════════════════════════════════════════════════════════
 
-def create_title_request(db, user_id: int, package_id: int, title_text: str,
+def create_title_request(db, workspace_id: int, user_id: int, package_id: int, title_text: str,
                          price_rub: int, duration_days: Optional[int]) -> int:
     db.cursor.execute(
         'INSERT INTO title_rub_requests '
-        '(user_id, package_id, title_text, price_rub, duration_days) '
-        'VALUES (?, ?, ?, ?, ?)',
-        (user_id, package_id, title_text, price_rub, duration_days)
+        '(workspace_id, user_id, package_id, title_text, price_rub, duration_days) '
+        'VALUES (?, ?, ?, ?, ?, ?)',
+        (workspace_id, user_id, package_id, title_text, price_rub, duration_days)
     )
     db.conn.commit()
     return db.cursor.lastrowid
 
 
-def attach_owner_message(db, request_id: int, owner_chat_id: int,
+def attach_owner_message(db, workspace_id: int, request_id: int, owner_chat_id: int,
                          owner_msg_id: int) -> None:
     db.cursor.execute(
         'UPDATE title_rub_requests SET owner_chat_id = ?, owner_msg_id = ? '
-        'WHERE id = ?',
-        (owner_chat_id, owner_msg_id, request_id)
+        'WHERE id = ? AND workspace_id = ?',
+        (owner_chat_id, owner_msg_id, request_id, workspace_id)
     )
     db.conn.commit()
 
 
-def get_title_request(db, request_id: int) -> Optional[dict]:
-    db.cursor.execute('SELECT * FROM title_rub_requests WHERE id = ?',
-                      (request_id,))
+def get_title_request(db, workspace_id: int, request_id: int) -> Optional[dict]:
+    db.cursor.execute(
+        'SELECT * FROM title_rub_requests WHERE id = ? AND workspace_id = ?',
+        (request_id, workspace_id)
+    )
     row = db.cursor.fetchone()
     return dict(row) if row else None
 
 
-def list_title_requests(db, status: Optional[str] = None,
+def list_title_requests(db, workspace_id: int, status: Optional[str] = None,
                         limit: int = 50, offset: int = 0) -> list[dict]:
     if status:
         db.cursor.execute(
-            'SELECT * FROM title_rub_requests WHERE status = ? '
+            'SELECT * FROM title_rub_requests WHERE workspace_id = ? AND status = ? '
             'ORDER BY created_at DESC LIMIT ? OFFSET ?',
-            (status, limit, offset)
+            (workspace_id, status, limit, offset)
         )
     else:
         db.cursor.execute(
-            'SELECT * FROM title_rub_requests '
+            'SELECT * FROM title_rub_requests WHERE workspace_id = ? '
             'ORDER BY (status = "pending") DESC, created_at DESC '
             'LIMIT ? OFFSET ?',
-            (limit, offset)
+            (workspace_id, limit, offset)
         )
     return [dict(r) for r in db.cursor.fetchall()]
 
 
-def count_title_requests_by_status(db, status: str) -> int:
+def count_title_requests_by_status(db, workspace_id: int, status: str) -> int:
     db.cursor.execute(
-        'SELECT COUNT(*) AS c FROM title_rub_requests WHERE status = ?',
-        (status,)
+        'SELECT COUNT(*) AS c FROM title_rub_requests WHERE workspace_id = ? AND status = ?',
+        (workspace_id, status)
     )
     row = db.cursor.fetchone()
     return row['c'] if row else 0
 
 
-def transition_title_request(db, request_id: int, new_status: str,
+def transition_title_request(db, workspace_id: int, request_id: int, new_status: str,
                              decided_by: Optional[int] = None,
                              reject_reason: Optional[str] = None,
                              only_from: str = 'pending') -> bool:
@@ -241,24 +262,24 @@ def transition_title_request(db, request_id: int, new_status: str,
         "SET status = ?, decided_at = datetime('now'), "
         '    decided_by = COALESCE(?, decided_by), '
         '    reject_reason = COALESCE(?, reject_reason) '
-        'WHERE id = ? AND status = ?',
-        (new_status, decided_by, reject_reason, request_id, only_from)
+        'WHERE id = ? AND workspace_id = ? AND status = ?',
+        (new_status, decided_by, reject_reason, request_id, workspace_id, only_from)
     )
     changed = db.cursor.rowcount
     db.conn.commit()
     return changed > 0
 
 
-def expire_old_title_requests(db, ttl_hours: int) -> list[dict]:
+def expire_old_title_requests(db, workspace_id: int, ttl_hours: int) -> list[dict]:
     """
-    Перевести pending-заявки старше ttl_hours в статус 'expired'.
+    Перевести pending-заявки workspace старше ttl_hours в статус 'expired'.
     Возвращает список заявок которые были помечены — чтобы фон-задача
     могла отредактировать сообщения у Владельца.
     """
     db.cursor.execute(
-        "SELECT * FROM title_rub_requests WHERE status = 'pending' "
+        "SELECT * FROM title_rub_requests WHERE workspace_id = ? AND status = 'pending' "
         "AND created_at < datetime('now', ?)",
-        (f'-{int(ttl_hours)} hours',)
+        (workspace_id, f'-{int(ttl_hours)} hours')
     )
     rows = [dict(r) for r in db.cursor.fetchall()]
     if not rows:
@@ -268,8 +289,8 @@ def expire_old_title_requests(db, ttl_hours: int) -> list[dict]:
     db.cursor.execute(
         f"UPDATE title_rub_requests SET status = 'expired', "
         f"decided_at = datetime('now') "
-        f"WHERE id IN ({placeholders}) AND status = 'pending'",
-        ids
+        f"WHERE id IN ({placeholders}) AND workspace_id = ? AND status = 'pending'",
+        ids + [workspace_id]
     )
     db.conn.commit()
     return rows

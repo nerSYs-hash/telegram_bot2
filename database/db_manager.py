@@ -609,9 +609,11 @@ class Database:
         # Initialize economy tables
         _init_economy_tables(self)
 
-        # Initialize titles tables (V1.16.0)
+        # Initialize titles tables (V1.16.0).
+        # V1.17.0a17: seed для workspace=1 (Pulse). При создании нового
+        # workspace через onboarding (Подпроект #2) — отдельный вызов seed.
         _init_titles_tables(self)
-        _seed_title_packages(self)
+        _seed_title_packages(self, 1)
 
         # Migration V1.16.0: добавить expires_at в marketplace_services
         try:
@@ -678,46 +680,46 @@ class Database:
     def get_economy_metrics(self):
         return _get_economy_metrics(self, self._DEFAULT_WS_ID)
 
-    # ── Titles (V1.16.0) ──
+    # ── Titles (V1.16.0) — multi-tenancy V1.17.0a17 ──
     def list_title_packages(self, only_enabled=False):
-        return _list_title_packages(self, only_enabled=only_enabled)
+        return _list_title_packages(self, self._DEFAULT_WS_ID, only_enabled=only_enabled)
 
     def get_title_package(self, pkg_id):
-        return _get_title_package(self, pkg_id)
+        return _get_title_package(self, self._DEFAULT_WS_ID, pkg_id)
 
     def create_title_package(self, label, duration_days, price_pulses, price_rub):
-        return _create_title_package(self, label, duration_days, price_pulses, price_rub)
+        return _create_title_package(self, self._DEFAULT_WS_ID, label, duration_days, price_pulses, price_rub)
 
     def update_title_package(self, pkg_id, **fields):
-        return _update_title_package(self, pkg_id, **fields)
+        return _update_title_package(self, self._DEFAULT_WS_ID, pkg_id, **fields)
 
     def toggle_title_package(self, pkg_id):
-        return _toggle_title_package(self, pkg_id)
+        return _toggle_title_package(self, self._DEFAULT_WS_ID, pkg_id)
 
     def create_title_request(self, user_id, package_id, title_text, price_rub, duration_days):
-        return _create_title_request(self, user_id, package_id, title_text, price_rub, duration_days)
+        return _create_title_request(self, self._DEFAULT_WS_ID, user_id, package_id, title_text, price_rub, duration_days)
 
     def attach_title_request_message(self, request_id, owner_chat_id, owner_msg_id):
-        return _attach_owner_message(self, request_id, owner_chat_id, owner_msg_id)
+        return _attach_owner_message(self, self._DEFAULT_WS_ID, request_id, owner_chat_id, owner_msg_id)
 
     def get_title_request(self, request_id):
-        return _get_title_request(self, request_id)
+        return _get_title_request(self, self._DEFAULT_WS_ID, request_id)
 
     def list_title_requests(self, status=None, limit=50, offset=0):
-        return _list_title_requests(self, status=status, limit=limit, offset=offset)
+        return _list_title_requests(self, self._DEFAULT_WS_ID, status=status, limit=limit, offset=offset)
 
     def count_title_requests_pending(self):
-        return _count_title_requests_by_status(self, 'pending')
+        return _count_title_requests_by_status(self, self._DEFAULT_WS_ID, 'pending')
 
     def transition_title_request(self, request_id, new_status, decided_by=None,
                                  reject_reason=None, only_from='pending'):
-        return _transition_title_request(self, request_id, new_status,
+        return _transition_title_request(self, self._DEFAULT_WS_ID, request_id, new_status,
                                          decided_by=decided_by,
                                          reject_reason=reject_reason,
                                          only_from=only_from)
 
     def expire_old_title_requests(self, ttl_hours):
-        return _expire_old_title_requests(self, ttl_hours)
+        return _expire_old_title_requests(self, self._DEFAULT_WS_ID, ttl_hours)
 
     # ── Settings ──
     def get_setting(self, key, default=None):
@@ -878,27 +880,27 @@ class Database:
     def get_user_joins(self, start_date=None, end_date=None):
         return _get_user_joins(self, self._DEFAULT_WS_ID, start_date, end_date)
 
-    # ── Scheduled Posts ──
+    # ── Scheduled Posts — multi-tenancy V1.17.0a17 ──
     def add_scheduled_post(self, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at):
-        return _add_scheduled_post(self, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at)
+        return _add_scheduled_post(self, self._DEFAULT_WS_ID, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at)
 
     def get_scheduled_post(self, post_id):
-        return _get_scheduled_post(self, post_id)
+        return _get_scheduled_post(self, self._DEFAULT_WS_ID, post_id)
 
     def update_scheduled_post(self, post_id, **kwargs):
-        return _update_scheduled_post(self, post_id, **kwargs)
+        return _update_scheduled_post(self, self._DEFAULT_WS_ID, post_id, **kwargs)
 
     def get_pending_scheduled_posts(self, before_time):
-        return _get_pending_scheduled_posts(self, before_time)
+        return _get_pending_scheduled_posts(self, self._DEFAULT_WS_ID, before_time)
 
     def mark_scheduled_post_published(self, post_id):
-        _mark_scheduled_post_published(self, post_id)
+        _mark_scheduled_post_published(self, self._DEFAULT_WS_ID, post_id)
 
     def get_scheduled_posts_list(self, status='pending'):
-        return _get_scheduled_posts_list(self, status)
+        return _get_scheduled_posts_list(self, self._DEFAULT_WS_ID, status)
 
     def delete_scheduled_post(self, post_id):
-        return _delete_scheduled_post(self, post_id)
+        return _delete_scheduled_post(self, self._DEFAULT_WS_ID, post_id)
 
     # ── Shipper Roulette ──
     def seed_shipper_phrases_if_empty(self):
