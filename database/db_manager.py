@@ -817,32 +817,36 @@ class Database:
         return _get_rate_history_30d(self)
 
     # ── Top Activists History ──
+    # V1.17.0a15 (multi-tenancy): wrapper'ы прокидывают _DEFAULT_WS_ID до
+    # интеграции WorkspaceContext в handlers (Task 15).
     def save_top_snapshot(self, date, time_slot, user_id, rank, activity_index):
-        _save_top_snapshot(self, date, time_slot, user_id, rank, activity_index)
+        _save_top_snapshot(self, self._DEFAULT_WS_ID, date, time_slot, user_id, rank, activity_index)
 
     def get_latest_top_snapshot(self):
-        return _get_latest_top_snapshot(self)
+        return _get_latest_top_snapshot(self, self._DEFAULT_WS_ID)
 
     def get_previous_top_snapshot(self):
-        return _get_previous_top_snapshot(self)
+        return _get_previous_top_snapshot(self, self._DEFAULT_WS_ID)
 
     def get_user_top_appearances(self, user_id, days=30):
-        return _get_user_top_appearances(self, user_id, days)
+        return _get_user_top_appearances(self, self._DEFAULT_WS_ID, user_id, days)
 
     def get_all_top_appearances(self, days=30):
-        return _get_all_top_appearances(self, days)
+        return _get_all_top_appearances(self, self._DEFAULT_WS_ID, days)
 
     # ── Hourly Stats & % Activity ──
     def update_user_activity_hourly(self, user_id, date, hour, **kwargs):
-        _update_user_activity_hourly(self, user_id, date, hour, **kwargs)
+        _update_user_activity_hourly(self, self._DEFAULT_WS_ID, user_id, date, hour, **kwargs)
 
     def save_top5_percent(self, entries, window_start, window_end):
-        _save_top5_percent(self, entries, window_start, window_end)
+        _save_top5_percent(self, self._DEFAULT_WS_ID, entries, window_start, window_end)
 
     def get_top5_percent(self):
-        return _get_top5_percent(self)
+        return _get_top5_percent(self, self._DEFAULT_WS_ID)
 
     def cleanup_old_hourly_stats(self, days_to_keep=2):
+        # cleanup_old_hourly_stats — cross-workspace (глобальная очистка по дате),
+        # workspace_id не нужен.
         _cleanup_old_hourly_stats(self, days_to_keep)
 
     # ── Referrals ──
