@@ -277,6 +277,39 @@ def _require_auth(authorization: str) -> dict:
         raise HTTPException(status_code=401, detail="Неверный токен")
 
 
+# ──── Multi-tenancy: workspace_id resolver ────────────────────────────
+# V1.17.0a19. Сейчас сайт работает только с Pulse Москва (workspace_id=1).
+# Frontend пока не присылает X-Workspace-Id — fallback на 1.
+# После подпроекта #3 (web auth + workspace switcher) workspace_id
+# будет извлекаться из JWT-токена напрямую, а не из header'а.
+
+_DEFAULT_WS_ID = 1
+
+
+async def get_workspace_id(
+    x_workspace_id: int | None = Header(default=None, alias='X-Workspace-Id'),
+) -> int:
+    """FastAPI dependency: извлекает workspace_id из заголовка X-Workspace-Id.
+
+    Использование в endpoint-ах:
+        @app.get("/api/something")
+        async def something(workspace_id: int = Depends(get_workspace_id)):
+            ...
+
+    Fallback на _DEFAULT_WS_ID=1 если header не передан.
+    """
+    return x_workspace_id if x_workspace_id is not None else _DEFAULT_WS_ID
+
+
+def resolve_workspace_id_from_header(x_workspace_id) -> int:
+    """Sync-вариант резолвера для не-async helper-функций.
+
+    Используется в роутерах economy/titles/press_release через _setup-инжекцию.
+    Принимает значение из Header (Optional[int]) и возвращает int с fallback.
+    """
+    return x_workspace_id if x_workspace_id is not None else _DEFAULT_WS_ID
+
+
 def _resolve_user_role(user_id: int) -> str:
     """Возвращает роль пользователя (owner/developer/deputy/admin/user)."""
     main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))

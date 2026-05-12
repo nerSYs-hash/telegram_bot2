@@ -91,3 +91,41 @@ async def test_pulse_only_skips_when_not_themed():
 async def test_pulse_only_skips_when_no_context():
     result = await _pulse_handler(None, None, None)
     assert result is None
+
+
+# ── V1.17.0a19: PTB-style ws_ctx из context.user_data / context.chat_data ──
+
+@pulse_only
+async def _ptb_pulse_handler(update, context):
+    """PTB сигнатура (update, context), ws_ctx через context.user_data."""
+    return 'ran'
+
+
+class _FakeContext:
+    def __init__(self, user_data=None, chat_data=None):
+        self.user_data = user_data or {}
+        self.chat_data = chat_data or {}
+
+
+@pytest.mark.asyncio
+async def test_pulse_only_reads_ws_ctx_from_user_data():
+    ws = WorkspaceContext(workspace_id=1, is_pulse_themed=True, plan='free')
+    ctx = _FakeContext(user_data={'ws_ctx': ws})
+    result = await _ptb_pulse_handler('fake_update', ctx)
+    assert result == 'ran'
+
+
+@pytest.mark.asyncio
+async def test_pulse_only_reads_ws_ctx_from_chat_data():
+    ws = WorkspaceContext(workspace_id=1, is_pulse_themed=True, plan='free')
+    ctx = _FakeContext(chat_data={'ws_ctx': ws})
+    result = await _ptb_pulse_handler('fake_update', ctx)
+    assert result == 'ran'
+
+
+@pytest.mark.asyncio
+async def test_pulse_only_skips_non_pulse_ws_via_context():
+    ws = WorkspaceContext(workspace_id=2, is_pulse_themed=False, plan='free')
+    ctx = _FakeContext(user_data={'ws_ctx': ws})
+    result = await _ptb_pulse_handler('fake_update', ctx)
+    assert result is None

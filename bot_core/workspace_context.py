@@ -83,12 +83,27 @@ def pulse_only(handler):
 
     Сигнатура handler-а: (update, ctx, ws_ctx, ...) — ws_ctx должен быть
     в kwargs или 3-м позиционным.
+
+    V1.17.0a19 (multi-tenancy middleware): для PTB-handlers с сигнатурой
+    `async def handler(update, context)` декоратор автоматически достаёт
+    ws_ctx из `context.user_data['ws_ctx']` или `context.chat_data['ws_ctx']`
+    которые middleware (bot.py resolve_workspace_middleware) кладёт туда
+    перед запуском handler'а.
     """
     @functools.wraps(handler)
     async def wrapper(*args, **kwargs):
         ws_ctx = kwargs.get('ws_ctx')
         if ws_ctx is None and len(args) >= 3:
             ws_ctx = args[2]
+        # PTB-fallback: достаём из context.user_data / context.chat_data
+        if ws_ctx is None and len(args) >= 2:
+            context = args[1]
+            for attr in ('user_data', 'chat_data'):
+                store = getattr(context, attr, None)
+                if isinstance(store, dict):
+                    ws_ctx = store.get('ws_ctx')
+                    if ws_ctx is not None:
+                        break
         if ws_ctx is None or not ws_ctx.is_pulse_themed:
             logger.debug(
                 'pulse_only skip: handler=%s ws=%s',
