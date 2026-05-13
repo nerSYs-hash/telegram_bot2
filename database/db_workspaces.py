@@ -206,3 +206,36 @@ def get_workspace_by_chat(conn: sqlite3.Connection, chat_id: int) -> Optional[in
         'SELECT workspace_id FROM bot_chats WHERE chat_id=?', (chat_id,)
     ).fetchone()
     return row[0] if row else None
+
+
+# ── V1.17.0c (G): удаление чатов и сообществ ──
+
+def remove_bot_chat(conn: sqlite3.Connection, chat_id: int) -> None:
+    """Удаляет запись чата из bot_chats. Workspace и members не трогает."""
+    conn.execute('DELETE FROM bot_chats WHERE chat_id=?', (chat_id,))
+    conn.commit()
+
+
+def list_chat_ids_for_workspace(conn: sqlite3.Connection, workspace_id: int) -> list:
+    """Возвращает chat_id всех чатов привязанных к workspace."""
+    return [r[0] for r in conn.execute(
+        'SELECT chat_id FROM bot_chats WHERE workspace_id=?', (workspace_id,)
+    ).fetchall()]
+
+
+def delete_workspace(conn: sqlite3.Connection, workspace_id: int) -> None:
+    """Удаляет workspace полностью: members + bot_chats + сам workspace.
+
+    Запрещает удаление is_pulse_themed=1 (защита Pulse-сообщества).
+    """
+    row = conn.execute(
+        'SELECT is_pulse_themed FROM workspaces WHERE id=?', (workspace_id,)
+    ).fetchone()
+    if not row:
+        return
+    if row[0]:
+        raise ValueError('Нельзя удалить Pulse-themed сообщество')
+    conn.execute('DELETE FROM bot_chats WHERE workspace_id=?', (workspace_id,))
+    conn.execute('DELETE FROM workspace_members WHERE workspace_id=?', (workspace_id,))
+    conn.execute('DELETE FROM workspaces WHERE id=?', (workspace_id,))
+    conn.commit()
