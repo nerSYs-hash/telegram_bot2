@@ -118,7 +118,7 @@ except Exception as e:
 
 # ── Auth config ──
 _BOT_TOKEN    = os.getenv("BOT_TOKEN", "")
-_BOT_USERNAME = "Pulse_On_bot"
+_BOT_USERNAME = os.getenv("BOT_USERNAME", "Puls_ON_bot")
 _JWT_SECRET   = os.getenv("JWT_SECRET", "pulse-jwt-secret-2026")
 _JWT_DAYS     = 7
 
