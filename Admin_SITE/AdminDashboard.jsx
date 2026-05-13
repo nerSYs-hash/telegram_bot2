@@ -5021,16 +5021,16 @@ export default function App() {
           return (
             <div className="pb-24 animate-in fade-in duration-500">
               <WorkspacePage
-                token={authUser?.token}
+                token={localStorage.getItem('auth_token')}
                 wsId={selectedWorkspaceId}
-                currentUserId={authUser?.id}
+                currentUserId={authUser?.user_id}
                 onBack={() => setSelectedWorkspaceId(null)}
                 onInviteClick={() => setShowInviteModal(true)}
                 reloadTrigger={inviteReloadTick}
               />
               {showInviteModal && (
                 <InviteMemberModal
-                  token={authUser?.token}
+                  token={localStorage.getItem('auth_token')}
                   wsId={selectedWorkspaceId}
                   onClose={() => setShowInviteModal(false)}
                   onSuccess={() => setInviteReloadTick(t => t + 1)}
@@ -5095,7 +5095,7 @@ export default function App() {
 
               {/* МОИ СООБЩЕСТВА (V1.17.0b13) — заменили старый блок ЧАТ/БЕЗ ЧАТА */}
               <WorkspaceList
-                token={authUser?.token}
+                token={localStorage.getItem('auth_token')}
                 onConnectClick={() => setShowConnectChat(true)}
                 onSelectWorkspace={(id) => setSelectedWorkspaceId(id)}
               />
