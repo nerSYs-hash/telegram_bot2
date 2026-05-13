@@ -24,6 +24,7 @@ import asyncio
 import logging
 from telegram import InlineKeyboardMarkup, InlineKeyboardButton, ForceReply
 from config import ADMIN_CHAT_ID, DOSSIER_THREAD_ID
+from bot_core.workspace_context import pulse_only  # V1.17.0a21 multi-tenancy gating
 
 logger = logging.getLogger(__name__)
 
@@ -408,6 +409,7 @@ async def _show_edit_menu(query_or_msg, context, db, user_id: int,
 #  Обработчик колбэков
 # ─────────────────────────────────────────────
 
+@pulse_only
 async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
     """
     Обрабатывает все anketa_edit_* callback-ы.
@@ -560,6 +562,7 @@ async def _autodelete(msg, delay: int = 4):
         pass
 
 
+@pulse_only
 async def handle_anketa_edit_input(message, context, db) -> bool:
     """
     Вызывается из message_handler / admin_logic для обработки ввода в FSM.

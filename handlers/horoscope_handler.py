@@ -9,6 +9,7 @@ import aiohttp
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import get_moscow_time
 from utils.horoscope_parser import get_all_horoscopes
+from bot_core.workspace_context import pulse_only  # V1.17.0a21 multi-tenancy gating
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +160,7 @@ async def show_horoscope_menu(query, user, db, admin_id):
         ])
     )
 
+@pulse_only
 async def publish_horoscope_today(query, user, context, db, admin_id, target_chat_id):
     if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.edit_message_text("🚀 <b>Скоростная сборка данных...</b>", parse_mode='HTML')
@@ -174,6 +176,7 @@ async def publish_horoscope_today(query, user, context, db, admin_id, target_cha
         logger.error(f"Pub error: {e}", exc_info=True)
         await query.edit_message_text(f"❌ Ошибка: {str(e)}")
 
+@pulse_only
 async def preview_horoscope(query, user, context, db, admin_id):
     if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.answer("Сборка...")
@@ -185,6 +188,7 @@ async def preview_horoscope(query, user, context, db, admin_id):
     except Exception as e:
         await context.bot.send_message(chat_id=user.id, text=f"❌ Ошибка превью: {e}")
 
+@pulse_only
 async def diagnose_emoji(query, user, context, db, admin_id):
     if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.answer("Плитки в порядке!", show_alert=True)
@@ -256,6 +260,7 @@ async def toggle_horoscope_mode(query, user, db, admin_id, target_chat_id):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
 
 
+@pulse_only
 async def show_horoscope_thread_picker(query, user, context, db, admin_id, target_chat_id):
     """Выбор ветки для расписания гороскопа."""
     if not await _is_horoscope_privileged(user.id, admin_id): return
@@ -303,6 +308,7 @@ async def handle_horoscope_sched_thread(query, data, user, db, admin_id, target_
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=kb)
 
 
+@pulse_only
 async def prompt_horoscope_schedule_time(query, user, context, db, admin_id):
     """Запрашивает новое время через FSM."""
     if not await _is_horoscope_privileged(user.id, admin_id): return

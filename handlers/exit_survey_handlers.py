@@ -26,6 +26,7 @@
 import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import format_number
+from bot_core.workspace_context import pulse_only  # V1.17.0a21 multi-tenancy gating
 
 logger = logging.getLogger(__name__)
 
@@ -199,6 +200,7 @@ async def _generate_invite_link(context, user_id: int) -> str | None:
 #  ШАГ 1: ПРИЧИНА УХОДА  (exit_{key}_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_reason(query, data: str, context, db, admin_id: int) -> None:
     ensure_survey_columns(db)
 
@@ -368,6 +370,7 @@ async def handle_exit_reason(query, data: str, context, db, admin_id: int) -> No
     )
 
 
+@pulse_only
 async def handle_exit_skip_reason(query, data: str, context, db) -> None:
     """Пропуск текстового ввода Q1."""
     parts = data.split('_')
@@ -393,6 +396,7 @@ async def handle_exit_skip_reason(query, data: str, context, db) -> None:
 #  ПОДВОПРОС: НАШЁЛ ЛЮБОВЬ  (exitlove_{key}_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_love_place(query, data: str, context, db) -> None:
     place_key, user_id = _parse_key_and_uid(data, "exitlove_")
     if place_key is None:
@@ -423,6 +427,7 @@ async def handle_exit_love_place(query, data: str, context, db) -> None:
 #  Q2: ЧТО УЛУЧШИТЬ  (exitimp_{key}_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_improvement(query, data: str, context, db) -> None:
     imp_key, user_id = _parse_key_and_uid(data, "exitimp_")
     if imp_key is None:
@@ -461,6 +466,7 @@ async def handle_exit_improvement(query, data: str, context, db) -> None:
 #  Q3: СОБЫТИЕ  (exitev_{key}_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_event(query, data: str, context, db) -> None:
     ev_key, user_id = _parse_key_and_uid(data, "exitev_")
     if ev_key is None:
@@ -506,6 +512,7 @@ async def handle_exit_event(query, data: str, context, db) -> None:
 #  Q4 ПРОПУСК  (exitq4_skip_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exitq4_skip(query, data: str, context, db) -> None:
     parts = data.split('_')
     try:
@@ -551,6 +558,7 @@ async def handle_exitq4_skip(query, data: str, context, db) -> None:
 #  Q5: ФИНАЛ  (exitfinal_done_{user_id})
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_final(query, data: str, context, db) -> None:
     """Завершение опроса — показываем благодарность."""
     parts = data.split('_')
@@ -693,6 +701,7 @@ async def _show_thanks(message, user_id: int, db, context) -> None:
 #  ОБРАБОТЧИК ТЕКСТОВОГО ВВОДА  (вызывается из message_handler)
 # ════════════════════════════════════════════════════════════════
 
+@pulse_only
 async def handle_exit_survey_text(update, context, db) -> bool:
     """
     Перехватывает текстовые ответы в рамках exit survey.

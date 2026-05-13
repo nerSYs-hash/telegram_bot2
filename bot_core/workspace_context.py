@@ -93,17 +93,20 @@ def pulse_only(handler):
     @functools.wraps(handler)
     async def wrapper(*args, **kwargs):
         ws_ctx = kwargs.get('ws_ctx')
-        if ws_ctx is None and len(args) >= 3:
-            ws_ctx = args[2]
-        # PTB-fallback: достаём из context.user_data / context.chat_data
-        if ws_ctx is None and len(args) >= 2:
-            context = args[1]
-            for attr in ('user_data', 'chat_data'):
-                store = getattr(context, attr, None)
-                if isinstance(store, dict):
-                    ws_ctx = store.get('ws_ctx')
-                    if ws_ctx is not None:
-                        break
+        if ws_ctx is None and isinstance(ws_ctx_candidate := (args[2] if len(args) >= 3 else None), WorkspaceContext):
+            ws_ctx = ws_ctx_candidate
+        # PTB-fallback: ищем context (любой объект с user_data/chat_data dict)
+        # среди args — сигнатуры handler-ов разные, context не всегда args[1].
+        if ws_ctx is None:
+            for candidate in args:
+                for attr in ('user_data', 'chat_data'):
+                    store = getattr(candidate, attr, None)
+                    if isinstance(store, dict):
+                        ws_ctx = store.get('ws_ctx')
+                        if ws_ctx is not None:
+                            break
+                if ws_ctx is not None:
+                    break
         if ws_ctx is None or not ws_ctx.is_pulse_themed:
             logger.debug(
                 'pulse_only skip: handler=%s ws=%s',
