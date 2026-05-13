@@ -11,10 +11,20 @@ from database.migrations.multi_tenancy import (
 
 @pytest.fixture
 def real_db_copy(tmp_path):
-    """Копия настоящей БД во временной директории."""
+    """Копия настоящей БД во временной директории.
+    Если live-БД уже мигрирована (workspaces existуют) — откатываем
+    в копии, чтобы тест мог проверить up "с нуля"."""
     src = os.path.join(os.path.dirname(__file__), '..', 'database', 'bot_database.db')
     dst = tmp_path / 'test.db'
     shutil.copy2(src, dst)
+    # Reset to pre-migration state на копии (live-БД не трогаем).
+    conn = sqlite3.connect(str(dst))
+    has_ws = conn.execute(
+        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='workspaces'"
+    ).fetchone()
+    conn.close()
+    if has_ws:
+        migrate_down(str(dst))
     return str(dst)
 
 
