@@ -21,8 +21,10 @@ from handlers.BBS.editing_bbs import (
     apply_edit_and_republish, _build_edit_params_keyboard, _build_edit_city_keyboard,
 )
 from handlers.BBS.fsm_other import process_other_input
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 
+@pulse_only
 async def process_bbs_input(message, context, db):
     """Обработка текстовых/фото сообщений в рамках BBS FSM."""
     if await process_other_input(message, context, db):

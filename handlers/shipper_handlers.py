@@ -7,6 +7,7 @@ import logging
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 from handlers.shipper_logic import schedule_next_shipper_run, TARGET_MODES
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 logger = logging.getLogger(__name__)
 
@@ -41,6 +42,7 @@ def _is_shipper_manager(db, user_id: int) -> bool:
         return False
 
 
+@pulse_only
 async def send_shipper_panel(message, context, db, target_chat_id):
     """Открывает меню шиппера из reply-кнопки (новое сообщение)."""
     try:
@@ -83,6 +85,7 @@ def _shipper_status_text(db):
         return "💘 <b>РУЛЕТКА ПАР (ШИППЕР)</b>\n\n❌ Ошибка чтения настроек."
 
 
+@pulse_only
 async def show_shipper_menu(query, context, db, target_chat_id):
     try:
         if not _is_shipper_manager(db, query.from_user.id):
@@ -108,6 +111,7 @@ async def show_shipper_menu(query, context, db, target_chat_id):
             pass
 
 
+@pulse_only
 async def toggle_shipper_enabled(query, context, db, target_chat_id):
     try:
         if not _is_shipper_manager(db, query.from_user.id):
@@ -130,6 +134,7 @@ async def toggle_shipper_enabled(query, context, db, target_chat_id):
             pass
 
 
+@pulse_only
 async def start_shipper_timing_input(query, context, db):
     try:
         if not _is_shipper_manager(db, query.from_user.id):
@@ -148,6 +153,7 @@ async def start_shipper_timing_input(query, context, db):
         logger.error(f"start_shipper_timing_input error: {e}")
 
 
+@pulse_only
 async def start_shipper_add_phrase(query, context, db):
     try:
         if not _is_shipper_manager(db, query.from_user.id):
@@ -314,6 +320,7 @@ async def delete_shipper_phrase(query, data, db):
             pass
 
 
+@pulse_only
 async def run_shipper_now(query, context, db, target_chat_id):
     try:
         if not _is_shipper_manager(db, query.from_user.id):
@@ -331,6 +338,7 @@ async def run_shipper_now(query, context, db, target_chat_id):
             pass
 
 
+@pulse_only
 async def handle_shipper_text_input(update, context, db, admin_id, target_chat_id=None):
     try:
         awaiting = context.user_data.get("owner_awaiting")

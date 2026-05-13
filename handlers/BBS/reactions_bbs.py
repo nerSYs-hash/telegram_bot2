@@ -7,6 +7,7 @@
 import logging
 from datetime import datetime
 from utils.helpers import format_number
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 # Константы
 BBS_BONUS_AMOUNT = 10       # Пульсов автору за 10 реакций
@@ -14,6 +15,7 @@ BBS_BONUS_COOLDOWN = 30     # Дней между бонусами автору
 AMBASSADOR_REWARD = 10.0    # Награда "Амбассадор Любви" (10 💎)
 
 
+@pulse_only
 async def handle_bbs_reaction(reaction_update, context, db, target_chat_id):
     """
     Обработчик реакций для BBS-постов.
