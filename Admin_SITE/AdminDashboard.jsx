@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PromptTranslator from './components/PromptTranslator';
 import PressReleasePage from './components/press_release/PressReleasePage';
+import WorkspaceList from './components/workspaces/WorkspaceList';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -335,6 +336,7 @@ export default function App() {
   const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
   const [accessesOpen, setAccessesOpen]           = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
@@ -5063,64 +5065,12 @@ export default function App() {
                 )}
               </div>
 
-              {/* ЧАТ / БЕЗ ЧАТА */}
-              {profileData && profileData.has_chat === false ? (
-                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-5
-                                border border-blue-700 shadow-md text-white flex flex-col justify-between">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur
-                                    flex items-center justify-center border border-white/30 flex-shrink-0">
-                      <Plug size={18} className="text-white"/>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-black uppercase tracking-wide">Без чата</h3>
-                      <p className="text-xs font-medium text-blue-100 mt-1 leading-snug">
-                        Pulse Bot ещё не работает в вашем чате
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowConnectChat(true)}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-                               bg-white text-blue-700 font-black text-xs uppercase tracking-wide
-                               hover:bg-blue-50 active:scale-[0.98] transition-all shadow">
-                    <Plug size={14}/> Подключить чат
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-white rounded-[2rem] p-5 border border-gray-100 space-y-2">
-                  <h3 className="font-black text-gray-900 text-xs uppercase flex items-center mb-2">
-                    <MessageCircle className="mr-2 text-green-500" size={14}/> Чат
-                  </h3>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">В чате с</span>
-                    </div>
-                    {fmtDate(profileData?.joined_at)
-                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
-                      : placeholderVal}
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">Последнее</span>
-                    </div>
-                    {fmtDate(profileData?.last_message)
-                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
-                      : placeholderVal}
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">Сообщений</span>
-                    </div>
-                    {profileData
-                      ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
-                      : placeholderVal}
-                  </div>
-                </div>
-              )}
+              {/* МОИ СООБЩЕСТВА (V1.17.0b13) — заменили старый блок ЧАТ/БЕЗ ЧАТА */}
+              <WorkspaceList
+                token={authUser?.token}
+                onConnectClick={() => setShowConnectChat(true)}
+                onSelectWorkspace={(id) => setSelectedWorkspaceId(id)}
+              />
 
               {/* ВАШИ ДОСТУПЫ — collapsible, на полную ширину сетки */}
               {accesses.length > 0 && (
