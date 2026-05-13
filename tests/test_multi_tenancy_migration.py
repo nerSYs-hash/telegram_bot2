@@ -24,6 +24,13 @@ def real_db_copy(tmp_path):
     ).fetchone()
     conn.close()
     if has_ws:
+        # Сначала откатываем composite_pk_fix (если применён), потом multi_tenancy.
+        # Миграции откатываются в обратном порядке применения.
+        from database.migrations.composite_pk_fix import migrate_down as composite_down
+        try:
+            composite_down(str(dst))
+        except Exception:
+            pass  # composite_pk_fix не применён — ничего страшного
         migrate_down(str(dst))
     return str(dst)
 
