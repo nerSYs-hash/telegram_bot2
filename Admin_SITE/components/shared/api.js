@@ -67,3 +67,29 @@ export async function updateChatRole(token, wsId, chatId, role) {
   }
   return r.json();
 }
+
+// V1.17.0c (G): отключить чат от сообщества (бот покидает чат)
+export async function disconnectChat(token, wsId, chatId) {
+  const r = await fetch(`/api/workspaces/${wsId}/chats/${chatId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `disconnectChat ${r.status}`);
+  }
+  return r.json();
+}
+
+// V1.17.0c (G): удалить сообщество целиком (бот покидает все его чаты)
+export async function deleteWorkspace(token, wsId) {
+  const r = await fetch(`/api/workspaces/${wsId}`, {
+    method: 'DELETE',
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `deleteWorkspace ${r.status}`);
+  }
+  return r.json();
+}

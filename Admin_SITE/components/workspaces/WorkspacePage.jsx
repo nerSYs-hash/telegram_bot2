@@ -2,10 +2,11 @@
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Edit2, Save, X, MessageCircle, Users, UserPlus, Trash2,
-  Plus, Copy, Check, Crown, Shield, BookOpen,
+  Plus, Copy, Check, Crown, Shield, BookOpen, LogOut, AlertTriangle,
 } from 'lucide-react';
 import {
   fetchWorkspaceDetails, renameWorkspace, removeMember, updateChatRole,
+  disconnectChat, deleteWorkspace,
 } from '../shared/api';
 
 const ROLE_LABEL = { owner: '👑 Владелец', admin: '🛡 Админ', moderator: '🔧 Модератор' };
@@ -70,6 +71,40 @@ export default function WorkspacePage({
       await reload();
     } catch (e) { setErr(e.message); }
     finally { setSavingRole(null); }
+  };
+
+  const handleDisconnectChat = async (chatId, title) => {
+    if (!window.confirm(
+      `Отключить чат «${title}» от сообщества?\n\nБот выйдет из чата, ` +
+      `запись в БД удалится. Чат сам не исчезнет в Telegram.`
+    )) return;
+    setSavingRole(chatId);
+    try {
+      await disconnectChat(token, wsId, chatId);
+      await reload();
+    } catch (e) { setErr(e.message); }
+    finally { setSavingRole(null); }
+  };
+
+  const handleDeleteWorkspace = async () => {
+    const name = details?.workspace?.name || '';
+    const c1 = window.confirm(
+      `Удалить сообщество «${name}»?\n\n` +
+      `• Бот покинет ВСЕ привязанные чаты\n` +
+      `• Все помощники потеряют доступ\n` +
+      `• Запись о сообществе будет полностью удалена\n\n` +
+      `Это действие необратимо.`
+    );
+    if (!c1) return;
+    const typed = window.prompt(`Для подтверждения введи название сообщества: «${name}»`);
+    if (typed !== name) {
+      setErr('Имя не совпало — удаление отменено.');
+      return;
+    }
+    try {
+      await deleteWorkspace(token, wsId);
+      onBack();
+    } catch (e) { setErr(e.message); }
   };
 
   const connectLink = botUsername
@@ -175,6 +210,15 @@ export default function WorkspacePage({
                       <meta.icon size={11}/> {meta.label}
                     </span>
                   )}
+                  {isOwner && (
+                    <button
+                      disabled={savingRole === c.chat_id}
+                      onClick={() => handleDisconnectChat(c.chat_id, c.title || `Чат ${c.chat_id}`)}
+                      title="Отключить чат — бот покинет его"
+                      className="p-2 rounded-xl hover:bg-red-50 text-red-500 disabled:opacity-50">
+                      <LogOut size={14}/>
+                    </button>
+                  )}
                 </div>
 
                 {isOwner && (
@@ -250,6 +294,28 @@ export default function WorkspacePage({
           ))}
         </div>
       </div>
+
+      {/* Danger zone — удаление сообщества (только не-Pulse, только owner) */}
+      {isOwner && !ws.is_pulse_themed && (
+        <div className="bg-red-50 border-2 border-dashed border-red-200 rounded-[2rem] p-5">
+          <h3 className="font-black text-red-800 text-xs uppercase mb-2 flex items-center">
+            <AlertTriangle className="mr-2 text-red-500" size={14}/> Опасная зона
+          </h3>
+          <p className="text-xs text-red-700 font-medium mb-3">
+            Удаление сообщества необратимо. Бот покинет все привязанные чаты, помощники потеряют доступ.
+          </p>
+          <button onClick={handleDeleteWorkspace}
+                  className="flex items-center gap-2 px-4 py-2 rounded-xl bg-red-600 text-white
+                             text-xs font-black uppercase tracking-wide hover:bg-red-700">
+            <Trash2 size={14}/> Удалить сообщество
+          </button>
+        </div>
+      )}
+      {isOwner && ws.is_pulse_themed && (
+        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-3 text-[11px] text-gray-500 font-medium">
+          Это Pulse-сообщество — удалить через сайт нельзя.
+        </div>
+      )}
     </div>
   );
 }
