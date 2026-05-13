@@ -665,6 +665,12 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("remove_from_top", self.command_handler.remove_from_top_command))
         # Разморозить пульсы пользователя (вернуть баланс)
         self.application.add_handler(CommandHandler("unfreeze", self.command_handler.unfreeze_command))
+        # V1.17.0b17 — welcome-сообщение в Pulse-чат с deep-link join_1
+        from handlers.commands.system_commands import setup_welcome_command
+        self.application.add_handler(CommandHandler(
+            "setup_welcome",
+            lambda u, c: setup_welcome_command(u, c, self.db, self.main_admin_id)
+        ))
         # Восстановить все анкеты BBS (только для владельца)
         self.application.add_handler(CommandHandler("restore_bbs", self.command_handler.restore_bbs_command))
         # Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)

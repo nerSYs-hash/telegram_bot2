@@ -504,3 +504,48 @@ async def show_faq_functions(query, db):
 
     await query.edit_message_text(text, parse_mode='HTML',
                                   reply_markup=InlineKeyboardMarkup(keyboard))
+
+
+# ═══════════════════════════════════════════════════════════
+# /setup_welcome — V1.17.0b17
+# Owner Pulse-чата выкладывает welcome-сообщение с deep-link join_1
+# ═══════════════════════════════════════════════════════════
+
+async def setup_welcome_command(update: Update, context: ContextTypes.DEFAULT_TYPE,
+                                db, main_admin_id: int = None):
+    """Команда владельца Pulse: выкладывает welcome-сообщение в основной чат
+    с inline-кнопкой "Регистрация" ведущей на /start join_1."""
+    main_admin_id = main_admin_id or int(os.getenv('MAIN_ADMIN_ID', 0))
+    if update.effective_user.id != main_admin_id:
+        await update.message.reply_text(
+            "❌ Команда доступна только владельцу.", parse_mode='HTML'
+        )
+        return
+
+    target_chat_id = int(os.getenv('TARGET_CHAT_ID', 0))
+    if not target_chat_id:
+        await update.message.reply_text("❌ TARGET_CHAT_ID не настроен в .env")
+        return
+
+    bot_username = os.getenv('BOT_USERNAME', 'Pulse_On_bot')
+    keyboard = InlineKeyboardMarkup([[
+        InlineKeyboardButton(
+            "🎫 Регистрация",
+            url=f"https://t.me/{bot_username}?start=join_1"
+        )
+    ]])
+    msg = await context.bot.send_message(
+        target_chat_id,
+        "👋 <b>Добро пожаловать в Pulse Москва!</b>\n\n"
+        "Чтобы получить полный доступ — пройди регистрацию.",
+        parse_mode='HTML',
+        reply_markup=keyboard
+    )
+    try:
+        await context.bot.pin_chat_message(target_chat_id, msg.message_id,
+                                            disable_notification=True)
+    except Exception:
+        pass
+    await update.message.reply_text(
+        f"✅ Welcome выложен в чат, message_id={msg.message_id}"
+    )
