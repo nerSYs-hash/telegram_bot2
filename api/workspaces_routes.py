@@ -1,6 +1,10 @@
 """Endpoints: /api/workspaces, /api/workspaces/{id}, /workspaces/{id}/members."""
+import json as _json
 import logging
+import os
 from typing import Optional
+from urllib import request as _urlreq
+from urllib.error import URLError, HTTPError
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
@@ -8,6 +12,7 @@ from database.db_workspaces import (
     get_workspaces_for_user, get_workspace_details,
     add_member, remove_member, update_workspace_name,
     update_bot_chat_role,
+    remove_bot_chat, delete_workspace, list_chat_ids_for_workspace,
 )
 
 
@@ -184,3 +189,87 @@ async def patch_workspace_chat(
 
     update_bot_chat_role(_db.conn, chat_id, body.role)
     return {"ok": True, "chat_id": chat_id, "role": body.role}
+
+
+# ── V1.17.0c (G): удаление чатов и сообществ ──
+
+def _bot_leave_chat(chat_id: int) -> bool:
+    """Дергает Telegram Bot API чтобы бот покинул чат. Возвращает True если успех.
+    Не падает на ошибках сети/прав — логируем и идём дальше (DB чистим всё равно).
+    Использует stdlib urllib чтобы не зависеть от внешних пакетов.
+    """
+    token = os.getenv('BOT_TOKEN')
+    if not token:
+        logger.warning('BOT_TOKEN не задан, leaveChat пропускаем')
+        return False
+    url = f'https://api.telegram.org/bot{token}/leaveChat'
+    data = _json.dumps({'chat_id': chat_id}).encode('utf-8')
+    req = _urlreq.Request(url, data=data, method='POST',
+                          headers={'Content-Type': 'application/json'})
+    try:
+        with _urlreq.urlopen(req, timeout=5) as resp:
+            if resp.status != 200:
+                logger.warning(f'leaveChat {chat_id} -> {resp.status}')
+                return False
+            return True
+    except (URLError, HTTPError) as e:
+        logger.warning(f'leaveChat {chat_id} failed: {e}')
+        return False
+    except Exception as e:
+        logger.warning(f'leaveChat {chat_id} unexpected: {e}')
+        return False
+
+
+@router.delete("/{ws_id}/chats/{chat_id}")
+async def disconnect_workspace_chat(
+    ws_id: int, chat_id: int,
+    authorization: str = Header(default=None)
+):
+    """G: отключить чат от сообщества. Owner-only. Бот покидает чат + DB чистится."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    row = _db.conn.execute(
+        "SELECT workspace_id FROM bot_chats WHERE chat_id=?", (chat_id,)
+    ).fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+    if row[0] != ws_id:
+        raise HTTPException(status_code=403, detail="Чат принадлежит другому сообществу")
+
+    _bot_leave_chat(chat_id)  # best-effort
+    remove_bot_chat(_db.conn, chat_id)
+    return {"ok": True, "chat_id": chat_id}
+
+
+@router.delete("/{ws_id}")
+async def delete_workspace_endpoint(
+    ws_id: int, authorization: str = Header(default=None)
+):
+    """G: удалить сообщество полностью. Owner-only. Pulse-themed запрещено.
+    Бот покидает все привязанные чаты, потом каскадно стираются members и сам ws.
+    """
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    ws_row = _db.conn.execute(
+        "SELECT is_pulse_themed FROM workspaces WHERE id=?", (ws_id,)
+    ).fetchone()
+    if not ws_row:
+        raise HTTPException(status_code=404, detail="Сообщество не найдено")
+    if ws_row[0]:
+        raise HTTPException(
+            status_code=403,
+            detail="Это Pulse-сообщество, его нельзя удалить через сайт"
+        )
+
+    chat_ids = list_chat_ids_for_workspace(_db.conn, ws_id)
+    for cid in chat_ids:
+        _bot_leave_chat(cid)
+    try:
+        delete_workspace(_db.conn, ws_id)
+    except ValueError as e:
+        raise HTTPException(status_code=403, detail=str(e))
+    return {"ok": True, "deleted_workspace_id": ws_id, "left_chats": len(chat_ids)}

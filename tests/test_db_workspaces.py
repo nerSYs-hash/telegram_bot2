@@ -190,3 +190,48 @@ def test_get_workspace_details_orders_chats_by_role(conn):
     details = get_workspace_details(conn, ws_id)
     titles = [c['title'] for c in details['chats']]
     assert titles == ['M', 'A', 'J', 'N']
+
+
+# ── V1.17.0c (G): удаление чатов и сообществ ──
+
+def test_remove_bot_chat_clears_record(conn):
+    from database.db_workspaces import add_bot_chat, remove_bot_chat, get_workspace_by_chat
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, chat_id=-5, workspace_id=ws_id, added_by=1,
+                 title='X', chat_type='group')
+    assert get_workspace_by_chat(conn, -5) == ws_id
+    remove_bot_chat(conn, -5)
+    assert get_workspace_by_chat(conn, -5) is None
+
+
+def test_list_chat_ids_for_workspace_returns_all(conn):
+    from database.db_workspaces import add_bot_chat, list_chat_ids_for_workspace
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, -10, ws_id, 1, 'A', 'group')
+    add_bot_chat(conn, -20, ws_id, 1, 'B', 'group')
+    assert set(list_chat_ids_for_workspace(conn, ws_id)) == {-10, -20}
+
+
+def test_delete_workspace_cascades_members_and_chats(conn):
+    from database.db_workspaces import (
+        add_bot_chat, delete_workspace, get_workspace, get_workspace_by_chat,
+    )
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_member(conn, ws_id, 2, 'admin')
+    add_bot_chat(conn, -50, ws_id, 1, 'C', 'group')
+
+    delete_workspace(conn, ws_id)
+
+    assert get_workspace(conn, ws_id) is None
+    assert get_workspace_by_chat(conn, -50) is None
+    n = conn.execute(
+        "SELECT COUNT(*) FROM workspace_members WHERE workspace_id=?", (ws_id,)
+    ).fetchone()[0]
+    assert n == 0
+
+
+def test_delete_pulse_themed_workspace_raises(conn):
+    from database.db_workspaces import delete_workspace
+    ws_id = create_workspace(conn, 'Pulse', owner_user_id=1, is_pulse_themed=True)
+    with pytest.raises(ValueError):
+        delete_workspace(conn, ws_id)

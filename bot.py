@@ -643,6 +643,10 @@ class TelegramBot:
         from handlers.registration_conversation import registration_conv
         self.application.add_handler(registration_conv)
 
+        # V1.17.0c6 (F follow-up): /get_thread_id — узнать ID текущего топика
+        from handlers.get_thread_id import get_thread_id_command
+        self.application.add_handler(CommandHandler("get_thread_id", get_thread_id_command))
+
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
         self.application.add_handler(CommandHandler("menu", self.command_handler.menu_command))

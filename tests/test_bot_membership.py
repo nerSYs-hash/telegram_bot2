@@ -227,3 +227,42 @@ async def test_callback_rejects_foreign_user(db):
 
     await on_connect_chat_callback(update, MagicMock(), db)
     assert db.get_workspace_by_chat(-400) is None
+
+
+# ── V1.17.0c (G): бот покинул чат → авто-отвязка ──
+
+@pytest.mark.asyncio
+async def test_bot_kicked_removes_chat_from_bot_chats(db):
+    """G1: бот kicked → запись в bot_chats удаляется, workspace остаётся."""
+    from handlers.bot_membership import on_bot_added_to_chat
+    db.conn.execute("INSERT INTO users (user_id, username) VALUES (42, 'alice')")
+    db.conn.commit()
+    ws_id = create_workspace(db.conn, 'Mine', owner_user_id=42)
+    add_bot_chat(db.conn, chat_id=-700, workspace_id=ws_id, added_by=42,
+                 title='Gone', chat_type='supergroup')
+
+    update = _make_update(999, 'kicked', -700, 'Gone', 'supergroup', 42)
+    ctx = _make_context(999)
+    await on_bot_added_to_chat(update, ctx, db)
+
+    assert db.get_workspace_by_chat(-700) is None
+    ws_row = db.conn.execute(
+        "SELECT id FROM workspaces WHERE id=?", (ws_id,)
+    ).fetchone()
+    assert ws_row is not None  # workspace остаётся
+
+
+@pytest.mark.asyncio
+async def test_bot_left_removes_chat_from_bot_chats(db):
+    from handlers.bot_membership import on_bot_added_to_chat
+    db.conn.execute("INSERT INTO users (user_id, username) VALUES (42, 'alice')")
+    db.conn.commit()
+    ws_id = create_workspace(db.conn, 'Mine', owner_user_id=42)
+    add_bot_chat(db.conn, chat_id=-800, workspace_id=ws_id, added_by=42,
+                 title='Gone2', chat_type='supergroup')
+
+    update = _make_update(999, 'left', -800, 'Gone2', 'supergroup', 42)
+    ctx = _make_context(999)
+    await on_bot_added_to_chat(update, ctx, db)
+
+    assert db.get_workspace_by_chat(-800) is None

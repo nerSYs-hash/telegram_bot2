@@ -240,3 +240,64 @@ def test_chat_role_chat_not_found(client):
                      headers={'Authorization': 'Bearer fake-42'})
     assert r.status_code == 404
 
+
+# ── V1.17.0c (G): DELETE chat + DELETE workspace ──
+
+def _disable_leave_chat(monkeypatch):
+    """Замокать leaveChat чтобы не дёргать Telegram API во время тестов."""
+    from api import workspaces_routes
+    monkeypatch.setattr(workspaces_routes, '_bot_leave_chat', lambda cid: True)
+
+
+def test_owner_can_disconnect_chat(client, monkeypatch):
+    _disable_leave_chat(monkeypatch)
+    r = client.delete('/api/workspaces/1/chats/-100',
+                      headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    d = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'}).json()
+    assert d['chats'] == []
+
+
+def test_admin_cannot_disconnect_chat(client, monkeypatch):
+    _disable_leave_chat(monkeypatch)
+    r = client.delete('/api/workspaces/1/chats/-100',
+                      headers={'Authorization': 'Bearer fake-100'})
+    assert r.status_code == 403
+
+
+def test_disconnect_chat_not_found(client, monkeypatch):
+    _disable_leave_chat(monkeypatch)
+    r = client.delete('/api/workspaces/1/chats/-99999',
+                      headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 404
+
+
+def test_owner_can_delete_workspace(client, monkeypatch):
+    """Удаление НЕ-pulse сообщества. ws=2 (Other WS, не pulse-themed) с owner=99."""
+    _disable_leave_chat(monkeypatch)
+    r = client.delete('/api/workspaces/2',
+                      headers={'Authorization': 'Bearer fake-99'})
+    assert r.status_code == 200
+    r2 = client.get('/api/workspaces/2', headers={'Authorization': 'Bearer fake-99'})
+    assert r2.status_code == 404
+
+
+def test_non_owner_cannot_delete_workspace(client, monkeypatch):
+    _disable_leave_chat(monkeypatch)
+    r = client.delete('/api/workspaces/1',
+                      headers={'Authorization': 'Bearer fake-100'})
+    assert r.status_code == 403
+
+
+def test_delete_pulse_themed_forbidden(client, monkeypatch):
+    """Pulse-themed ws нельзя удалить через API. Помечаем ws=1 как pulse-themed."""
+    _disable_leave_chat(monkeypatch)
+    from api import workspaces_routes
+    workspaces_routes._db.conn.execute(
+        "UPDATE workspaces SET is_pulse_themed=1 WHERE id=1"
+    )
+    workspaces_routes._db.conn.commit()
+    r = client.delete('/api/workspaces/1',
+                      headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 403
+
