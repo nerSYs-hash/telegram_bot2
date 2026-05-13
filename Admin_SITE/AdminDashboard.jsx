@@ -4,6 +4,7 @@ import PromptTranslator from './components/PromptTranslator';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
+import InviteMemberModal from './components/workspaces/InviteMemberModal';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -339,6 +340,7 @@ export default function App() {
   const [showConnectChat, setShowConnectChat]     = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
   const [showInviteModal, setShowInviteModal]     = useState(false);
+  const [inviteReloadTick, setInviteReloadTick]   = useState(0);
   const [accessesOpen, setAccessesOpen]           = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
@@ -5024,7 +5026,16 @@ export default function App() {
                 currentUserId={authUser?.id}
                 onBack={() => setSelectedWorkspaceId(null)}
                 onInviteClick={() => setShowInviteModal(true)}
+                reloadTrigger={inviteReloadTick}
               />
+              {showInviteModal && (
+                <InviteMemberModal
+                  token={authUser?.token}
+                  wsId={selectedWorkspaceId}
+                  onClose={() => setShowInviteModal(false)}
+                  onSuccess={() => setInviteReloadTick(t => t + 1)}
+                />
+              )}
             </div>
           );
         }

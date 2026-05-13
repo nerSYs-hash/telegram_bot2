@@ -1,0 +1,86 @@
+// InviteMemberModal (V1.17.0b15) — приглашение помощника owner-only
+import React, { useState } from 'react';
+import { createPortal } from 'react-dom';
+import { X, UserPlus } from 'lucide-react';
+import { inviteMember } from '../shared/api';
+
+export default function InviteMemberModal({ token, wsId, onClose, onSuccess }) {
+  const [userId, setUserId] = useState('');
+  const [role, setRole] = useState('admin');
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState(null);
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    setErr(null);
+    setLoading(true);
+    try {
+      const uid = parseInt(userId.replace('@', ''), 10);
+      if (!uid || isNaN(uid)) throw new Error('Введи Telegram user_id (число)');
+      await inviteMember(token, wsId, uid, role);
+      onSuccess?.();
+      onClose();
+    } catch (e) { setErr(e.message); }
+    finally { setLoading(false); }
+  };
+
+  return createPortal(
+    <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4
+                    bg-black/60 backdrop-blur-sm" onClick={onClose}>
+      <form
+        onSubmit={handleSubmit}
+        onClick={e => e.stopPropagation()}
+        className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 shadow-2xl">
+        <div className="flex items-start justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center">
+              <UserPlus size={22} className="text-violet-600"/>
+            </div>
+            <div>
+              <h3 className="font-black text-gray-900 text-base">Пригласить помощника</h3>
+              <p className="text-xs text-gray-500 font-medium">user_id из Telegram</p>
+            </div>
+          </div>
+          <button type="button" onClick={onClose}
+                  className="p-2 rounded-xl hover:bg-gray-100">
+            <X size={18} className="text-gray-400"/>
+          </button>
+        </div>
+
+        <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mb-1.5 block">
+          Telegram user_id
+        </label>
+        <input
+          value={userId}
+          onChange={e => setUserId(e.target.value)}
+          placeholder="например 123456789"
+          className="w-full px-3 py-3 border border-gray-200 rounded-2xl text-sm font-medium mb-4
+                     focus:border-blue-500 focus:outline-none"/>
+
+        <label className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mb-1.5 block">
+          Роль
+        </label>
+        <div className="grid grid-cols-2 gap-2 mb-5">
+          {['admin', 'moderator'].map(r => (
+            <button key={r} type="button" onClick={() => setRole(r)}
+                    className={`py-3 rounded-2xl font-black text-xs uppercase tracking-wide transition-all
+                                ${role === r
+                                  ? 'bg-blue-600 text-white'
+                                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'}`}>
+              {r === 'admin' ? '🛡 Админ' : '🔧 Модератор'}
+            </button>
+          ))}
+        </div>
+
+        {err && <div className="bg-red-50 text-red-700 rounded-2xl p-3 text-xs font-medium mb-4">{err}</div>}
+
+        <button type="submit" disabled={loading || !userId}
+                className="w-full py-4 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase
+                           tracking-wide hover:bg-blue-700 disabled:opacity-50">
+          {loading ? 'Добавляю…' : 'Пригласить'}
+        </button>
+      </form>
+    </div>,
+    document.body
+  );
+}
