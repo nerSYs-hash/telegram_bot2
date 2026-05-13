@@ -12,8 +12,10 @@ from telegram import InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from handlers.BBS.constants_bbs import EDITABLE_FIELDS
 from handlers.BBS.database_bbs import get_profile
 from handlers.BBS.editing_bbs import get_edited_fields
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 
+@pulse_only
 async def show_bbs_menu(update_or_query, context, db):
     keyboard = [
         [InlineKeyboardButton("💘 Знакомства", callback_data="bbs_dating")],
@@ -28,6 +30,7 @@ async def show_bbs_menu(update_or_query, context, db):
         await update_or_query.message.reply_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def show_dating_menu(query, context, db, user_id):
     profile = get_profile(db, user_id)
     keyboard = [[InlineKeyboardButton("📝 Разместить анкету", callback_data="bbs_create_start")]]

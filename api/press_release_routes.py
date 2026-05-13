@@ -26,6 +26,11 @@ _db = None
 _require_auth_fn = None
 _resolve_role_fn = None
 
+# Multi-tenancy placeholder (V1.17.0a14). Сейчас API всегда работает с
+# workspace=1 (Pulse Москва). После подпроекта #3 (web auth) — извлекать
+# из JWT-токена через header X-Workspace-Id.
+_DEFAULT_WS_ID = 1
+
 
 def _setup(db, require_auth, resolve_role):
     global _db, _require_auth_fn, _resolve_role_fn
@@ -112,10 +117,10 @@ async def list_bot_chats(authorization: str = Header(default=None)):
     """Список чатов где есть бот, с подгруженными топиками для форумов."""
     _check(authorization, "view")
     from database.db_press_release import get_bot_chats, get_bot_chat_topics
-    chats = get_bot_chats(_db)
+    chats = get_bot_chats(_db, _DEFAULT_WS_ID)
     for c in chats:
         if c.get('is_forum'):
-            c['topics'] = get_bot_chat_topics(_db, c['chat_id'])
+            c['topics'] = get_bot_chat_topics(_db, _DEFAULT_WS_ID, c['chat_id'])
         else:
             c['topics'] = []
     return chats
@@ -143,6 +148,7 @@ async def add_chat_manually(body: ChatLookupBody, authorization: str = Header(de
         from database.db_press_release import upsert_bot_chat
         upsert_bot_chat(
             _db,
+            _DEFAULT_WS_ID,
             chat_id=int(result["id"]),
             chat_type=result.get("type", "supergroup"),
             title=result.get("title", ""),
@@ -161,7 +167,7 @@ async def add_topic_manually(body: TopicBody, authorization: str = Header(defaul
     """Ручное добавление топика форума (когда авто-захват ещё не сработал)."""
     _check(authorization, "edit")
     from database.db_press_release import upsert_bot_chat_topic
-    upsert_bot_chat_topic(_db, body.chat_id, body.thread_id, body.name, source='manual')
+    upsert_bot_chat_topic(_db, _DEFAULT_WS_ID, body.chat_id, body.thread_id, body.name, source='manual')
     return {"ok": True}
 
 
@@ -169,7 +175,7 @@ async def add_topic_manually(body: TopicBody, authorization: str = Header(defaul
 async def delete_topic(chat_id: int, thread_id: int, authorization: str = Header(default=None)):
     _check(authorization, "edit")
     from database.db_press_release import delete_bot_chat_topic
-    ok = delete_bot_chat_topic(_db, chat_id, thread_id)
+    ok = delete_bot_chat_topic(_db, _DEFAULT_WS_ID, chat_id, thread_id)
     return {"ok": ok}
 
 
@@ -198,7 +204,7 @@ async def list_press(status: Optional[str] = None, authorization: str = Header(d
     """Список пресс-релизов. status: draft/scheduled/published/failed/cancelled (или нет = все)."""
     _check(authorization, "view")
     from database.db_press_release import list_press_releases
-    posts = list_press_releases(_db, status=status, limit=300)
+    posts = list_press_releases(_db, _DEFAULT_WS_ID, status=status, limit=300)
     return [_serialize_post(p) for p in posts]
 
 
@@ -206,7 +212,7 @@ async def list_press(status: Optional[str] = None, authorization: str = Header(d
 async def get_press(post_id: int, authorization: str = Header(default=None)):
     _check(authorization, "view")
     from database.db_press_release import get_press_release
-    post = get_press_release(_db, post_id)
+    post = get_press_release(_db, _DEFAULT_WS_ID, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Не найден")
     return _serialize_post(post)
@@ -229,15 +235,15 @@ async def create_press(body: PressReleaseBody, authorization: str = Header(defau
     if throttle.get("enabled") and body.status == "scheduled":
         from database.db_press_release import count_recent_press_releases
         since = (datetime.utcnow() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
-        n = count_recent_press_releases(_db, uid, since)
+        n = count_recent_press_releases(_db, _DEFAULT_WS_ID, uid, since)
         limit = int(throttle.get("limit_per_hour", 5))
         if n >= limit:
             raise HTTPException(status_code=429, detail=f"Лимит {limit} релизов в час исчерпан")
-    pid = create_press_release(_db, uid, **fields)
+    pid = create_press_release(_db, _DEFAULT_WS_ID, uid, **fields)
     if targets:
-        replace_targets(_db, pid, [t.dict() if hasattr(t, "dict") else t for t in targets])
+        replace_targets(_db, _DEFAULT_WS_ID, pid, [t.dict() if hasattr(t, "dict") else t for t in targets])
     from database.db_press_release import get_press_release
-    return _serialize_post(get_press_release(_db, pid))
+    return _serialize_post(get_press_release(_db, _DEFAULT_WS_ID, pid))
 
 
 @router.put("/api/press-releases/{post_id}")
@@ -247,11 +253,11 @@ async def update_press(post_id: int, body: PressReleaseBody, authorization: str 
     from database.db_press_release import (
         get_press_release, update_press_release, replace_targets, save_version
     )
-    existing = get_press_release(_db, post_id)
+    existing = get_press_release(_db, _DEFAULT_WS_ID, post_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Не найден")
     # Сохраняем снимок текущей версии перед обновлением
-    save_version(_db, post_id, _serialize_post(existing), uid)
+    save_version(_db, _DEFAULT_WS_ID, post_id, _serialize_post(existing), uid)
 
     fields = body.dict(exclude_none=True)
     targets = fields.pop("targets", None)
@@ -259,17 +265,17 @@ async def update_press(post_id: int, body: PressReleaseBody, authorization: str 
         fields["inline_keyboard"] = json.dumps(fields["inline_keyboard"], ensure_ascii=False)
     if "settings_json" in fields and fields["settings_json"] is not None:
         fields["settings_json"] = json.dumps(fields["settings_json"], ensure_ascii=False)
-    update_press_release(_db, post_id, **fields)
+    update_press_release(_db, _DEFAULT_WS_ID, post_id, **fields)
     if targets is not None:
-        replace_targets(_db, post_id, [t.dict() if hasattr(t, "dict") else t for t in targets])
-    return _serialize_post(get_press_release(_db, post_id))
+        replace_targets(_db, _DEFAULT_WS_ID, post_id, [t.dict() if hasattr(t, "dict") else t for t in targets])
+    return _serialize_post(get_press_release(_db, _DEFAULT_WS_ID, post_id))
 
 
 @router.delete("/api/press-releases/{post_id}")
 async def delete_press(post_id: int, authorization: str = Header(default=None)):
     _check(authorization, "delete")
     from database.db_press_release import delete_press_release
-    ok = delete_press_release(_db, post_id)
+    ok = delete_press_release(_db, _DEFAULT_WS_ID, post_id)
     return {"ok": ok}
 
 
@@ -278,7 +284,7 @@ async def cancel_press(post_id: int, authorization: str = Header(default=None)):
     """Отменить запланированный пресс-релиз. Можно восстановить через /restore."""
     uid = _check(authorization, "edit")
     from database.db_press_release import cancel_press_release
-    ok = cancel_press_release(_db, post_id, uid)
+    ok = cancel_press_release(_db, _DEFAULT_WS_ID, post_id, uid)
     if not ok:
         raise HTTPException(status_code=400, detail="Нельзя отменить (статус не scheduled/draft)")
     return {"ok": True}
@@ -289,7 +295,7 @@ async def restore_press(post_id: int, authorization: str = Header(default=None))
     """cancelled/failed → draft (для редактирования и повторной публикации)."""
     _check(authorization, "edit")
     from database.db_press_release import restore_press_release
-    ok = restore_press_release(_db, post_id)
+    ok = restore_press_release(_db, _DEFAULT_WS_ID, post_id)
     if not ok:
         raise HTTPException(status_code=400, detail="Нельзя восстановить (только из cancelled/failed)")
     return {"ok": True}
@@ -300,10 +306,10 @@ async def clone_press(post_id: int, authorization: str = Header(default=None)):
     """Создать копию пресс-релиза (status=draft)."""
     uid = _check(authorization, "create")
     from database.db_press_release import clone_press_release, get_press_release
-    new_id = clone_press_release(_db, post_id, uid)
+    new_id = clone_press_release(_db, _DEFAULT_WS_ID, post_id, uid)
     if not new_id:
         raise HTTPException(status_code=404, detail="Оригинал не найден")
-    return _serialize_post(get_press_release(_db, new_id))
+    return _serialize_post(get_press_release(_db, _DEFAULT_WS_ID, new_id))
 
 
 @router.post("/api/press-releases/{post_id}/publish-now")
@@ -312,10 +318,10 @@ async def publish_now(post_id: int, authorization: str = Header(default=None)):
     _check(authorization, "publish_now")
     from database.db_press_release import update_press_release, get_press_release
     now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
-    ok = update_press_release(_db, post_id, status='scheduled', publish_at=now)
+    ok = update_press_release(_db, _DEFAULT_WS_ID, post_id, status='scheduled', publish_at=now)
     if not ok:
         raise HTTPException(status_code=404, detail="Не найден")
-    return _serialize_post(get_press_release(_db, post_id))
+    return _serialize_post(get_press_release(_db, _DEFAULT_WS_ID, post_id))
 
 
 @router.delete("/api/press-releases/{post_id}/from-telegram")
@@ -326,7 +332,7 @@ async def delete_from_telegram(post_id: int, authorization: str = Header(default
     bot_token = os.getenv("BOT_TOKEN", "")
     if not bot_token:
         raise HTTPException(status_code=500, detail="BOT_TOKEN не задан")
-    post = get_press_release(_db, post_id)
+    post = get_press_release(_db, _DEFAULT_WS_ID, post_id)
     if not post:
         raise HTTPException(status_code=404, detail="Не найден")
     deleted_total, errors = 0, []
@@ -355,14 +361,14 @@ async def delete_from_telegram(post_id: int, authorization: str = Header(default
 async def get_versions(post_id: int, authorization: str = Header(default=None)):
     _check(authorization, "view")
     from database.db_press_release import list_versions
-    return list_versions(_db, post_id)
+    return list_versions(_db, _DEFAULT_WS_ID, post_id)
 
 
 @router.get("/api/press-releases/versions/{version_id}")
 async def get_version(version_id: int, authorization: str = Header(default=None)):
     _check(authorization, "view")
     from database.db_press_release import get_version_snapshot
-    snap = get_version_snapshot(_db, version_id)
+    snap = get_version_snapshot(_db, _DEFAULT_WS_ID, version_id)
     if snap is None:
         raise HTTPException(status_code=404, detail="Версия не найдена")
     return snap
@@ -376,7 +382,7 @@ async def get_version(version_id: int, authorization: str = Header(default=None)
 async def list_templates_ep(authorization: str = Header(default=None)):
     _check(authorization, "view")
     from database.db_press_release import list_templates
-    rows = list_templates(_db)
+    rows = list_templates(_db, _DEFAULT_WS_ID)
     return [_serialize_post(r) for r in rows]
 
 
@@ -390,8 +396,8 @@ async def create_template_ep(body: TemplateBody, authorization: str = Header(def
         fields["inline_keyboard"] = json.dumps(fields["inline_keyboard"], ensure_ascii=False)
     if "settings_json" in fields and fields["settings_json"] is not None:
         fields["settings_json"] = json.dumps(fields["settings_json"], ensure_ascii=False)
-    tid = create_template(_db, name, uid, **fields)
-    return _serialize_post(get_template(_db, tid))
+    tid = create_template(_db, _DEFAULT_WS_ID, name, uid, **fields)
+    return _serialize_post(get_template(_db, _DEFAULT_WS_ID, tid))
 
 
 @router.put("/api/press-release-templates/{template_id}")
@@ -403,15 +409,15 @@ async def update_template_ep(template_id: int, body: TemplateBody, authorization
         fields["inline_keyboard"] = json.dumps(fields["inline_keyboard"], ensure_ascii=False)
     if "settings_json" in fields and fields["settings_json"] is not None:
         fields["settings_json"] = json.dumps(fields["settings_json"], ensure_ascii=False)
-    update_template(_db, template_id, **fields)
-    return _serialize_post(get_template(_db, template_id))
+    update_template(_db, _DEFAULT_WS_ID, template_id, **fields)
+    return _serialize_post(get_template(_db, _DEFAULT_WS_ID, template_id))
 
 
 @router.delete("/api/press-release-templates/{template_id}")
 async def delete_template_ep(template_id: int, authorization: str = Header(default=None)):
     _check(authorization, "delete")
     from database.db_press_release import delete_template
-    ok = delete_template(_db, template_id)
+    ok = delete_template(_db, _DEFAULT_WS_ID, template_id)
     return {"ok": ok}
 
 
@@ -423,7 +429,7 @@ async def delete_template_ep(template_id: int, authorization: str = Header(defau
 async def get_branding_ep(authorization: str = Header(default=None)):
     _auth(authorization)  # любой авторизованный — для отображения подписи
     from database.db_press_release import get_all_branding
-    return get_all_branding(_db)
+    return get_all_branding(_db, _DEFAULT_WS_ID)
 
 
 @router.put("/api/branding")
@@ -435,5 +441,5 @@ async def set_branding_ep(body: BrandingBody, authorization: str = Header(defaul
     if role not in ("owner", "developer") and not has_permission(role, "press_release.edit"):
         raise HTTPException(status_code=403, detail="Недостаточно прав")
     from database.db_press_release import set_branding
-    set_branding(_db, body.key, body.value, uid)
+    set_branding(_db, _DEFAULT_WS_ID, body.key, body.value, uid)
     return {"ok": True, "key": body.key, "value": body.value}

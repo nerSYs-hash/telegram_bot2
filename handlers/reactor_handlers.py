@@ -17,6 +17,7 @@ import logging
 from datetime import datetime
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import format_number
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,7 @@ def _is_reward_unlocked(db, threshold_pct):
 #  ГЛАВНОЕ МЕНЮ РЕАКТОРА (для пользователей)
 # ═══════════════════════════════════════════════════════════════
 
+@pulse_only
 async def show_reactor_menu(query, context, db, user_id, is_owner=False):
     """Генерирует красивое сообщение-меню Реактора."""
     ensure_reactor_tables(db)
@@ -361,6 +363,7 @@ async def handle_reactor_feature(query, data, db, user_id):
 #  ЛОГИКА ДОНАТА
 # ═══════════════════════════════════════════════════════════════
 
+@pulse_only
 async def _process_reactor_donation(query, context, db, user_id, amount, target_chat_id):
     """
     Центральная логика пополнения Реактора.
@@ -553,6 +556,7 @@ async def handle_reactor_donate_custom_start(query, user, context, db):
     )
 
 
+@pulse_only
 async def handle_reactor_custom_amount(update, context, db, target_chat_id):
     """
     Обработчик текстового сообщения с суммой (вызывается из message_handler).
@@ -659,6 +663,7 @@ async def handle_reactor_custom_amount(update, context, db, target_chat_id):
 #  АДМИН-ПАНЕЛЬ РЕАКТОРА
 # ═══════════════════════════════════════════════════════════════
 
+@pulse_only
 async def show_reactor_admin(query, context, db, user_id, admin_id):
     """Панель управления Реактором (только owner)."""
     if user_id != admin_id:
@@ -735,6 +740,7 @@ async def show_reactor_admin(query, context, db, user_id, admin_id):
             logger.error(f"show_reactor_admin edit error: {e}")
 
 
+@pulse_only
 async def reactor_admin_reset(query, context, db, user_id, admin_id):
     """Сброс Реактора — новый цикл. Только для owner."""
     if user_id != admin_id:
@@ -760,6 +766,7 @@ async def reactor_admin_reset(query, context, db, user_id, admin_id):
         await query.answer("❌ Ошибка сброса.", show_alert=True)
 
 
+@pulse_only
 async def reactor_admin_set_target(query, context, db, user_id, admin_id, new_target):
     """Изменение цели Реактора. Только для owner."""
     if user_id != admin_id:
@@ -788,6 +795,7 @@ async def reactor_admin_set_target(query, context, db, user_id, admin_id, new_ta
         await query.answer("❌ Ошибка.", show_alert=True)
 
 
+@pulse_only
 async def reactor_admin_set_status(query, context, db, user_id, admin_id, new_status):
     """Ручная смена статуса Реактора. Только для owner."""
     if user_id != admin_id:
@@ -832,6 +840,7 @@ async def reactor_admin_custom_target_start(query, user, context, db, admin_id):
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def handle_reactor_admin_custom_target(update, context, db, admin_id):
     """
     Обработчик текстового ввода новой цели (из message_handler).

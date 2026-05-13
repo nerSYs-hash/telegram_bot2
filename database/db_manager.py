@@ -609,9 +609,11 @@ class Database:
         # Initialize economy tables
         _init_economy_tables(self)
 
-        # Initialize titles tables (V1.16.0)
+        # Initialize titles tables (V1.16.0).
+        # V1.17.0a17: seed для workspace=1 (Pulse). При создании нового
+        # workspace через onboarding (Подпроект #2) — отдельный вызов seed.
         _init_titles_tables(self)
-        _seed_title_packages(self)
+        _seed_title_packages(self, 1)
 
         # Migration V1.16.0: добавить expires_at в marketplace_services
         try:
@@ -631,88 +633,93 @@ class Database:
             logging.getLogger(__name__).error(f"init_press_release_tables: {e}")
 
     # ── Economy ──
+    # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
+    # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.
+    # Сейчас Pulse Москва — единственный workspace, поэтому хардкод 1 безопасен.
+    _DEFAULT_WS_ID = 1
+
     def get_econ(self, key, default=None, value_type='float'):
-        return _get_econ(self, key, default, value_type)
+        return _get_econ(self, self._DEFAULT_WS_ID, key, default, value_type)
 
     def set_econ(self, key, value, comment, changed_by, changed_by_role):
-        return _set_econ(self, key, value, comment, changed_by, changed_by_role)
+        return _set_econ(self, self._DEFAULT_WS_ID, key, value, comment, changed_by, changed_by_role)
 
     def toggle_econ(self, key, comment, changed_by, changed_by_role):
-        return _toggle_econ(self, key, comment, changed_by, changed_by_role)
+        return _toggle_econ(self, self._DEFAULT_WS_ID, key, comment, changed_by, changed_by_role)
 
     def toggle_econ_section(self, category, comment, changed_by, changed_by_role):
-        return _toggle_econ_section(self, category, comment, changed_by, changed_by_role)
+        return _toggle_econ_section(self, self._DEFAULT_WS_ID, category, comment, changed_by, changed_by_role)
 
     def is_econ_section_enabled(self, category):
-        return _is_econ_section_enabled(self, category)
+        return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
 
     def get_econ_categories(self):
-        return _get_econ_categories(self)
+        return _get_econ_categories(self, self._DEFAULT_WS_ID)
 
     def get_econ_settings(self, category=None, subcategory=None):
-        return _get_econ_settings(self, category=category, subcategory=subcategory)
+        return _get_econ_settings(self, self._DEFAULT_WS_ID, category=category, subcategory=subcategory)
 
     def rollback_econ(self, history_id, comment, changed_by, changed_by_role):
-        return _rollback_econ(self, history_id, comment, changed_by, changed_by_role)
+        return _rollback_econ(self, self._DEFAULT_WS_ID, history_id, comment, changed_by, changed_by_role)
 
     def get_econ_history(self, key, limit=20, offset=0):
-        return _get_econ_history(self, key, limit=limit, offset=offset)
+        return _get_econ_history(self, self._DEFAULT_WS_ID, key, limit=limit, offset=offset)
 
     def get_econ_chart_data(self, key):
-        return _get_econ_chart_data(self, key)
+        return _get_econ_chart_data(self, self._DEFAULT_WS_ID, key)
 
     def cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role):
-        return _cancel_pointwise(self, tx_id, mode, comment, executed_by, executed_by_role)
+        return _cancel_pointwise(self, self._DEFAULT_WS_ID, tx_id, mode, comment, executed_by, executed_by_role)
 
     def cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role):
-        return _cancel_mass(self, filter_dict, mode, comment, executed_by, executed_by_role)
+        return _cancel_mass(self, self._DEFAULT_WS_ID, filter_dict, mode, comment, executed_by, executed_by_role)
 
     def get_economy_cancellations(self, limit=50, offset=0):
-        return _get_economy_cancellations(self, limit=limit, offset=offset)
+        return _get_economy_cancellations(self, self._DEFAULT_WS_ID, limit=limit, offset=offset)
 
     def get_economy_metrics(self):
-        return _get_economy_metrics(self)
+        return _get_economy_metrics(self, self._DEFAULT_WS_ID)
 
-    # ── Titles (V1.16.0) ──
+    # ── Titles (V1.16.0) — multi-tenancy V1.17.0a17 ──
     def list_title_packages(self, only_enabled=False):
-        return _list_title_packages(self, only_enabled=only_enabled)
+        return _list_title_packages(self, self._DEFAULT_WS_ID, only_enabled=only_enabled)
 
     def get_title_package(self, pkg_id):
-        return _get_title_package(self, pkg_id)
+        return _get_title_package(self, self._DEFAULT_WS_ID, pkg_id)
 
     def create_title_package(self, label, duration_days, price_pulses, price_rub):
-        return _create_title_package(self, label, duration_days, price_pulses, price_rub)
+        return _create_title_package(self, self._DEFAULT_WS_ID, label, duration_days, price_pulses, price_rub)
 
     def update_title_package(self, pkg_id, **fields):
-        return _update_title_package(self, pkg_id, **fields)
+        return _update_title_package(self, self._DEFAULT_WS_ID, pkg_id, **fields)
 
     def toggle_title_package(self, pkg_id):
-        return _toggle_title_package(self, pkg_id)
+        return _toggle_title_package(self, self._DEFAULT_WS_ID, pkg_id)
 
     def create_title_request(self, user_id, package_id, title_text, price_rub, duration_days):
-        return _create_title_request(self, user_id, package_id, title_text, price_rub, duration_days)
+        return _create_title_request(self, self._DEFAULT_WS_ID, user_id, package_id, title_text, price_rub, duration_days)
 
     def attach_title_request_message(self, request_id, owner_chat_id, owner_msg_id):
-        return _attach_owner_message(self, request_id, owner_chat_id, owner_msg_id)
+        return _attach_owner_message(self, self._DEFAULT_WS_ID, request_id, owner_chat_id, owner_msg_id)
 
     def get_title_request(self, request_id):
-        return _get_title_request(self, request_id)
+        return _get_title_request(self, self._DEFAULT_WS_ID, request_id)
 
     def list_title_requests(self, status=None, limit=50, offset=0):
-        return _list_title_requests(self, status=status, limit=limit, offset=offset)
+        return _list_title_requests(self, self._DEFAULT_WS_ID, status=status, limit=limit, offset=offset)
 
     def count_title_requests_pending(self):
-        return _count_title_requests_by_status(self, 'pending')
+        return _count_title_requests_by_status(self, self._DEFAULT_WS_ID, 'pending')
 
     def transition_title_request(self, request_id, new_status, decided_by=None,
                                  reject_reason=None, only_from='pending'):
-        return _transition_title_request(self, request_id, new_status,
+        return _transition_title_request(self, self._DEFAULT_WS_ID, request_id, new_status,
                                          decided_by=decided_by,
                                          reject_reason=reject_reason,
                                          only_from=only_from)
 
     def expire_old_title_requests(self, ttl_hours):
-        return _expire_old_title_requests(self, ttl_hours)
+        return _expire_old_title_requests(self, self._DEFAULT_WS_ID, ttl_hours)
 
     # ── Settings ──
     def get_setting(self, key, default=None):
@@ -748,14 +755,14 @@ class Database:
         return _get_top_users_by_balance(self, limit, exclude_admins)
 
     def get_top_daily_earners(self, date, limit=5):
-        return _get_top_daily_earners(self, date, limit)
+        return _get_top_daily_earners(self, self._DEFAULT_WS_ID, date, limit)
 
     def get_top_activists(self, date, limit=5):
-        return _get_top_activists(self, date, limit)
+        return _get_top_activists(self, self._DEFAULT_WS_ID, date, limit)
 
     # ── Transactions & Bank ──
     def add_transaction(self, from_user_id, to_user_id, amount, transaction_type, description=None):
-        return _add_transaction(self, from_user_id, to_user_id, amount, transaction_type, description)
+        return _add_transaction(self, self._DEFAULT_WS_ID, from_user_id, to_user_id, amount, transaction_type, description)
 
     def get_bank_balance(self):
         return _get_bank_balance(self)
@@ -765,34 +772,35 @@ class Database:
 
     # ── Stats ──
     def update_user_activity(self, user_id, date, event_id: str = None, **kwargs):
-        _update_user_activity(self, user_id, date, event_id=event_id, **kwargs)
+        _update_user_activity(self, self._DEFAULT_WS_ID, user_id, date, event_id=event_id, **kwargs)
 
     def cleanup_stat_events_log(self, older_than_days: int = 3):
         _cleanup_stat_events_log(self, older_than_days)
 
     def get_active_core_count(self, date):
-        return _get_active_core_count(self, date)
+        return _get_active_core_count(self, self._DEFAULT_WS_ID, date)
 
     def register_topic(self, chat_id, thread_id, thread_name=None):
-        _register_topic(self, chat_id, thread_id, thread_name)
+        _register_topic(self, self._DEFAULT_WS_ID, chat_id, thread_id, thread_name)
 
     def get_all_topics(self, chat_id):
-        return _get_all_topics(self, chat_id)
+        return _get_all_topics(self, self._DEFAULT_WS_ID, chat_id)
 
     def update_topic_name(self, chat_id, thread_id, thread_name):
-        _update_topic_name(self, chat_id, thread_id, thread_name)
+        _update_topic_name(self, self._DEFAULT_WS_ID, chat_id, thread_id, thread_name)
 
     def purge_unnamed_topics(self, chat_id):
-        return _purge_unnamed_topics(self, chat_id)
+        return _purge_unnamed_topics(self, self._DEFAULT_WS_ID, chat_id)
 
     def get_joined_users_count(self, start_date, end_date):
+        # users — GLOBAL, без workspace_id (см. db_stats.py TODO).
         return _get_joined_users_count(self, start_date, end_date)
 
     def get_left_users_count(self, start_date, end_date):
-        return _get_left_users_count(self, start_date, end_date)
+        return _get_left_users_count(self, self._DEFAULT_WS_ID, start_date, end_date)
 
     def get_user_dynamics_stats(self, start_date, end_date):
-        return _get_user_dynamics_stats(self, start_date, end_date)
+        return _get_user_dynamics_stats(self, self._DEFAULT_WS_ID, start_date, end_date)
 
     # ── Exchange Rate ──
     def set_exchange_rate(self, rate, changed_by=None, is_manual=False,
@@ -812,81 +820,87 @@ class Database:
         return _get_rate_history_30d(self)
 
     # ── Top Activists History ──
+    # V1.17.0a15 (multi-tenancy): wrapper'ы прокидывают _DEFAULT_WS_ID до
+    # интеграции WorkspaceContext в handlers (Task 15).
     def save_top_snapshot(self, date, time_slot, user_id, rank, activity_index):
-        _save_top_snapshot(self, date, time_slot, user_id, rank, activity_index)
+        _save_top_snapshot(self, self._DEFAULT_WS_ID, date, time_slot, user_id, rank, activity_index)
 
     def get_latest_top_snapshot(self):
-        return _get_latest_top_snapshot(self)
+        return _get_latest_top_snapshot(self, self._DEFAULT_WS_ID)
 
     def get_previous_top_snapshot(self):
-        return _get_previous_top_snapshot(self)
+        return _get_previous_top_snapshot(self, self._DEFAULT_WS_ID)
 
     def get_user_top_appearances(self, user_id, days=30):
-        return _get_user_top_appearances(self, user_id, days)
+        return _get_user_top_appearances(self, self._DEFAULT_WS_ID, user_id, days)
 
     def get_all_top_appearances(self, days=30):
-        return _get_all_top_appearances(self, days)
+        return _get_all_top_appearances(self, self._DEFAULT_WS_ID, days)
 
     # ── Hourly Stats & % Activity ──
     def update_user_activity_hourly(self, user_id, date, hour, **kwargs):
-        _update_user_activity_hourly(self, user_id, date, hour, **kwargs)
+        _update_user_activity_hourly(self, self._DEFAULT_WS_ID, user_id, date, hour, **kwargs)
 
     def save_top5_percent(self, entries, window_start, window_end):
-        _save_top5_percent(self, entries, window_start, window_end)
+        _save_top5_percent(self, self._DEFAULT_WS_ID, entries, window_start, window_end)
 
     def get_top5_percent(self):
-        return _get_top5_percent(self)
+        return _get_top5_percent(self, self._DEFAULT_WS_ID)
 
     def cleanup_old_hourly_stats(self, days_to_keep=2):
+        # cleanup_old_hourly_stats — cross-workspace (глобальная очистка по дате),
+        # workspace_id не нужен.
         _cleanup_old_hourly_stats(self, days_to_keep)
 
     # ── Referrals ──
     def create_referral_link(self, user_id):
-        return _create_referral_link(self, user_id)
+        return _create_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_active_referral_link(self, user_id):
-        return _get_active_referral_link(self, user_id)
+        return _get_active_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_or_create_referral_link(self, user_id):
-        return _get_or_create_referral_link(self, user_id)
+        return _get_or_create_referral_link(self, self._DEFAULT_WS_ID, user_id)
 
     def get_referrer_by_token(self, token):
+        # token globally unique — workspace_id берётся из строки
         return _get_referrer_by_token(self, token)
 
     def use_referral_link(self, token, used_by_user_id):
+        # token globally unique — workspace_id берётся из строки
         return _use_referral_link(self, token, used_by_user_id)
 
     def get_referral_link_stats(self, user_id):
-        return _get_referral_link_stats(self, user_id)
+        return _get_referral_link_stats(self, self._DEFAULT_WS_ID, user_id)
 
     def record_user_join(self, user_id, username, first_name, join_method,
                          referrer_id=None, referral_token=None):
-        _record_user_join(self, user_id, username, first_name, join_method, referrer_id, referral_token)
+        _record_user_join(self, self._DEFAULT_WS_ID, user_id, username, first_name, join_method, referrer_id, referral_token)
 
     def get_user_joins(self, start_date=None, end_date=None):
-        return _get_user_joins(self, start_date, end_date)
+        return _get_user_joins(self, self._DEFAULT_WS_ID, start_date, end_date)
 
-    # ── Scheduled Posts ──
+    # ── Scheduled Posts — multi-tenancy V1.17.0a17 ──
     def add_scheduled_post(self, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at):
-        return _add_scheduled_post(self, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at)
+        return _add_scheduled_post(self, self._DEFAULT_WS_ID, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at)
 
     def get_scheduled_post(self, post_id):
-        return _get_scheduled_post(self, post_id)
+        return _get_scheduled_post(self, self._DEFAULT_WS_ID, post_id)
 
     def update_scheduled_post(self, post_id, **kwargs):
-        return _update_scheduled_post(self, post_id, **kwargs)
+        return _update_scheduled_post(self, self._DEFAULT_WS_ID, post_id, **kwargs)
 
     def get_pending_scheduled_posts(self, before_time):
-        return _get_pending_scheduled_posts(self, before_time)
+        return _get_pending_scheduled_posts(self, self._DEFAULT_WS_ID, before_time)
 
     def mark_scheduled_post_published(self, post_id):
-        _mark_scheduled_post_published(self, post_id)
+        _mark_scheduled_post_published(self, self._DEFAULT_WS_ID, post_id)
 
     def get_scheduled_posts_list(self, status='pending'):
-        return _get_scheduled_posts_list(self, status)
+        return _get_scheduled_posts_list(self, self._DEFAULT_WS_ID, status)
 
     def delete_scheduled_post(self, post_id):
-        return _delete_scheduled_post(self, post_id)
+        return _delete_scheduled_post(self, self._DEFAULT_WS_ID, post_id)
 
     # ── Shipper Roulette ──
     def seed_shipper_phrases_if_empty(self):

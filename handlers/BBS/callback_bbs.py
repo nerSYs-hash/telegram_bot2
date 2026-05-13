@@ -34,8 +34,10 @@ from handlers.BBS.editing_bbs import (
     _build_edit_city_keyboard, _build_edit_goal_keyboard,
 )
 from handlers.BBS.navigation_bbs import show_bbs_menu, show_dating_menu, handle_bbs_view_profile
+from bot_core.workspace_context import pulse_only  # V1.17.0a20 multi-tenancy gating
 
 
+@pulse_only
 async def handle_bbs_callback(query, context, db, target_chat_id, bbs_thread_id):
     data = query.data
     user_id = query.from_user.id

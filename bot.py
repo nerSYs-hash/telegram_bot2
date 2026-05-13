@@ -16,8 +16,11 @@ from telegram.ext import (
     CallbackQueryHandler,
     ChatMemberHandler,
     MessageReactionHandler,  # ← ДОБАВЛЕНО для обработки реакций
+    TypeHandler,
     filters
 )
+# V1.17.0a19 (multi-tenancy): резолвер WorkspaceContext для middleware
+from bot_core.workspace_context import build_context, WorkspaceContext
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 # Import custom modules
@@ -590,8 +593,58 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in error_handler itself: {e}")
 
+    async def resolve_workspace_middleware(self, update: Update, context) -> None:
+        """V1.17.0a19 multi-tenancy middleware.
+
+        Запускается ДО всех остальных handlers (group=-1, block=False).
+        Резолвит WorkspaceContext через bot_chats[chat_id] → workspace_id
+        и кладёт его в context.user_data['ws_ctx'].
+
+        Pulse single-tenant fallback: если чат не зарезолвлен (новый чат,
+        DM до onboarding-а), используем workspace_id=1 (Pulse) с
+        is_pulse_themed=True. После подпроекта #2 (Bot connection flow)
+        unknown-чаты будут уходить в onboarding-flow вместо fallback.
+        """
+        try:
+            chat = update.effective_chat
+            user = update.effective_user
+            chat_id = chat.id if chat else None
+            user_id = user.id if user else None
+
+            ws_ctx = None
+            if chat_id is not None:
+                ws_ctx = build_context(self.db.conn, chat_id, user_id)
+
+            if ws_ctx is None:
+                # Fallback на Pulse (ws=1) до Bot connection flow (#2)
+                ws_ctx = WorkspaceContext(
+                    workspace_id=1,
+                    is_pulse_themed=True,
+                    plan='free',
+                    member_role=None,
+                )
+
+            context.user_data['ws_ctx'] = ws_ctx
+            # Также chat_data для удобного доступа из callback-ов где
+            # user_data может быть пустым (например, anon-callback).
+            context.chat_data['ws_ctx'] = ws_ctx
+        except Exception as e:
+            logger.error(f"resolve_workspace_middleware: {e}", exc_info=True)
+            # При ошибке резолва — кладём дефолтный Pulse контекст чтобы
+            # не сломать downstream handlers
+            context.user_data['ws_ctx'] = WorkspaceContext(
+                workspace_id=1, is_pulse_themed=True, plan='free'
+            )
+
     def setup_handlers(self):
         """Setup all handlers"""
+        # V1.17.0a19: middleware-резолвер ws_ctx (group=-1, block=False)
+        # Запускается ПЕРВЫМ для каждого update, кладёт ws_ctx в context.
+        self.application.add_handler(
+            TypeHandler(Update, self.resolve_workspace_middleware, block=False),
+            group=-1
+        )
+
         # Registration conversation handler (MUST be before general message handler)
         from handlers.registration_conversation import registration_conv
         self.application.add_handler(registration_conv)

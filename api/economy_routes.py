@@ -15,6 +15,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/economy", tags=["economy"])
 
+# TODO(multi-tenancy): workspace_id=1 placeholder. После Подпроекта #3 (web auth)
+# извлекать из JWT/header X-Workspace-Id.
+_DEFAULT_WS_ID = 1
+
 
 # ── Pydantic models ───────────────────────────────────────────────────────────
 
@@ -81,7 +85,7 @@ async def list_categories(authorization: str = Header(default=None)):
     if not has_permission(role, "economy.view"):
         raise HTTPException(403, detail="Нет доступа к экономике")
     from database.db_economy import get_econ_categories
-    return get_econ_categories(_db)
+    return get_econ_categories(_db, _DEFAULT_WS_ID)
 
 
 @router.get("/settings")
@@ -95,7 +99,7 @@ async def list_settings(
     if not has_permission(role, "economy.view"):
         raise HTTPException(403, detail="Нет доступа к экономике")
     from database.db_economy import get_econ_settings
-    return get_econ_settings(_db, category=category, subcategory=subcategory)
+    return get_econ_settings(_db, _DEFAULT_WS_ID, category=category, subcategory=subcategory)
 
 
 @router.patch("/settings/{key}")
@@ -112,7 +116,7 @@ async def update_setting(
 
     from database.db_economy import set_econ
     try:
-        result = set_econ(_db, key, body.value, body.comment.strip(), uid, role)
+        result = set_econ(_db, _DEFAULT_WS_ID, key, body.value, body.comment.strip(), uid, role)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
 
@@ -142,7 +146,7 @@ async def toggle_setting(
 
     from database.db_economy import toggle_econ
     try:
-        result = toggle_econ(_db, key, body.comment.strip(), uid, role)
+        result = toggle_econ(_db, _DEFAULT_WS_ID, key, body.comment.strip(), uid, role)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
 
@@ -171,7 +175,7 @@ async def toggle_category(
 
     from database.db_economy import toggle_section
     try:
-        result = toggle_section(_db, key, body.comment.strip(), uid, role)
+        result = toggle_section(_db, _DEFAULT_WS_ID, key, body.comment.strip(), uid, role)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
 
@@ -198,7 +202,7 @@ async def get_setting_history(
     if not has_permission(role, "economy.view"):
         raise HTTPException(403, detail="Нет доступа к экономике")
     from database.db_economy_history import get_history_for_key
-    return get_history_for_key(_db, key, limit=limit, offset=offset)
+    return get_history_for_key(_db, _DEFAULT_WS_ID, key, limit=limit, offset=offset)
 
 
 @router.post("/settings/{key}/rollback/{history_id}")
@@ -216,7 +220,7 @@ async def rollback_setting(
 
     from database.db_economy import rollback_econ
     try:
-        result = rollback_econ(_db, history_id, body.comment.strip(), uid, role)
+        result = rollback_econ(_db, _DEFAULT_WS_ID, history_id, body.comment.strip(), uid, role)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
 
@@ -248,7 +252,7 @@ async def cancel_pointwise_endpoint(
 
     from database.db_economy import cancel_pointwise
     try:
-        result = cancel_pointwise(_db, body.tx_id, body.mode, body.comment.strip(), uid, role)
+        result = cancel_pointwise(_db, _DEFAULT_WS_ID, body.tx_id, body.mode, body.comment.strip(), uid, role)
     except ValueError as e:
         raise HTTPException(400, detail=str(e))
 
@@ -284,7 +288,7 @@ async def cancel_mass_endpoint(
 
     from database.db_economy import cancel_mass
     try:
-        result = cancel_mass(_db, filter_dict, "log_only", body.comment.strip(), uid, role)
+        result = cancel_mass(_db, _DEFAULT_WS_ID, filter_dict, "log_only", body.comment.strip(), uid, role)
     except Exception as e:
         raise HTTPException(400, detail=str(e))
 
@@ -310,7 +314,7 @@ async def list_cancellations(
     if not has_permission(role, "economy.view"):
         raise HTTPException(403, detail="Нет доступа к экономике")
     from database.db_economy import get_cancellations
-    return get_cancellations(_db, limit=limit, offset=offset)
+    return get_cancellations(_db, _DEFAULT_WS_ID, limit=limit, offset=offset)
 
 
 @router.get("/metrics")
@@ -320,4 +324,4 @@ async def get_metrics(authorization: str = Header(default=None)):
     if not has_permission(role, "economy.view"):
         raise HTTPException(403, detail="Нет доступа к экономике")
     from database.db_economy import get_economy_metrics
-    return get_economy_metrics(_db)
+    return get_economy_metrics(_db, _DEFAULT_WS_ID)

@@ -295,6 +295,9 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
     Публикует пресс-релиз во все его targets.
     Обновляет targets (message_ids/error) и статус поста.
     Возвращает (overall_ok, errors_list).
+
+    V1.17.0a14: workspace_id берётся из `post['workspace_id']` (приходит из
+    scheduled_posts.workspace_id, добавленного миграцией multi-tenancy).
     """
     from database.db_press_release import (
         get_targets, mark_target_published, mark_target_error,
@@ -303,16 +306,17 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
 
     bot = application.bot
     post_id = post['id']
+    ws_id = post.get('workspace_id') or 1
     settings = _settings(post)
     media_list = _parse_media(post.get('photo_file_id'))
     keyboard = _build_keyboard(post)
 
     # Подпись из брендинга (default fallback)
-    sig_default = get_branding(db, 'signature', '') or ''
+    sig_default = get_branding(db, ws_id, 'signature', '') or ''
     text = _build_text(post, signature_default=sig_default)
 
     # Если targets пустой — fallback на legacy target_chat_id/thread_id
-    targets = get_targets(db, post_id)
+    targets = get_targets(db, ws_id, post_id)
     if not targets and post.get('target_chat_id'):
         targets = [{
             'id': None,
@@ -322,7 +326,7 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
         }]
 
     if not targets:
-        mark_failed(db, post_id, "Нет ни одного target для публикации")
+        mark_failed(db, ws_id, post_id, "Нет ни одного target для публикации")
         return False, ["no targets"]
 
     overall_ok = True
@@ -340,7 +344,7 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
                 settings=settings,
             )
             if tgt.get('id'):
-                mark_target_published(db, tgt['id'], msg_ids)
+                mark_target_published(db, ws_id, tgt['id'], msg_ids)
 
             # Отложенное удаление через JobQueue
             dap = settings.get('delete_after_publish') or {}
@@ -352,20 +356,20 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
             err = str(e)
             errors.append(f"chat={tgt['chat_id']}: {err}")
             if tgt.get('id'):
-                mark_target_error(db, tgt['id'], err)
+                mark_target_error(db, ws_id, tgt['id'], err)
             logger.error(f"publish post={post_id} target={tgt['chat_id']}: {e}", exc_info=True)
 
     if overall_ok:
-        mark_published(db, post_id)
+        mark_published(db, ws_id, post_id)
     else:
         # Если все таргеты упали — фейл; иначе оставляем published как partial
         all_failed = all(
-            t.get('error') or False for t in get_targets(db, post_id)
+            t.get('error') or False for t in get_targets(db, ws_id, post_id)
         )
         if all_failed:
-            mark_failed(db, post_id, "; ".join(errors)[:500])
+            mark_failed(db, ws_id, post_id, "; ".join(errors)[:500])
         else:
-            mark_published(db, post_id)  # частичный успех — всё равно published
+            mark_published(db, ws_id, post_id)  # частичный успех — всё равно published
 
     # Уведомление автору в ЛС
     try:
@@ -414,7 +418,7 @@ async def check_pre_publish_reminders(application, db) -> None:
     from database.db_press_release import update_press_release
     now = get_moscow_time()
     db.cursor.execute('''
-        SELECT id, author_id, title, publish_at, pre_publish_reminder, settings_json
+        SELECT id, workspace_id, author_id, title, publish_at, pre_publish_reminder, settings_json
         FROM scheduled_posts
         WHERE status = 'scheduled' AND pre_publish_reminder > 0
     ''')
@@ -446,7 +450,7 @@ async def check_pre_publish_reminders(application, db) -> None:
                 )
                 settings['reminder_sent'] = True
                 update_press_release(
-                    db, row['id'],
+                    db, row.get('workspace_id') or 1, row['id'],
                     settings_json=json.dumps(settings, ensure_ascii=False),
                 )
             except Exception as e:
@@ -458,9 +462,15 @@ async def check_pre_publish_reminders(application, db) -> None:
 # ────────────────────────────────────────────────────────────────────
 
 async def tick_scheduler(application, db) -> None:
-    """Вызывается из bot.py check_scheduled_posts. Публикует подошедшие пресс-релизы."""
+    """Вызывается из bot.py check_scheduled_posts. Публикует подошедшие пресс-релизы.
+
+    V1.17.0a14: cross-workspace — берём из всех тенантов через
+    `get_all_pending_press_releases`. Каждый post тащит свой workspace_id
+    из строки scheduled_posts, дальнейшие вызовы получают его внутри
+    publish_press_release.
+    """
     from utils.helpers import get_moscow_time
-    from database.db_press_release import get_pending_press_releases
+    from database.db_press_release import get_all_pending_press_releases
 
     # 1) Pre-publish reminders
     try:
@@ -470,7 +480,7 @@ async def tick_scheduler(application, db) -> None:
 
     # 2) Сами публикации
     now_str = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
-    pending = get_pending_press_releases(db, now_str)
+    pending = get_all_pending_press_releases(db, now_str)
     for post in pending:
         try:
             await publish_press_release(application, db, post)
