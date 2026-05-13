@@ -108,3 +108,88 @@ def get_member_role(
         (ws_id, user_id)
     ).fetchone()
     return row[0] if row else None
+
+
+# ── V1.17.0b3: helpers для UI и onboarding flow ──
+
+def get_workspaces_for_user(conn: sqlite3.Connection, user_id: int) -> list:
+    """Все workspaces где user — member. Включает role и счётчики."""
+    rows = conn.execute('''
+        SELECT
+            w.id, w.name, w.owner_user_id, w.is_pulse_themed, w.plan,
+            m.role,
+            (SELECT COUNT(*) FROM workspace_members WHERE workspace_id=w.id) AS members_count,
+            (SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id) AS chats_count
+        FROM workspaces w
+        JOIN workspace_members m ON m.workspace_id = w.id
+        WHERE m.user_id = ?
+        ORDER BY w.created_at DESC
+    ''', (user_id,)).fetchall()
+    keys = ('id', 'name', 'owner_user_id', 'is_pulse_themed', 'plan',
+            'role', 'members_count', 'chats_count')
+    return [dict(zip(keys, r)) for r in rows]
+
+
+def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Optional[dict]:
+    """Workspace + список членов + список чатов."""
+    ws_row = conn.execute(
+        'SELECT id, name, owner_user_id, is_pulse_themed, plan, created_at '
+        'FROM workspaces WHERE id=?', (workspace_id,)
+    ).fetchone()
+    if not ws_row:
+        return None
+
+    members = conn.execute('''
+        SELECT user_id, role, joined_at
+        FROM workspace_members WHERE workspace_id=?
+        ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+                 joined_at
+    ''', (workspace_id,)).fetchall()
+
+    chats = conn.execute('''
+        SELECT chat_id, title, chat_type, added_by_user_id, added_at
+        FROM bot_chats WHERE workspace_id=?
+        ORDER BY added_at DESC
+    ''', (workspace_id,)).fetchall()
+
+    return {
+        'workspace': {
+            'id': ws_row[0], 'name': ws_row[1], 'owner_user_id': ws_row[2],
+            'is_pulse_themed': bool(ws_row[3]), 'plan': ws_row[4],
+            'created_at': ws_row[5],
+        },
+        'members': [{'user_id': m[0], 'role': m[1], 'joined_at': m[2]} for m in members],
+        'chats': [{'chat_id': c[0], 'title': c[1], 'chat_type': c[2],
+                   'added_by': c[3], 'added_at': c[4]} for c in chats],
+    }
+
+
+def update_workspace_name(conn: sqlite3.Connection, workspace_id: int, new_name: str) -> None:
+    conn.execute(
+        "UPDATE workspaces SET name=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (new_name, workspace_id)
+    )
+    conn.commit()
+
+
+def add_bot_chat(conn: sqlite3.Connection, chat_id: int, workspace_id: int,
+                 added_by: int, title: Optional[str], chat_type: Optional[str]) -> None:
+    """Привязывает chat к workspace (upsert по chat_id)."""
+    conn.execute('''
+        INSERT INTO bot_chats (chat_id, workspace_id, added_by_user_id, title, chat_type, added_at)
+        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        ON CONFLICT(chat_id) DO UPDATE SET
+          workspace_id=excluded.workspace_id,
+          added_by_user_id=excluded.added_by_user_id,
+          title=excluded.title,
+          chat_type=excluded.chat_type
+    ''', (chat_id, workspace_id, added_by, title, chat_type))
+    conn.commit()
+
+
+def get_workspace_by_chat(conn: sqlite3.Connection, chat_id: int) -> Optional[int]:
+    """Возвращает workspace_id если chat привязан, иначе None."""
+    row = conn.execute(
+        'SELECT workspace_id FROM bot_chats WHERE chat_id=?', (chat_id,)
+    ).fetchone()
+    return row[0] if row else None

@@ -68,6 +68,16 @@ def test_build_context_unknown_chat_returns_none(conn):
     assert ctx is None
 
 
+def test_build_context_no_fallback_to_pulse_for_unknown(conn):
+    """V1.17.0b7: после Bot Connection Flow middleware больше не возвращает
+    Pulse fallback для unknown chats. build_context честно возвращает None,
+    @pulse_only декораторы корректно скипают handlers."""
+    # Только Pulse workspace создан, но bot_chats пустой
+    create_workspace(conn, 'Pulse', owner_user_id=1, is_pulse_themed=True)
+    ctx = build_context(conn, chat_id=-12345, user_id=1)
+    assert ctx is None  # NOT a Pulse fallback!
+
+
 @pulse_only
 async def _pulse_handler(update, ctx, ws_ctx):
     return 'ran'

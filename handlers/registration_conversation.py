@@ -113,6 +113,32 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = update.effective_user.id
     user_name = update.effective_user.first_name or "Друг"
 
+    # ── V1.17.0b6 Deep link `join_<ws_id>` — multi-tenancy onboarding ──
+    # Для Pulse-сообщества (is_pulse_themed=1) → продолжаем обычную анкету.
+    # Для не-Pulse → простой welcome без анкеты (модуль регистрации = #4).
+    if context.args and context.args[0].startswith('join_'):
+        try:
+            target_ws_id = int(context.args[0][5:])
+        except (ValueError, TypeError):
+            await update.message.reply_text("❌ Некорректная ссылка.")
+            return ConversationHandler.END
+
+        main_db = context.bot_data.get('db')
+        if main_db:
+            from database.db_workspaces import get_workspace
+            ws = get_workspace(main_db.conn, target_ws_id)
+            if not ws:
+                await update.message.reply_text("❌ Сообщество не найдено.")
+                return ConversationHandler.END
+            if not ws.is_pulse_themed:
+                await update.message.reply_text(
+                    f"👋 Добро пожаловать в «{ws.name}»!\n\n"
+                    f"Скоро здесь будет регистрационная анкета этого сообщества. "
+                    f"Пока — подожди приглашение от админов."
+                )
+                return ConversationHandler.END
+        # is_pulse_themed=True → fall through к обычной Pulse-анкете
+
     # ── Deep link жалобы BBS: показываем меню выбора причины, минуя регистрацию ──
     if context.args and context.args[0].startswith('report_'):
         import html as _html

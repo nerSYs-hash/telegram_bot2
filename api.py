@@ -96,6 +96,15 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения press_release router: {e}")
 
+# Workspaces (V1.17.0b8 — bot connection flow API)
+try:
+    from api.workspaces_routes import router as workspaces_router, _setup as _ws_setup
+    _ws_setup(db, lambda auth: _require_auth(auth))
+    app.include_router(workspaces_router)
+    logger.info("✅ workspaces: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения workspaces router: {e}")
+
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
