@@ -147,9 +147,11 @@ def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Option
     ''', (workspace_id,)).fetchall()
 
     chats = conn.execute('''
-        SELECT chat_id, title, chat_type, added_by_user_id, added_at
+        SELECT chat_id, title, chat_type, added_by_user_id, added_at, role
         FROM bot_chats WHERE workspace_id=?
-        ORDER BY added_at DESC
+        ORDER BY
+          CASE role WHEN 'main' THEN 0 WHEN 'admin' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END,
+          added_at DESC
     ''', (workspace_id,)).fetchall()
 
     return {
@@ -160,7 +162,7 @@ def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Option
         },
         'members': [{'user_id': m[0], 'role': m[1], 'joined_at': m[2]} for m in members],
         'chats': [{'chat_id': c[0], 'title': c[1], 'chat_type': c[2],
-                   'added_by': c[3], 'added_at': c[4]} for c in chats],
+                   'added_by': c[3], 'added_at': c[4], 'role': c[5]} for c in chats],
     }
 
 
@@ -173,17 +175,28 @@ def update_workspace_name(conn: sqlite3.Connection, workspace_id: int, new_name:
 
 
 def add_bot_chat(conn: sqlite3.Connection, chat_id: int, workspace_id: int,
-                 added_by: int, title: Optional[str], chat_type: Optional[str]) -> None:
-    """Привязывает chat к workspace (upsert по chat_id)."""
+                 added_by: int, title: Optional[str], chat_type: Optional[str],
+                 role: Optional[str] = None) -> None:
+    """Привязывает chat к workspace (upsert по chat_id). role: 'main'|'admin'|'journal'|None."""
+    if role is not None and role not in ('main', 'admin', 'journal'):
+        raise ValueError(f'Invalid chat role: {role!r}')
     conn.execute('''
-        INSERT INTO bot_chats (chat_id, workspace_id, added_by_user_id, title, chat_type, added_at)
-        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+        INSERT INTO bot_chats (chat_id, workspace_id, added_by_user_id, title, chat_type, role, added_at)
+        VALUES (?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(chat_id) DO UPDATE SET
           workspace_id=excluded.workspace_id,
           added_by_user_id=excluded.added_by_user_id,
           title=excluded.title,
           chat_type=excluded.chat_type
-    ''', (chat_id, workspace_id, added_by, title, chat_type))
+    ''', (chat_id, workspace_id, added_by, title, chat_type, role))
+    conn.commit()
+
+
+def update_bot_chat_role(conn: sqlite3.Connection, chat_id: int, role: Optional[str]) -> None:
+    """Меняет роль чата. role: 'main'|'admin'|'journal'|None (без роли)."""
+    if role is not None and role not in ('main', 'admin', 'journal'):
+        raise ValueError(f'Invalid chat role: {role!r}')
+    conn.execute('UPDATE bot_chats SET role=? WHERE chat_id=?', (role, chat_id))
     conn.commit()
 
 
