@@ -2,7 +2,7 @@
 import logging
 from fastapi import APIRouter, Header, HTTPException
 
-from database.db_workspaces import get_workspaces_for_user
+from database.db_workspaces import get_workspaces_for_user, get_workspace_details
 
 logger = logging.getLogger(__name__)
 
@@ -43,3 +43,14 @@ async def list_workspaces(authorization: str = Header(default=None)):
     user_id = int(payload['user_id'])
     rows = get_workspaces_for_user(_db.conn, user_id)
     return {"workspaces": rows}
+
+
+@router.get("/{ws_id}")
+async def workspace_details(ws_id: int, authorization: str = Header(default=None)):
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'moderator')
+    details = get_workspace_details(_db.conn, ws_id)
+    if not details:
+        raise HTTPException(status_code=404, detail="Сообщество не найдено")
+    return details

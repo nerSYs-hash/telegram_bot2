@@ -82,3 +82,18 @@ def test_get_workspaces_empty_for_new_user(client):
     r = client.get('/api/workspaces', headers={'Authorization': 'Bearer fake-555'})
     assert r.status_code == 200
     assert r.json()['workspaces'] == []
+
+
+def test_get_workspace_details(client):
+    r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    data = r.json()
+    assert data['workspace']['name'] == 'My WS'
+    assert len(data['members']) == 2
+    assert len(data['chats']) == 1
+    assert data['chats'][0]['title'] == 'My Main'
+
+
+def test_get_workspace_details_non_member_forbidden(client):
+    r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-555'})
+    assert r.status_code == 404
