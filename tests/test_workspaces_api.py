@@ -16,7 +16,9 @@ def client(tmp_path):
     conn.execute('''CREATE TABLE bot_chats (
         chat_id INTEGER PRIMARY KEY,
         workspace_id INTEGER NOT NULL DEFAULT 1,
-        added_by_user_id INTEGER, title TEXT, chat_type TEXT, added_at TEXT
+        added_by_user_id INTEGER, title TEXT, chat_type TEXT,
+        role TEXT CHECK (role IS NULL OR role IN ('main','admin','journal')),
+        added_at TEXT
     )''')
     conn.execute('''CREATE TABLE users (
         user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT
@@ -196,3 +198,45 @@ def test_rename_empty_name_400(client):
         headers={'Authorization': 'Bearer fake-42'}
     )
     assert r.status_code == 400
+
+
+# ── V1.17.0c (F): PATCH /chats/{chat_id} role ──
+
+def test_owner_can_set_chat_role(client):
+    r = client.patch(
+        '/api/workspaces/1/chats/-100',
+        json={'role': 'main'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 200
+    d = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'}).json()
+    assert d['chats'][0]['role'] == 'main'
+
+
+def test_owner_can_clear_chat_role(client):
+    client.patch('/api/workspaces/1/chats/-100', json={'role': 'admin'},
+                 headers={'Authorization': 'Bearer fake-42'})
+    r = client.patch('/api/workspaces/1/chats/-100', json={'role': None},
+                     headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    d = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'}).json()
+    assert d['chats'][0]['role'] is None
+
+
+def test_admin_cannot_set_chat_role(client):
+    r = client.patch('/api/workspaces/1/chats/-100', json={'role': 'main'},
+                     headers={'Authorization': 'Bearer fake-100'})
+    assert r.status_code == 403
+
+
+def test_invalid_chat_role_400(client):
+    r = client.patch('/api/workspaces/1/chats/-100', json={'role': 'boss'},
+                     headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 400
+
+
+def test_chat_role_chat_not_found(client):
+    r = client.patch('/api/workspaces/1/chats/-99999', json={'role': 'main'},
+                     headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 404
+
