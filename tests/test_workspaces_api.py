@@ -26,6 +26,10 @@ def client(tmp_path):
     create_workspace(conn, 'Other WS', owner_user_id=99)
     add_member(conn, 1, 100, 'admin')   # 100 — admin в My WS
     add_bot_chat(conn, -100, 1, 42, 'My Main', 'supergroup')
+    # site_users: 42 (owner), 100 (admin), 200 (потенциальный invitee) логинились на сайте
+    conn.execute("INSERT INTO users (user_id, username, first_name) VALUES (42, 'vitya', 'Витя')")
+    conn.execute("INSERT INTO users (user_id, username, first_name) VALUES (100, 'helper', 'Помощник')")
+    conn.execute("INSERT INTO users (user_id, username, first_name) VALUES (200, 'newbie', 'Новенький')")
     conn.commit()
 
     from api.workspaces_routes import router, _setup
@@ -38,6 +42,15 @@ def client(tmp_path):
         def get_workspace_by_chat(self, chat_id):
             from database.db_workspaces import get_workspace_by_chat
             return get_workspace_by_chat(self.conn, chat_id)
+
+        def get_site_user(self, user_id):
+            row = self.conn.execute(
+                "SELECT user_id, username, first_name FROM users WHERE user_id=?",
+                (user_id,)
+            ).fetchone()
+            if not row:
+                return None
+            return {'user_id': row[0], 'username': row[1], 'first_name': row[2]}
 
     fake_db = _DB(conn)
 
@@ -97,3 +110,60 @@ def test_get_workspace_details(client):
 def test_get_workspace_details_non_member_forbidden(client):
     r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-555'})
     assert r.status_code == 404
+
+
+def test_owner_can_add_admin(client):
+    r = client.post(
+        '/api/workspaces/1/members',
+        json={'user_id': 200, 'role': 'admin'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 200
+
+
+def test_non_owner_cannot_add_member(client):
+    r = client.post(
+        '/api/workspaces/1/members',
+        json={'user_id': 300, 'role': 'admin'},
+        headers={'Authorization': 'Bearer fake-100'}
+    )
+    assert r.status_code == 403
+
+
+def test_add_member_invalid_role(client):
+    r = client.post(
+        '/api/workspaces/1/members',
+        json={'user_id': 200, 'role': 'superadmin'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 400
+
+
+def test_add_member_unknown_user(client):
+    r = client.post(
+        '/api/workspaces/1/members',
+        json={'user_id': 999, 'role': 'admin'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 404
+
+
+def test_owner_can_remove_admin(client):
+    client.post(
+        '/api/workspaces/1/members',
+        json={'user_id': 200, 'role': 'admin'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    r = client.delete(
+        '/api/workspaces/1/members/200',
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 200
+
+
+def test_owner_cannot_remove_self(client):
+    r = client.delete(
+        '/api/workspaces/1/members/42',
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 400

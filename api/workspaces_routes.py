@@ -1,8 +1,17 @@
 """Endpoints: /api/workspaces, /api/workspaces/{id}, /workspaces/{id}/members."""
 import logging
 from fastapi import APIRouter, Header, HTTPException
+from pydantic import BaseModel
 
-from database.db_workspaces import get_workspaces_for_user, get_workspace_details
+from database.db_workspaces import (
+    get_workspaces_for_user, get_workspace_details,
+    add_member, remove_member,
+)
+
+
+class MemberAdd(BaseModel):
+    user_id: int
+    role: str  # 'admin' | 'moderator'
 
 logger = logging.getLogger(__name__)
 
@@ -54,3 +63,57 @@ async def workspace_details(ws_id: int, authorization: str = Header(default=None
     if not details:
         raise HTTPException(status_code=404, detail="Сообщество не найдено")
     return details
+
+
+@router.post("/{ws_id}/members")
+async def add_workspace_member(
+    ws_id: int, body: MemberAdd, authorization: str = Header(default=None)
+):
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if body.role not in ('admin', 'moderator'):
+        raise HTTPException(status_code=400, detail="Роль должна быть admin или moderator")
+
+    target = _db.get_site_user(body.user_id)
+    if not target:
+        raise HTTPException(
+            status_code=404,
+            detail="Этот юзер ещё не логинился на сайте. Попроси его войти через Telegram."
+        )
+
+    exists = _db.conn.execute(
+        "SELECT 1 FROM workspace_members WHERE workspace_id=? AND user_id=?",
+        (ws_id, body.user_id)
+    ).fetchone()
+    if exists:
+        raise HTTPException(status_code=409, detail="Юзер уже член этого сообщества")
+
+    add_member(_db.conn, ws_id, body.user_id, body.role)
+    return {"ok": True, "user_id": body.user_id, "role": body.role}
+
+
+@router.delete("/{ws_id}/members/{member_user_id}")
+async def remove_workspace_member(
+    ws_id: int, member_user_id: int,
+    authorization: str = Header(default=None)
+):
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if member_user_id == user_id:
+        raise HTTPException(status_code=400, detail="Owner не может удалить себя")
+
+    target_role = _db.conn.execute(
+        "SELECT role FROM workspace_members WHERE workspace_id=? AND user_id=?",
+        (ws_id, member_user_id)
+    ).fetchone()
+    if not target_role:
+        raise HTTPException(status_code=404, detail="Член сообщества не найден")
+    if target_role[0] == 'owner':
+        raise HTTPException(status_code=400, detail="Owner нельзя удалить (нужен transfer ownership)")
+
+    remove_member(_db.conn, ws_id, member_user_id)
+    return {"ok": True}
