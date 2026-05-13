@@ -167,3 +167,32 @@ def test_owner_cannot_remove_self(client):
         headers={'Authorization': 'Bearer fake-42'}
     )
     assert r.status_code == 400
+
+
+def test_owner_can_rename(client):
+    r = client.patch(
+        '/api/workspaces/1',
+        json={'name': 'Renamed'},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 200
+    r2 = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'})
+    assert r2.json()['workspace']['name'] == 'Renamed'
+
+
+def test_admin_cannot_rename(client):
+    r = client.patch(
+        '/api/workspaces/1',
+        json={'name': 'X'},
+        headers={'Authorization': 'Bearer fake-100'}
+    )
+    assert r.status_code == 403
+
+
+def test_rename_empty_name_400(client):
+    r = client.patch(
+        '/api/workspaces/1',
+        json={'name': ''},
+        headers={'Authorization': 'Bearer fake-42'}
+    )
+    assert r.status_code == 400

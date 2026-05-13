@@ -1,17 +1,22 @@
 """Endpoints: /api/workspaces, /api/workspaces/{id}, /workspaces/{id}/members."""
 import logging
+from typing import Optional
 from fastapi import APIRouter, Header, HTTPException
 from pydantic import BaseModel
 
 from database.db_workspaces import (
     get_workspaces_for_user, get_workspace_details,
-    add_member, remove_member,
+    add_member, remove_member, update_workspace_name,
 )
 
 
 class MemberAdd(BaseModel):
     user_id: int
     role: str  # 'admin' | 'moderator'
+
+
+class WorkspacePatch(BaseModel):
+    name: Optional[str] = None
 
 logger = logging.getLogger(__name__)
 
@@ -116,4 +121,22 @@ async def remove_workspace_member(
         raise HTTPException(status_code=400, detail="Owner нельзя удалить (нужен transfer ownership)")
 
     remove_member(_db.conn, ws_id, member_user_id)
+    return {"ok": True}
+
+
+@router.patch("/{ws_id}")
+async def patch_workspace(
+    ws_id: int, body: WorkspacePatch, authorization: str = Header(default=None)
+):
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if body.name is not None:
+        if not body.name.strip():
+            raise HTTPException(status_code=400, detail="Имя не может быть пустым")
+        if len(body.name) > 100:
+            raise HTTPException(status_code=400, detail="Имя слишком длинное")
+        update_workspace_name(_db.conn, ws_id, body.name.strip())
+
     return {"ok": True}
