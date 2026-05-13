@@ -129,3 +129,8 @@ def test_get_workspace_by_chat_returns_id_or_none(conn):
                  title='C', chat_type='group')
     assert get_workspace_by_chat(conn, -200) == ws_id
     assert get_workspace_by_chat(conn, -99999) is None
+
+
+# Note: Database.get_site_user и Database.get_workspace_by_chat — тонкие
+# обёртки над SQL/db_workspaces, тестируются интеграционно через
+# test_bot_membership.py (fake _DB class) и live smoke.

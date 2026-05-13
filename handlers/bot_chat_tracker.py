@@ -49,10 +49,19 @@ async def handle_my_chat_member(update: Update, context: ContextTypes.DEFAULT_TY
         return
 
     try:
+        # V1.17.0b5: после bot_membership.on_bot_added_to_chat (Bot Connection Flow)
+        # для нового чата уже создан workspace и bot_chats запись. Резолвим
+        # workspace_id из БД, fallback на 1 для legacy/unknown чатов.
+        try:
+            from database.db_workspaces import get_workspace_by_chat
+            resolved_ws = get_workspace_by_chat(db.conn, chat.id) or _DEFAULT_WS_ID
+        except Exception:
+            resolved_ws = _DEFAULT_WS_ID
+
         if _is_bot_present(new_status):
             upsert_bot_chat(
                 db,
-                _DEFAULT_WS_ID,
+                resolved_ws,
                 chat_id=chat.id,
                 chat_type=chat.type,
                 title=chat.title or '',

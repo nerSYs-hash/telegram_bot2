@@ -717,6 +717,18 @@ class TelegramBot:
             )
         )
 
+        # V1.17.0b5 Bot Connection Flow: онбординг нового workspace при
+        # добавлении бота в чат. Регистрируется ПЕРЕД bot_chat_tracker,
+        # чтобы успеть создать workspace до того как tracker upsert'нет
+        # bot_chats запись.
+        from handlers.bot_membership import on_bot_added_to_chat
+        self.application.add_handler(
+            ChatMemberHandler(
+                lambda u, c: on_bot_added_to_chat(u, c, self.db),
+                ChatMemberHandler.MY_CHAT_MEMBER
+            )
+        )
+
         # Press-Releases (V1.16.14): отслеживание чатов где есть бот
         from handlers.bot_chat_tracker import handle_my_chat_member
         self.application.add_handler(

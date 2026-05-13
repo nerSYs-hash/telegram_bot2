@@ -748,6 +748,32 @@ class Database:
     def get_user_by_username(self, username):
         return _get_user_by_username(self, username)
 
+    # V1.17.0b5: helpers для bot_membership handler (Bot Connection Flow)
+    def get_site_user(self, user_id: int):
+        """Возвращает {user_id, username, first_name} если юзер логинился на сайте
+        (= есть запись в users), иначе None."""
+        self.cursor.execute(
+            "SELECT user_id, username, first_name FROM users WHERE user_id=?",
+            (user_id,)
+        )
+        row = self.cursor.fetchone()
+        if not row:
+            return None
+        # sqlite3.Row supports both keys() and index
+        try:
+            return {
+                'user_id': row['user_id'],
+                'username': row['username'],
+                'first_name': row['first_name'],
+            }
+        except (TypeError, IndexError):
+            return {'user_id': row[0], 'username': row[1], 'first_name': row[2]}
+
+    def get_workspace_by_chat(self, chat_id: int):
+        """Возвращает workspace_id если chat привязан, иначе None."""
+        from database.db_workspaces import get_workspace_by_chat as _impl
+        return _impl(self.conn, chat_id)
+
     def update_user_balance(self, user_id, amount, operation='add'):
         return _update_user_balance(self, user_id, amount, operation)
 
