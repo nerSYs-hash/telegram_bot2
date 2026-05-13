@@ -615,26 +615,20 @@ class TelegramBot:
             if chat_id is not None:
                 ws_ctx = build_context(self.db.conn, chat_id, user_id)
 
-            if ws_ctx is None:
-                # Fallback на Pulse (ws=1) до Bot connection flow (#2)
-                ws_ctx = WorkspaceContext(
-                    workspace_id=1,
-                    is_pulse_themed=True,
-                    plan='free',
-                    member_role=None,
-                )
+            # V1.17.0b7: для unknown chat ws_ctx остаётся None.
+            # @pulse_only декораторы скипают handlers (allow для DM-команд
+            # которые не нуждаются в workspace context). После Bot Connection
+            # Flow реальные unknown-чаты получают workspace через
+            # on_bot_added_to_chat handler, поэтому fallback ws=1 больше не
+            # нужен и был бы опасен (utечка Pulse-данных в чужой чат).
 
-            context.user_data['ws_ctx'] = ws_ctx
-            # Также chat_data для удобного доступа из callback-ов где
-            # user_data может быть пустым (например, anon-callback).
+            context.user_data['ws_ctx'] = ws_ctx  # may be None
             context.chat_data['ws_ctx'] = ws_ctx
         except Exception as e:
             logger.error(f"resolve_workspace_middleware: {e}", exc_info=True)
-            # При ошибке резолва — кладём дефолтный Pulse контекст чтобы
-            # не сломать downstream handlers
-            context.user_data['ws_ctx'] = WorkspaceContext(
-                workspace_id=1, is_pulse_themed=True, plan='free'
-            )
+            # При ошибке резолва — None, handlers безопасно скипают.
+            context.user_data['ws_ctx'] = None
+            context.chat_data['ws_ctx'] = None
 
     def setup_handlers(self):
         """Setup all handlers"""
