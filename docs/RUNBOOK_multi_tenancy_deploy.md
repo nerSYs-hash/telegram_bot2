@@ -128,3 +128,84 @@ sudo systemctl start pulse_bot
   - `platform_pivot_2026_05_08.md` — стратегия SaaS pivot
   - `multi_tenancy_pk_debt.md` — composite PK долг
   - `session_2026_05_13_phase5.md` — Phase 5 итоги
+
+---
+
+## V1.17.0b — Bot connection flow + composite PK fix
+
+**Подпроект #2** (Bot Connection Flow). Ветка: `feat/V1.17.0b-bot-connection-flow`.
+Включает 15 коммитов V1.17.0b1-b15. Backend (DB+handler+API) + UI (4 React-компонента).
+
+### Что нового
+
+- **Composite PK fix** (b1) — rebuild 7 таблиц (`economy_settings`, `economy_section_toggles`,
+  `branding_settings`, `user_stats_hourly`, `user_stats`, `chat_stats`, `topics`)
+  с `PRIMARY KEY (workspace_id, ...)` — закрыт долг из a21.
+- **bot_chats** расширен (b2): `added_by_user_id`, `title`, `chat_type`, `added_at`.
+- **Само-онбординг** (b4-b5): `ChatMemberHandler.MY_CHAT_MEMBER` на добавление бота
+  в чат → создаёт workspace с `owner_user_id = тот, кто добавил`, привязывает chat
+  через `add_bot_chat`. Если from_user не зарегистрирован на сайте — leave_chat.
+- **/start join_<ws>** (b6) — deep-link для приглашения участника в конкретный ws.
+- **Middleware fallback убран** (b7) — unknown chats честно `ws_ctx=None` (защита
+  от утечки Pulse-данных).
+- **API** (b8-b11): `GET /api/workspaces`, `GET/{id}`, `POST/DELETE /members`, `PATCH /{id}`.
+- **UI** (b12-b15): `WorkspaceList` (список на дашборде), `WorkspacePage`
+  (детали+rename+чаты+помощники), `InviteMemberModal`, hook `useWorkspaces` с
+  polling 30s.
+
+### Deploy steps
+
+После применения V1.17.0a21 и smoke прохождения:
+
+```bash
+# 1. На сервере: остановить бота, бэкап
+sudo systemctl stop pulse_bot
+cp /opt/pulse_bot/database/bot_database.db /opt/backups/bot_database.pre_b15.db
+
+# 2. Pull
+cd /opt/pulse_bot
+git fetch origin
+git checkout feat/V1.17.0b-bot-connection-flow   # или merge в main + checkout main
+
+# 3. Миграции (идемпотентные, можно перезапускать)
+.venv/bin/python -m database.migrations.composite_pk_fix
+.venv/bin/python -m database.migrations.bot_chats_extend
+
+# 4. Sanity check
+.venv/bin/python -c "from dotenv import load_dotenv; load_dotenv(); import bot; print('OK')"
+
+# 5. Build UI и положить на nginx
+cd Admin_SITE
+npm install            # если node_modules не свежий
+npm run build
+cp -r dist/* /var/www/pulse-admin/
+
+# 6. Запустить бота
+sudo systemctl start pulse_bot
+sudo systemctl status pulse_bot
+```
+
+### Smoke checklist после деплоя
+
+1. Залогиниться на сайт **новым** TG-аккаунтом (не Витя)
+2. Дашборд: empty state "Без чата"
+3. В Telegram: создать тестовую группу, добавить `@Pulse_On_bot` как админа
+4. В чате: ожидаемое сообщение «✅ Сообщество «...» подключено к Pulse SaaS»
+5. В DM от бота: «✅ Чат «...» добавлен в твой кабинет»
+6. Refresh сайт → карточка нового сообщества появилась
+7. Open → «Помощники» → «Пригласить» → user_id Вити → admin → 200
+8. Logout → login Витей → видит новый workspace с role=admin
+9. Pulse-чат (workspace=1): BBS / Реактор / `/top` работают как раньше
+
+### Rollback
+
+```bash
+sudo systemctl stop pulse_bot
+cp /opt/backups/bot_database.pre_b15.db /opt/pulse_bot/database/bot_database.db
+git checkout <prev tag, например V1.17.0a22>
+sudo systemctl start pulse_bot
+```
+
+Миграция `composite_pk_fix` имеет down-функцию (rebuild обратно к старому PK),
+но если есть данные нового workspace — они потеряются. Использовать только
+вместе с откатом БД из бэкапа.
