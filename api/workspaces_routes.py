@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from database.db_workspaces import (
     get_workspaces_for_user, get_workspace_details,
     add_member, remove_member, update_workspace_name,
+    update_bot_chat_role,
 )
 
 
@@ -17,6 +18,10 @@ class MemberAdd(BaseModel):
 
 class WorkspacePatch(BaseModel):
     name: Optional[str] = None
+
+
+class ChatPatch(BaseModel):
+    role: Optional[str] = None  # 'main' | 'admin' | 'journal' | None
 
 logger = logging.getLogger(__name__)
 
@@ -140,3 +145,42 @@ async def patch_workspace(
         update_workspace_name(_db.conn, ws_id, body.name.strip())
 
     return {"ok": True}
+
+
+_VALID_CHAT_ROLES = ('main', 'admin', 'journal')
+
+
+@router.patch("/{ws_id}/chats/{chat_id}")
+async def patch_workspace_chat(
+    ws_id: int, chat_id: int, body: ChatPatch,
+    authorization: str = Header(default=None)
+):
+    """V1.17.0c (F): обновить роль чата. role: main|admin|journal|null."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if body.role is not None and body.role not in _VALID_CHAT_ROLES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"role должна быть одной из: {', '.join(_VALID_CHAT_ROLES)} или null",
+        )
+
+    chat_row = _db.conn.execute(
+        "SELECT workspace_id FROM bot_chats WHERE chat_id=?", (chat_id,)
+    ).fetchone()
+    if not chat_row:
+        raise HTTPException(status_code=404, detail="Чат не найден")
+    if chat_row[0] != ws_id:
+        raise HTTPException(status_code=403, detail="Чат принадлежит другому сообществу")
+
+    # Если назначаем главного/админа/журнал — снять эту роль с других чатов того же ws
+    # (на каждое сообщество максимум 1 чат каждой роли).
+    if body.role is not None:
+        _db.conn.execute(
+            "UPDATE bot_chats SET role=NULL WHERE workspace_id=? AND role=? AND chat_id<>?",
+            (ws_id, body.role, chat_id),
+        )
+
+    update_bot_chat_role(_db.conn, chat_id, body.role)
+    return {"ok": True, "chat_id": chat_id, "role": body.role}

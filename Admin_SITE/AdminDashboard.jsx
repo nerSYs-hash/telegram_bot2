@@ -5024,6 +5024,7 @@ export default function App() {
                 token={localStorage.getItem('auth_token')}
                 wsId={selectedWorkspaceId}
                 currentUserId={authUser?.user_id}
+                botUsername={profileData?.bot_username || 'Pulse_On_bot'}
                 onBack={() => setSelectedWorkspaceId(null)}
                 onInviteClick={() => setShowInviteModal(true)}
                 reloadTrigger={inviteReloadTick}

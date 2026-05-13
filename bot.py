@@ -721,11 +721,18 @@ class TelegramBot:
         # добавлении бота в чат. Регистрируется ПЕРЕД bot_chat_tracker,
         # чтобы успеть создать workspace до того как tracker upsert'нет
         # bot_chats запись.
-        from handlers.bot_membership import on_bot_added_to_chat
+        from handlers.bot_membership import on_bot_added_to_chat, on_connect_chat_callback
         self.application.add_handler(
             ChatMemberHandler(
                 lambda u, c: on_bot_added_to_chat(u, c, self.db),
                 ChatMemberHandler.MY_CHAT_MEMBER
+            )
+        )
+        # V1.17.0c (F): callback от кнопок «куда подключить чат»
+        self.application.add_handler(
+            CallbackQueryHandler(
+                lambda u, c: on_connect_chat_callback(u, c, self.db),
+                pattern=r'^connect_chat:'
             )
         )
 

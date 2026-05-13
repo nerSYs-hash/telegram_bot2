@@ -53,3 +53,17 @@ export async function renameWorkspace(token, wsId, newName) {
   }
   return r.json();
 }
+
+// V1.17.0c (F): обновить роль чата (main|admin|journal|null)
+export async function updateChatRole(token, wsId, chatId, role) {
+  const r = await fetch(`/api/workspaces/${wsId}/chats/${chatId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    body: JSON.stringify({ role }),
+  });
+  if (!r.ok) {
+    const err = await r.json().catch(() => ({}));
+    throw new Error(err.detail || `updateChatRole ${r.status}`);
+  }
+  return r.json();
+}

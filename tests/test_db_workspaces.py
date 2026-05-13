@@ -20,6 +20,7 @@ def conn():
         added_by_user_id INTEGER,
         title TEXT,
         chat_type TEXT,
+        role TEXT CHECK (role IS NULL OR role IN ('main','admin','journal')),
         added_at TEXT
     )''')
     yield c
@@ -134,3 +135,58 @@ def test_get_workspace_by_chat_returns_id_or_none(conn):
 # Note: Database.get_site_user и Database.get_workspace_by_chat — тонкие
 # обёртки над SQL/db_workspaces, тестируются интеграционно через
 # test_bot_membership.py (fake _DB class) и live smoke.
+
+
+# ── V1.17.0c (F): chat roles ──
+
+def test_add_bot_chat_with_role(conn):
+    from database.db_workspaces import add_bot_chat, get_workspace_details
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, chat_id=-1, workspace_id=ws_id, added_by=1,
+                 title='Main', chat_type='supergroup', role='main')
+    details = get_workspace_details(conn, ws_id)
+    assert details['chats'][0]['role'] == 'main'
+
+
+def test_add_bot_chat_invalid_role_raises(conn):
+    from database.db_workspaces import add_bot_chat
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    with pytest.raises(ValueError):
+        add_bot_chat(conn, chat_id=-1, workspace_id=ws_id, added_by=1,
+                     title='X', chat_type='group', role='superuser')
+
+
+def test_update_bot_chat_role(conn):
+    from database.db_workspaces import add_bot_chat, update_bot_chat_role, get_workspace_details
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, chat_id=-2, workspace_id=ws_id, added_by=1,
+                 title='A', chat_type='group')
+    update_bot_chat_role(conn, -2, 'admin')
+    details = get_workspace_details(conn, ws_id)
+    assert details['chats'][0]['role'] == 'admin'
+
+    update_bot_chat_role(conn, -2, None)
+    details = get_workspace_details(conn, ws_id)
+    assert details['chats'][0]['role'] is None
+
+
+def test_update_bot_chat_role_invalid_raises(conn):
+    from database.db_workspaces import update_bot_chat_role
+    with pytest.raises(ValueError):
+        update_bot_chat_role(conn, -1, 'random')
+
+
+def test_get_workspace_details_orders_chats_by_role(conn):
+    from database.db_workspaces import add_bot_chat, get_workspace_details
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, chat_id=-3, workspace_id=ws_id, added_by=1,
+                 title='J', chat_type='channel', role='journal')
+    add_bot_chat(conn, chat_id=-1, workspace_id=ws_id, added_by=1,
+                 title='M', chat_type='supergroup', role='main')
+    add_bot_chat(conn, chat_id=-2, workspace_id=ws_id, added_by=1,
+                 title='A', chat_type='group', role='admin')
+    add_bot_chat(conn, chat_id=-4, workspace_id=ws_id, added_by=1,
+                 title='N', chat_type='group')
+    details = get_workspace_details(conn, ws_id)
+    titles = [c['title'] for c in details['chats']]
+    assert titles == ['M', 'A', 'J', 'N']
