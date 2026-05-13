@@ -14,8 +14,9 @@
 
 ## Pre-flight checklist
 
-- [ ] Текущая ветка `Интеграция-множетсвенные-пользователи` смержена в `dev` и протестирована.
-- [ ] `git log` показывает коммиты `V1.17.0a1 … V1.17.0a21`.
+- [ ] Текущая ветка `Интеграция-множетсвенные-пользователи` смержена в `main`
+      (по решению Вити 13.05 — сразу в main, минуя dev).
+- [ ] `git log main` показывает коммиты `V1.17.0a1 … V1.17.0a22`.
 - [ ] `pytest tests/test_multi_tenancy_migration.py tests/test_db_workspaces.py tests/test_workspace_context.py tests/test_economy_isolation.py` → 28 PASS локально.
 - [ ] `python -c "import bot"` локально без ошибок.
 - [ ] `MAIN_ADMIN_ID` в проде совпадает с локальным (Витя = 1283941769).
@@ -35,7 +36,7 @@ cp database/bot_database.db database/bot_database.db.bak.pre_v17
 
 # 3. Pull свежий код
 git fetch origin
-git checkout dev          # или main, в зависимости от merge-flow
+git checkout main
 git pull --ff-only
 
 # 4. Прогон миграции
