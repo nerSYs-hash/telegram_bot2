@@ -3,6 +3,7 @@ import EconomyPage from './components/economy/EconomyPage';
 import PromptTranslator from './components/PromptTranslator';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import WorkspaceList from './components/workspaces/WorkspaceList';
+import WorkspacePage from './components/workspaces/WorkspacePage';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -337,6 +338,7 @@ export default function App() {
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
   const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
+  const [showInviteModal, setShowInviteModal]     = useState(false);
   const [accessesOpen, setAccessesOpen]           = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
@@ -5011,6 +5013,21 @@ export default function App() {
         };
         const accesses = profileData?.accesses || [];
         const totalActions = accesses.reduce((sum, r) => sum + r.actions.length, 0);
+
+        // V1.17.0b14 — если выбран workspace, показываем его детали вместо профиля
+        if (selectedWorkspaceId) {
+          return (
+            <div className="pb-24 animate-in fade-in duration-500">
+              <WorkspacePage
+                token={authUser?.token}
+                wsId={selectedWorkspaceId}
+                currentUserId={authUser?.id}
+                onBack={() => setSelectedWorkspaceId(null)}
+                onInviteClick={() => setShowInviteModal(true)}
+              />
+            </div>
+          );
+        }
 
         return (
           <div className="pb-24 animate-in fade-in duration-500 space-y-4">
