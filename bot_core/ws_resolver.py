@@ -107,3 +107,22 @@ def effective_main_chat(
         return fallback_chat_id
     resolved = resolve_role_chat(conn, ws_id, 'main')
     return resolved if resolved is not None else fallback_chat_id
+
+
+def resolve_gate_chat(conn, context, fallback_chat_id, *, user_id=None):
+    """Context-aware обёртка над effective_main_chat для Pulse-гейта.
+
+    Достаёт ws_ctx из context.chat_data/user_data (кладёт middleware
+    bot.py resolve_workspace_middleware) и резолвит эффективный главный
+    чат. Флаг OFF → fallback_chat_id байт-в-байт. Единый источник
+    логики для message_handler и registration_conversation."""
+    ws_ctx = None
+    for attr in ('chat_data', 'user_data'):
+        store = getattr(context, attr, None)
+        if isinstance(store, dict) and store.get('ws_ctx') is not None:
+            ws_ctx = store['ws_ctx']
+            break
+    return effective_main_chat(
+        conn, ws_ctx, fallback_chat_id,
+        enabled=runtime_ws_enabled(), user_id=user_id,
+    )

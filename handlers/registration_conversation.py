@@ -224,7 +224,15 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from config import CHAT_ID
     main_db = context.bot_data.get('db')
     from utils.membership import verify_chat_membership
-    is_member = await verify_chat_membership(context.bot, CHAT_ID, user_id, db=main_db)
+    # H3: гейт по workspace юзера (ЛС регистрации → резолв по членству),
+    # за флагом H_RUNTIME_WS. Флаг OFF / новый аппликант без членства →
+    # CHAT_ID байт-в-байт. main_db=None → старое поведение.
+    from bot_core.ws_resolver import resolve_gate_chat
+    _gate_chat = (
+        resolve_gate_chat(main_db.conn, context, CHAT_ID, user_id=user_id)
+        if main_db else CHAT_ID
+    )
+    is_member = await verify_chat_membership(context.bot, _gate_chat, user_id, db=main_db)
 
     # Проверка блокировки по возрасту (< 18)
     if user and user.get('status') == 'blocked':

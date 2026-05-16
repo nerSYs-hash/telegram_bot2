@@ -108,16 +108,9 @@ class MessageHandler:
         H_RUNTIME_WS). Флаг OFF → self.target_chat_id байт-в-байт.
         Флаг ON → чат workspace по ws_ctx (группа) или по членству
         юзера (ЛС: chat.id юзера нет в bot_chats)."""
-        from bot_core.ws_resolver import effective_main_chat, runtime_ws_enabled
-        ws_ctx = None
-        for attr in ('chat_data', 'user_data'):
-            store = getattr(context, attr, None)
-            if isinstance(store, dict) and store.get('ws_ctx') is not None:
-                ws_ctx = store['ws_ctx']
-                break
-        return effective_main_chat(
-            self.db.conn, ws_ctx, self.target_chat_id,
-            enabled=runtime_ws_enabled(), user_id=user_id,
+        from bot_core.ws_resolver import resolve_gate_chat
+        return resolve_gate_chat(
+            self.db.conn, context, self.target_chat_id, user_id=user_id
         )
 
     async def get_chat_administrators(self, context):

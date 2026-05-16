@@ -14,6 +14,7 @@ from bot_core.ws_resolver import (
     effective_main_chat,
     runtime_ws_enabled,
     resolve_user_primary_workspace,
+    resolve_gate_chat,
     invalidate_resolver_cache,
 )
 
@@ -124,6 +125,39 @@ def test_ws_ctx_takes_precedence_over_user_id(conn):
     assert effective_main_chat(
         conn, _ws(1), -999, enabled=True, user_id=500
     ) == -100
+
+
+# ── resolve_gate_chat (context-aware обёртка) ────────────────────
+
+def _ctx(ws_ctx=None, *, no_attrs=False):
+    if no_attrs:
+        return object()  # ни chat_data ни user_data
+    return SimpleNamespace(
+        chat_data={'ws_ctx': ws_ctx}, user_data={'ws_ctx': ws_ctx}
+    )
+
+
+def test_gate_chat_flag_off_fallback(conn, monkeypatch):
+    monkeypatch.setenv('H_RUNTIME_WS', '0')
+    assert resolve_gate_chat(conn, _ctx(_ws(2)), -999) == -999
+
+
+def test_gate_chat_flag_on_chat_based(conn, monkeypatch):
+    monkeypatch.setenv('H_RUNTIME_WS', '1')
+    assert resolve_gate_chat(conn, _ctx(_ws(2)), -999) == -300
+
+
+def test_gate_chat_flag_on_user_based_dm(conn, monkeypatch):
+    monkeypatch.setenv('H_RUNTIME_WS', '1')
+    # ЛС регистрации: ws_ctx=None, user 500 owner ws=2
+    assert resolve_gate_chat(conn, _ctx(None), -999, user_id=500) == -300
+
+
+def test_gate_chat_context_without_attrs(conn, monkeypatch):
+    monkeypatch.setenv('H_RUNTIME_WS', '1')
+    # context без chat_data/user_data → ws_ctx None → user/fallback путь
+    assert resolve_gate_chat(conn, _ctx(no_attrs=True), -999, user_id=500) == -300
+    assert resolve_gate_chat(conn, _ctx(no_attrs=True), -999) == -999
 
 
 # ── runtime_ws_enabled ───────────────────────────────────────────
