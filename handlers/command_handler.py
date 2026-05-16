@@ -111,10 +111,15 @@ class CommandHandler:
             + (f"\n🔁 Первое вступление: {_fmt_date(reg_data.get('created_at'))}" if is_returning else "")
         )
 
-        # Добавляем индикатор присутствия — проверяем реальный статус в TG
+        # Добавляем индикатор присутствия — проверяем реальный статус в TG.
+        # H4: главный чат workspace вызвавшего админа (флаг OFF → CHAT_ID).
+        from bot_core.ws_resolver import resolve_gate_chat
+        _admin_id = update.effective_user.id if update.effective_user else None
+        _presence_chat = resolve_gate_chat(
+            self.db.conn, context, CHAT_ID, user_id=_admin_id)
         _in_chat = False
         try:
-            _cm = await context.bot.get_chat_member(CHAT_ID, target_id)
+            _cm = await context.bot.get_chat_member(_presence_chat, target_id)
             _in_chat = _cm.status not in ('left', 'kicked', 'banned')
         except Exception as e:
             logger.warning(f"resend_dossier get_chat_member error: {e}")
