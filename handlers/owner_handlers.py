@@ -910,7 +910,7 @@ async def handle_owner_text_input(
 #  💾 БЭКАП (существующий функционал)
 # ═══════════════════════════════════════════════════════════════
 
-async def show_statistics_not_in_chat(query, admin_id: int) -> None:
+async def show_statistics_not_in_chat(query, admin_id: int, context=None) -> None:
     """Статистика 4.5 — пользователи Не в чате (БЗА / НПС). Доступ: владелец и замы."""
     import html as _html
 
@@ -922,7 +922,7 @@ async def show_statistics_not_in_chat(query, admin_id: int) -> None:
 
     # Доступ: владелец ИЛИ зам владельца
     from handlers.admin_moderation import _is_owner_or_deputy
-    if not await _is_owner_or_deputy(query.from_user.id):
+    if not await _is_owner_or_deputy(query.from_user.id, context):
         try:
             await query.answer("⛔ Нет доступа.", show_alert=True)
         except Exception:
