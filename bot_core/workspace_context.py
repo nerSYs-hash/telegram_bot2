@@ -67,6 +67,67 @@ def build_context(
     )
 
 
+def build_context_for_user(
+    conn: sqlite3.Connection, user_id: int
+) -> Optional[WorkspaceContext]:
+    """DM-фоллбэк (e6): WorkspaceContext по членству юзера.
+
+    В ЛС chat.id юзера нет в bot_chats → chat-резолв даёт None. Тут
+    резолвим ws по workspace_members (owner→admin→прочее, меньший id).
+    None если членства нет / нет такого workspace → Pulse-safe skip.
+    Дёргается ТОЛЬКО при флаге H_RUNTIME_WS=1 (см. pulse_only)."""
+    from bot_core.ws_resolver import resolve_user_primary_workspace
+    ws_id = resolve_user_primary_workspace(conn, user_id)
+    if ws_id is None:
+        return None
+    ws_row = conn.execute(
+        'SELECT is_pulse_themed, plan FROM workspaces WHERE id=?', (ws_id,)
+    ).fetchone()
+    if not ws_row:
+        return None
+    m_row = conn.execute(
+        'SELECT role FROM workspace_members WHERE workspace_id=? AND user_id=?',
+        (ws_id, user_id)
+    ).fetchone()
+    return WorkspaceContext(
+        workspace_id=ws_id,
+        is_pulse_themed=bool(ws_row[0]),
+        plan=ws_row[1],
+        member_role=m_row[0] if m_row else None,
+    )
+
+
+def _extract_conn(args) -> Optional[sqlite3.Connection]:
+    """Достаёт sqlite3.Connection из аргументов handler-а (сигнатуры
+    разные: db-объект с .conn, сам Connection, или PTB context.bot_data['db'])."""
+    for c in args:
+        if isinstance(c, sqlite3.Connection):
+            return c
+        conn = getattr(c, 'conn', None)
+        if isinstance(conn, sqlite3.Connection):
+            return conn
+        bot_data = getattr(c, 'bot_data', None)
+        if isinstance(bot_data, dict):
+            db = bot_data.get('db')
+            conn = getattr(db, 'conn', None)
+            if isinstance(conn, sqlite3.Connection):
+                return conn
+    return None
+
+
+def _extract_user_id(args) -> Optional[int]:
+    """user_id из update/query: .from_user.id (CallbackQuery/Message) или
+    .effective_user.id (Update)."""
+    for c in args:
+        fu = getattr(c, 'from_user', None)
+        if fu is not None and getattr(fu, 'id', None) is not None:
+            return fu.id
+        eu = getattr(c, 'effective_user', None)
+        if eu is not None and getattr(eu, 'id', None) is not None:
+            return eu.id
+    return None
+
+
 def invalidate_cache(chat_id: Optional[int] = None) -> None:
     """Сброс кеша при изменении привязки чата к workspace."""
     if chat_id is None:
@@ -107,6 +168,16 @@ def pulse_only(handler):
                             break
                 if ws_ctx is not None:
                     break
+        # e6 DM-фоллбэк: в ЛС chat не в bot_chats → ws_ctx=None и хендлер
+        # молча скипался. При флаге H_RUNTIME_WS=1 резолвим ws по членству
+        # юзера. Флаг OFF → ветка не входит, поведение байт-в-байт прежнее.
+        if ws_ctx is None:
+            from bot_core.ws_resolver import runtime_ws_enabled
+            if runtime_ws_enabled():
+                conn = _extract_conn(args)
+                user_id = _extract_user_id(args)
+                if conn is not None and user_id is not None:
+                    ws_ctx = build_context_for_user(conn, user_id)
         if ws_ctx is None or not ws_ctx.is_pulse_themed:
             logger.debug(
                 'pulse_only skip: handler=%s ws=%s',

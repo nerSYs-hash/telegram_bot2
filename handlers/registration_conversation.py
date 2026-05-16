@@ -224,7 +224,15 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from config import CHAT_ID
     main_db = context.bot_data.get('db')
     from utils.membership import verify_chat_membership
-    is_member = await verify_chat_membership(context.bot, CHAT_ID, user_id, db=main_db)
+    # H3: гейт по workspace юзера (ЛС регистрации → резолв по членству),
+    # за флагом H_RUNTIME_WS. Флаг OFF / новый аппликант без членства →
+    # CHAT_ID байт-в-байт. main_db=None → старое поведение.
+    from bot_core.ws_resolver import resolve_gate_chat
+    _gate_chat = (
+        resolve_gate_chat(main_db.conn, context, CHAT_ID, user_id=user_id)
+        if main_db else CHAT_ID
+    )
+    is_member = await verify_chat_membership(context.bot, _gate_chat, user_id, db=main_db)
 
     # Проверка блокировки по возрасту (< 18)
     if user and user.get('status') == 'blocked':
@@ -306,10 +314,15 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             logger.error(f"approved_app check failed in start_reg for {user_id}: {e}")
 
     if has_q_name or has_approved_app:
+        # H4: возвращенец — ban-check и invite в главный чат ЕГО workspace
+        # (флаг OFF → CHAT_ID байт-в-байт).
+        from bot_core.ws_resolver import resolve_gate_chat
+        _ret_chat = (resolve_gate_chat(main_db.conn, context, CHAT_ID, user_id=user_id)
+                     if main_db else CHAT_ID)
         # Проверяем не забанен ли в чате
         tg_status = None
         try:
-            cm = await context.bot.get_chat_member(CHAT_ID, user_id)
+            cm = await context.bot.get_chat_member(_ret_chat, user_id)
             tg_status = cm.status
         except Exception:
             pass
@@ -332,7 +345,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             from database.db_friend import create_invite_link as _save_invite
             display_name = (user.get('q_name') if user else None) or user_name
             invite_obj = await context.bot.create_chat_invite_link(
-                CHAT_ID,
+                _ret_chat,
                 member_limit=1,
                 name=f"ret_{user_id}"[:32],
             )
