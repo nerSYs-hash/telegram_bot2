@@ -102,7 +102,24 @@ class MessageHandler:
             except ValueError:
                 import logging
                 logging.warning(f"Invalid EXCLUDED_USER_IDS format in .env: {excluded_ids}")
-      
+
+    def _gate_target_chat(self, context, user_id=None):
+        """H3: эффективный главный чат для Pulse-гейта (за флагом
+        H_RUNTIME_WS). Флаг OFF → self.target_chat_id байт-в-байт.
+        Флаг ON → чат workspace по ws_ctx (группа) или по членству
+        юзера (ЛС: chat.id юзера нет в bot_chats)."""
+        from bot_core.ws_resolver import effective_main_chat, runtime_ws_enabled
+        ws_ctx = None
+        for attr in ('chat_data', 'user_data'):
+            store = getattr(context, attr, None)
+            if isinstance(store, dict) and store.get('ws_ctx') is not None:
+                ws_ctx = store['ws_ctx']
+                break
+        return effective_main_chat(
+            self.db.conn, ws_ctx, self.target_chat_id,
+            enabled=runtime_ws_enabled(), user_id=user_id,
+        )
+
     async def get_chat_administrators(self, context):
         """Get list of chat administrators with caching"""
         import logging
@@ -191,7 +208,7 @@ class MessageHandler:
             await self.handle_private_message(update, context)
             return
         
-        if message.chat.id != self.target_chat_id:
+        if message.chat.id != self._gate_target_chat(context):
             from config import ADMIN_CHAT_ID
             if message.chat.id == ADMIN_CHAT_ID:
                 # Исключение: сообщения из ADMIN_CHAT_ID — обрабатываем кнопки и причину отказа
@@ -802,7 +819,7 @@ class MessageHandler:
         if not _is_owner_or_dep:
             from utils.membership import verify_chat_membership
             is_member = await verify_chat_membership(
-                context.bot, self.target_chat_id, user.id, db=self.db
+                context.bot, self._gate_target_chat(context, user.id), user.id, db=self.db
             )
 
             if not is_member:
