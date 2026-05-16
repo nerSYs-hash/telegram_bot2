@@ -154,21 +154,19 @@ async def auth_telegram(request: Request):
     if time.time() - int(data.get("auth_date", 0)) > 86400:
         raise HTTPException(status_code=401, detail="Данные авторизации устарели")
     user_id = int(data["id"])
-    _main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    _developer_id  = int(os.getenv('DEVELOPER_ID', 0))
-    udata = db.get_user(user_id) if db else None
-    is_owner    = bool((udata and udata["is_owner"]) or (_main_admin_id and user_id == _main_admin_id))
+    _developer_id = int(os.getenv('DEVELOPER_ID', 0))
     is_developer = bool(_developer_id and user_id == _developer_id)
-    is_admin    = bool(is_owner or is_developer or (udata and udata["is_admin"]))
+    # is_owner/is_admin в JWT больше НЕ глобальные — это per-ws (см. /profile/me).
+    # Оставляем поля для обратной совместимости фронта: developer => true, иначе false.
     token = _make_jwt({
         "user_id":    user_id,
         "username":   data.get("username", ""),
         "first_name": data.get("first_name", ""),
         "photo_url":  data.get("photo_url", ""),
-        "is_admin":   is_admin,
-        "is_owner":   is_owner,
+        "is_admin":   is_developer,
+        "is_owner":   is_developer,
     })
-    return {"token": token, "is_admin": is_admin, "is_owner": is_owner}
+    return {"token": token, "is_admin": is_developer, "is_owner": is_developer}
 
 
 @app.get("/api/auth/me")
