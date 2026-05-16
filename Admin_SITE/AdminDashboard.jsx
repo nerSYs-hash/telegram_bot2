@@ -332,11 +332,12 @@ export default function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  const isOwner = !!(profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer');
-  const isAdmin = !!(authUser && (isOwner || (profileData?.permissions || []).length > 0));
-
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
+  // ВАЖНО: isOwner/isAdmin читают profileData → объявляем ПОСЛЕ его useState
+  // (иначе ReferenceError: Cannot access before initialization — TDZ).
+  const isOwner = !!(profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer');
+  const isAdmin = !!(authUser && (isOwner || (profileData?.permissions || []).length > 0));
   const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
