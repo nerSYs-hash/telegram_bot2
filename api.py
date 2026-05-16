@@ -363,15 +363,18 @@ def resolve_workspace_id_from_header(x_workspace_id) -> int:
 
 
 def _resolve_user_role(user_id: int) -> str:
-    """Возвращает роль пользователя (owner/developer/deputy/admin/user)."""
-    main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    if main_admin_id and user_id == main_admin_id:
-        return "owner"
+    """Per-workspace роль из активного ws (ставит ws_context_middleware).
+
+    developer_id (Илья) — god-mode. MAIN_ADMIN не имеет спец-кейса:
+    owner ws=1 только через workspace_members.
+    """
+    from api.workspace_rbac import resolve_ws_role, WS_ID_CTX
     developer_id = int(os.getenv('DEVELOPER_ID', 0))
     if developer_id and user_id == developer_id:
         return "developer"
-    meta = _get_user_role_meta(user_id)
-    return (meta.get("role") or "user").lower()
+    if not db:
+        return "user"
+    return resolve_ws_role(db.conn, user_id, WS_ID_CTX.get(), developer_id=developer_id)
 
 
 def _require_owner(authorization: str) -> int:
