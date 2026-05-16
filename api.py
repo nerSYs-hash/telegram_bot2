@@ -289,7 +289,9 @@ def _require_auth(authorization: str) -> dict:
 # кладёт ws_id/role в ContextVar. Кросс-тенант доступ → 403.
 from starlette.requests import Request as _Req
 from starlette.responses import JSONResponse as _JSONResp
-from api.workspace_rbac import resolve_ws_role, WS_ID_CTX, WS_ROLE_CTX
+from api.workspace_rbac import (
+    resolve_ws_role, default_workspace_for_user, WS_ID_CTX, WS_ROLE_CTX,
+)
 
 _WS_SKIP_PREFIXES = ("/api/auth", "/api/workspaces")
 
@@ -311,10 +313,17 @@ async def ws_context_middleware(request: _Req, call_next):
             payload = None
         if payload:
             user_id = int(payload.get("user_id", 0))
-            try:
-                ws_id = int(request.headers.get("x-workspace-id") or 1)
-            except (TypeError, ValueError):
-                ws_id = 1
+            hdr = request.headers.get("x-workspace-id")
+            if hdr is None or hdr == "":
+                # Заголовок не пришёл (ранние запросы фронта до выбора ws,
+                # либо fetch без обёртки): резолвим ЛИЧНЫЙ ws юзера,
+                # НЕ хардкодим ws=1 (иначе 2-й владелец ловит 403).
+                ws_id = default_workspace_for_user(db.conn, user_id) if db else 1
+            else:
+                try:
+                    ws_id = int(hdr)
+                except (TypeError, ValueError):
+                    ws_id = 1
             dev_id = int(os.getenv("DEVELOPER_ID", 0))
             role = resolve_ws_role(db.conn, user_id, ws_id, developer_id=dev_id) if db else "user"
             if role == "user":

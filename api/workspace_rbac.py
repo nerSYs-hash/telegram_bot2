@@ -40,3 +40,23 @@ def resolve_ws_role(
     if not row:
         return "user"
     return _MEMBER_ROLE_MAP.get(row[0], "user")
+
+
+def default_workspace_for_user(
+    conn: sqlite3.Connection,
+    user_id: int,
+) -> int:
+    """ws по умолчанию, когда фронт НЕ прислал X-Workspace-Id.
+
+    Берём личное сообщество юзера из членства (owner → admin → любое),
+    НЕ хардкодим ws=1 — иначе второй владелец (не член ws=1) ловит 403
+    на всех запросах без заголовка (напр. /permissions/catalog).
+    Фолбэк 1: Pulse-владелец член ws=1; developer god-mode разрулит роль.
+    """
+    row = conn.execute(
+        "SELECT workspace_id FROM workspace_members WHERE user_id=? "
+        "ORDER BY CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END, "
+        "workspace_id LIMIT 1",
+        (user_id,),
+    ).fetchone()
+    return row[0] if row else 1

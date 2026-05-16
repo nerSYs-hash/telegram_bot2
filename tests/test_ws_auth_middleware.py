@@ -130,3 +130,25 @@ def test_require_owner_uses_ws_role(client):
     r2 = c.put("/api/admin/permissions/roles/admin", headers=h2,
                json={"permissions": ["triggers.view"]})
     assert r2.status_code == 200
+
+
+# ── d13: 2-й владелец без X-Workspace-Id резолвится в свой ws (не 403) ──
+
+def test_second_owner_no_header_resolves_own_ws(client):
+    """99 — owner ws2, НЕ член ws1. Запрос БЕЗ X-Workspace-Id не должен
+    хардкодиться в ws=1 → 403. Должен резолвиться в ws2 (его сообщество)."""
+    c, api_mod = client
+    h = {"Authorization": f"Bearer {_tok(api_mod, 99)}"}   # без X-Workspace-Id
+    r = c.get("/api/admin/profile/me", headers=h)
+    assert r.status_code == 200
+    assert r.json()["role_raw"] == "owner"
+    # permissions/catalog без заголовка — тоже не 403 (это и был баг d13)
+    r2 = c.get("/api/admin/permissions/catalog", headers=h)
+    assert r2.status_code == 200
+
+def test_second_owner_explicit_foreign_ws_still_403(client):
+    """Защита не ослабла: 99 с явным X-Workspace-Id=1 (чужой ws) → 403."""
+    c, api_mod = client
+    h = {"Authorization": f"Bearer {_tok(api_mod, 99)}", "X-Workspace-Id": "1"}
+    r = c.get("/api/admin/profile/me", headers=h)
+    assert r.status_code == 403
