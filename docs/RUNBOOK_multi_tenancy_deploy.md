@@ -209,3 +209,47 @@ sudo systemctl start pulse_bot
 Миграция `composite_pk_fix` имеет down-функцию (rebuild обратно к старому PK),
 но если есть данные нового workspace — они потеряются. Использовать только
 вместе с откатом БД из бэкапа.
+
+---
+
+## V1.17.0d — Web Auth + per-WS RBAC (Подпроект #3)
+
+Что меняется: сайт считает роль/права для **активного сообщества**
+(заголовок `X-Workspace-Id`), middleware блокирует доступ к чужому
+сообществу (403). JWT больше НЕ делает кого-либо глобальным владельцем —
+только `DEVELOPER_ID` (Илья) имеет сквозной доступ.
+
+### Pre-deploy (локально И на сервере, ДО рестарта)
+
+```bash
+python scripts/verify_ws_rbac_pulse.py     # обязан вернуть exit 0 (OK: ws=1 ...)
+```
+
+Если FAIL — НЕ деплоить: владелец Pulse не записан в `workspace_members`
+как `owner`. Починить данные (см. `scripts/reset_workspace_owner.py`),
+повторить проверку.
+
+### Deploy
+
+```bash
+git pull --ff-only
+sudo systemctl restart pulse_bot           # api в том же процессе → нужен рестарт
+# фронт: статика уже в Admin_SITE/dist (закоммичена), nginx раздаёт напрямую
+```
+
+### Post-deploy smoke
+
+1. Владелец Pulse логинится → видит «Pulse Москва», role=owner, меню полное
+2. Второй владелец чужого ws логинится → видит ТОЛЬКО свой ws
+3. Переключалка сообществ в шапке → меню/права меняются без релогина
+4. Запрос к чужому ws (подменить X-Workspace-Id) → 403
+
+### Rollback
+
+```bash
+git revert <диапазон V1.17.0d1..d11>   # либо checkout пред-тега
+sudo systemctl restart pulse_bot
+```
+
+БД-миграций в #3 НЕТ (только код + ContextVar) — откат безопасен,
+данные не теряются.
