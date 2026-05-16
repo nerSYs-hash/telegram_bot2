@@ -68,3 +68,9 @@ def test_dm_resolves_ws_by_membership(monkeypatch, conn):
 def test_non_member_is_user(monkeypatch, conn):
     monkeypatch.setenv('I_WS_RBAC', '1')
     assert resolve_bot_role(_Ctx(7), 424242, conn=conn) == 'user'
+
+def test_moderator_is_not_owner(monkeypatch, conn):
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    # workspace_members.role='moderator' → resolve_ws_role -> 'admin'
+    assert resolve_bot_role(_Ctx(7), 555, conn=conn) == 'admin'
+    assert is_ws_owner(_Ctx(7), 555, conn=conn) is False

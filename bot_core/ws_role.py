@@ -20,7 +20,9 @@ def i_ws_rbac_enabled() -> bool:
 
 def _ws_from_context(context) -> Optional[int]:
     """ws_id из ws_ctx (кладёт resolve_workspace_middleware в bot.py
-    в context.chat_data/user_data). None если нет (напр. ЛС)."""
+    в context.chat_data/user_data). None если нет (напр. ЛС).
+    chat_data проверяется раньше user_data: ws-контекст группового
+    сообщения приоритетнее DM/user-контекста."""
     for attr in ('chat_data', 'user_data'):
         store = getattr(context, attr, None)
         if isinstance(store, dict) and store.get('ws_ctx') is not None:
@@ -36,7 +38,11 @@ def resolve_bot_role(context, user_id: int,
 
     Флаг OFF → всегда 'user' (вызывающий уходит на старую single-tenant
     логику — байт-в-байт). ws: группа → ws_ctx; ЛС → членство (H).
-    conn=None → открываем свой к DB_PATH (и закрываем)."""
+    conn=None → открываем свой к DB_PATH (и закрываем).
+    Caller-supplied conn НЕ закрывается этой функцией — ответственность
+    закрытия остаётся у вызывающего (важно для Task 2: не передавай conn,
+    который ещё нужен после вызова, без уверенности что он останется
+    открытым)."""
     if not i_ws_rbac_enabled():
         return 'user'
     own = conn is None
