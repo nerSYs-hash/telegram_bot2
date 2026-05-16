@@ -286,6 +286,49 @@ def _require_auth(authorization: str) -> dict:
         raise HTTPException(status_code=401, detail="Неверный токен")
 
 
+# ──── Подпроект #3: ws_context_middleware ────────────────────────────
+# Валидирует членство юзера в активном workspace (X-Workspace-Id),
+# кладёт ws_id/role в ContextVar. Кросс-тенант доступ → 403.
+from starlette.requests import Request as _Req
+from starlette.responses import JSONResponse as _JSONResp
+from api.workspace_rbac import resolve_ws_role, WS_ID_CTX, WS_ROLE_CTX
+
+_WS_SKIP_PREFIXES = ("/api/auth", "/api/workspaces")
+
+
+@app.middleware("http")
+async def ws_context_middleware(request: _Req, call_next):
+    WS_ID_CTX.set(1)
+    WS_ROLE_CTX.set("user")
+    path = request.url.path
+    authz = request.headers.get("authorization", "")
+    if (
+        path.startswith("/api/")
+        and not any(path.startswith(p) for p in _WS_SKIP_PREFIXES)
+        and authz.startswith("Bearer ")
+    ):
+        try:
+            payload = _decode_jwt(authz[7:])
+        except Exception:
+            payload = None
+        if payload:
+            user_id = int(payload.get("user_id", 0))
+            try:
+                ws_id = int(request.headers.get("x-workspace-id") or 1)
+            except (TypeError, ValueError):
+                ws_id = 1
+            dev_id = int(os.getenv("DEVELOPER_ID", 0))
+            role = resolve_ws_role(db.conn, user_id, ws_id, developer_id=dev_id) if db else "user"
+            if role == "user":
+                return _JSONResp(
+                    status_code=403,
+                    content={"detail": "Нет доступа к этому сообществу"},
+                )
+            WS_ID_CTX.set(ws_id)
+            WS_ROLE_CTX.set(role)
+    return await call_next(request)
+
+
 # ──── Multi-tenancy: workspace_id resolver ────────────────────────────
 # V1.17.0a19. Сейчас сайт работает только с Pulse Москва (workspace_id=1).
 # Frontend пока не присылает X-Workspace-Id — fallback на 1.
