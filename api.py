@@ -154,21 +154,19 @@ async def auth_telegram(request: Request):
     if time.time() - int(data.get("auth_date", 0)) > 86400:
         raise HTTPException(status_code=401, detail="Данные авторизации устарели")
     user_id = int(data["id"])
-    _main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    _developer_id  = int(os.getenv('DEVELOPER_ID', 0))
-    udata = db.get_user(user_id) if db else None
-    is_owner    = bool((udata and udata["is_owner"]) or (_main_admin_id and user_id == _main_admin_id))
+    _developer_id = int(os.getenv('DEVELOPER_ID', 0))
     is_developer = bool(_developer_id and user_id == _developer_id)
-    is_admin    = bool(is_owner or is_developer or (udata and udata["is_admin"]))
+    # is_owner/is_admin в JWT больше НЕ глобальные — это per-ws (см. /profile/me).
+    # Оставляем поля для обратной совместимости фронта: developer => true, иначе false.
     token = _make_jwt({
         "user_id":    user_id,
         "username":   data.get("username", ""),
         "first_name": data.get("first_name", ""),
         "photo_url":  data.get("photo_url", ""),
-        "is_admin":   is_admin,
-        "is_owner":   is_owner,
+        "is_admin":   is_developer,
+        "is_owner":   is_developer,
     })
-    return {"token": token, "is_admin": is_admin, "is_owner": is_owner}
+    return {"token": token, "is_admin": is_developer, "is_owner": is_developer}
 
 
 @app.get("/api/auth/me")
@@ -286,6 +284,49 @@ def _require_auth(authorization: str) -> dict:
         raise HTTPException(status_code=401, detail="Неверный токен")
 
 
+# ──── Подпроект #3: ws_context_middleware ────────────────────────────
+# Валидирует членство юзера в активном workspace (X-Workspace-Id),
+# кладёт ws_id/role в ContextVar. Кросс-тенант доступ → 403.
+from starlette.requests import Request as _Req
+from starlette.responses import JSONResponse as _JSONResp
+from api.workspace_rbac import resolve_ws_role, WS_ID_CTX, WS_ROLE_CTX
+
+_WS_SKIP_PREFIXES = ("/api/auth", "/api/workspaces")
+
+
+@app.middleware("http")
+async def ws_context_middleware(request: _Req, call_next):
+    WS_ID_CTX.set(1)
+    WS_ROLE_CTX.set("user")
+    path = request.url.path
+    authz = request.headers.get("authorization", "")
+    if (
+        path.startswith("/api/")
+        and not any(path.startswith(p) for p in _WS_SKIP_PREFIXES)
+        and authz.startswith("Bearer ")
+    ):
+        try:
+            payload = _decode_jwt(authz[7:])
+        except Exception:
+            payload = None
+        if payload:
+            user_id = int(payload.get("user_id", 0))
+            try:
+                ws_id = int(request.headers.get("x-workspace-id") or 1)
+            except (TypeError, ValueError):
+                ws_id = 1
+            dev_id = int(os.getenv("DEVELOPER_ID", 0))
+            role = resolve_ws_role(db.conn, user_id, ws_id, developer_id=dev_id) if db else "user"
+            if role == "user":
+                return _JSONResp(
+                    status_code=403,
+                    content={"detail": "Нет доступа к этому сообществу"},
+                )
+            WS_ID_CTX.set(ws_id)
+            WS_ROLE_CTX.set(role)
+    return await call_next(request)
+
+
 # ──── Multi-tenancy: workspace_id resolver ────────────────────────────
 # V1.17.0a19. Сейчас сайт работает только с Pulse Москва (workspace_id=1).
 # Frontend пока не присылает X-Workspace-Id — fallback на 1.
@@ -320,15 +361,18 @@ def resolve_workspace_id_from_header(x_workspace_id) -> int:
 
 
 def _resolve_user_role(user_id: int) -> str:
-    """Возвращает роль пользователя (owner/developer/deputy/admin/user)."""
-    main_admin_id = int(os.getenv('MAIN_ADMIN_ID', 0))
-    if main_admin_id and user_id == main_admin_id:
-        return "owner"
+    """Per-workspace роль из активного ws (ставит ws_context_middleware).
+
+    developer_id (Илья) — god-mode. MAIN_ADMIN не имеет спец-кейса:
+    owner ws=1 только через workspace_members.
+    """
+    from api.workspace_rbac import resolve_ws_role, WS_ID_CTX
     developer_id = int(os.getenv('DEVELOPER_ID', 0))
     if developer_id and user_id == developer_id:
         return "developer"
-    meta = _get_user_role_meta(user_id)
-    return (meta.get("role") or "user").lower()
+    if not db:
+        return "user"
+    return resolve_ws_role(db.conn, user_id, WS_ID_CTX.get(), developer_id=developer_id)
 
 
 def _require_owner(authorization: str) -> int:

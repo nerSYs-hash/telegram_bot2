@@ -5,6 +5,8 @@ import PressReleasePage from './components/press_release/PressReleasePage';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
+import WorkspaceSwitcher from './components/workspaces/WorkspaceSwitcher';
+import { getActiveWs } from './components/shared/api';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -330,8 +332,8 @@ export default function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
-  const isOwner = !!(authUser && authUser.is_owner);
+  const isOwner = !!(profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer');
+  const isAdmin = !!(authUser && (isOwner || (profileData?.permissions || []).length > 0));
 
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
@@ -346,7 +348,12 @@ export default function App() {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     setProfileLoading(true);
-    fetch('/api/admin/profile/me', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/api/admin/profile/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(getActiveWs() != null ? { 'X-Workspace-Id': String(getActiveWs()) } : {}),
+      },
+    })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setProfileData(d); })
       .catch(() => {})
@@ -356,21 +363,26 @@ export default function App() {
   // Автозагрузка профиля сразу после логина — чтобы permissions были доступны во всех вкладках
   useEffect(() => { if (authUser && !profileData) fetchProfile(); }, [authUser, profileData, fetchProfile]);
 
+  const onWorkspaceSwitch = useCallback(() => {
+    setProfileData(null);
+    fetchProfile();
+  }, [fetchProfile]);
+
   // ── userCan(perm) — главный хелпер проверки прав на фронте ──
   const userPermissions = useMemo(
     () => new Set(profileData?.permissions || []),
     [profileData]
   );
   const userCan = useCallback((perm) => {
-    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
-  }, [authUser, userPermissions, profileData]);
+  }, [userPermissions, profileData]);
 
   const userCanAny = useCallback((resourceKey) => {
-    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     if (!profileData) return true;
     return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
-  }, [authUser, userPermissions, profileData]);
+  }, [userPermissions, profileData]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -5223,7 +5235,7 @@ export default function App() {
       }
 
       case 'permissions': {
-        if (!authUser?.is_owner && profileData?.role_raw !== 'developer') {
+        if (!isOwner) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
               <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center border border-red-100">
@@ -5501,7 +5513,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer') && (!n.resource || userCanAny(n.resource))).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || isOwner) && (!n.resource || userCanAny(n.resource))).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
@@ -5538,6 +5550,10 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center space-x-3">
+            <WorkspaceSwitcher
+              token={localStorage.getItem('auth_token')}
+              onSwitch={onWorkspaceSwitch}
+            />
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigateTo('profile')}
