@@ -1,8 +1,27 @@
 // Workspaces API wrapper (V1.17.0b12)
+// V1.17.0d (Подпроект #3): активный workspace в localStorage + общий хедер.
+const WS_KEY = 'active_ws_id';
+
+export function getActiveWs() {
+  const v = localStorage.getItem(WS_KEY);
+  return v ? parseInt(v, 10) : null;
+}
+
+export function setActiveWs(wsId) {
+  if (wsId == null) localStorage.removeItem(WS_KEY);
+  else localStorage.setItem(WS_KEY, String(wsId));
+}
+
+function wsHeaders(token, extra = {}) {
+  const h = { Authorization: `Bearer ${token}`, ...extra };
+  const ws = getActiveWs();
+  if (ws != null) h['X-Workspace-Id'] = String(ws);
+  return h;
+}
 
 export async function fetchWorkspaces(token) {
   const r = await fetch('/api/workspaces', {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token),
   });
   if (!r.ok) throw new Error(`fetchWorkspaces ${r.status}`);
   return r.json();
@@ -10,7 +29,7 @@ export async function fetchWorkspaces(token) {
 
 export async function fetchWorkspaceDetails(token, wsId) {
   const r = await fetch(`/api/workspaces/${wsId}`, {
-    headers: { Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token),
   });
   if (!r.ok) throw new Error(`fetchWorkspaceDetails ${r.status}`);
   return r.json();
@@ -19,7 +38,7 @@ export async function fetchWorkspaceDetails(token, wsId) {
 export async function inviteMember(token, wsId, userId, role) {
   const r = await fetch(`/api/workspaces/${wsId}/members`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ user_id: userId, role }),
   });
   if (!r.ok) {
@@ -32,7 +51,7 @@ export async function inviteMember(token, wsId, userId, role) {
 export async function removeMember(token, wsId, userId) {
   const r = await fetch(`/api/workspaces/${wsId}/members/${userId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
@@ -44,7 +63,7 @@ export async function removeMember(token, wsId, userId) {
 export async function renameWorkspace(token, wsId, newName) {
   const r = await fetch(`/api/workspaces/${wsId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ name: newName }),
   });
   if (!r.ok) {
@@ -58,7 +77,7 @@ export async function renameWorkspace(token, wsId, newName) {
 export async function updateChatRole(token, wsId, chatId, role) {
   const r = await fetch(`/api/workspaces/${wsId}/chats/${chatId}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token, { 'Content-Type': 'application/json' }),
     body: JSON.stringify({ role }),
   });
   if (!r.ok) {
@@ -72,7 +91,7 @@ export async function updateChatRole(token, wsId, chatId, role) {
 export async function disconnectChat(token, wsId, chatId) {
   const r = await fetch(`/api/workspaces/${wsId}/chats/${chatId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
@@ -85,7 +104,7 @@ export async function disconnectChat(token, wsId, chatId) {
 export async function deleteWorkspace(token, wsId) {
   const r = await fetch(`/api/workspaces/${wsId}`, {
     method: 'DELETE',
-    headers: { Authorization: `Bearer ${token}` },
+    headers: wsHeaders(token),
   });
   if (!r.ok) {
     const err = await r.json().catch(() => ({}));
