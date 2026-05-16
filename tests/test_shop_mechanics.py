@@ -17,8 +17,12 @@ async def test_apply_title_promotes_with_manage_chat():
     result = await apply_title_to_user(context, -1001234567890, 12345, "Спикер")
 
     assert result is True
-    kwargs = context.bot.promote_chat_member.call_args.kwargs
-    assert kwargs.get('can_manage_chat') is True, f"can_manage_chat must be True, got: {kwargs}"
+    # Шаг 1 (повышение для установки титула) обязан дать can_manage_chat=True.
+    # Шаг 3 НАМЕРЕННО демоутит (can_manage_chat=False) → проверяем ПЕРВЫЙ вызов,
+    # а не последний (.call_args = последний = шаг 3).
+    first_call = context.bot.promote_chat_member.call_args_list[0]
+    assert first_call.kwargs.get('can_manage_chat') is True, \
+        f"can_manage_chat must be True on promote, got: {first_call.kwargs}"
     context.bot.set_chat_administrator_custom_title.assert_awaited_once_with(
         chat_id=-1001234567890, user_id=12345, custom_title="Спикер"
     )
