@@ -107,6 +107,9 @@ async def dispatch_admin(handler, query, data, user, context) -> bool:
         await handler.show_main_menu(query, user)
     elif data == "press_release_start":
         await start_press_release(query, user, context, db, eff_admin)
+    elif data == "pr_migration_info":
+        from handlers.PR.press_release_pr import show_migration_info
+        await show_migration_info(query, user, context, db, eff_admin)
     elif data.startswith("pr_target_"):
         await handle_pr_target_selection(query, data, user, context, db, eff_admin, target_chat_id)
     elif data == "pr_publish_now":

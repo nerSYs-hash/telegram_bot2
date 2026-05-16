@@ -45,28 +45,29 @@ ROLE_LABELS = {
 
 # ── РЕСУРСЫ (каталог) — у каждого ресурса свой список осмысленных actions ──
 RESOURCES = {
-    "triggers":   {"label": "Триггеры",            "icon": "ShieldAlert",     "actions": ["view", "create", "edit", "delete", "toggle"]},
-    "shipper":    {"label": "Шиппер",              "icon": "HeartHandshake",  "actions": ["view", "edit", "toggle"]},
-    "broadcast":  {"label": "Рассылка",            "icon": "Send",            "actions": ["view", "create", "edit", "delete"]},
-    "journal":    {"label": "Журнал событий",      "icon": "ScrollText",      "actions": ["view", "export"]},
-    "statistics": {"label": "Статистика",          "icon": "PieChart",        "actions": ["view", "export"]},
-    "system":     {"label": "Системные настройки", "icon": "Settings",        "actions": ["view", "edit", "toggle"]},
-    "admins":     {"label": "Управление админами", "icon": "ShieldCheck",     "actions": ["view", "create", "edit", "delete"]},
-    "blacklist":  {"label": "Чёрный список",       "icon": "Ban",             "actions": ["view", "create", "delete"]},
-    "moderation": {"label": "Модерация чата",      "icon": "ShieldBan",       "actions": ["view", "delete", "toggle"]},
-    "economy":    {"label": "Экономика",           "icon": "Coins",           "actions": ["view", "edit", "toggle", "rollback", "cancel"]},
+    "triggers":      {"label": "Триггеры",            "icon": "ShieldAlert",     "actions": ["view", "create", "edit", "delete", "toggle"]},
+    "shipper":       {"label": "Шиппер",              "icon": "HeartHandshake",  "actions": ["view", "edit", "toggle"]},
+    "press_release": {"label": "Пресс-релизы",        "icon": "Megaphone",       "actions": ["view", "create", "edit", "delete", "publish_now"]},
+    "journal":       {"label": "Журнал событий",      "icon": "ScrollText",      "actions": ["view", "export"]},
+    "statistics":    {"label": "Статистика",          "icon": "PieChart",        "actions": ["view", "export"]},
+    "system":        {"label": "Системные настройки", "icon": "Settings",        "actions": ["view", "edit", "toggle"]},
+    "admins":        {"label": "Управление админами", "icon": "ShieldCheck",     "actions": ["view", "create", "edit", "delete"]},
+    "blacklist":     {"label": "Чёрный список",       "icon": "Ban",             "actions": ["view", "create", "delete"]},
+    "moderation":    {"label": "Модерация чата",      "icon": "ShieldBan",       "actions": ["view", "delete", "toggle"]},
+    "economy":       {"label": "Экономика",           "icon": "Coins",           "actions": ["view", "edit", "toggle", "rollback", "cancel"]},
 }
 
 # ── ДЕЙСТВИЯ (каталог — все уникальные labels) ──
 ACTION_LABELS = {
-    "view":     "просмотр",
-    "create":   "создание",
-    "edit":     "редактирование",
-    "delete":   "удаление",
-    "toggle":   "вкл/выкл",
-    "export":   "выгрузка",
-    "rollback": "откат изменений",
-    "cancel":   "отмена выплат",
+    "view":        "просмотр",
+    "create":      "создание",
+    "edit":        "редактирование",
+    "delete":      "удаление",
+    "toggle":      "вкл/выкл",
+    "export":      "выгрузка",
+    "rollback":    "откат изменений",
+    "cancel":      "отмена выплат",
+    "publish_now": "опубликовать сейчас",
 }
 
 # ── Permissions только для owner и developer — нельзя выдать deputy/admin ──
@@ -89,8 +90,9 @@ DEFAULT_ROLE_PERMISSIONS = {
         "triggers.view", "triggers.create", "triggers.edit", "triggers.delete", "triggers.toggle",
         # Шиппер
         "shipper.view", "shipper.edit", "shipper.toggle",
-        # Рассылка
-        "broadcast.view", "broadcast.create", "broadcast.edit", "broadcast.delete",
+        # Пресс-релизы
+        "press_release.view", "press_release.create", "press_release.edit",
+        "press_release.delete", "press_release.publish_now",
         # Журнал
         "journal.view", "journal.export",
         # Статистика
@@ -109,7 +111,7 @@ DEFAULT_ROLE_PERMISSIONS = {
     ROLE_ADMIN: [
         "triggers.view",
         "shipper.view",
-        "broadcast.view",
+        "press_release.view", "press_release.create",
         "journal.view",
         "statistics.view",
         "system.view",

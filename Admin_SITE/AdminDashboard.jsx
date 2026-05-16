@@ -1,6 +1,12 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PromptTranslator from './components/PromptTranslator';
+import PressReleasePage from './components/press_release/PressReleasePage';
+import WorkspaceList from './components/workspaces/WorkspaceList';
+import WorkspacePage from './components/workspaces/WorkspacePage';
+import InviteMemberModal from './components/workspaces/InviteMemberModal';
+import WorkspaceSwitcher from './components/workspaces/WorkspaceSwitcher';
+import { getActiveWs } from './components/shared/api';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -218,7 +224,7 @@ function LoginPage({ onLogin }) {
     if (container && !container.querySelector('script')) {
       const s = document.createElement('script');
       s.src = 'https://telegram.org/js/telegram-widget.js?22';
-      s.setAttribute('data-telegram-login', 'Pulse_On_bot');
+      s.setAttribute('data-telegram-login', 'Puls_ON_bot');
       s.setAttribute('data-size', 'large');
       s.setAttribute('data-radius', '12');
       s.setAttribute('data-onauth', 'onTelegramAuth(user)');
@@ -326,20 +332,29 @@ export default function App() {
       .finally(() => setAuthLoading(false));
   }, []);
 
-  const isAdmin = !!(authUser && (authUser.is_admin || authUser.is_owner));
-  const isOwner = !!(authUser && authUser.is_owner);
-  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
-
   // ── ПРОФИЛЬ ──
   const [profileData, setProfileData]             = useState(null);
+  // ВАЖНО: isOwner/isAdmin читают profileData → объявляем ПОСЛЕ его useState
+  // (иначе ReferenceError: Cannot access before initialization — TDZ).
+  const isOwner = !!(profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer');
+  const isAdmin = !!(authUser && (isOwner || (profileData?.permissions || []).length > 0));
+  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
   const [profileLoading, setProfileLoading]       = useState(false);
   const [showConnectChat, setShowConnectChat]     = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
+  const [showInviteModal, setShowInviteModal]     = useState(false);
+  const [inviteReloadTick, setInviteReloadTick]   = useState(0);
   const [accessesOpen, setAccessesOpen]           = useState(false);
   const fetchProfile = useCallback(() => {
     const token = localStorage.getItem('auth_token');
     if (!token) return;
     setProfileLoading(true);
-    fetch('/api/admin/profile/me', { headers: { Authorization: `Bearer ${token}` } })
+    fetch('/api/admin/profile/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(getActiveWs() != null ? { 'X-Workspace-Id': String(getActiveWs()) } : {}),
+      },
+    })
       .then(r => r.ok ? r.json() : null)
       .then(d => { if (d) setProfileData(d); })
       .catch(() => {})
@@ -349,21 +364,26 @@ export default function App() {
   // Автозагрузка профиля сразу после логина — чтобы permissions были доступны во всех вкладках
   useEffect(() => { if (authUser && !profileData) fetchProfile(); }, [authUser, profileData, fetchProfile]);
 
+  const onWorkspaceSwitch = useCallback(() => {
+    setProfileData(null);
+    fetchProfile();
+  }, [fetchProfile]);
+
   // ── userCan(perm) — главный хелпер проверки прав на фронте ──
   const userPermissions = useMemo(
     () => new Set(profileData?.permissions || []),
     [profileData]
   );
   const userCan = useCallback((perm) => {
-    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
-  }, [authUser, userPermissions, profileData]);
+  }, [userPermissions, profileData]);
 
   const userCanAny = useCallback((resourceKey) => {
-    if (authUser?.is_owner || profileData?.role_raw === 'developer') return true;
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     if (!profileData) return true;
     return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
-  }, [authUser, userPermissions, profileData]);
+  }, [userPermissions, profileData]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -935,16 +955,16 @@ export default function App() {
   };
 
   const navigation = [
-    { id: 'updates',     name: 'Обновления',    icon: Megaphone,      group: 'top' },
-    { id: 'statistics',  name: 'Статистика',    icon: PieChart,       group: 'main',     resource: 'statistics' },
-    { id: 'journal',     name: 'Журнал',        icon: ScrollText,     group: 'main',     resource: 'journal' },
-    { id: 'triggers',    name: 'Триггеры',      icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
-    { id: 'shipper',     name: 'Шиппер',        icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
-    { id: 'prompt',      name: 'AI-помощник',   icon: Bot,           group: 'modules' },
-    { id: 'economy',     name: 'Экономика',     icon: Coins,          group: 'modules',  resource: 'economy' },
-    { id: 'system',      name: 'Система',       icon: Settings,       group: 'main',     resource: 'system' },
-    { id: 'broadcast',   name: 'Рассылка',      icon: Send,           group: 'features', resource: 'broadcast' },
-    { id: 'permissions', name: 'Права',         icon: ShieldCheck,    group: 'features', ownerOnly: true },
+    { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
+    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'main',     resource: 'statistics' },
+    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'main',     resource: 'journal' },
+    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
+    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release' },
+    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
+    { id: 'prompt',        name: 'AI-помощник',    icon: Bot,            group: 'modules' },
+    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy' },
+    { id: 'system',        name: 'Система',        icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
   const renderContent = () => {
@@ -5009,6 +5029,31 @@ export default function App() {
         const accesses = profileData?.accesses || [];
         const totalActions = accesses.reduce((sum, r) => sum + r.actions.length, 0);
 
+        // V1.17.0b14 — если выбран workspace, показываем его детали вместо профиля
+        if (selectedWorkspaceId) {
+          return (
+            <div className="pb-24 animate-in fade-in duration-500">
+              <WorkspacePage
+                token={localStorage.getItem('auth_token')}
+                wsId={selectedWorkspaceId}
+                currentUserId={authUser?.user_id}
+                botUsername={profileData?.bot_username || 'Pulse_On_bot'}
+                onBack={() => setSelectedWorkspaceId(null)}
+                onInviteClick={() => setShowInviteModal(true)}
+                reloadTrigger={inviteReloadTick}
+              />
+              {showInviteModal && (
+                <InviteMemberModal
+                  token={localStorage.getItem('auth_token')}
+                  wsId={selectedWorkspaceId}
+                  onClose={() => setShowInviteModal(false)}
+                  onSuccess={() => setInviteReloadTick(t => t + 1)}
+                />
+              )}
+            </div>
+          );
+        }
+
         return (
           <div className="pb-24 animate-in fade-in duration-500 space-y-4">
 
@@ -5062,64 +5107,12 @@ export default function App() {
                 )}
               </div>
 
-              {/* ЧАТ / БЕЗ ЧАТА */}
-              {profileData && profileData.has_chat === false ? (
-                <div className="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-[2rem] p-5
-                                border border-blue-700 shadow-md text-white flex flex-col justify-between">
-                  <div className="flex items-start gap-3 mb-4">
-                    <div className="w-10 h-10 rounded-xl bg-white/15 backdrop-blur
-                                    flex items-center justify-center border border-white/30 flex-shrink-0">
-                      <Plug size={18} className="text-white"/>
-                    </div>
-                    <div className="flex-1">
-                      <h3 className="text-sm font-black uppercase tracking-wide">Без чата</h3>
-                      <p className="text-xs font-medium text-blue-100 mt-1 leading-snug">
-                        Pulse Bot ещё не работает в вашем чате
-                      </p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={() => setShowConnectChat(true)}
-                    className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-                               bg-white text-blue-700 font-black text-xs uppercase tracking-wide
-                               hover:bg-blue-50 active:scale-[0.98] transition-all shadow">
-                    <Plug size={14}/> Подключить чат
-                  </button>
-                </div>
-              ) : (
-                <div className="bg-white rounded-[2rem] p-5 border border-gray-100 space-y-2">
-                  <h3 className="font-black text-gray-900 text-xs uppercase flex items-center mb-2">
-                    <MessageCircle className="mr-2 text-green-500" size={14}/> Чат
-                  </h3>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Calendar size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">В чате с</span>
-                    </div>
-                    {fmtDate(profileData?.joined_at)
-                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.joined_at)}</span>
-                      : placeholderVal}
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <Clock size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">Последнее</span>
-                    </div>
-                    {fmtDate(profileData?.last_message)
-                      ? <span className="font-black text-sm text-gray-900">{fmtDate(profileData.last_message)}</span>
-                      : placeholderVal}
-                  </div>
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
-                    <div className="flex items-center gap-2">
-                      <MessageCircle size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">Сообщений</span>
-                    </div>
-                    {profileData
-                      ? <span className="font-black text-sm text-gray-900">{(profileData.total_messages || 0).toLocaleString('ru-RU')}</span>
-                      : placeholderVal}
-                  </div>
-                </div>
-              )}
+              {/* МОИ СООБЩЕСТВА (V1.17.0b13) — заменили старый блок ЧАТ/БЕЗ ЧАТА */}
+              <WorkspaceList
+                token={localStorage.getItem('auth_token')}
+                onConnectClick={() => setShowConnectChat(true)}
+                onSelectWorkspace={(id) => setSelectedWorkspaceId(id)}
+              />
 
               {/* ВАШИ ДОСТУПЫ — collapsible, на полную ширину сетки */}
               {accesses.length > 0 && (
@@ -5243,7 +5236,7 @@ export default function App() {
       }
 
       case 'permissions': {
-        if (!authUser?.is_owner && profileData?.role_raw !== 'developer') {
+        if (!isOwner) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
               <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center border border-red-100">
@@ -5479,6 +5472,15 @@ export default function App() {
           </EconomyErrorBoundary>
         );
 
+      case 'press_release':
+        return (
+          <PressReleasePage
+            token={localStorage.getItem('auth_token')}
+            userPermissions={authUser?.permissions || []}
+            userId={authUser?.user_id}
+          />
+        );
+
       default: return null;
     }
   };
@@ -5512,7 +5514,7 @@ export default function App() {
                   {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || authUser?.is_owner || profileData?.role_raw === 'developer') && (!n.resource || userCanAny(n.resource))).map((item) => (
+              {navigation.filter(n => n.group === group && (!n.ownerOnly || isOwner) && (!n.resource || userCanAny(n.resource))).map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
@@ -5549,6 +5551,10 @@ export default function App() {
             </h1>
           </div>
           <div className="flex items-center space-x-3">
+            <WorkspaceSwitcher
+              token={localStorage.getItem('auth_token')}
+              onSwitch={onWorkspaceSwitch}
+            />
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigateTo('profile')}
@@ -5575,7 +5581,7 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
-          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' ? 'w-full' : 'max-w-3xl mx-auto'}>
+          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' || activeTab === 'press_release' ? 'w-full' : 'max-w-3xl mx-auto'}>
             {renderContent()}
           </div>
         </div>

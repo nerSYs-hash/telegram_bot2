@@ -1,28 +1,40 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Пользователи — CRUD и топы. Вынесено из Database."""
+"""Пользователи — CRUD и топы. Вынесено из Database.
+
+V1.17.0a16 (multi-tenancy):
+  • users — ГЛОБАЛЬНАЯ таблица (один user может быть в нескольких workspace-ах,
+    членство через workspace_members). CRUD функций add_user/get_user/
+    update_user_balance/get_top_users_by_balance — без workspace_id.
+  • get_top_daily_earners / get_top_activists джойнятся с user_stats
+    (тенантизирована) → принимают workspace_id.
+
+  TODO(multi-tenancy): users.balance — глобальный (один кошелёк Pulse-токена
+  на сеть). Если в SaaS каждый workspace получит свою валюту — переехать
+  на user_workspace_balance(workspace_id, user_id, balance).
+"""
 
 import hashlib
 
 
 def add_user(db, user_id, username=None, first_name=None, last_name=None,
              is_admin=False, is_owner=False):
-    """Add or update user"""
+    """Add or update user (GLOBAL — across all workspaces)."""
     referral_code = f"ref_{hashlib.md5(str(user_id).encode()).hexdigest()[:8]}"
 
     existing_user = get_user(db, user_id)
 
     if existing_user:
         db.cursor.execute('''
-            UPDATE users 
-            SET username = ?, first_name = ?, last_name = ?, 
+            UPDATE users
+            SET username = ?, first_name = ?, last_name = ?,
                 last_active = CURRENT_TIMESTAMP
             WHERE user_id = ?
         ''', (username, first_name, last_name, user_id))
     else:
         db.cursor.execute('''
-            INSERT INTO users 
-            (user_id, username, first_name, last_name, is_admin, is_owner, 
+            INSERT INTO users
+            (user_id, username, first_name, last_name, is_admin, is_owner,
              referral_code, last_active, balance)
             VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, 0)
         ''', (user_id, username, first_name, last_name, is_admin, is_owner, referral_code))
@@ -31,21 +43,24 @@ def add_user(db, user_id, username=None, first_name=None, last_name=None,
 
 
 def get_user(db, user_id):
-    """Get user by ID"""
+    """Get user by ID (GLOBAL)."""
     db.cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
     row = db.cursor.fetchone()
     return dict(row) if row else None
 
 
 def get_user_by_username(db, username):
-    """Get user by username (без @, без учёта регистра)"""
+    """Get user by username (без @, без учёта регистра)."""
     clean = username.lstrip('@').lower()
     db.cursor.execute('SELECT * FROM users WHERE LOWER(username) = ?', (clean,))
     return db.cursor.fetchone()
 
 
 def update_user_balance(db, user_id, amount, operation='add'):
-    """Update user balance (with decimal support, rounded to 2 places)"""
+    """Update user balance (with decimal support, rounded to 2 places).
+
+    GLOBAL balance — Pulse-токен один на всю сеть.
+    """
     user = get_user(db, user_id)
     if not user:
         return False
@@ -73,7 +88,7 @@ def update_user_balance(db, user_id, amount, operation='add'):
 
 
 def get_top_users_by_balance(db, limit=5, exclude_admins=True):
-    """Get top users by balance"""
+    """Get top users by balance (GLOBAL balance)."""
     query = 'SELECT * FROM users WHERE is_left = 0'
     if exclude_admins:
         query += ' AND is_admin = 0 AND is_owner = 0'
@@ -83,31 +98,31 @@ def get_top_users_by_balance(db, limit=5, exclude_admins=True):
     return db.cursor.fetchall()
 
 
-def get_top_daily_earners(db, date, limit=5):
-    """Get top users by earnings for a specific date (Daily Top)"""
+def get_top_daily_earners(db, workspace_id, date, limit=5):
+    """Get top users by earnings for a specific date in workspace (Daily Top)."""
     db.cursor.execute('''
-        SELECT u.username, u.first_name, us.pulses_mined 
+        SELECT u.username, u.first_name, us.pulses_mined
         FROM user_stats us
         JOIN users u ON us.user_id = u.user_id
-        WHERE us.date = ? AND us.pulses_mined > 0
+        WHERE us.workspace_id = ? AND us.date = ? AND us.pulses_mined > 0
           AND (u.is_admin = 0 AND u.is_owner = 0)
           AND u.is_left = 0
         ORDER BY us.pulses_mined DESC
         LIMIT ?
-    ''', (date, limit))
+    ''', (workspace_id, date, limit))
     return db.cursor.fetchall()
 
 
-def get_top_activists(db, date, limit=5):
-    """Get top users by message count for a specific date"""
+def get_top_activists(db, workspace_id, date, limit=5):
+    """Get top users by message count for a specific date in workspace."""
     db.cursor.execute('''
         SELECT u.username, u.first_name, us.total_messages
         FROM user_stats us
         JOIN users u ON us.user_id = u.user_id
-        WHERE us.date = ? AND us.total_messages > 0
+        WHERE us.workspace_id = ? AND us.date = ? AND us.total_messages > 0
           AND (u.is_admin = 0 AND u.is_owner = 0)
           AND u.is_left = 0
         ORDER BY us.total_messages DESC
         LIMIT ?
-    ''', (date, limit))
+    ''', (workspace_id, date, limit))
     return db.cursor.fetchall()

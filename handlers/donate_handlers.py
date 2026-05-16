@@ -18,6 +18,7 @@
 
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 from utils.helpers import format_number, get_today_date_msk
+from bot_core.workspace_context import pulse_only  # V1.17.0a21 multi-tenancy gating
 
 
 def safe_name(user_data):
@@ -61,6 +62,7 @@ async def show_donate_menu(query, user, db):
 
 # ─── Донат пользователю ───
 
+@pulse_only
 async def donate_to_user_start(query, user, context, db):
     """Умное меню переводов — выбор категории получателя"""
     user_data = db.get_user(user.id)
@@ -86,6 +88,7 @@ async def donate_to_user_start(query, user, context, db):
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def donate_cat_recent(query, user, context, db):
     """Категория: последние 5 уникальных получателей моих донатов."""
     user_data = db.get_user(user.id)
@@ -134,6 +137,7 @@ async def donate_cat_recent(query, user, context, db):
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def donate_cat_activists(query, user, context, db):
     """Категория: Топ-5 активистов сегодня."""
     user_data = db.get_user(user.id)
@@ -178,6 +182,7 @@ async def donate_cat_activists(query, user, context, db):
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def donate_cat_poor(query, user, context, db):
     """Категория: Топ-5 малоимущих (без админов, активные за 7 дней)."""
     user_data = db.get_user(user.id)
@@ -220,6 +225,7 @@ async def donate_cat_poor(query, user, context, db):
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def donate_cat_manual(query, user, context, db):
     """Категория: ручной ввод @username или ID."""
     user_data = db.get_user(user.id)
@@ -243,6 +249,7 @@ async def donate_cat_manual(query, user, context, db):
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
 
+@pulse_only
 async def handle_manual_donate_user(message, context, db):
     """Обработка ручного ввода @username или ID для доната.
 
@@ -320,6 +327,7 @@ async def handle_manual_donate_user(message, context, db):
     await message.reply_text(text_msg, reply_markup=InlineKeyboardMarkup(keyboard))
     return True
 
+@pulse_only
 async def donate_pick_user(query, data, user, context, db):
     """Выбор суммы для доната пользователю"""
     target_user_id = int(data.replace("donate_pick_user_", ""))
@@ -350,6 +358,7 @@ async def donate_pick_user(query, data, user, context, db):
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_user_amount(query, data, user, context, db):
     """Подтверждение суммы доната пользователю"""
     parts = data.replace("donate_user_amount_", "").split("_")
@@ -379,6 +388,7 @@ async def donate_user_amount(query, data, user, context, db):
     ]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_user_custom(query, data, user, context, db):
     """Ввод своей суммы для доната пользователю"""
     target_user_id = int(data.replace("donate_user_custom_", ""))
@@ -395,6 +405,7 @@ async def donate_user_custom(query, data, user, context, db):
     keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data=f"donate_pick_user_{target_user_id}")]]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_user_confirm(query, data, user, context, db):
     """Выполнение доната пользователю"""
     parts = data.replace("donate_user_confirm_", "").split("_")
@@ -441,6 +452,7 @@ async def donate_user_confirm(query, data, user, context, db):
 
 # ─── Донат в Центробанк ───
 
+@pulse_only
 async def donate_to_bank_start(query, user, context, db):
     """Выбор суммы для доната в банк"""
     user_data = db.get_user(user.id)
@@ -475,6 +487,7 @@ async def donate_to_bank_start(query, user, context, db):
     
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_bank_custom(query, user, context, db):
     """Ввод своей суммы для банка"""
     context.user_data['awaiting_donate_amount'] = 'bank'
@@ -482,6 +495,7 @@ async def donate_bank_custom(query, user, context, db):
     keyboard = [[InlineKeyboardButton("❌ Отмена", callback_data="donate_to_bank_start")]]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_bank_amount(query, data, user, context, db):
     """Подтверждение суммы доната в банк"""
     amount = float(data.replace("donate_bank_amount_", ""))
@@ -501,6 +515,7 @@ async def donate_bank_amount(query, data, user, context, db):
     ]
     await query.edit_message_text(message, reply_markup=InlineKeyboardMarkup(keyboard))
 
+@pulse_only
 async def donate_bank_confirm(query, data, user, context, db):
     """Выполнение доната в банк"""
     amount = round(float(data.replace("donate_bank_confirm_", "")), 2)

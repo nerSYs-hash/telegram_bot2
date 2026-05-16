@@ -1,0 +1,77 @@
+
+name: Auto-Update Project Map
+
+# Запускать скрипт автоматически на push в main с изменениями кода.
+# Раньше триггер был на любую ветку — это плодило мусорные ветки <branch>-map
+# на каждый feature/fix. Теперь карта обновляется только для main.
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - '**.py'
+      - '**.js'
+      - '**.jsx'
+  workflow_dispatch:
+jobs:
+  update-excel:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Даем право сохранять файл в репозиторий
+
+    steps:
+      - name: Скачиваем код проекта
+        uses: actions/checkout@v4
+
+      - name: Проверяем расположение файла
+        run: |
+          pwd
+          ls -la scanner_to_excel.py 2>/dev/null || echo "❌ Файл не найден в текущей директории"
+          ls -la Скрпиты/scanner_to_excel.py 2>/dev/null || echo "❌ Файл не найден в Скрпиты/"
+
+      - name: Устанавливаем Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11' # Работает на любой стабильной версии
+
+      - name: Устанавливаем библиотеку openpyxl
+        run: pip install openpyxl
+
+      - name: Запускаем наш сканер
+        run: python scanner_to_excel.py # Убедись, что файл сканера называется именно так
+        continue-on-error: true
+
+      - name: Сохраняем новый Excel в подветку
+        run: |
+          git config --global user.name "Pulse Bot Auto-Scanner"
+          git config --global user.email "scanner@pulse.bot"
+
+          if [ -f "Pulse_Auto_Map.xlsx" ]; then
+            CURRENT_BRANCH=${GITHUB_REF_NAME}
+            MAP_BRANCH="${CURRENT_BRANCH}-map"
+
+            # 1. Переходим в отдельную ветку для карты
+            git checkout -b $MAP_BRANCH
+
+            # 2. Добавляем файл
+            git add -f Pulse_Auto_Map.xlsx
+            
+            # 3. Делаем коммит (если файл не изменился, || true не даст экшену упасть)
+            git commit -m "🗺 Карта проекта PULSE для $CURRENT_BRANCH" || true
+            
+            # 4. ПРИНУДИТЕЛЬНО отправляем именно в ветку-карту
+            git push -f origin $MAP_BRANCH
+          else
+            echo "⚠️ Файл Pulse_Auto_Map.xlsx не был создан"
+          fi
+
+      - name: Отправка файла в Telegram
+        run: |
+          if [ -f "Pulse_Auto_Map.xlsx" ]; then
+            curl -F document=@"Pulse_Auto_Map.xlsx" \
+                 -F caption="✅ Карта проекта **PULSE** обновлена!" \
+                 -F parse_mode="Markdown" \
+                 https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
+          else
+            echo "⚠️ Файл для отправки не найден"
+          fi

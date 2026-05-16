@@ -37,6 +37,10 @@ _db = None
 _require_auth_fn = None
 _resolve_role_fn = None
 
+# Multi-tenancy placeholder (V1.17.0a17). До подпроекта #3 (web auth) —
+# извлекать из JWT через header X-Workspace-Id.
+_DEFAULT_WS_ID = 1
+
 
 def _setup(db, require_auth, resolve_role):
     global _db, _require_auth_fn, _resolve_role_fn
@@ -176,7 +180,7 @@ def _write_marketplace_service(db, user_id: int, title_text: str, duration_days)
 async def list_packages(authorization: str = Header(default=None)):
     _auth(authorization)
     from database.db_titles import list_title_packages
-    return list_title_packages(_db)
+    return list_title_packages(_db, _DEFAULT_WS_ID)
 
 
 @router.post("/packages")
@@ -186,10 +190,10 @@ async def create_package(body: PackageBody, authorization: str = Header(default=
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
     from database.db_titles import create_title_package
-    new_id = create_title_package(_db, body.label, body.duration_days,
+    new_id = create_title_package(_db, _DEFAULT_WS_ID, body.label, body.duration_days,
                                    body.price_pulses, body.price_rub)
     from database.db_titles import get_title_package
-    return get_title_package(_db, new_id)
+    return get_title_package(_db, _DEFAULT_WS_ID, new_id)
 
 
 @router.put("/packages/{pkg_id}")
@@ -200,13 +204,13 @@ async def update_package(pkg_id: int, body: PackageBody,
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
     from database.db_titles import update_title_package, get_title_package
-    if not get_title_package(_db, pkg_id):
+    if not get_title_package(_db, _DEFAULT_WS_ID, pkg_id):
         raise HTTPException(status_code=404, detail="Пакет не найден")
-    update_title_package(_db, pkg_id, label=body.label,
+    update_title_package(_db, _DEFAULT_WS_ID, pkg_id, label=body.label,
                          duration_days=body.duration_days,
                          price_pulses=body.price_pulses,
                          price_rub=body.price_rub)
-    return get_title_package(_db, pkg_id)
+    return get_title_package(_db, _DEFAULT_WS_ID, pkg_id)
 
 
 @router.patch("/packages/{pkg_id}/toggle")
@@ -216,7 +220,7 @@ async def toggle_package(pkg_id: int, authorization: str = Header(default=None))
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
     from database.db_titles import toggle_title_package
-    new_val = toggle_title_package(_db, pkg_id)
+    new_val = toggle_title_package(_db, _DEFAULT_WS_ID, pkg_id)
     if new_val is None:
         raise HTTPException(status_code=404, detail="Пакет не найден")
     return {"id": pkg_id, "is_enabled": new_val}
@@ -229,9 +233,12 @@ async def delete_package(pkg_id: int, authorization: str = Header(default=None))
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
     from database.db_titles import get_title_package
-    if not get_title_package(_db, pkg_id):
+    if not get_title_package(_db, _DEFAULT_WS_ID, pkg_id):
         raise HTTPException(status_code=404, detail="Пакет не найден")
-    _db.cursor.execute("DELETE FROM title_packages WHERE id = ?", (pkg_id,))
+    _db.cursor.execute(
+        "DELETE FROM title_packages WHERE id = ? AND workspace_id = ?",
+        (pkg_id, _DEFAULT_WS_ID)
+    )
     _db.conn.commit()
     return {"deleted": True}
 
@@ -283,8 +290,8 @@ async def list_requests(
 ):
     _auth(authorization)
     from database.db_titles import list_title_requests, count_title_requests_by_status
-    items = list_title_requests(_db, status=status, limit=limit, offset=offset)
-    pending = count_title_requests_by_status(_db, "pending")
+    items = list_title_requests(_db, _DEFAULT_WS_ID, status=status, limit=limit, offset=offset)
+    pending = count_title_requests_by_status(_db, _DEFAULT_WS_ID, "pending")
     return {"items": items, "pending_count": pending}
 
 
@@ -297,11 +304,11 @@ async def approve_request(req_id: int, authorization: str = Header(default=None)
         raise HTTPException(status_code=403, detail="Нет доступа")
 
     from database.db_titles import transition_title_request, get_title_request
-    ok = transition_title_request(_db, req_id, "approved", decided_by=caller_id)
+    ok = transition_title_request(_db, _DEFAULT_WS_ID, req_id, "approved", decided_by=caller_id)
     if not ok:
         raise HTTPException(status_code=409, detail="Уже обработана")
 
-    req = get_title_request(_db, req_id)
+    req = get_title_request(_db, _DEFAULT_WS_ID, req_id)
     if not req:
         raise HTTPException(status_code=404, detail="Заявка не найдена")
 
@@ -310,8 +317,8 @@ async def approve_request(req_id: int, authorization: str = Header(default=None)
         # Rollback status so admin can retry
         _db.cursor.execute(
             "UPDATE title_rub_requests SET status='pending', decided_at=NULL, decided_by=NULL "
-            "WHERE id=?",
-            (req_id,)
+            "WHERE id = ? AND workspace_id = ?",
+            (req_id, _DEFAULT_WS_ID)
         )
         _db.conn.commit()
         raise HTTPException(status_code=400, detail=f"Telegram: {tg_err}")
@@ -320,7 +327,7 @@ async def approve_request(req_id: int, authorization: str = Header(default=None)
         _db, req["user_id"], req["title_text"], req.get("duration_days")
     )
 
-    return get_title_request(_db, req_id)
+    return get_title_request(_db, _DEFAULT_WS_ID, req_id)
 
 
 @router.post("/requests/{req_id}/reject")
@@ -332,11 +339,11 @@ async def reject_request(req_id: int, reason: Optional[str] = None,
     if not _can_edit(role):
         raise HTTPException(status_code=403, detail="Нет доступа")
     from database.db_titles import transition_title_request, get_title_request
-    ok = transition_title_request(_db, req_id, "rejected",
+    ok = transition_title_request(_db, _DEFAULT_WS_ID, req_id, "rejected",
                                    decided_by=caller_id, reject_reason=reason)
     if not ok:
         raise HTTPException(status_code=409, detail="Уже обработана")
-    return get_title_request(_db, req_id)
+    return get_title_request(_db, _DEFAULT_WS_ID, req_id)
 
 
 # ── Stats ─────────────────────────────────────────────────────────────────────
@@ -345,10 +352,10 @@ async def reject_request(req_id: int, reason: Optional[str] = None,
 async def get_stats(authorization: str = Header(default=None)):
     _auth(authorization)
     from database.db_titles import count_title_requests_by_status, list_title_packages
-    pending  = count_title_requests_by_status(_db, "pending")
-    approved = count_title_requests_by_status(_db, "approved")
-    rejected = count_title_requests_by_status(_db, "rejected")
-    packages = list_title_packages(_db)
+    pending  = count_title_requests_by_status(_db, _DEFAULT_WS_ID, "pending")
+    approved = count_title_requests_by_status(_db, _DEFAULT_WS_ID, "approved")
+    rejected = count_title_requests_by_status(_db, _DEFAULT_WS_ID, "rejected")
+    packages = list_title_packages(_db, _DEFAULT_WS_ID)
     enabled  = sum(1 for p in packages if p["is_enabled"])
     return {
         "packages_total":   len(packages),

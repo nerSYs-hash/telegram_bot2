@@ -171,6 +171,13 @@ class MessageHandler:
         
         logging.info(f"📨 Incoming message from user_id={user.id} (@{user.username}), "
                     f"chat_id={message.chat.id}, thread_id={thread_id} ({thread_name})")
+
+        # Press-Releases: захват топика форума по факту
+        try:
+            from handlers.bot_chat_tracker import track_topic_from_message
+            track_topic_from_message(message, self.db)
+        except Exception:
+            pass
         
         # Ввод причины отказа по заявке — работает и в ЛС, и в админ-чате
         if message.text and context.user_data.get('awaiting_reject_reason'):
@@ -498,10 +505,11 @@ class MessageHandler:
         else:
             message_type = 'text'
             
+        # V1.17.0a16: messages — тенантизирована, workspace_id берём из db wrapper
         self.db.cursor.execute('''
-            INSERT INTO messages (user_id, chat_id, message_text, message_type, message_thread_id, telegram_message_id)
-            VALUES (?, ?, ?, ?, ?, ?)
-        ''', (user.id, message.chat.id, text[:500], message_type, thread_id, message.message_id))
+            INSERT INTO messages (workspace_id, user_id, chat_id, message_text, message_type, message_thread_id, telegram_message_id)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (self.db._DEFAULT_WS_ID, user.id, message.chat.id, text[:500], message_type, thread_id, message.message_id))
         self.db.conn.commit()
 
         # Скрытое комбо "Мэтч дня": если сведенная пара взаимодействует в течение часа,

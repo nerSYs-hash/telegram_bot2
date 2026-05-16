@@ -196,12 +196,29 @@ async def start_press_release(query, user, context, db, admin_id):
         "• Добавить до 5 фото/видео\n"
         "• Выбрать куда публиковать (чат / ветка)\n"
         "• Опубликовать сразу или запланировать\n\n"
-        "Для отмены: /cancel",
+        "Для отмены: /cancel\n\n"
+        "━━━━━━━━━━━━━━━━━━━━━━\n"
+        "⚠️ <b>СКОРО УДАЛИТСЯ</b>\n"
+        "До конца мая модуль «Пресс-релизы» переедет на сайт админки.\n"
+        "Постепенно из бота будут убраны и другие модули — управление перейдёт на сайт.\n"
+        "📲 Следите за обновлениями!",
+        parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("⚠️ СКОРО УДАЛИТСЯ — переезд на сайт", callback_data="pr_migration_info")],
             [InlineKeyboardButton("📋 Запланированные", callback_data="pr_scheduled_list")],
             [InlineKeyboardButton("❌ Отмена", callback_data="back_to_menu")],
             [InlineKeyboardButton("🔙 Назад в настройки", callback_data="back_to_menu")]
         ])
+    )
+
+
+async def show_migration_info(query, user, context, db, admin_id):
+    """Показывает подробности переезда модуля на сайт."""
+    await query.answer(
+        "ℹ️ Модуль «Пресс-релизы» переезжает на сайт админки. "
+        "До конца мая 2026 управление полностью переедет туда. "
+        "Следите за обновлениями!",
+        show_alert=True
     )
 
 

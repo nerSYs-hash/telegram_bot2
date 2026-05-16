@@ -16,8 +16,11 @@ from telegram.ext import (
     CallbackQueryHandler,
     ChatMemberHandler,
     MessageReactionHandler,  # ← ДОБАВЛЕНО для обработки реакций
+    TypeHandler,
     filters
 )
+# V1.17.0a19 (multi-tenancy): резолвер WorkspaceContext для middleware
+from bot_core.workspace_context import build_context, WorkspaceContext
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 import pytz
 # Import custom modules
@@ -171,7 +174,14 @@ class TelegramBot:
 
         # Setup handlers after initialization
         self.setup_handlers()
-        
+
+        # Press-Releases (V1.16.14): бэкфил каталога чатов и топиков
+        try:
+            from handlers.bot_chat_tracker import backfill_known_chats
+            await backfill_known_chats(self.application, self.db, self.target_chat_id)
+        except Exception as e:
+            logger.warning(f"backfill_known_chats: {e}")
+
         # Setup scheduled jobs
         self.setup_jobs()
         
@@ -396,44 +406,13 @@ class TelegramBot:
             logger.error(f"check_horoscope_schedule error: {e}", exc_info=True)
 
     async def check_scheduled_posts(self):
-        """Check and publish scheduled posts"""
+        """Press-Releases: публикация запланированных постов + pre-publish reminders.
+           Логика вынесена в handlers/press_release_publisher.py (V1.16.14)."""
         try:
-            from utils.helpers import get_moscow_time
-            now = get_moscow_time()
-            now_str = now.strftime('%Y-%m-%d %H:%M:%S')
-            
-            pending_posts = self.db.get_pending_scheduled_posts(now_str)
-            
-            for post in pending_posts:
-                try:
-                    success = await self.message_handler.publish_press_release_to_target(
-                        bot=self.application.bot,
-                        text=post['text'],
-                        photo_file_id=post['photo_file_id'],
-                        chat_id=post['target_chat_id'],
-                        thread_id=post['thread_id']
-                    )
-                    
-                    if success:
-                        self.db.mark_scheduled_post_published(post['id'])
-                        logger.info(f"Published scheduled post #{post['id']}")
-                        
-                        # Notify author
-                        try:
-                            await self.application.bot.send_message(
-                                chat_id=post['author_id'],
-                                text=f"✅ Запланированный пресс-релиз #{post['id']} опубликован!"
-                            )
-                        except Exception:
-                            pass
-                    else:
-                        logger.error(f"Failed to publish scheduled post #{post['id']}")
-                        
-                except Exception as e:
-                    logger.error(f"Error publishing scheduled post #{post['id']}: {e}")
-            
+            from handlers.press_release_publisher import tick_scheduler
+            await tick_scheduler(self.application, self.db)
         except Exception as e:
-            logger.error(f"Error checking scheduled posts: {e}")
+            logger.error(f"check_scheduled_posts: {e}", exc_info=True)
     
     async def cleanup_expired_freezes(self):
         """Clean up expired frozen balances"""
@@ -614,11 +593,59 @@ class TelegramBot:
         except Exception as e:
             logger.error(f"Error in error_handler itself: {e}")
 
+    async def resolve_workspace_middleware(self, update: Update, context) -> None:
+        """V1.17.0a19 multi-tenancy middleware.
+
+        Запускается ДО всех остальных handlers (group=-1, block=False).
+        Резолвит WorkspaceContext через bot_chats[chat_id] → workspace_id
+        и кладёт его в context.user_data['ws_ctx'].
+
+        Pulse single-tenant fallback: если чат не зарезолвлен (новый чат,
+        DM до onboarding-а), используем workspace_id=1 (Pulse) с
+        is_pulse_themed=True. После подпроекта #2 (Bot connection flow)
+        unknown-чаты будут уходить в onboarding-flow вместо fallback.
+        """
+        try:
+            chat = update.effective_chat
+            user = update.effective_user
+            chat_id = chat.id if chat else None
+            user_id = user.id if user else None
+
+            ws_ctx = None
+            if chat_id is not None:
+                ws_ctx = build_context(self.db.conn, chat_id, user_id)
+
+            # V1.17.0b7: для unknown chat ws_ctx остаётся None.
+            # @pulse_only декораторы скипают handlers (allow для DM-команд
+            # которые не нуждаются в workspace context). После Bot Connection
+            # Flow реальные unknown-чаты получают workspace через
+            # on_bot_added_to_chat handler, поэтому fallback ws=1 больше не
+            # нужен и был бы опасен (utечка Pulse-данных в чужой чат).
+
+            context.user_data['ws_ctx'] = ws_ctx  # may be None
+            context.chat_data['ws_ctx'] = ws_ctx
+        except Exception as e:
+            logger.error(f"resolve_workspace_middleware: {e}", exc_info=True)
+            # При ошибке резолва — None, handlers безопасно скипают.
+            context.user_data['ws_ctx'] = None
+            context.chat_data['ws_ctx'] = None
+
     def setup_handlers(self):
         """Setup all handlers"""
+        # V1.17.0a19: middleware-резолвер ws_ctx (group=-1, block=False)
+        # Запускается ПЕРВЫМ для каждого update, кладёт ws_ctx в context.
+        self.application.add_handler(
+            TypeHandler(Update, self.resolve_workspace_middleware, block=False),
+            group=-1
+        )
+
         # Registration conversation handler (MUST be before general message handler)
         from handlers.registration_conversation import registration_conv
         self.application.add_handler(registration_conv)
+
+        # V1.17.0c6 (F follow-up): /get_thread_id — узнать ID текущего топика
+        from handlers.get_thread_id import get_thread_id_command
+        self.application.add_handler(CommandHandler("get_thread_id", get_thread_id_command))
 
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
@@ -642,6 +669,12 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("remove_from_top", self.command_handler.remove_from_top_command))
         # Разморозить пульсы пользователя (вернуть баланс)
         self.application.add_handler(CommandHandler("unfreeze", self.command_handler.unfreeze_command))
+        # V1.17.0b17 — welcome-сообщение в Pulse-чат с deep-link join_1
+        from handlers.commands.system_commands import setup_welcome_command
+        self.application.add_handler(CommandHandler(
+            "setup_welcome",
+            lambda u, c: setup_welcome_command(u, c, self.db, self.main_admin_id)
+        ))
         # Восстановить все анкеты BBS (только для владельца)
         self.application.add_handler(CommandHandler("restore_bbs", self.command_handler.restore_bbs_command))
         # Восстановить ПОСЛЕДНЮЮ удаленную анкету BBS (только для владельца)
@@ -687,6 +720,33 @@ class TelegramBot:
                 ChatMemberHandler.CHAT_MEMBER
             )
         )
+
+        # V1.17.0b5 Bot Connection Flow: онбординг нового workspace при
+        # добавлении бота в чат. Регистрируется ПЕРЕД bot_chat_tracker,
+        # чтобы успеть создать workspace до того как tracker upsert'нет
+        # bot_chats запись.
+        from handlers.bot_membership import on_bot_added_to_chat, on_connect_chat_callback
+        self.application.add_handler(
+            ChatMemberHandler(
+                lambda u, c: on_bot_added_to_chat(u, c, self.db),
+                ChatMemberHandler.MY_CHAT_MEMBER
+            )
+        )
+        # V1.17.0c (F): callback от кнопок «куда подключить чат»
+        self.application.add_handler(
+            CallbackQueryHandler(
+                lambda u, c: on_connect_chat_callback(u, c, self.db),
+                pattern=r'^connect_chat:'
+            )
+        )
+
+        # Press-Releases (V1.16.14): отслеживание чатов где есть бот
+        from handlers.bot_chat_tracker import handle_my_chat_member
+        self.application.add_handler(
+            ChatMemberHandler(handle_my_chat_member, ChatMemberHandler.MY_CHAT_MEMBER)
+        )
+        # Прокидываем db в bot_data, чтобы handle_my_chat_member её достал
+        self.application.bot_data['db'] = self.db
         
         # Заявки на вступление (ChatJoinRequest)
         from telegram.ext import ChatJoinRequestHandler

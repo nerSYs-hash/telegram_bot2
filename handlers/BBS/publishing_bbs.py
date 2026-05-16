@@ -218,8 +218,10 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_delete
 
     if not (msg_ids or []):
         logging.warning(f"BBS delete_profile_chat_messages: message_ids пустой/None для профиля {profile.get('id')} user {profile.get('user_id')}")
+        return
 
-    for mid in (msg_ids or []):
+    # Разворачиваем список, чтобы сначала удалять кнопки (они обычно последние)
+    for mid in reversed(msg_ids or []):
         try:
             await bot.delete_message(chat_id=target_chat_id, message_id=mid)
             logging.debug(f"BBS: deleted msg {mid} from chat {target_chat_id}")
@@ -227,8 +229,20 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_delete
             logging.warning(f"BBS: delete_message failed for msg {mid} chat {target_chat_id}: {del_err}")
             if not mark_deleted:
                 continue
-            # Не смогли удалить — помечаем: убираем кнопки и меняем caption/text
+
+            # Если удалить не вышло (старое сообщение > 48ч), пробуем «затереть»
             no_buttons = InlineKeyboardMarkup([])
+            # 1. Сначала пробуем убрать кнопки (самое важное)
+            try:
+                await bot.edit_message_reply_markup(
+                    chat_id=target_chat_id,
+                    message_id=mid,
+                    reply_markup=no_buttons,
+                )
+            except Exception:
+                pass
+
+            # 2. Пробуем изменить текст/подпись
             try:
                 await bot.edit_message_text(
                     chat_id=target_chat_id,
@@ -246,16 +260,8 @@ async def delete_profile_chat_messages(bot, profile, target_chat_id, mark_delete
                         parse_mode='HTML',
                         reply_markup=no_buttons,
                     )
-                except Exception:
-                    # Медиагруппа без caption — убираем хотя бы кнопки
-                    try:
-                        await bot.edit_message_reply_markup(
-                            chat_id=target_chat_id,
-                            message_id=mid,
-                            reply_markup=no_buttons,
-                        )
-                    except Exception as e3:
-                        logging.warning(f"BBS: Could not remove msg {mid}: {e3}")
+                except Exception as e3:
+                    logging.debug(f"BBS: Could not change text for msg {mid}: {e3}")
 
 
 async def delete_profile_messages(bot, db, profile, target_chat_id, bbs_thread_id=None, deleted_by: str = 'system'):
@@ -428,10 +434,10 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id,
 
     # Обновляем message_ids в БД, снимаем метки удаления если были
     try:
+        now_iso = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
         db.cursor.execute(
-            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ?, '
-            'deleted_at = NULL, deleted_by = NULL WHERE user_id = ?',
-            (json.dumps(sent_ids), bbs_thread_id, user_id),
+            'UPDATE bbs_profiles SET message_ids = ?, thread_id = ?, published_at = ?, deleted_at = NULL, deleted_by = NULL WHERE user_id = ?',
+            (json.dumps(sent_ids), bbs_thread_id, now_iso, user_id),
         )
         db.conn.commit()
     except Exception as e:
@@ -490,6 +496,30 @@ async def update_profile_in_place(bot, db, user_id, target_chat_id):
     msg_ids = parsed.get('message_ids') or []
     photos = parsed.get('photos') or []
     thread_id = profile.get('thread_id')
+    published_at = profile.get('published_at')
+
+    # ПРОВЕРКА 1: Если анкета старше 47 часов — только перепубликация
+    # (чтобы избежать проблем с лимитом 48ч на редактирование/удаление)
+    if published_at:
+        try:
+            pub_dt = datetime.fromisoformat(published_at)
+            now = get_moscow_time().replace(tzinfo=None)
+            elapsed_hrs = (now - pub_dt).total_seconds() / 3600
+            if elapsed_hrs > 47:
+                logging.info(f"BBS update_in_place: profile too old ({elapsed_hrs:.1f}h), forcing republish for user {user_id}")
+                await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=True)
+                await republish_profile(bot, db, user_id, target_chat_id, thread_id)
+                return
+        except Exception as age_err:
+            logging.error(f"BBS age check error: {age_err}")
+
+    # ПРОВЕРКА 2: Если фото > 1 (медиагруппа) — только перепубликация
+    # (редактирование медиагрупп работает нестабильно с кнопками)
+    if len(photos) > 1:
+        logging.info(f"BBS update_in_place: multi-photo, forcing republish for user {user_id}")
+        await delete_profile_chat_messages(bot, profile, target_chat_id, mark_deleted=True)
+        await republish_profile(bot, db, user_id, target_chat_id, thread_id)
+        return
 
     # VIP-эмодзи
     try:

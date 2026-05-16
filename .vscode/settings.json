@@ -1,1 +1,85 @@
-{}
+{"actionButtons.commands": [
+    {
+        "name": "🚀 Force Push",
+        "command": "git push -f",
+        "color": "#ff4747",
+        "tooltip": "Принудительно отправить чистую историю на GitHub после склейки (squash)"
+    },
+    {
+        "name": "📊 Получить Карту",
+        "command": "git fetch origin main-map && git restore --source origin/main-map Pulse_Auto_Map.xlsx",
+        "color": "#00e5ff",
+        "tooltip": "Скачать свежую Excel-карту проекта PULSE из облака"
+    },
+    {
+        "name": "🧹 Чистка веток",
+        "command": "git fetch --prune",
+        "color": "#ffca28",
+        "tooltip": "Удалить из списка VS Code 'призрачные' ветки, которые уже удалены на сервере"
+    },
+    {
+        "name": "🧱 Склеить 5 (Squash)",
+        "command": "git rebase -i HEAD~5",
+        "color": "#9ccc65",
+        "tooltip": "Объединить последние 5 мелких коммитов в один красивый"
+    },
+    {
+        "name": "📜 Статус",
+        "command": "git status",
+        "tooltip": "Показать текущее состояние: что изменено, а что нет"
+    },
+    {
+        "name": "✏️ Изм. описание",
+        "command": "git commit --amend",
+        "color": "#ce93d8",
+        "tooltip": "Изменить описание самого последнего коммита (откроет Vim)"
+    },
+    {
+        "name": "↩️ Отменить коммит",
+        "command": "git reset --soft HEAD~1",
+        "color": "#ffab91",
+        "tooltip": "Удалить последний коммит, но оставить все изменения в файлах (разгитить)"
+    },
+    {
+        "name": "🚀 Push в Main",
+        "command": "git push origin main",
+        "color": "#4caf50",
+        "tooltip": "Просто отправить текущие коммиты в ветку main"
+    },
+    {
+        "name": "🌱 Dev ➡️ Main",
+        "command": "git checkout main && git merge dev && git push origin main && git checkout dev",
+        "color": "#f44336",
+        "tooltip": "Перейти на main, влить в неё всё из dev, отправить на сервер и вернуться на dev"
+    },
+    {
+        "name": "📦 В заначку (Stash)",
+        "command": "git stash",
+        "color": "#ffeb3b",
+        "tooltip": "Временно спрятать все незавершенные изменения, чтобы очистить ветку"
+    },
+    {
+        "name": "📥 Из заначки",
+        "command": "git stash pop",
+        "color": "#fbc02d",
+        "tooltip": "Вернуть спрятанные изменения обратно в работу"
+    },
+    {
+        "name": "🔄 Синхрон (Pull)",
+        "command": "git pull origin main",
+        "color": "#03a9f4",
+        "tooltip": "Скачать свежие изменения с GitHub, чтобы не было конфликтов"
+    },
+    {
+        "name": "⚠️ Сброс (Hard)",
+        "command": "git reset --hard origin/main",
+        "color": "#b71c1c",
+        "tooltip": "ОПАСНО: Полностью стереть все локальные изменения и вернуть код к состоянию на сервере"
+    },
+    {
+        "name": "🆕 Новая ветка",
+        "command": "git checkout -b feature/",
+        "color": "#8e24aa",
+        "tooltip": "Создать новую ветку для разработки (допиши название в терминале)"
+    }
+    ]}
