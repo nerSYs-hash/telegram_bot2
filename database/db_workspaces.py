@@ -2,6 +2,7 @@
 import sqlite3
 from typing import Optional, List
 from dataclasses import dataclass
+from bot_core.connect_flow import connect_flow_v2_enabled
 
 
 @dataclass
@@ -201,10 +202,17 @@ def update_bot_chat_role(conn: sqlite3.Connection, chat_id: int, role: Optional[
 
 
 def get_workspace_by_chat(conn: sqlite3.Connection, chat_id: int) -> Optional[int]:
-    """Возвращает workspace_id если chat привязан, иначе None."""
-    row = conn.execute(
-        'SELECT workspace_id FROM bot_chats WHERE chat_id=?', (chat_id,)
-    ).fetchone()
+    """Возвращает workspace_id если chat привязан, иначе None.
+    При CONNECT_FLOW_V2 ON: soft-removed чат (removed_at IS NOT NULL) → None."""
+    if connect_flow_v2_enabled() and _bot_chats_has_removed_at(conn):
+        row = conn.execute(
+            'SELECT workspace_id FROM bot_chats '
+            'WHERE chat_id=? AND removed_at IS NULL', (chat_id,)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            'SELECT workspace_id FROM bot_chats WHERE chat_id=?', (chat_id,)
+        ).fetchone()
     return row[0] if row else None
 
 
@@ -214,6 +222,34 @@ def remove_bot_chat(conn: sqlite3.Connection, chat_id: int) -> None:
     """Удаляет запись чата из bot_chats. Workspace и members не трогает."""
     conn.execute('DELETE FROM bot_chats WHERE chat_id=?', (chat_id,))
     conn.commit()
+
+
+def _bot_chats_has_removed_at(conn: sqlite3.Connection) -> bool:
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(bot_chats)").fetchall()]
+    return 'removed_at' in cols
+
+
+def soft_remove_bot_chat(conn: sqlite3.Connection, chat_id: int) -> None:
+    """V1.17.0h: мягкое отключение — removed_at=now, workspace_id/role сохраняются.
+    Если колонки removed_at нет (старая схема) — фолбэк на hard delete."""
+    if _bot_chats_has_removed_at(conn):
+        conn.execute(
+            "UPDATE bot_chats SET removed_at=CURRENT_TIMESTAMP WHERE chat_id=?",
+            (chat_id,))
+    else:
+        conn.execute("DELETE FROM bot_chats WHERE chat_id=?", (chat_id,))
+    conn.commit()
+
+
+def get_disconnected_bot_chat(conn: sqlite3.Connection, chat_id: int):
+    """Вернёт {'workspace_id','role'} если чат soft-removed, иначе None."""
+    if not _bot_chats_has_removed_at(conn):
+        return None
+    row = conn.execute(
+        "SELECT workspace_id, role FROM bot_chats "
+        "WHERE chat_id=? AND removed_at IS NOT NULL", (chat_id,)
+    ).fetchone()
+    return {'workspace_id': row[0], 'role': row[1]} if row else None
 
 
 def list_chat_ids_for_workspace(conn: sqlite3.Connection, workspace_id: int) -> list:
