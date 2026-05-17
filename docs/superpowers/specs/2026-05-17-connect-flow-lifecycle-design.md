@@ -140,6 +140,18 @@ API уже отдаёт `chats_count` (`get_workspaces_for_user`) и списо�
   главное сверху. Часть Piece D (деплой сайта отдельным юнитом).
 Иконки/аватары сообществ — НЕ здесь (см. §8, companion-spec).
 
+**C9 — Каскадная очистка tenant-данных при удалении ws.**
+Запрос-вопрос Ильи 17.05. Сейчас `delete_workspace`
+(`db_workspaces.py:226`) чистит ТОЛЬКО `bot_chats`,
+`workspace_members`, `workspaces` → economy/branding/stats/topics/
+triggers с этим `workspace_id` **осиротевают навсегда** (FK-каскада
+в схеме нет, `workspace_id` — голая колонка). При `CONNECT_FLOW_V2`
+ON: `delete_workspace` дополнительно `DELETE FROM <t> WHERE
+workspace_id=?` по единому списку tenant-таблиц (тот же список, что
+safety-проверка C7 и probe `_cf_probe`). При OFF — прежнее поведение
+(3 таблицы, байт-в-байт). Защита `is_pulse_themed=1` сохраняется.
+Единый список таблиц — одна константа, реюз в C7/C9 (DRY).
+
 **C7 — Одноразовая консолидация ws5/ws6→ws1 (Piece C, прод-данные).**
 `scripts/consolidate_workspaces.py --from 5,6 --into 1` :
 1. backup БД (копия с таймстампом);
@@ -189,6 +201,9 @@ API уже отдаёт `chats_count` (`get_workspaces_for_user`) и списо�
   привязка ставит роль (не None); «создать новое» всё ещё доступно.
 - C5: `get_workspace_by_chat` для removed чата → «не активен» при ON;
   при OFF — прежнее поведение.
+- C9: `delete_workspace` при ON → tenant-строки этого ws стёрты по
+  всему списку таблиц; при OFF → стираются только 3 структурные
+  (байт-в-байт); `is_pulse_themed=1` → отказ как раньше.
 - `test_consolidate_workspaces.py`: dry-run ничего не меняет; apply
   переносит bot_chats, удаляет пустые ws, роли сохранены; защита
   срабатывает при непустом source; idempotent; round-trip из backup.
@@ -229,9 +244,10 @@ push ветки → main → авто-деплой (`deploy.yml`, флаг OFF =
    отдельным юнитом.
 5. Флаг `CONNECT_FLOW_V2` дефолт OFF = строго байт-в-байт.
 6. Один spec, но реализация фазами: P1 backend lifecycle+флаг+тесты
-   (C1-C3,C5), P2 prevention (C4), P3 консолидация-скрипт (C7),
-   P4 сайт-бейдж (C6). P3/P4 — отдельные деплой-юниты, выполняются
-   с Ильёй.
+   (C1-C3,C5,C9), P2 prevention (C4), P3 консолидация-скрипт (C7),
+   P4 сайт-UI бейдж+главное/доп. (C6,C8). P3/P4 — отдельные
+   деплой-юниты, выполняются с Ильёй. Список tenant-таблиц для
+   C7/C9 — одна общая константа (DRY).
 7. Необратимые/наружные шаги (исполнение C7 на живом проде, публикация
    сайта C6) НЕ выполняются без явного «go» Ильи, несмотря на общую
    автономию — они hard-to-reverse.
