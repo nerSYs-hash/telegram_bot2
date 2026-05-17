@@ -20,10 +20,17 @@ from database.db_workspaces import (
     remove_bot_chat,
 )
 from bot_core.workspace_context import invalidate_cache
+from bot_core.login_button import login_keyboard, login_url_enabled
 
 logger = logging.getLogger(__name__)
 
 SITE_URL = os.getenv('SITE_URL', 'https://puls-chat.ru')
+
+
+def _login_kb():
+    """Срез D (V1.17.0g): LoginUrl-кнопка если флаг LOGIN_URL_BUTTON ON,
+    иначе None. None ≡ нет reply_markup → флаг OFF = байт-в-байт."""
+    return login_keyboard() if login_url_enabled() else None
 
 
 async def on_bot_added_to_chat(update, context, db):
@@ -69,7 +76,8 @@ async def on_bot_added_to_chat(update, context, db):
                 await context.bot.send_message(
                     chat_id,
                     "ℹ️ Этот чат уже подключён к твоему сообществу на Pulse SaaS.\n"
-                    f"Управление — на сайте: {SITE_URL}"
+                    f"Управление — на сайте: {SITE_URL}",
+                    reply_markup=_login_kb(),
                 )
             except Exception as e:
                 logger.warning(f"send_message (already own) failed: {e}")
@@ -94,7 +102,8 @@ async def on_bot_added_to_chat(update, context, db):
             await context.bot.send_message(
                 chat_id,
                 "❌ Тот, кто меня добавил, не зарегистрирован на сайте.\n"
-                f"Зайди сюда: {SITE_URL}/login и попробуй снова."
+                f"Зайди сюда: {SITE_URL}/login и попробуй снова.",
+                reply_markup=_login_kb(),
             )
         except Exception as e:
             logger.warning(f"send_message (unregistered) failed: {e}")
@@ -143,7 +152,8 @@ async def on_bot_added_to_chat(update, context, db):
         await context.bot.send_message(
             chat_id,
             f"✅ Сообщество «{chat_title}» подключено к Pulse SaaS.\n"
-            f"Управление — на сайте: {SITE_URL}"
+            f"Управление — на сайте: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception as e:
         logger.warning(f"send_message (success) failed: {e}")
@@ -151,7 +161,8 @@ async def on_bot_added_to_chat(update, context, db):
         await context.bot.send_message(
             from_user.id,
             f"✅ Чат «{chat_title}» добавлен в твой кабинет.\n"
-            f"Зайди на сайт чтобы настроить: {SITE_URL}"
+            f"Зайди на сайт чтобы настроить: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception as e:
         logger.warning(f"DM to owner failed: {e}")
@@ -201,7 +212,8 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
         try:
             await q.edit_message_text(
                 f"✅ Создано новое сообщество «{chat_title}».\n"
-                f"Настройка — на сайте: {SITE_URL}"
+                f"Настройка — на сайте: {SITE_URL}",
+                reply_markup=_login_kb(),
             )
         except Exception:
             pass
@@ -231,7 +243,8 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
     try:
         await q.edit_message_text(
             f"✅ Чат «{chat_title}» подключён к сообществу «{ws['name']}».\n"
-            f"Назначь ему роль (Главный/Админ/Журнал) на сайте: {SITE_URL}"
+            f"Назначь ему роль (Главный/Админ/Журнал) на сайте: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception:
         pass
