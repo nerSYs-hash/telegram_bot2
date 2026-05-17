@@ -173,3 +173,45 @@ async def test_reconnect_flag_off_unchanged(monkeypatch):
     ctx = _ctx()
     await on_bot_added_to_chat(_added_update(-100), ctx, db)
     assert get_workspace_by_chat(db.conn, -100) is not None
+
+
+# --- Task 6: C9 каскад-очистка tenant-таблиц в delete_workspace ---
+def test_delete_workspace_flag_off_keeps_tenant_data(monkeypatch):
+    monkeypatch.delenv("CONNECT_FLOW_V2", raising=False)
+    from database.db_workspaces import delete_workspace
+    conn = sqlite3.connect(":memory:")
+    up_create_workspaces_tables(conn)
+    conn.execute("CREATE TABLE bot_chats (chat_id INTEGER PRIMARY KEY, workspace_id INTEGER, role TEXT, removed_at TIMESTAMP)")
+    conn.execute("CREATE TABLE economy_settings (workspace_id INTEGER, key TEXT, value TEXT)")
+    conn.execute("INSERT INTO workspaces (id,name,owner_user_id,is_pulse_themed,plan) VALUES (9,'X',42,0,'free')")
+    conn.execute("INSERT INTO economy_settings VALUES (9,'k','v')")
+    conn.commit()
+    delete_workspace(conn, 9)
+    assert conn.execute("SELECT COUNT(*) FROM economy_settings WHERE workspace_id=9").fetchone()[0] == 1
+
+
+def test_delete_workspace_flag_on_cascades(monkeypatch):
+    monkeypatch.setenv("CONNECT_FLOW_V2", "1")
+    from database.db_workspaces import delete_workspace
+    conn = sqlite3.connect(":memory:")
+    up_create_workspaces_tables(conn)
+    conn.execute("CREATE TABLE bot_chats (chat_id INTEGER PRIMARY KEY, workspace_id INTEGER, role TEXT, removed_at TIMESTAMP)")
+    conn.execute("CREATE TABLE economy_settings (workspace_id INTEGER, key TEXT, value TEXT)")
+    conn.execute("INSERT INTO workspaces (id,name,owner_user_id,is_pulse_themed,plan) VALUES (9,'X',42,0,'free')")
+    conn.execute("INSERT INTO economy_settings VALUES (9,'k','v')")
+    conn.commit()
+    delete_workspace(conn, 9)
+    assert conn.execute("SELECT COUNT(*) FROM economy_settings WHERE workspace_id=9").fetchone()[0] == 0
+
+
+def test_delete_workspace_pulse_themed_still_refused(monkeypatch):
+    monkeypatch.setenv("CONNECT_FLOW_V2", "1")
+    from database.db_workspaces import delete_workspace
+    conn = sqlite3.connect(":memory:")
+    up_create_workspaces_tables(conn)
+    conn.execute("CREATE TABLE bot_chats (chat_id INTEGER PRIMARY KEY, workspace_id INTEGER, role TEXT, removed_at TIMESTAMP)")
+    conn.execute("INSERT INTO workspaces (id,name,owner_user_id,is_pulse_themed,plan) VALUES (1,'P',42,1,'free')")
+    conn.commit()
+    import pytest as _pt
+    with _pt.raises(ValueError):
+        delete_workspace(conn, 1)

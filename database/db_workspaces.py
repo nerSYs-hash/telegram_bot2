@@ -259,9 +259,18 @@ def list_chat_ids_for_workspace(conn: sqlite3.Connection, workspace_id: int) -> 
     ).fetchall()]
 
 
+# V1.17.0h: единый список tenant-таблиц с колонкой workspace_id.
+# Реюз: C9 (delete cascade) и scripts/consolidate_workspaces.py (safety).
+TENANT_TABLES = (
+    'economy_settings', 'economy_section_toggles', 'branding_settings',
+    'user_stats', 'user_stats_hourly', 'chat_stats', 'topics', 'triggers',
+)
+
+
 def delete_workspace(conn: sqlite3.Connection, workspace_id: int) -> None:
     """Удаляет workspace полностью: members + bot_chats + сам workspace.
 
+    При CONNECT_FLOW_V2 ON — дополнительно чистит tenant-данные (C9).
     Запрещает удаление is_pulse_themed=1 (защита Pulse-сообщества).
     """
     row = conn.execute(
@@ -271,6 +280,12 @@ def delete_workspace(conn: sqlite3.Connection, workspace_id: int) -> None:
         return
     if row[0]:
         raise ValueError('Нельзя удалить Pulse-themed сообщество')
+    if connect_flow_v2_enabled():
+        for t in TENANT_TABLES:
+            try:
+                conn.execute(f'DELETE FROM {t} WHERE workspace_id=?', (workspace_id,))
+            except sqlite3.OperationalError:
+                pass  # таблицы может не быть в этой БД — ок
     conn.execute('DELETE FROM bot_chats WHERE workspace_id=?', (workspace_id,))
     conn.execute('DELETE FROM workspace_members WHERE workspace_id=?', (workspace_id,))
     conn.execute('DELETE FROM workspaces WHERE id=?', (workspace_id,))
