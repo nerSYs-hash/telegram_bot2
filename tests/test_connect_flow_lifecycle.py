@@ -284,3 +284,17 @@ async def test_promotion_event_does_not_double_onboard(monkeypatch):
         "событие повышения создало дубль workspace"
     assert ctx.bot.send_message.await_count == sends_after_1, \
         "событие повышения отправило повторное онбординг-сообщение"
+
+
+@pytest.mark.asyncio
+async def test_channel_is_skipped_no_onboarding(monkeypatch):
+    monkeypatch.delenv("CONNECT_FLOW_V2", raising=False)
+    from handlers.bot_membership import on_bot_added_to_chat
+    db = _lifecycle_db()
+    ctx = _ctx()
+    upd = _added_update(-300, old_status='left', new_status='administrator')
+    upd.my_chat_member.chat.type = 'channel'
+    await on_bot_added_to_chat(upd, ctx, db)
+    assert db.conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0] == 0
+    assert ctx.bot.send_message.await_count == 0
+    assert ctx.bot.leave_chat.await_count == 0

@@ -55,6 +55,12 @@ async def on_bot_added_to_chat(update, context, db):
     chat_id = chat.id
     chat_title = chat.title or f"Чат {chat_id}"
 
+    # V1.17.0h14-fix: канал — НЕ workspace. Журнал-канал настраивается
+    # отдельно (Панель Владельца → Журнал). Онбординг сообществ к каналам
+    # не применяется (нет from_user/интерактива) — пропускаем тихо.
+    if getattr(chat, 'type', None) == 'channel':
+        return
+
     # G1 / V1.17.0h C1: bot kicked/left → отвязать чат от ws (workspace остаётся).
     if new.status in ('left', 'kicked'):
         existing_ws = db.get_workspace_by_chat(chat_id)

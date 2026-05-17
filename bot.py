@@ -622,13 +622,21 @@ class TelegramBot:
             # on_bot_added_to_chat handler, поэтому fallback ws=1 больше не
             # нужен и был бы опасен (utечка Pulse-данных в чужой чат).
 
-            context.user_data['ws_ctx'] = ws_ctx  # may be None
-            context.chat_data['ws_ctx'] = ws_ctx
+            # V1.17.0h14-fix: на канале PTB отдаёт context.user_data=None
+            # (нет effective_user). Прямое присваивание None['ws_ctx']
+            # роняло middleware на КАЖДОМ апдейте канала. Присваиваем
+            # только в существующие mapping'и.
+            if context.user_data is not None:
+                context.user_data['ws_ctx'] = ws_ctx  # may be None
+            if context.chat_data is not None:
+                context.chat_data['ws_ctx'] = ws_ctx
         except Exception as e:
             logger.error(f"resolve_workspace_middleware: {e}", exc_info=True)
             # При ошибке резолва — None, handlers безопасно скипают.
-            context.user_data['ws_ctx'] = None
-            context.chat_data['ws_ctx'] = None
+            if context.user_data is not None:
+                context.user_data['ws_ctx'] = None
+            if context.chat_data is not None:
+                context.chat_data['ws_ctx'] = None
 
     def setup_handlers(self):
         """Setup all handlers"""
