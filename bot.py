@@ -711,7 +711,20 @@ class TelegramBot:
             )
         )
         
-        # Callback handler
+        # V1.17.0c (F): callback от кнопок «куда подключить чат».
+        # ВАЖНО: регистрируется ПЕРЕД беспаттерновым catch-all
+        # `handle_callback` — иначе catch-all (та же группа 0) ловит
+        # `connect_chat:` первым и кнопки подключения чата мертвы.
+        from handlers.bot_membership import on_connect_chat_callback
+        self.application.add_handler(
+            CallbackQueryHandler(
+                lambda u, c: on_connect_chat_callback(u, c, self.db),
+                pattern=r'^connect_chat:'
+            )
+        )
+
+        # Callback handler (беспаттерновый catch-all — ДОЛЖЕН быть после
+        # всех профильных CallbackQueryHandler в группе 0)
         self.application.add_handler(CallbackQueryHandler(self.callback_handler.handle_callback))
         
         # Message reaction handler (для подсчёта реакций)
@@ -729,20 +742,14 @@ class TelegramBot:
         # добавлении бота в чат. Регистрируется ПЕРЕД bot_chat_tracker,
         # чтобы успеть создать workspace до того как tracker upsert'нет
         # bot_chats запись.
-        from handlers.bot_membership import on_bot_added_to_chat, on_connect_chat_callback
+        from handlers.bot_membership import on_bot_added_to_chat
         self.application.add_handler(
             ChatMemberHandler(
                 lambda u, c: on_bot_added_to_chat(u, c, self.db),
                 ChatMemberHandler.MY_CHAT_MEMBER
             )
         )
-        # V1.17.0c (F): callback от кнопок «куда подключить чат»
-        self.application.add_handler(
-            CallbackQueryHandler(
-                lambda u, c: on_connect_chat_callback(u, c, self.db),
-                pattern=r'^connect_chat:'
-            )
-        )
+        # connect_chat callback зарегистрирован выше (перед catch-all).
 
         # Press-Releases (V1.16.14): отслеживание чатов где есть бот
         from handlers.bot_chat_tracker import handle_my_chat_member
