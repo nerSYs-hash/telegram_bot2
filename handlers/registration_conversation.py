@@ -273,7 +273,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=user_id,
                 text="✅ Ты уже участник чата! Нижнее меню восстановлено.",
-                reply_markup=get_main_reply_keyboard(main_db, user_id, OWNER_ID)
+                reply_markup=get_main_reply_keyboard(main_db, user_id, OWNER_ID, context)
             )
         else:
             logger.error("main_db is None in start_reg — bot_data['db'] not set!")

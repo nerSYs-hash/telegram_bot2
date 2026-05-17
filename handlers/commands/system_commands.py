@@ -17,10 +17,13 @@ from utils.helpers import format_number
 # УМНАЯ ПОСТОЯННАЯ КЛАВИАТУРА (ReplyKeyboard)
 # ═══════════════════════════════════════════════════════════
 
-def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
+def get_main_reply_keyboard(db, user_id=None, main_admin_id=None, context=None):
     """
     Нижняя клавиатура — только базовые кнопки.
     Владелец видит [👑 Панель Владельца], Админ — [📋 Новые заявки], остальные — [❓ FAQ].
+
+    Подпроект I: при context!=None и флаге I_WS_RBAC=1 владелец СВОЕГО ws
+    тоже видит «Панель Владельца». context=None / флаг OFF → байт-в-байт.
     """
     profile_enabled = db.is_feature_enabled('profile')
     balance_or_profile = KeyboardButton("👤 Профиль") if profile_enabled else KeyboardButton("💰 Баланс")
@@ -28,6 +31,15 @@ def get_main_reply_keyboard(db, user_id=None, main_admin_id=None):
     is_owner = user_id and main_admin_id and user_id == main_admin_id
     is_deputy = False
     is_admin = False
+
+    if not is_owner and user_id and context is not None:
+        try:
+            from bot_core.ws_role import is_ws_owner
+            if is_ws_owner(context, user_id):
+                is_owner = True
+        except Exception:
+            pass
+
     if user_id and not is_owner:
         u = db.get_user(user_id)
         if u and u.get('is_owner'):
@@ -174,12 +186,12 @@ async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, 
         else:
             await update.message.reply_text(
                 f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-                reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
+                reply_markup=get_main_reply_keyboard(db, user.id, admin_id, context)
             )
     else:
         await update.message.reply_text(
             f"Привет, {user.first_name}! 👋\n\nЯ бот для управления чатом с системой геймификации и экономикой.\n\nИспользуй кнопки внизу для навигации 👇",
-            reply_markup=get_main_reply_keyboard(db, user.id, admin_id)
+            reply_markup=get_main_reply_keyboard(db, user.id, admin_id, context)
         )
 
 
