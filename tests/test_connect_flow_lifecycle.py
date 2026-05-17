@@ -135,10 +135,11 @@ async def test_kicked_flag_on_soft_removes(monkeypatch):
 
 
 # --- Task 5: C3 restore роли при повторном добавлении ---
-def _added_update(chat_id):
+def _added_update(chat_id, old_status='left', new_status='administrator'):
     u = MagicMock()
     u.my_chat_member.new_chat_member.user.id = 999
-    u.my_chat_member.new_chat_member.status = 'administrator'
+    u.my_chat_member.new_chat_member.status = new_status
+    u.my_chat_member.old_chat_member.status = old_status
     u.my_chat_member.chat.id = chat_id
     u.my_chat_member.chat.title = 'X'
     u.my_chat_member.chat.type = 'supergroup'
@@ -259,3 +260,27 @@ async def test_connect_callback_legacy_3parts_still_works(monkeypatch):
     await on_connect_chat_callback(upd, MagicMock(), db)
     row = db.conn.execute("SELECT workspace_id,role FROM bot_chats WHERE chat_id=-100").fetchone()
     assert row == (3, None)  # legacy byte-for-byte: role None
+
+
+# --- V1.17.0h12-fix: анти-двойное-срабатывание (член → админ = 2 события) ---
+@pytest.mark.asyncio
+async def test_promotion_event_does_not_double_onboard(monkeypatch):
+    monkeypatch.delenv("CONNECT_FLOW_V2", raising=False)  # флаг OFF
+    from handlers.bot_membership import on_bot_added_to_chat
+    db = _lifecycle_db()
+    db.conn.execute("INSERT INTO users (user_id,username) VALUES (42,'kir')")
+    db.conn.commit()
+    ctx = _ctx()
+    # Событие 1: бота добавили как участника (реальный вход) → онбординг 1 раз
+    await on_bot_added_to_chat(
+        _added_update(-200, old_status='left', new_status='member'), ctx, db)
+    ws_after_1 = db.conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0]
+    sends_after_1 = ctx.bot.send_message.await_count
+    # Событие 2: бота повысили member→admin → онбординг НЕ должен повториться
+    await on_bot_added_to_chat(
+        _added_update(-200, old_status='member', new_status='administrator'), ctx, db)
+    assert ws_after_1 == 1
+    assert db.conn.execute("SELECT COUNT(*) FROM workspaces").fetchone()[0] == 1, \
+        "событие повышения создало дубль workspace"
+    assert ctx.bot.send_message.await_count == sends_after_1, \
+        "событие повышения отправило повторное онбординг-сообщение"

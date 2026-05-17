@@ -71,6 +71,15 @@ async def on_bot_added_to_chat(update, context, db):
     if new.status not in ('member', 'administrator'):
         return
 
+    # V1.17.0h12-fix: анти-двойное-срабатывание. Telegram шлёт отдельный
+    # MY_CHAT_MEMBER на «добавлен участником» и ещё один на «повышен до
+    # админа». Онбординг запускаем ТОЛЬКО при реальном входе бота
+    # (old: left/kicked/None). Повышение/смена прав (old уже member/admin)
+    # — не повод снова онбордить (иначе дубль-сообщения и гонка).
+    old = update.my_chat_member.old_chat_member
+    if old is not None and getattr(old, 'status', None) in ('member', 'administrator'):
+        return
+
     # V1.17.0h C3: повторное добавление soft-removed чата → восстановить роль.
     if connect_flow_v2_enabled():
         disc = get_disconnected_bot_chat(db.conn, chat_id)
@@ -86,7 +95,7 @@ async def on_bot_added_to_chat(update, context, db):
             try:
                 await context.bot.send_message(
                     chat_id,
-                    f"♻️ С возвращением! Чат переподключён к Pulse SaaS, "
+                    f"♻️ С возвращением! Чат переподключён к Puls_bot, "
                     f"роль «{role_txt}» восстановлена.\n"
                     f"Управление — на сайте: {SITE_URL}",
                     reply_markup=_login_kb(),
@@ -104,7 +113,7 @@ async def on_bot_added_to_chat(update, context, db):
             try:
                 await context.bot.send_message(
                     chat_id,
-                    "ℹ️ Этот чат уже подключён к твоему сообществу на Pulse SaaS.\n"
+                    "ℹ️ Этот чат уже подключён к твоему сообществу в Puls_bot.\n"
                     f"Управление — на сайте: {SITE_URL}",
                     reply_markup=_login_kb(),
                 )
@@ -114,7 +123,7 @@ async def on_bot_added_to_chat(update, context, db):
             try:
                 await context.bot.send_message(
                     chat_id,
-                    "❌ Этот чат уже привязан к другому сообществу на Pulse SaaS."
+                    "❌ Этот чат уже привязан к другому сообществу в Puls_bot."
                 )
             except Exception as e:
                 logger.warning(f"send_message (already bound elsewhere) failed: {e}")
@@ -158,18 +167,21 @@ async def on_bot_added_to_chat(update, context, db):
                     )])
             else:
                 buttons.append([InlineKeyboardButton(
-                    f"📂 К «{w['name']}»",
+                    f"📂 В сообщество «{w['name']}»",
                     callback_data=f"connect_chat:{w['id']}:{from_user.id}",
                 )])
         buttons.append([InlineKeyboardButton(
-            "🆕 Создать новое сообщество",
+            "🆕 Новое отдельное сообщество",
             callback_data=f"connect_chat:new:{from_user.id}",
         )])
         try:
             await context.bot.send_message(
                 chat_id,
-                f"👋 Привет! Я бот Pulse SaaS.\n\n"
-                f"Куда подключить этот чат («{chat_title}»)?",
+                f"👋 Я бот Puls_bot. Чат «{chat_title}» можно:\n\n"
+                f"📂 добавить в готовое сообщество — будет жить по его "
+                f"настройкам, экономике и участникам;\n"
+                f"🆕 сделать отдельным сообществом — свои настройки с нуля.\n\n"
+                f"Куда подключить?",
                 reply_markup=InlineKeyboardMarkup(buttons),
             )
         except Exception as e:
@@ -188,7 +200,7 @@ async def on_bot_added_to_chat(update, context, db):
     try:
         await context.bot.send_message(
             chat_id,
-            f"✅ Сообщество «{chat_title}» подключено к Pulse SaaS.\n"
+            f"✅ Сообщество «{chat_title}» подключено к Puls_bot.\n"
             f"Управление — на сайте: {SITE_URL}",
             reply_markup=_login_kb(),
         )
