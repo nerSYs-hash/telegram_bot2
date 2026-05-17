@@ -17,10 +17,11 @@ from telegram.ext import ContextTypes
 
 from database.db_workspaces import (
     create_workspace, add_bot_chat, get_workspaces_for_user,
-    remove_bot_chat,
+    remove_bot_chat, soft_remove_bot_chat, get_disconnected_bot_chat,
 )
 from bot_core.workspace_context import invalidate_cache
 from bot_core.login_button import login_keyboard, login_url_enabled
+from bot_core.connect_flow import connect_flow_v2_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -54,17 +55,45 @@ async def on_bot_added_to_chat(update, context, db):
     chat_id = chat.id
     chat_title = chat.title or f"Чат {chat_id}"
 
-    # G1: bot kicked/left → отвязать чат от ws (workspace остаётся).
+    # G1 / V1.17.0h C1: bot kicked/left → отвязать чат от ws (workspace остаётся).
     if new.status in ('left', 'kicked'):
         existing_ws = db.get_workspace_by_chat(chat_id)
         if existing_ws is not None:
-            remove_bot_chat(db.conn, chat_id)
+            if connect_flow_v2_enabled():
+                soft_remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; soft-removed (ws={existing_ws})")
+            else:
+                remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
             invalidate_cache(chat_id)
-            logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
         return
 
     if new.status not in ('member', 'administrator'):
         return
+
+    # V1.17.0h C3: повторное добавление soft-removed чата → восстановить роль.
+    if connect_flow_v2_enabled():
+        disc = get_disconnected_bot_chat(db.conn, chat_id)
+        if disc is not None:
+            db.conn.execute(
+                "UPDATE bot_chats SET removed_at=NULL, added_by_user_id=?, "
+                "title=?, chat_type=? WHERE chat_id=?",
+                (from_user.id, chat_title, chat.type, chat_id))
+            db.conn.commit()
+            invalidate_cache(chat_id)
+            role_txt = disc['role'] or 'без роли'
+            logger.info(f"Reconnect chat={chat_id} restored ws={disc['workspace_id']} role={disc['role']}")
+            try:
+                await context.bot.send_message(
+                    chat_id,
+                    f"♻️ С возвращением! Чат переподключён к Pulse SaaS, "
+                    f"роль «{role_txt}» восстановлена.\n"
+                    f"Управление — на сайте: {SITE_URL}",
+                    reply_markup=_login_kb(),
+                )
+            except Exception as e:
+                logger.warning(f"send_message (reconnect) failed: {e}")
+            return
 
     # 3+4. Already bound?
     existing_ws = db.get_workspace_by_chat(chat_id)
@@ -120,10 +149,18 @@ async def on_bot_added_to_chat(update, context, db):
     if owned_wss:
         buttons = []
         for w in owned_wss:
-            buttons.append([InlineKeyboardButton(
-                f"📂 К «{w['name']}»",
-                callback_data=f"connect_chat:{w['id']}:{from_user.id}",
-            )])
+            if connect_flow_v2_enabled():
+                # V1.17.0h C4: сразу выбор роли при привязке к существующему ws.
+                for rcode, rlabel in (('main', 'Главный'), ('admin', 'Админ'), ('journal', 'Журнал')):
+                    buttons.append([InlineKeyboardButton(
+                        f"📂 «{w['name']}» — {rlabel}",
+                        callback_data=f"connect_chat:{w['id']}:{from_user.id}:{rcode}",
+                    )])
+            else:
+                buttons.append([InlineKeyboardButton(
+                    f"📂 К «{w['name']}»",
+                    callback_data=f"connect_chat:{w['id']}:{from_user.id}",
+                )])
         buttons.append([InlineKeyboardButton(
             "🆕 Создать новое сообщество",
             callback_data=f"connect_chat:new:{from_user.id}",
@@ -178,13 +215,17 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
     await q.answer()
 
     parts = q.data.split(':')
-    if len(parts) != 3 or parts[0] != 'connect_chat':
+    if len(parts) < 3 or parts[0] != 'connect_chat':
         return
     target = parts[1]
     try:
         from_user_id = int(parts[2])
     except ValueError:
         return
+    # V1.17.0h C4: опциональный 4-й сегмент role (только при флаге ON).
+    chosen_role = parts[3] if (len(parts) >= 4 and connect_flow_v2_enabled()) else None
+    if chosen_role is not None and chosen_role not in ('main', 'admin', 'journal'):
+        chosen_role = None
 
     if q.from_user.id != from_user_id:
         await q.answer("Только тот, кто добавил бота, может выбрать.",
@@ -237,9 +278,9 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
         return
 
     add_bot_chat(db.conn, chat_id, ws_id, added_by=from_user_id,
-                 title=chat_title, chat_type=chat.type, role=None)
+                 title=chat_title, chat_type=chat.type, role=chosen_role)
     invalidate_cache(chat_id)
-    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} owner={from_user_id}")
+    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} role={chosen_role} owner={from_user_id}")
     try:
         await q.edit_message_text(
             f"✅ Чат «{chat_title}» подключён к сообществу «{ws['name']}».\n"

@@ -297,3 +297,26 @@ def create_stat_events_log(db):
         logging.info("✅ stat_events_log ready")
     except Exception as e:
         logging.error(f"create_stat_events_log error: {e}")
+
+
+def add_removed_at_to_bot_chats(db):
+    """V1.17.0h: добавить bot_chats.removed_at если колонки нет.
+
+    Идемпотентно (PRAGMA-проверка), безопасно при флаге OFF — колонка
+    аддитивна и не меняет поведения сама по себе.
+    """
+    try:
+        db.cursor.execute("PRAGMA table_info(bot_chats)")
+        cols = [row[1] for row in db.cursor.fetchall()]
+        if not cols:
+            logging.info("bot_chats table absent, skip removed_at migration")
+            return
+        if 'removed_at' not in cols:
+            db.cursor.execute("ALTER TABLE bot_chats ADD COLUMN removed_at TIMESTAMP")
+            db.conn.commit()
+            logging.info("✅ bot_chats.removed_at column added")
+        else:
+            logging.info("bot_chats.removed_at already present")
+    except Exception as e:
+        logging.error(f"add_removed_at_to_bot_chats error: {e}")
+        db.conn.rollback()
