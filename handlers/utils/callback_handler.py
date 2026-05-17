@@ -252,8 +252,8 @@ class CallbackHandler:
         
         # FAQ callbacks
         elif data == "faq_commands":
-            from handlers.commands.system_commands import FAQ_COMMANDS_USER, FAQ_COMMANDS_ADMIN
-            text = FAQ_COMMANDS_USER
+            from handlers.commands.system_commands import faq_commands_user_text, FAQ_COMMANDS_ADMIN
+            text = faq_commands_user_text()
             if user.id == self.main_admin_id:
                 text += FAQ_COMMANDS_ADMIN
             kb = [

@@ -337,6 +337,21 @@ FAQ_COMMANDS_ADMIN = (
     "\n🎁 <b>Кнопка «Компенсация BBS»</b> — позволяет вручную выдать компенсацию пострадавшим пользователям после восстановления ветки BBS. Доступна в меню восстановления веток для владельца."
 )
 
+# Срез D (V1.17.0g): строка про /login. Показывается только при флаге
+# LOGIN_URL_BUTTON ON → флаг OFF = FAQ байт-в-байт со старым.
+FAQ_LOGIN_LINE = (
+    "\n\n🔑 <b>Кабинет на сайте</b>\n"
+    "• /login — открыть свой кабинет Pulse SaaS одним тапом "
+    "(вход через Telegram, без пароля)."
+)
+
+
+def faq_commands_user_text() -> str:
+    """Базовый пользовательский FAQ + строка /login если срез D активен."""
+    from bot_core.login_button import login_url_enabled
+    return FAQ_COMMANDS_USER + (FAQ_LOGIN_LINE if login_url_enabled() else "")
+
+
 FAQ_FEATURES = {
     'profile': {
         'icon': '👤',

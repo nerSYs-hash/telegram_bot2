@@ -29,6 +29,24 @@ def _update():
     return upd
 
 
+def test_faq_text_byte_for_byte_when_off(monkeypatch):
+    monkeypatch.delenv("LOGIN_URL_BUTTON", raising=False)
+    from handlers.commands.system_commands import (
+        faq_commands_user_text, FAQ_COMMANDS_USER,
+    )
+    assert faq_commands_user_text() == FAQ_COMMANDS_USER  # ни байта лишнего
+
+
+def test_faq_text_mentions_login_when_on(monkeypatch):
+    monkeypatch.setenv("LOGIN_URL_BUTTON", "on")
+    from handlers.commands.system_commands import (
+        faq_commands_user_text, FAQ_COMMANDS_USER,
+    )
+    txt = faq_commands_user_text()
+    assert txt.startswith(FAQ_COMMANDS_USER)
+    assert "/login" in txt
+
+
 @pytest.mark.asyncio
 async def test_login_command_silent_when_off(monkeypatch):
     monkeypatch.delenv("LOGIN_URL_BUTTON", raising=False)
