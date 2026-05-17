@@ -215,3 +215,47 @@ def test_delete_workspace_pulse_themed_still_refused(monkeypatch):
     import pytest as _pt
     with _pt.raises(ValueError):
         delete_workspace(conn, 1)
+
+
+# --- Task 8: C4 привязка к существующему ws с выбором роли ---
+@pytest.mark.asyncio
+async def test_connect_existing_ws_binds_with_role(monkeypatch):
+    monkeypatch.setenv("CONNECT_FLOW_V2", "1")
+    from handlers.bot_membership import on_connect_chat_callback
+    db = _lifecycle_db()
+    db.conn.execute("INSERT INTO users (user_id,username) VALUES (42,'a')")
+    db.conn.execute("INSERT INTO workspaces (id,name,owner_user_id,is_pulse_themed,plan) VALUES (3,'W',42,0,'free')")
+    db.conn.execute("INSERT INTO workspace_members (workspace_id,user_id,role) VALUES (3,42,'owner')")
+    db.conn.commit()
+    q = MagicMock()
+    q.data = "connect_chat:3:42:admin"
+    q.from_user.id = 42
+    q.message.chat.id = -100
+    q.message.chat.title = "C"
+    q.message.chat.type = "supergroup"
+    q.answer = AsyncMock(); q.edit_message_text = AsyncMock()
+    upd = MagicMock(); upd.callback_query = q
+    await on_connect_chat_callback(upd, MagicMock(), db)
+    row = db.conn.execute("SELECT workspace_id,role FROM bot_chats WHERE chat_id=-100").fetchone()
+    assert row == (3, 'admin')
+
+
+@pytest.mark.asyncio
+async def test_connect_callback_legacy_3parts_still_works(monkeypatch):
+    monkeypatch.delenv("CONNECT_FLOW_V2", raising=False)
+    from handlers.bot_membership import on_connect_chat_callback
+    db = _lifecycle_db()
+    db.conn.execute("INSERT INTO users (user_id,username) VALUES (42,'a')")
+    db.conn.execute("INSERT INTO workspaces (id,name,owner_user_id,is_pulse_themed,plan) VALUES (3,'W',42,0,'free')")
+    db.conn.execute("INSERT INTO workspace_members (workspace_id,user_id,role) VALUES (3,42,'owner')")
+    db.conn.commit()
+    q = MagicMock()
+    q.data = "connect_chat:3:42"   # legacy 3-part
+    q.from_user.id = 42
+    q.message.chat.id = -100
+    q.message.chat.title = "C"; q.message.chat.type = "supergroup"
+    q.answer = AsyncMock(); q.edit_message_text = AsyncMock()
+    upd = MagicMock(); upd.callback_query = q
+    await on_connect_chat_callback(upd, MagicMock(), db)
+    row = db.conn.execute("SELECT workspace_id,role FROM bot_chats WHERE chat_id=-100").fetchone()
+    assert row == (3, None)  # legacy byte-for-byte: role None

@@ -149,10 +149,18 @@ async def on_bot_added_to_chat(update, context, db):
     if owned_wss:
         buttons = []
         for w in owned_wss:
-            buttons.append([InlineKeyboardButton(
-                f"📂 К «{w['name']}»",
-                callback_data=f"connect_chat:{w['id']}:{from_user.id}",
-            )])
+            if connect_flow_v2_enabled():
+                # V1.17.0h C4: сразу выбор роли при привязке к существующему ws.
+                for rcode, rlabel in (('main', 'Главный'), ('admin', 'Админ'), ('journal', 'Журнал')):
+                    buttons.append([InlineKeyboardButton(
+                        f"📂 «{w['name']}» — {rlabel}",
+                        callback_data=f"connect_chat:{w['id']}:{from_user.id}:{rcode}",
+                    )])
+            else:
+                buttons.append([InlineKeyboardButton(
+                    f"📂 К «{w['name']}»",
+                    callback_data=f"connect_chat:{w['id']}:{from_user.id}",
+                )])
         buttons.append([InlineKeyboardButton(
             "🆕 Создать новое сообщество",
             callback_data=f"connect_chat:new:{from_user.id}",
@@ -207,13 +215,17 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
     await q.answer()
 
     parts = q.data.split(':')
-    if len(parts) != 3 or parts[0] != 'connect_chat':
+    if len(parts) < 3 or parts[0] != 'connect_chat':
         return
     target = parts[1]
     try:
         from_user_id = int(parts[2])
     except ValueError:
         return
+    # V1.17.0h C4: опциональный 4-й сегмент role (только при флаге ON).
+    chosen_role = parts[3] if (len(parts) >= 4 and connect_flow_v2_enabled()) else None
+    if chosen_role is not None and chosen_role not in ('main', 'admin', 'journal'):
+        chosen_role = None
 
     if q.from_user.id != from_user_id:
         await q.answer("Только тот, кто добавил бота, может выбрать.",
@@ -266,9 +278,9 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
         return
 
     add_bot_chat(db.conn, chat_id, ws_id, added_by=from_user_id,
-                 title=chat_title, chat_type=chat.type, role=None)
+                 title=chat_title, chat_type=chat.type, role=chosen_role)
     invalidate_cache(chat_id)
-    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} owner={from_user_id}")
+    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} role={chosen_role} owner={from_user_id}")
     try:
         await q.edit_message_text(
             f"✅ Чат «{chat_title}» подключён к сообществу «{ws['name']}».\n"
