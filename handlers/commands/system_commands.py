@@ -341,7 +341,7 @@ FAQ_COMMANDS_ADMIN = (
 # LOGIN_URL_BUTTON ON → флаг OFF = FAQ байт-в-байт со старым.
 FAQ_LOGIN_LINE = (
     "\n\n🔑 <b>Кабинет на сайте</b>\n"
-    "• /login — открыть свой кабинет Pulse SaaS одним тапом "
+    "• /login — открыть свой кабинет Puls Chat одним тапом "
     "(вход через Telegram, без пароля)."
 )
 

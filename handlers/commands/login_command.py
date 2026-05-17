@@ -22,7 +22,7 @@ async def login_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         return
     try:
         await msg.reply_text(
-            "🔓 <b>Твой кабинет Pulse SaaS</b>\n"
+            "🔓 <b>Твой кабинет Puls Chat</b>\n"
             "Один тап — и ты внутри, без пароля.",
             parse_mode="HTML",
             reply_markup=login_keyboard(),
