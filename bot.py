@@ -646,6 +646,10 @@ class TelegramBot:
         # V1.17.0c6 (F follow-up): /get_thread_id — узнать ID текущего топика
         from handlers.get_thread_id import get_thread_id_command
         self.application.add_handler(CommandHandler("get_thread_id", get_thread_id_command))
+        # Срез D (V1.17.0g): /login — LoginUrl-кнопка в кабинет (за флагом
+        # LOGIN_URL_BUTTON; OFF → хендлер молчит = байт-в-байт)
+        from handlers.commands.login_command import login_command
+        self.application.add_handler(CommandHandler("login", login_command))
 
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))

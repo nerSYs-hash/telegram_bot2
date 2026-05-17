@@ -1,5 +1,5 @@
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 import io
 import re
 import httpx
@@ -167,6 +167,24 @@ async def auth_telegram(request: Request):
         "is_owner":   is_developer,
     })
     return {"token": token, "is_admin": is_developer, "is_owner": is_developer}
+
+
+@app.get("/api/auth/tg-callback")
+async def auth_tg_callback(request: Request):
+    """Срез D (V1.17.0g): GET-двойник /api/auth/telegram для inline LoginUrl.
+
+    Telegram при тапе LoginUrl-кнопки в боте делает GET с подписью сюда.
+    Логика — в чистом, оттестированном bot_core.web_auth.build_callback
+    (НЕ трогает прод-горячие _verify_tg_hash/_make_jwt / POST-виджет).
+    """
+    from bot_core.web_auth import build_callback
+    status, body = build_callback(
+        dict(request.query_params),
+        _BOT_TOKEN, _JWT_SECRET,
+        developer_id=int(os.getenv('DEVELOPER_ID', 0) or 0),
+        bot_username=_BOT_USERNAME,
+    )
+    return HTMLResponse(content=body, status_code=status)
 
 
 @app.get("/api/auth/me")
