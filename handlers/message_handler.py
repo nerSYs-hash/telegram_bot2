@@ -231,14 +231,14 @@ class MessageHandler:
                         return
                     elif btn == REPLY_BTN_OWNER_PANEL:
                         from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
-                        is_owner = await _is_owner_or_deputy(user.id)
+                        is_owner = await _is_owner_or_deputy(user.id, context)
                         await send_admin_panel(context.bot, message.chat.id, is_owner=is_owner)
                         return
                     elif btn == REPLY_BTN_SHIPPER:
                         from handlers.shipper_handlers import send_shipper_panel
                         await send_shipper_panel(message, context, self.db, self.target_chat_id)
                         return
-                
+
                 # FSM: редактирование анкеты (фото / примечание) в ADMIN_CHAT
                 if context.user_data.get('anketa_edit'):
                     from handlers.anketa_edit_handlers import handle_anketa_edit_input
@@ -667,7 +667,7 @@ class MessageHandler:
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
                 from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
-                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
+                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id, context))
                 return
             elif btn == REPLY_BTN_SHIPPER:
                 from handlers.shipper_handlers import send_shipper_panel
@@ -928,7 +928,7 @@ class MessageHandler:
                 return
             elif btn == REPLY_BTN_OWNER_PANEL:
                 from handlers.admin_moderation import send_admin_panel, _is_owner_or_deputy
-                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id))
+                await send_admin_panel(context.bot, message.chat.id, is_owner=await _is_owner_or_deputy(user.id, context))
                 return
             elif btn == REPLY_BTN_SHIPPER:
                 from handlers.shipper_handlers import send_shipper_panel
