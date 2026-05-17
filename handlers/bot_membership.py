@@ -17,10 +17,11 @@ from telegram.ext import ContextTypes
 
 from database.db_workspaces import (
     create_workspace, add_bot_chat, get_workspaces_for_user,
-    remove_bot_chat,
+    remove_bot_chat, soft_remove_bot_chat,
 )
 from bot_core.workspace_context import invalidate_cache
 from bot_core.login_button import login_keyboard, login_url_enabled
+from bot_core.connect_flow import connect_flow_v2_enabled
 
 logger = logging.getLogger(__name__)
 
@@ -54,13 +55,17 @@ async def on_bot_added_to_chat(update, context, db):
     chat_id = chat.id
     chat_title = chat.title or f"Чат {chat_id}"
 
-    # G1: bot kicked/left → отвязать чат от ws (workspace остаётся).
+    # G1 / V1.17.0h C1: bot kicked/left → отвязать чат от ws (workspace остаётся).
     if new.status in ('left', 'kicked'):
         existing_ws = db.get_workspace_by_chat(chat_id)
         if existing_ws is not None:
-            remove_bot_chat(db.conn, chat_id)
+            if connect_flow_v2_enabled():
+                soft_remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; soft-removed (ws={existing_ws})")
+            else:
+                remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
             invalidate_cache(chat_id)
-            logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
         return
 
     if new.status not in ('member', 'administrator'):
