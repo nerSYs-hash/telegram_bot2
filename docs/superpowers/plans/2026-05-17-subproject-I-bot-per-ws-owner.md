@@ -181,7 +181,7 @@ def is_ws_owner(context, user_id: int,
 - [ ] **Step 4: Run test to verify it passes**
 
 Run: `.venv\Scripts\python.exe -m pytest tests/test_ws_role.py -q`
-Expected: PASS (10 passed)
+Expected: PASS (13 passed — 9 funcs, `test_flag_on_truthy` parametrized ×4, +`test_moderator_is_not_owner`)
 
 - [ ] **Step 5: Commit**
 
