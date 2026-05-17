@@ -17,7 +17,7 @@ from telegram.ext import ContextTypes
 
 from database.db_workspaces import (
     create_workspace, add_bot_chat, get_workspaces_for_user,
-    remove_bot_chat, soft_remove_bot_chat,
+    remove_bot_chat, soft_remove_bot_chat, get_disconnected_bot_chat,
 )
 from bot_core.workspace_context import invalidate_cache
 from bot_core.login_button import login_keyboard, login_url_enabled
@@ -70,6 +70,30 @@ async def on_bot_added_to_chat(update, context, db):
 
     if new.status not in ('member', 'administrator'):
         return
+
+    # V1.17.0h C3: повторное добавление soft-removed чата → восстановить роль.
+    if connect_flow_v2_enabled():
+        disc = get_disconnected_bot_chat(db.conn, chat_id)
+        if disc is not None:
+            db.conn.execute(
+                "UPDATE bot_chats SET removed_at=NULL, added_by_user_id=?, "
+                "title=?, chat_type=? WHERE chat_id=?",
+                (from_user.id, chat_title, chat.type, chat_id))
+            db.conn.commit()
+            invalidate_cache(chat_id)
+            role_txt = disc['role'] or 'без роли'
+            logger.info(f"Reconnect chat={chat_id} restored ws={disc['workspace_id']} role={disc['role']}")
+            try:
+                await context.bot.send_message(
+                    chat_id,
+                    f"♻️ С возвращением! Чат переподключён к Pulse SaaS, "
+                    f"роль «{role_txt}» восстановлена.\n"
+                    f"Управление — на сайте: {SITE_URL}",
+                    reply_markup=_login_kb(),
+                )
+            except Exception as e:
+                logger.warning(f"send_message (reconnect) failed: {e}")
+            return
 
     # 3+4. Already bound?
     existing_ws = db.get_workspace_by_chat(chat_id)

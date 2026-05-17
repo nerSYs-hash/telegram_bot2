@@ -132,3 +132,44 @@ async def test_kicked_flag_on_soft_removes(monkeypatch):
     row = db.conn.execute(
         "SELECT workspace_id,role,removed_at FROM bot_chats WHERE chat_id=-100").fetchone()
     assert row == (1, 'main', row[2]) and row[2] is not None
+
+
+# --- Task 5: C3 restore роли при повторном добавлении ---
+def _added_update(chat_id):
+    u = MagicMock()
+    u.my_chat_member.new_chat_member.user.id = 999
+    u.my_chat_member.new_chat_member.status = 'administrator'
+    u.my_chat_member.chat.id = chat_id
+    u.my_chat_member.chat.title = 'X'
+    u.my_chat_member.chat.type = 'supergroup'
+    u.my_chat_member.from_user.id = 42
+    return u
+
+
+@pytest.mark.asyncio
+async def test_reconnect_restores_role_no_menu(monkeypatch):
+    monkeypatch.setenv("CONNECT_FLOW_V2", "1")
+    from handlers.bot_membership import on_bot_added_to_chat
+    db = _lifecycle_db()
+    db.conn.execute("INSERT INTO bot_chats (chat_id,workspace_id,role,removed_at) "
+                    "VALUES (-100,1,'main',CURRENT_TIMESTAMP)")
+    db.conn.commit()
+    ctx = _ctx()
+    await on_bot_added_to_chat(_added_update(-100), ctx, db)
+    row = db.conn.execute(
+        "SELECT workspace_id,role,removed_at FROM bot_chats WHERE chat_id=-100").fetchone()
+    assert row[0] == 1 and row[1] == 'main' and row[2] is None  # restored
+    sent = " ".join(str(c) for c in ctx.bot.send_message.call_args_list)
+    assert "Куда подключить" not in sent
+
+
+@pytest.mark.asyncio
+async def test_reconnect_flag_off_unchanged(monkeypatch):
+    monkeypatch.delenv("CONNECT_FLOW_V2", raising=False)
+    from handlers.bot_membership import on_bot_added_to_chat
+    db = _lifecycle_db()
+    db.conn.execute("INSERT INTO users (user_id,username) VALUES (42,'a')")
+    db.conn.commit()
+    ctx = _ctx()
+    await on_bot_added_to_chat(_added_update(-100), ctx, db)
+    assert get_workspace_by_chat(db.conn, -100) is not None
