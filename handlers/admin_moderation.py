@@ -933,10 +933,10 @@ async def _is_owner_or_deputy(user_id: int, context=None) -> bool:
     """
     Проверка: владелец или зам владельца (доступ к Панели Владельца).
 
-    Подпроект I: при context!=None и флаге I_WS_RBAC=1 — per-WS owner
-    через bot_core.ws_role.is_ws_owner. context=None / флаг OFF /
-    is_ws_owner=False → ПРЕЖНЯЯ single-tenant логика (байт-в-байт):
-    1) Owner (по config.OWNER_ID) — всегда True
+    Порядок проверок:
+    0) OWNER_ID (config) — безусловный первый шаг, всегда True до любой ветки.
+    I) Подпроект I: при context!=None — per-WS owner через bot_core.ws_role.is_ws_owner
+       (флаг I_WS_RBAC может быть ON или OFF — логика внутри is_ws_owner).
     2) Динамические права: has_permission(role, "admins.view")
     3) Фолбэк на старую is_deputy()
     """

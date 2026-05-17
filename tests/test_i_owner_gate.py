@@ -8,7 +8,7 @@ class _Ctx:
     def __init__(self): self.chat_data = {}; self.user_data = {}
 
 
-def _run(coro): return asyncio.get_event_loop().run_until_complete(coro)
+def _run(coro): return asyncio.run(coro)
 
 
 async def _aw(v): return v
@@ -27,7 +27,8 @@ def test_owner_id_shortcut_still_first(monkeypatch):
     assert _run(am._is_owner_or_deputy(OWNER_ID, context=None)) is True
 
 
-def test_flag_on_ws_owner_true(monkeypatch):
+def test_wiring_is_ws_owner_true_grants(monkeypatch):
+    # patches is_ws_owner directly: verifies _is_owner_or_deputy respects its result (wiring, not the env flag)
     # context задан, is_ws_owner True → _is_owner_or_deputy True (per-WS).
     monkeypatch.setattr('bot_core.ws_role.is_ws_owner', lambda *a, **k: True)
     assert _run(am._is_owner_or_deputy(8376708692, context=_Ctx())) is True
@@ -39,3 +40,18 @@ def test_flag_on_ws_not_owner_falls_through(monkeypatch):
     monkeypatch.setattr('bot_permissions.user_has', lambda *a, **k: _aw(False))
     monkeypatch.setattr('database.db_friend.is_deputy', lambda *a, **k: _aw(False))
     assert _run(am._is_owner_or_deputy(424242, context=_Ctx())) is False
+
+
+def test_flag_on_but_context_none_skips_per_ws(monkeypatch):
+    # Флаг ON, но context=None → ветка I пропущена (guard `context is not None`),
+    # уходим в старую single-tenant логику.
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    called = {'hit': False}
+    def _boom(*a, **k):
+        called['hit'] = True
+        return True
+    monkeypatch.setattr('bot_core.ws_role.is_ws_owner', _boom)
+    monkeypatch.setattr('bot_permissions.user_has', lambda *a, **k: _aw(False))
+    monkeypatch.setattr('database.db_friend.is_deputy', lambda *a, **k: _aw(False))
+    assert _run(am._is_owner_or_deputy(424242, context=None)) is False
+    assert called['hit'] is False  # is_ws_owner НЕ должен вызываться при context=None

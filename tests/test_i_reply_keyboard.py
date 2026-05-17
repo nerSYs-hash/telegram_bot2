@@ -34,7 +34,7 @@ def test_ws_owner_with_context_gets_owner_button(monkeypatch):
     assert "👑 Панель Владельца" in _btn_texts(m)
 
 
-def test_context_none_unchanged(monkeypatch):
+def test_context_none_unchanged():
     # context=None → ветка I пропущена, обычный участник = FAQ.
     m = get_main_reply_keyboard(_DB(), user_id=8376708692,
                                 main_admin_id=111, context=None)
