@@ -3,15 +3,14 @@
 ID: 2026-05-08-multi-tenancy
 Spec: docs/superpowers/specs/2026-05-08-multi-tenancy-foundation-design.md
 
-TODO(multi-tenancy-pk): Composite PRIMARY KEY долг.
-    Таблицы economy_settings (PK=key), economy_section_toggles (PK=category)
-    и возможно branding_settings/bot_chats имеют ГЛОБАЛЬНО уникальный PK.
-    После добавления workspace_id два workspace не смогут иметь одинаковые
-    ключи настроек. Сейчас работает потому что workspace=1 единственный.
-    ФИКСИТЬ В ПОДПРОЕКТЕ #2 (onboarding нового чата) — перед первым seed
-    для workspace_id != 1 пересоздать эти таблицы с PK (workspace_id, key)
-    через rebuild-pattern (CREATE…AS SELECT, DROP, RENAME).
-    Подробности: ~/.claude/.../memory/multi_tenancy_pk_debt.md
+RESOLVED(multi-tenancy-pk) 2026-05-17: Composite PRIMARY KEY долг закрыт.
+    Миграция database/migrations/composite_pk_fix.py пересоздала 7 таблиц
+    (economy_settings, economy_section_toggles, branding_settings,
+    user_stats, user_stats_hourly, chat_stats, topics) с composite PK
+    (workspace_id, ...) через rebuild-pattern. Проверено 17.05: composite
+    PK присутствует на ЛОКАЛЬНОЙ и ПРОД БД (PRAGMA table_info, ws_id в PK).
+    Миграция идемпотентна (skip если уже composite), standalone-скрипт
+    (НЕ в startup-хуке db_manager). Тест: tests/test_composite_pk_fix.py.
 """
 import os
 import shutil
