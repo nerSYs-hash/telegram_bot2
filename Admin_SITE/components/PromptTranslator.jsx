@@ -7,23 +7,23 @@ function InfoModal({ open, onClose }) {
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-[32px] bg-white shadow-2xl border border-gray-200 overflow-hidden">
-        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100">
+      <div className="w-full max-w-2xl rounded-[32px] bg-sff shadow-2xl border border-bd2 overflow-hidden">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-bd">
           <div>
-            <div className="text-lg font-black text-gray-900">Инструкция по генерации</div>
-            <div className="text-sm text-gray-500 mt-1">Промпт формируется на основе стека и задачи.</div>
+            <div className="text-lg font-black text-tx">Инструкция по генерации</div>
+            <div className="text-sm text-txd mt-1">Промпт формируется на основе стека и задачи.</div>
           </div>
-          <button onClick={onClose} className="p-2 rounded-2xl text-gray-500 hover:bg-gray-100 transition">
+          <button onClick={onClose} className="p-2 rounded-2xl text-txd hover:bg-sf2 transition">
             <X size={18} />
           </button>
         </div>
 
-        <div className="space-y-4 px-6 py-5 text-sm text-gray-700">
+        <div className="space-y-4 px-6 py-5 text-sm text-tx">
           <p>Если поле "Стек" заполнено, результат будет содержать его в явном виде.</p>
           <p>Если поле "Стек" пустое, в итоговом промпте будет передана только задача.</p>
           <p>Для быстрого запуска используйте <span className="font-black">Ctrl+Enter</span> или <span className="font-black">Cmd+Enter</span>.</p>
-          <div className="rounded-3xl bg-gray-50 border border-gray-200 p-4 text-xs leading-relaxed text-gray-600">
-            <div className="font-black text-gray-900 mb-2">Структура результата:</div>
+          <div className="rounded-3xl bg-sf2 border border-bd2 p-4 text-xs leading-relaxed text-txd">
+            <div className="font-black text-tx mb-2">Структура результата:</div>
             <div>system: Ты переводишь описание задачи разработчика в промпт для Claude Code.</div>
             <div>Стек: {`{stack}`}</div>
             <div>Задача: {`{input}`}</div>
@@ -130,30 +130,30 @@ export default function PromptTranslator() {
 
   return (
     <div className="space-y-6">
-      <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm p-6">
+      <div className="bg-sff rounded-[2.5rem] border border-bd shadow-sm p-6">
         <div className="flex items-start justify-between gap-3 mb-5">
           <div>
-            <div className="text-xl font-black text-gray-900">Claude Code prompt helper</div>
-            <div className="text-sm text-gray-500 mt-1">Преобразуй задачу в структурированный промпт для Claude Code.</div>
+            <div className="text-xl font-black text-tx">Claude Code prompt helper</div>
+            <div className="text-sm text-txd mt-1">Преобразуй задачу в структурированный промпт для Claude Code.</div>
           </div>
-          <button onClick={() => setShowInfo(true)} className="inline-flex items-center gap-2 rounded-3xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition">
+          <button onClick={() => setShowInfo(true)} className="inline-flex items-center gap-2 rounded-3xl border border-bd2 bg-sf2 px-4 py-2 text-sm font-semibold text-tx hover:bg-sf2 transition">
             <Info size={16} /> Инструкция
           </button>
         </div>
 
         <div className="grid gap-4">
-          <label className="space-y-2 text-sm font-semibold text-gray-700">
+          <label className="space-y-2 text-sm font-semibold text-tx">
             Стек (input, необязательно)
             <input
               value={stack}
               onChange={(e) => setStack(e.target.value)}
               onKeyDown={handleKeyDown}
               placeholder="Next.js + TypeScript + Tailwind + Supabase"
-              className="w-full rounded-3xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              className="w-full rounded-3xl border border-bd2 bg-sf2 px-4 py-3 text-sm text-tx outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
             />
           </label>
 
-          <label className="space-y-2 text-sm font-semibold text-gray-700">
+          <label className="space-y-2 text-sm font-semibold text-tx">
             Задача
             <textarea
               value={task}
@@ -161,7 +161,7 @@ export default function PromptTranslator() {
               onKeyDown={handleKeyDown}
               placeholder="Опиши задачу понятно: пример — 'Напиши X на React с TypeScript, Tailwind и Supabase, кнопка закрывает модалку, результат в JSON.'"
               rows={8}
-              className="w-full rounded-[32px] border border-gray-200 bg-gray-50 px-4 py-4 text-sm text-gray-900 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
+              className="w-full rounded-[32px] border border-bd2 bg-sf2 px-4 py-4 text-sm text-tx outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 resize-none"
             />
           </label>
 
@@ -178,15 +178,15 @@ export default function PromptTranslator() {
               <button
                 type="button"
                 onClick={resetState}
-                className="inline-flex items-center gap-2 rounded-3xl border border-gray-200 bg-white px-5 py-3 text-sm font-black text-gray-700 transition hover:bg-gray-50"
+                className="inline-flex items-center gap-2 rounded-3xl border border-bd2 bg-sff px-5 py-3 text-sm font-black text-tx transition hover:bg-sf2"
               >
                 Очистить
               </button>
             </div>
 
-            <div className="flex items-center gap-2 text-xs text-gray-500">
+            <div className="flex items-center gap-2 text-xs text-txd">
               <span>Ctrl/Cmd + Enter для отправки</span>
-              <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-3 py-1">Итерация</span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-sf2 px-3 py-1">Итерация</span>
             </div>
           </div>
 
@@ -199,11 +199,11 @@ export default function PromptTranslator() {
       </div>
 
       {output && (
-        <div className="bg-white rounded-[2.5rem] border border-gray-100 shadow-sm overflow-hidden">
-          <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-gray-100">
+        <div className="bg-sff rounded-[2.5rem] border border-bd shadow-sm overflow-hidden">
+          <div className="flex items-center justify-between gap-3 px-6 py-5 border-b border-bd">
             <div>
-              <div className="text-sm font-black text-gray-900">Промпт для Claude Code</div>
-              <div className="text-xs text-gray-500">Скопируй и вставь в API-запрос.</div>
+              <div className="text-sm font-black text-tx">Промпт для Claude Code</div>
+              <div className="text-xs text-txd">Скопируй и вставь в API-запрос.</div>
             </div>
             <button
               onClick={handleCopy}

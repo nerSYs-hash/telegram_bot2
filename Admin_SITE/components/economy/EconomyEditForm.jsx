@@ -38,7 +38,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
       {/* Новое значение */}
       {!isValueLocked ? (
         <div>
-          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 block">
+          <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-1.5 block">
             Новое значение
           </label>
           <div className="relative">
@@ -49,10 +49,10 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
               placeholder={`${row.min_value ?? 0} — ${row.max_value ?? '∞'}`}
               autoFocus
               className="w-full px-3 py-2.5 pr-10 rounded-xl border-2 border-blue-100
-                         focus:border-blue-400 focus:outline-none text-sm font-bold bg-white"
+                         focus:border-blue-400 focus:outline-none text-sm font-bold bg-sff"
             />
             {row.unit && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs">
+              <span className="absolute right-3 top-1/2 -translate-y-1/2 text-lbl text-xs">
                 {row.unit}
               </span>
             )}
@@ -65,7 +65,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
         </div>
       ) : (
         <div>
-          <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-1.5 block">
+          <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-1.5 block">
             Откат к значению
           </label>
           <div className="px-3 py-2.5 rounded-xl bg-orange-50 border-2 border-orange-100 text-sm font-black text-orange-700">
@@ -86,7 +86,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
           rows={2}
           maxLength={500}
           className="w-full px-3 py-2 rounded-xl border-2 border-amber-100 focus:border-amber-400
-                     focus:outline-none text-sm bg-white resize-none"
+                     focus:outline-none text-sm bg-sff resize-none"
         />
         <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
           {comment.length}/500
@@ -100,13 +100,13 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
           disabled={!canSave}
           className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[11px] uppercase
                      hover:bg-blue-700 active:scale-95 transition whitespace-nowrap
-                     disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed">
+                     disabled:bg-gray-200 disabled:text-lbl disabled:cursor-not-allowed">
           {saving ? '⏳' : isValueLocked ? '↩ Откатить' : '✅ Сохранить'}
         </button>
         <button
           onClick={onCancel}
-          className="px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl
-                     font-black text-[11px] uppercase hover:bg-gray-50 active:scale-95 transition">
+          className="px-4 py-2.5 bg-sff border border-bd2 text-txd rounded-xl
+                     font-black text-[11px] uppercase hover:bg-sf2 active:scale-95 transition">
           Отмена
         </button>
       </div>

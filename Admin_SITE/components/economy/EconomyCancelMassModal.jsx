@@ -67,15 +67,15 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
     <>
       <div onClick={onClose} className="fixed inset-0 bg-black/40 z-[60]" />
       <div className="fixed inset-0 z-[61] flex items-center justify-center p-4 pointer-events-none">
-        <div className="bg-white rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto
+        <div className="bg-sff rounded-3xl shadow-2xl w-full max-w-md pointer-events-auto
                         animate-in zoom-in-95 fade-in duration-200 max-h-[90vh] flex flex-col">
           {/* Шапка */}
-          <div className="shrink-0 flex items-center justify-between p-5 border-b border-gray-100">
+          <div className="shrink-0 flex items-center justify-between p-5 border-b border-bd">
             <div>
               <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Только лог</div>
-              <h2 className="text-base font-black text-gray-900">Массовая отмена выплат</h2>
+              <h2 className="text-base font-black text-tx">Массовая отмена выплат</h2>
             </div>
-            <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition active:scale-90">
+            <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
               <X size={20} />
             </button>
           </div>
@@ -84,12 +84,12 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
           <div className="flex-1 overflow-y-auto p-5 space-y-4">
             {/* Раздел */}
             <label className="block">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Раздел</span>
+              <span className="text-[10px] font-black text-txd uppercase tracking-widest">Раздел</span>
               <select
                 value={category}
                 onChange={e => setCategory(e.target.value)}
-                className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl
-                           text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-white">
+                className="mt-1 w-full px-4 py-3 bg-sf2 border border-bd2 rounded-2xl
+                           text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-sff">
                 {CATEGORIES.map(c => (
                   <option key={c.key} value={c.key}>{c.label}</option>
                 ))}
@@ -99,30 +99,30 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
             {/* Период */}
             <div className="grid grid-cols-2 gap-3">
               <label className="block">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">С даты</span>
+                <span className="text-[10px] font-black text-txd uppercase tracking-widest">С даты</span>
                 <input
                   type="date"
                   value={dateFrom}
                   onChange={e => setDateFrom(e.target.value)}
-                  className="mt-1 w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-2xl
-                             text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-white"
+                  className="mt-1 w-full px-3 py-3 bg-sf2 border border-bd2 rounded-2xl
+                             text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-sff"
                 />
               </label>
               <label className="block">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">По дату</span>
+                <span className="text-[10px] font-black text-txd uppercase tracking-widest">По дату</span>
                 <input
                   type="date"
                   value={dateTo}
                   onChange={e => setDateTo(e.target.value)}
-                  className="mt-1 w-full px-3 py-3 bg-gray-50 border border-gray-200 rounded-2xl
-                             text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-white"
+                  className="mt-1 w-full px-3 py-3 bg-sf2 border border-bd2 rounded-2xl
+                             text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-sff"
                 />
               </label>
             </div>
 
             {/* user_ids (опц.) */}
             <label className="block">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+              <span className="text-[10px] font-black text-txd uppercase tracking-widest">
                 User ID через запятую (опционально)
               </span>
               <input
@@ -130,17 +130,17 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
                 value={userIds}
                 onChange={e => setUserIds(e.target.value)}
                 placeholder="например 12345, 67890"
-                className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl
-                           text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-white"
+                className="mt-1 w-full px-4 py-3 bg-sf2 border border-bd2 rounded-2xl
+                           text-sm font-bold focus:outline-none focus:border-blue-400 focus:bg-sff"
               />
-              <span className="text-[10px] text-gray-400 mt-1 block">
+              <span className="text-[10px] text-lbl mt-1 block">
                 Пусто — все юзеры за период
               </span>
             </label>
 
             {/* Комментарий */}
             <label className="block">
-              <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+              <span className="text-[10px] font-black text-txd uppercase tracking-widest">
                 Комментарий (обязательно, ≥ 3 символа)
               </span>
               <textarea
@@ -148,8 +148,8 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
                 onChange={e => setComment(e.target.value)}
                 rows={2}
                 placeholder="причина отмены"
-                className="mt-1 w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-2xl
-                           text-sm font-bold resize-none focus:outline-none focus:border-blue-400 focus:bg-white"
+                className="mt-1 w-full px-4 py-3 bg-sf2 border border-bd2 rounded-2xl
+                           text-sm font-bold resize-none focus:outline-none focus:border-blue-400 focus:bg-sff"
               />
             </label>
 
@@ -170,11 +170,11 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
           </div>
 
           {/* Кнопки */}
-          <div className="shrink-0 flex gap-2 p-5 border-t border-gray-100">
+          <div className="shrink-0 flex gap-2 p-5 border-t border-bd">
             <button
               onClick={onClose}
               disabled={busy}
-              className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-2xl text-xs font-black uppercase
+              className="flex-1 py-3 bg-sf2 text-tx rounded-2xl text-xs font-black uppercase
                          tracking-widest active:scale-95 transition disabled:opacity-50">
               Отмена
             </button>

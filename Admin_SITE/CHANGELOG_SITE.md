@@ -4,6 +4,17 @@
 
 ---
 
+## V1.17.0e — 19 мая 2026
+**Дизайн-система Puls Chat — токены и обе темы (cutover §2b)**
+- `new` Семантический token-tree в `index.css` (§2.5) + маппинг в `tailwind.config.js`: одна система переменных, тёмная/светлая темы
+- `new` `ThemeToggle` (sun/moon) в шапке + pre-paint в `index.html` (без мигания, помнит выбор); дефолт пока светлый
+- `chg` Re-skin всего Admin_SITE на токены — оболочка, все экраны, все `components/*` (economy, press-release, workspaces, titles, shared). Behavior-preserving (§10): логика/расположение не менялись
+- `fix` Glow CANON v2 — «вечная болезнь» обода вылечена в корне (mask-composite → мягкий halo, `border-radius:inherit`); pulse-step без белого ореола на тёмной
+- `fix` Обрезка кнопок-фильтров (Журнал/Статистика), Toggle on→зелёный (бриф), emoji метрик Экономики → Lucide (D1)
+- `dev` `?preview` — auth-free просмотр для дизайн-QA (только vite dev, в прод-сборке мёртв)
+
+---
+
 ## V1.17.0d — 16 мая 2026
 **Переключатель сообществ + права per-workspace**
 - `new` Компонент `WorkspaceSwitcher` в топбаре — переключение между своими сообществами

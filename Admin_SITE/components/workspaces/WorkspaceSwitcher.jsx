@@ -34,7 +34,7 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
     <select
       value={active ?? ''}
       onChange={change}
-      className="text-sm font-bold rounded-2xl border-2 border-gray-200 px-3 py-1.5 bg-white"
+      className="text-sm font-bold rounded-2xl border-2 border-bd2 px-3 py-1.5 bg-sff"
       title="Активное сообщество"
     >
       {list.map((w) => (

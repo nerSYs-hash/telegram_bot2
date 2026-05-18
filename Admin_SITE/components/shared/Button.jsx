@@ -25,40 +25,42 @@ import { Loader2, Check } from 'lucide-react';
  *   ...rest      — обычные props button
  */
 
+// Токен-скин (§12.1: API/логика те же, меняется только визуал).
+// glow-строки кормят канон v2 (.pulse-btn-glow в index.css) — бренд-цвета.
 const VARIANTS = {
   primary: {
-    base:  'bg-blue-500 text-white hover:bg-blue-600',
-    glow:  '--glow-from:#60a5fa; --glow-via:#a855f7; --glow-to:#60a5fa;',
+    base:  'bg-cta text-white hover:brightness-110',
+    glow:  '--glow-from:#3b82f6; --glow-via:#a855f7; --glow-to:#3b82f6;',
     glowDefault: true,
   },
   secondary: {
-    base:  'bg-gray-100 text-gray-700 hover:bg-gray-200',
-    glow:  '--glow-from:#9ca3af; --glow-via:#6b7280; --glow-to:#9ca3af;',
+    base:  'bg-sf2 text-tx border border-bd hover:bg-ih hover:border-bd2',
+    glow:  '',
     glowDefault: false,
   },
   ghost: {
-    base:  'bg-transparent text-gray-600 hover:bg-gray-100',
-    glow:  '--glow-from:#9ca3af; --glow-via:#6b7280; --glow-to:#9ca3af;',
+    base:  'bg-transparent text-txd hover:bg-ih hover:text-tx',
+    glow:  '',
     glowDefault: false,
   },
   outlined: {
-    base:  'bg-white text-blue-600 border-2 border-blue-200 hover:border-blue-400 hover:bg-blue-50',
-    glow:  '--glow-from:#60a5fa; --glow-via:#a855f7; --glow-to:#60a5fa;',
+    base:  'bg-transparent text-cta border-[1.5px] border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:border-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]',
+    glow:  '',
     glowDefault: false,
   },
   danger: {
-    base:  'bg-red-500 text-white hover:bg-red-600',
-    glow:  '--glow-from:#fb7185; --glow-via:#ef4444; --glow-to:#fb7185;',
+    base:  'bg-danger text-white hover:brightness-110',
+    glow:  '--glow-from:#fb7185; --glow-via:#FF453A; --glow-to:#fb7185;',
     glowDefault: true,
   },
   success: {
-    base:  'bg-emerald-500 text-white hover:bg-emerald-600',
-    glow:  '--glow-from:#34d399; --glow-via:#10b981; --glow-to:#34d399;',
+    base:  'bg-ok text-white hover:brightness-110',
+    glow:  '--glow-from:#34d399; --glow-via:#32D74B; --glow-to:#34d399;',
     glowDefault: true,
   },
   // text-only — для inline-действий, ссылок-заглушек
   link: {
-    base:  'bg-transparent text-blue-600 hover:underline px-0 py-0',
+    base:  'bg-transparent text-cta hover:underline px-0 py-0',
     glow:  '',
     glowDefault: false,
   },
@@ -122,7 +124,7 @@ const Button = forwardRef(function Button({
         // сжатие при клике — не для link
         isLink ? '' : 'active:scale-[0.97]',
         'disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100',
-        'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-blue-300',
+        'focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--sff)] focus-visible:ring-[color-mix(in_oklab,var(--cta)_55%,transparent)]',
         useGlow && !isLink ? 'pulse-btn-glow' : '',
         sizeCls,
         v.base,

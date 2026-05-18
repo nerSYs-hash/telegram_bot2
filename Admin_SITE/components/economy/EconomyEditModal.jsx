@@ -37,17 +37,17 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
 
   return createPortal(
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
-      <div className="bg-white rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
+      <div className="bg-sff rounded-3xl w-full max-w-md shadow-2xl overflow-hidden">
 
         {/* Шапка */}
-        <div className="p-6 border-b border-gray-100 flex items-center justify-between">
+        <div className="p-6 border-b border-bd flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">
+            <div className="text-[10px] font-black text-lbl uppercase tracking-widest">
               {isValueLocked ? 'Откат значения' : 'Изменить параметр'}
             </div>
-            <h2 className="text-base font-black text-gray-900 leading-tight">{row.label}</h2>
+            <h2 className="text-base font-black text-tx leading-tight">{row.label}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition active:scale-90">
+          <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
             <X size={20} />
           </button>
         </div>
@@ -55,19 +55,19 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
         {/* Тело */}
         <div className="p-6 space-y-4">
           {/* Старое значение */}
-          <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
-            <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">
+          <div className="flex items-center justify-between p-4 bg-sf2 rounded-2xl">
+            <span className="text-[10px] font-black text-txd uppercase tracking-widest">
               {isValueLocked ? 'Будет восстановлено' : 'Текущее значение'}
             </span>
-            <span className="text-base font-black text-gray-700">
-              {isValueLocked ? forceValue : row.value} <span className="text-gray-400 font-normal text-sm">{row.unit}</span>
+            <span className="text-base font-black text-tx">
+              {isValueLocked ? forceValue : row.value} <span className="text-lbl font-normal text-sm">{row.unit}</span>
             </span>
           </div>
 
           {/* Новое значение */}
           {!isValueLocked && (
             <div>
-              <label className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-2 block">
+              <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-2 block">
                 Новое значение
               </label>
               <div className="relative">
@@ -76,11 +76,11 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
                   value={value}
                   onChange={e => setValue(e.target.value)}
                   placeholder={`${row.min_value ?? 0} — ${row.max_value ?? '∞'}`}
-                  className="w-full px-4 py-3 pr-12 rounded-2xl border-2 border-gray-100
+                  className="w-full px-4 py-3 pr-12 rounded-2xl border-2 border-bd
                              focus:border-blue-300 focus:outline-none text-base font-bold"
                 />
                 {row.unit && (
-                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 text-sm">
+                  <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lbl text-sm">
                     {row.unit}
                   </span>
                 )}
@@ -108,7 +108,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
               rows={3}
               maxLength={500}
               className="w-full px-3 py-2 rounded-xl border border-amber-200 focus:border-amber-400
-                         focus:outline-none text-sm bg-white resize-none"
+                         focus:outline-none text-sm bg-sff resize-none"
             />
             <div className={`text-[10px] mt-1 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
               {comment.length}/500
@@ -126,7 +126,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
         <div className="p-6 pt-0 flex gap-3">
           <button
             onClick={onClose}
-            className="flex-1 py-3 bg-gray-100 text-gray-600 rounded-2xl font-black text-xs uppercase
+            className="flex-1 py-3 bg-sf2 text-txd rounded-2xl font-black text-xs uppercase
                        hover:bg-gray-200 active:scale-95 transition">
             Отмена
           </button>
@@ -135,7 +135,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
             disabled={!canSave}
             className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase
                        hover:bg-blue-700 active:scale-95 transition
-                       disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed">
+                       disabled:bg-gray-200 disabled:text-lbl disabled:cursor-not-allowed">
             {saving ? '⏳ Сохранение...' : isValueLocked ? '↩ Откатить' : '✅ Сохранить'}
           </button>
         </div>

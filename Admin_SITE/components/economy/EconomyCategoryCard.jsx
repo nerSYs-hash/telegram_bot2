@@ -11,7 +11,7 @@ const CATEGORY_THEME = {
   bbs_bonus:    { emoji: '❤️',  gradient: 'from-red-50 to-orange-50',     border: 'border-red-100',     accent: 'text-red-500',    dot: 'bg-red-400' },
 };
 
-const DEFAULT_THEME = { emoji: '⚙️', gradient: 'from-gray-50 to-slate-50', border: 'border-gray-100', accent: 'text-gray-600', dot: 'bg-gray-400' };
+const DEFAULT_THEME = { emoji: '⚙️', gradient: 'from-gray-50 to-slate-50', border: 'border-bd', accent: 'text-txd', dot: 'bg-gray-400' };
 
 function fmt(n) {
   if (n == null) return '—';
@@ -66,7 +66,7 @@ export default function EconomyCategoryCard({
   return (
     <div className={`relative rounded-2xl border overflow-hidden transition-all duration-200
       ${isDisabled
-        ? 'bg-gray-50 border-gray-200 opacity-60'
+        ? 'bg-sf2 border-bd2 opacity-60'
         : `bg-gradient-to-br ${theme.gradient} ${theme.border}`
       }`}>
 
@@ -95,7 +95,7 @@ export default function EconomyCategoryCard({
                 ${sectionEnabled ? 'bg-green-400' : 'bg-gray-300'}
                 ${canEdit ? 'cursor-pointer hover:opacity-90' : 'cursor-not-allowed opacity-50'}`}
             >
-              <span className={`inline-block w-3.5 h-3.5 bg-white rounded-full shadow-sm
+              <span className={`inline-block w-3.5 h-3.5 bg-sff rounded-full shadow-sm
                                 transform transition-transform duration-150
                                 ${sectionEnabled ? 'translate-x-4' : 'translate-x-0.5'}`} />
             </button>
@@ -103,14 +103,14 @@ export default function EconomyCategoryCard({
         </div>
 
         {/* Название */}
-        <div className="text-sm font-black text-gray-900 leading-tight mb-1">
+        <div className="text-sm font-black text-tx leading-tight mb-1">
           {category.label}
         </div>
 
         {/* Главный параметр */}
         {topLabel ? (
           <div className="mt-2">
-            <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider truncate">
+            <div className="text-[10px] font-semibold text-txd uppercase tracking-wider truncate">
               {topLabel}
             </div>
             <div className={`text-xl font-black ${theme.accent} leading-tight`}>
@@ -118,13 +118,13 @@ export default function EconomyCategoryCard({
             </div>
           </div>
         ) : (
-          <div className="text-[10px] text-gray-400 mt-1">{category.rows_count} параметров</div>
+          <div className="text-[10px] text-lbl mt-1">{category.rows_count} параметров</div>
         )}
 
         {/* Подсказка "открыть" */}
         <div className="mt-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-          <span className="text-[10px] font-semibold text-gray-500">Настроить</span>
-          <ArrowRight size={11} className="text-gray-400" />
+          <span className="text-[10px] font-semibold text-txd">Настроить</span>
+          <ArrowRight size={11} className="text-lbl" />
         </div>
       </button>
 
@@ -142,15 +142,15 @@ export default function EconomyCategoryCard({
             value={toggleComment}
             onChange={(e) => setToggleComment(e.target.value)}
             placeholder="Причина (необязательно)"
-            className="w-full text-xs px-2.5 py-1.5 border border-amber-200 rounded-lg bg-white
+            className="w-full text-xs px-2.5 py-1.5 border border-amber-200 rounded-lg bg-sff
                        placeholder-amber-300 focus:outline-none focus:border-amber-400"
           />
           <div className="flex gap-2">
             <button
               onClick={() => { setShowToggleForm(false); setToggleComment(''); }}
               disabled={toggleLoading}
-              className="flex-1 py-1.5 text-xs font-bold bg-white border border-gray-200 rounded-lg
-                         hover:bg-gray-50 transition disabled:opacity-50"
+              className="flex-1 py-1.5 text-xs font-bold bg-sff border border-bd2 rounded-lg
+                         hover:bg-sf2 transition disabled:opacity-50"
             >
               Отмена
             </button>

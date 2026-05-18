@@ -56,17 +56,17 @@ export default function StyledSelect({
       <button
         type="button"
         onClick={() => setOpen(o => !o)}
-        className={`${padCls} bg-gray-50 border border-gray-100 rounded-xl font-bold text-gray-700 hover:border-blue-200 focus:outline-none focus:border-blue-300 flex items-center gap-1.5 transition-all ${open ? 'border-blue-300 bg-white shadow-sm' : ''} ${className}`}
+        className={`${padCls} bg-sf2 border border-bd rounded-xl font-bold text-tx hover:border-bd2 focus:outline-none focus:border-cta flex items-center gap-1.5 transition-all ${open ? 'border-cta bg-sff shadow-sm' : ''} ${className}`}
       >
         <span className="truncate">
-          {current ? current.label : <span className="text-gray-400 font-normal">{placeholder}</span>}
+          {current ? current.label : <span className="text-lbl font-normal">{placeholder}</span>}
         </span>
-        <ChevronDown size={12} className={`text-gray-400 transition-transform ${open ? 'rotate-180' : ''}`} />
+        <ChevronDown size={12} className={`text-txd transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 
       {open && (
         <div
-          className={`absolute z-50 mt-1.5 min-w-full bg-white border border-gray-100 rounded-xl shadow-xl py-1 origin-top animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 ${align === 'right' ? 'right-0' : 'left-0'}`}
+          className={`absolute z-50 mt-1.5 min-w-full bg-sff border border-bd rounded-xl shadow-xl py-1 origin-top animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 ${align === 'right' ? 'right-0' : 'left-0'}`}
           style={{ minWidth: '100%' }}
         >
           {options.map(opt => {
@@ -76,13 +76,13 @@ export default function StyledSelect({
                 key={String(opt.value)}
                 type="button"
                 onClick={() => { onChange?.(opt.value); setOpen(false); }}
-                className={`w-full px-3 py-2 text-left text-xs font-bold flex items-center gap-2 transition-colors ${active ? 'bg-blue-50 text-blue-700' : 'text-gray-700 hover:bg-gray-50'}`}
+                className={`w-full px-3 py-2 text-left text-xs font-bold flex items-center gap-2 transition-colors ${active ? 'bg-[color-mix(in_oklab,var(--cta)_14%,transparent)] text-cta' : 'text-tx hover:bg-ih'}`}
               >
                 <span className="flex-1 truncate">
                   {opt.label}
-                  {opt.hint && <span className="ml-1.5 text-[10px] font-normal text-gray-400">{opt.hint}</span>}
+                  {opt.hint && <span className="ml-1.5 text-[10px] font-normal text-lbl">{opt.hint}</span>}
                 </span>
-                {active && <Check size={12} className="text-blue-500 flex-shrink-0" />}
+                {active && <Check size={12} className="text-cta flex-shrink-0" />}
               </button>
             );
           })}

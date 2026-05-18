@@ -16,7 +16,7 @@ function formatDate(str) {
 
 const ACTION_LABELS = {
   edit:     { label: 'Изменено',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
-  toggle:   { label: 'Тумблер',  cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  toggle:   { label: 'Тумблер',  cls: 'bg-sf2 text-txd border-bd2' },
   rollback: { label: 'Откат',    cls: 'bg-orange-50 text-orange-700 border-orange-200' },
   create:   { label: 'Создано',  cls: 'bg-green-50 text-green-700 border-green-200' },
 };
@@ -67,15 +67,15 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
   return createPortal(
     <>
       <div onClick={onClose} className="fixed inset-0 bg-black/30 z-40" />
-      <div className="fixed top-0 right-0 h-full w-full md:w-[420px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+      <div className="fixed top-0 right-0 h-full w-full md:w-[420px] bg-sff shadow-2xl z-50 flex flex-col overflow-hidden">
 
         {/* Шапка */}
-        <div className="shrink-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between">
+        <div className="shrink-0 bg-sff border-b border-bd p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest">История изменений</div>
-            <h2 className="text-base font-black text-gray-900 leading-tight">{label}</h2>
+            <div className="text-[10px] font-black text-lbl uppercase tracking-widest">История изменений</div>
+            <h2 className="text-base font-black text-tx leading-tight">{label}</h2>
           </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition active:scale-90">
+          <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
             <X size={20} />
           </button>
         </div>
@@ -91,8 +91,8 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
           {!loading && loadErr && (
             <div className="text-center py-12">
               <div className="text-3xl mb-3">⚠️</div>
-              <div className="text-sm font-black text-gray-500">Не удалось загрузить историю</div>
-              <div className="text-[11px] text-gray-400 mt-1">{loadErr}</div>
+              <div className="text-sm font-black text-txd">Не удалось загрузить историю</div>
+              <div className="text-[11px] text-lbl mt-1">{loadErr}</div>
               <button onClick={loadData} className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black">
                 Повторить
               </button>
@@ -106,35 +106,35 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
               )}
 
               {data.entries.length === 0 && (
-                <div className="text-center text-gray-400 py-12 text-sm">Нет истории изменений</div>
+                <div className="text-center text-lbl py-12 text-sm">Нет истории изменений</div>
               )}
 
               {data.entries.map(e => {
-                const meta = ACTION_LABELS[e.action] || { label: e.action, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
+                const meta = ACTION_LABELS[e.action] || { label: e.action, cls: 'bg-sf2 text-txd border-bd2' };
                 return (
-                  <div key={e.id} className={`bg-white border border-gray-100 rounded-2xl p-4 ${e.is_rolled_back ? 'opacity-50' : ''}`}>
+                  <div key={e.id} className={`bg-sff border border-bd rounded-2xl p-4 ${e.is_rolled_back ? 'opacity-50' : ''}`}>
                     <div className="flex items-center justify-between mb-2">
                       <span className={`px-2.5 py-0.5 rounded-full text-[9px] font-black uppercase border ${meta.cls}`}>
                         {meta.label}
                       </span>
-                      <span className="text-[10px] text-gray-400 font-bold">{formatDate(e.changed_at)}</span>
+                      <span className="text-[10px] text-lbl font-bold">{formatDate(e.changed_at)}</span>
                     </div>
 
                     {e.action !== 'toggle' && e.old_value != null && (
                       <div className="flex items-center gap-2 text-sm font-bold mb-2">
-                        <span className="line-through text-gray-400">{e.old_value}</span>
-                        <span className="text-gray-300">→</span>
+                        <span className="line-through text-lbl">{e.old_value}</span>
+                        <span className="text-lbl">→</span>
                         <span className="text-blue-600">{e.new_value}</span>
                       </div>
                     )}
                     {e.action === 'toggle' && (
-                      <div className="text-sm font-bold mb-2 text-gray-700">
+                      <div className="text-sm font-bold mb-2 text-tx">
                         {e.new_enabled ? '🟢 Включено' : '⚫ Выключено'}
                       </div>
                     )}
 
-                    <div className="text-xs text-gray-600 italic mb-1">💬 {e.comment}</div>
-                    <div className="text-[10px] text-gray-400 mb-2">
+                    <div className="text-xs text-txd italic mb-1">💬 {e.comment}</div>
+                    <div className="text-[10px] text-lbl mb-2">
                       {e.changed_by?.username ? `@${e.changed_by.username}` : e.changed_by?.name || ''}
                       {' '}({e.changed_by?.role})
                     </div>

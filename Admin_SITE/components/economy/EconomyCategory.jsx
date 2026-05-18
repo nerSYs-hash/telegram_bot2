@@ -70,22 +70,22 @@ export default function EconomyCategory({
 
   return (
     <>
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
+      <div className="bg-sff rounded-3xl border border-bd shadow-sm overflow-hidden">
         {/* Шапка-аккордеон */}
         <div className="flex items-center">
           <button
             onClick={onToggle}
-            className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-gray-50 transition text-left">
+            className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-sf2 transition text-left">
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-black text-gray-900">{category.label}</div>
-              <div className="text-[10px] text-gray-400 mt-0.5">
+              <div className="text-sm font-black text-tx">{category.label}</div>
+              <div className="text-[10px] text-lbl mt-0.5">
                 {category.rows_count} параметров
                 {!enabled && <span className="ml-2 text-red-400 font-black">• ВЫКЛЮЧЕН</span>}
               </div>
             </div>
             <ChevronDown
               size={20}
-              className={`text-gray-400 transition-transform duration-300 mr-4 ${isExpanded ? 'rotate-180' : ''}`}
+              className={`text-lbl transition-transform duration-300 mr-4 ${isExpanded ? 'rotate-180' : ''}`}
             />
           </button>
 
@@ -97,7 +97,7 @@ export default function EconomyCategory({
             className={`mr-4 relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
               enabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+            <span className={`inline-block w-4 h-4 bg-sff rounded-full shadow transform transition-transform duration-200 ${
               enabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
@@ -119,7 +119,7 @@ export default function EconomyCategory({
 
         {/* Тело */}
         {isExpanded && (
-          <div className="border-t border-gray-100 px-5 py-4 space-y-4">
+          <div className="border-t border-bd px-5 py-4 space-y-4">
             {loading && (
               <div className="flex items-center justify-center py-8">
                 <div className="w-5 h-5 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
@@ -138,7 +138,7 @@ export default function EconomyCategory({
               />
             ))}
             {!loading && settings?.length === 0 && (
-              <div className="text-center text-gray-400 py-6 text-sm">Нет параметров</div>
+              <div className="text-center text-lbl py-6 text-sm">Нет параметров</div>
             )}
           </div>
         )}

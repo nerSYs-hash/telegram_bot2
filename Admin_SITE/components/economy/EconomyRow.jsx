@@ -38,15 +38,15 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
   };
 
   return (
-    <div className={`bg-white rounded-xl border transition overflow-hidden ${
-      isRecent ? 'border-amber-200 bg-amber-50/30' : isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+    <div className={`bg-sff rounded-xl border transition overflow-hidden ${
+      isRecent ? 'border-amber-200 bg-amber-50/30' : isExpanded ? 'border-blue-200 shadow-sm' : 'border-bd hover:border-bd2'
     }`}>
       <div className="flex items-center gap-3 p-3">
 
         {/* Название */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-gray-900 truncate">{row.label}</span>
+            <span className="text-sm font-bold text-tx truncate">{row.label}</span>
             {isNew && (
               <span className="bg-orange-50 text-orange-600 border border-orange-200 rounded-full px-2 py-0.5 text-[8px] font-black uppercase">
                 Новое
@@ -59,13 +59,13 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
             )}
           </div>
           {row.description && (
-            <div className="text-[10px] text-gray-400 mt-0.5 truncate">{row.description}</div>
+            <div className="text-[10px] text-lbl mt-0.5 truncate">{row.description}</div>
           )}
         </div>
 
         {/* Значение — фиксированная ширина */}
-        <div className="w-24 text-right text-base font-black text-gray-900 flex-shrink-0 whitespace-nowrap tabular-nums">
-          {row.value} <span className="text-[10px] text-gray-500 font-normal">{row.unit}</span>
+        <div className="w-24 text-right text-base font-black text-tx flex-shrink-0 whitespace-nowrap tabular-nums">
+          {row.value} <span className="text-[10px] text-txd font-normal">{row.unit}</span>
         </div>
 
         {/* Тумблер — фиксированная ширина */}
@@ -77,7 +77,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
             className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
               row.is_enabled ? 'bg-green-500' : 'bg-gray-200'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+            <span className={`inline-block w-4 h-4 bg-sff rounded-full shadow transform transition-transform duration-200 ${
               row.is_enabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
@@ -87,7 +87,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
         <div className="w-12 flex justify-center flex-shrink-0">
           <button
             onClick={() => onOpenHistory(row.key, row.label)}
-            className="flex items-center justify-center gap-1 px-2 py-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition active:scale-90 min-w-[34px]">
+            className="flex items-center justify-center gap-1 px-2 py-2 text-lbl hover:text-blue-500 hover:bg-blue-50 rounded-lg transition active:scale-90 min-w-[34px]">
             <BarChart3 size={15} />
             {row.history_count > 0 && (
               <span className="text-[9px] font-black tabular-nums">{row.history_count}</span>
@@ -103,7 +103,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
             title={canEdit ? 'Изменить значение' : 'Нет прав'}
             className={`p-2 rounded-lg transition ${
               editing ? 'text-blue-600 bg-blue-50' :
-              canEdit ? 'text-gray-400 hover:text-blue-500 hover:bg-blue-50 active:scale-90'
+              canEdit ? 'text-lbl hover:text-blue-500 hover:bg-blue-50 active:scale-90'
                       : 'text-gray-200 cursor-not-allowed'
             }`}>
             <Edit size={15} />

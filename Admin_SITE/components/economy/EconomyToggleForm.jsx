@@ -46,7 +46,7 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
             rows={2}
             maxLength={500}
             className="w-full px-3 py-2 rounded-xl border-2 border-amber-100 focus:border-amber-400
-                       focus:outline-none text-sm bg-white resize-none"
+                       focus:outline-none text-sm bg-sff resize-none"
           />
           <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
             {comment.length}/500
@@ -58,7 +58,7 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
             onClick={handleSave}
             disabled={!canSave}
             className={`px-4 py-2.5 rounded-xl font-black text-[11px] uppercase active:scale-95 transition whitespace-nowrap
-              disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed
+              disabled:bg-gray-200 disabled:text-lbl disabled:cursor-not-allowed
               ${currentEnabled
                 ? 'bg-red-500 text-white hover:bg-red-600'
                 : 'bg-green-500 text-white hover:bg-green-600'}`}>
@@ -66,8 +66,8 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
           </button>
           <button
             onClick={onCancel}
-            className="px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl
-                       font-black text-[11px] uppercase hover:bg-gray-50 active:scale-95 transition">
+            className="px-4 py-2.5 bg-sff border border-bd2 text-txd rounded-xl
+                       font-black text-[11px] uppercase hover:bg-sf2 active:scale-95 transition">
             Отмена
           </button>
         </div>

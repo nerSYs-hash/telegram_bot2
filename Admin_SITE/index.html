@@ -1,10 +1,23 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html lang="ru" class="theme-light">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Puls Chat — Панель управления</title>
     <link rel="icon" type="image/jpeg" href="/logo.jpg"/>
+    <!-- Тема до первой отрисовки (без FOUC). Дефолт light на время
+         WIP-миграции (§10 минимум шока); флип на dark §0 — в конце. -->
+    <script>
+      (function () {
+        try {
+          var t = localStorage.getItem('puls.theme');
+          if (t !== 'dark' && t !== 'light') t = 'light';
+          var h = document.documentElement;
+          h.classList.remove('theme-dark', 'theme-light');
+          h.classList.add('theme-' + t);
+        } catch (e) {}
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

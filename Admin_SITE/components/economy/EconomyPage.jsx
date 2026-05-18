@@ -103,7 +103,7 @@ export default function EconomyPage({ token }) {
         <div className="flex justify-end">
           <button
             onClick={() => setCancellationsOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-white border border-red-200
+            className="flex items-center gap-2 px-4 py-2.5 bg-sff border border-red-200
                        text-red-600 rounded-2xl text-xs font-black uppercase tracking-widest
                        hover:bg-red-50 active:scale-95 transition shadow-sm">
             <Ban size={14} /> Отмены выплат
@@ -179,9 +179,9 @@ export default function EconomyPage({ token }) {
       )}
 
       {categories.length === 0 && (
-        <div className="bg-white rounded-3xl border border-gray-100 p-12 text-center text-gray-400">
+        <div className="bg-sff rounded-3xl border border-bd p-12 text-center text-lbl">
           <div className="text-4xl mb-3">💰</div>
-          <div className="font-black text-gray-600">Загрузка экономики...</div>
+          <div className="font-black text-txd">Загрузка экономики...</div>
         </div>
       )}
 
@@ -236,17 +236,17 @@ function CategoryDetailModal({
     <div className="fixed inset-0 z-40 bg-black/20 backdrop-blur-sm animate-in fade-in duration-200">
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-start justify-end">
-          <div className="w-full max-w-2xl bg-white rounded-l-3xl shadow-2xl animate-in slide-in-from-right duration-300">
+          <div className="w-full max-w-2xl bg-sff rounded-l-3xl shadow-2xl animate-in slide-in-from-right duration-300">
             {/* Шапка с кнопкой закрытия */}
-            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-gray-100 bg-white">
-              <h2 className="text-lg font-black text-gray-900">
+            <div className="sticky top-0 z-10 flex items-center justify-between px-6 py-4 border-b border-bd bg-sff">
+              <h2 className="text-lg font-black text-tx">
                 {category.label}
               </h2>
               <button
                 onClick={onClose}
-                className="p-2 hover:bg-gray-100 rounded-lg transition"
+                className="p-2 hover:bg-sf2 rounded-lg transition"
               >
-                <X size={20} className="text-gray-600" />
+                <X size={20} className="text-txd" />
               </button>
             </div>
 
@@ -264,7 +264,7 @@ function CategoryDetailModal({
               />
 
               {category.key === 'vip_bbs' && (
-                <div className="mt-6 pt-6 border-t border-gray-100">
+                <div className="mt-6 pt-6 border-t border-bd">
                   <TitlesPanel token={token} canEdit={canEdit} />
                 </div>
               )}
