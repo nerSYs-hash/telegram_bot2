@@ -22,8 +22,8 @@ function fmtAmount(v) {
 }
 
 const MODE_META = {
-  deduct:   { label: 'Списано',   cls: 'bg-red-50 text-red-700 border-red-200' },
-  debt:     { label: 'В долг',    cls: 'bg-orange-50 text-orange-700 border-orange-200' },
+  deduct:   { label: 'Списано',   cls: 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border-[color-mix(in_oklab,var(--danger)_40%,transparent)]' },
+  debt:     { label: 'В долг',    cls: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border-[color-mix(in_oklab,var(--warn)_40%,transparent)]' },
   log_only: { label: 'Только лог', cls: 'bg-sf2 text-txd border-bd2' },
 };
 
@@ -78,7 +78,7 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
         {/* Шапка */}
         <div className="shrink-0 bg-sff border-b border-bd p-4 flex items-center justify-between">
           <div>
-            <div className="text-[10px] font-black text-red-500 uppercase tracking-widest">Журнал отмен</div>
+            <div className="text-[10px] font-black text-danger uppercase tracking-widest">Журнал отмен</div>
             <h2 className="text-base font-black text-tx leading-tight">Отмены выплат</h2>
           </div>
           <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
@@ -121,7 +121,7 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
               <div className="text-[11px] text-lbl mt-1">{err}</div>
               <button
                 onClick={() => { setPage(0); load(true); }}
-                className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black">
+                className="mt-4 px-4 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-xl text-xs font-black">
                 Повторить
               </button>
             </div>
@@ -192,8 +192,8 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
           {hasMore && !loading && (
             <button
               onClick={() => setPage(p => p + 1)}
-              className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest
-                         hover:bg-blue-50 rounded-2xl transition">
+              className="w-full py-3 text-[11px] font-black text-cta uppercase tracking-widest
+                         hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-2xl transition">
               ↓ Загрузить ещё ↓
             </button>
           )}

@@ -9,7 +9,7 @@ function Toggle({ value, onChange, disabled }) {
     <button
       onClick={() => !disabled && onChange(!value)}
       disabled={disabled}
-      className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-green-500' : 'bg-gray-200'}`}>
+      className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-green-500' : 'bg-bd2'}`}>
       <span className={`inline-block w-3.5 h-3.5 bg-sff rounded-full shadow transform transition-transform duration-200 ${value ? 'translate-x-5' : 'translate-x-1'}`} />
     </button>
   );
@@ -31,9 +31,9 @@ function PackageRow({ pkg, canEdit, onToggle, onDelete, onEdit }) {
         <div className="flex items-center gap-2 shrink-0">
           <Toggle value={!!pkg.is_enabled} onChange={() => onToggle(pkg.id)} />
           <button onClick={() => onEdit(pkg)}
-            className="p-1 text-lbl hover:text-blue-500 transition"><Pencil size={13} /></button>
+            className="p-1 text-lbl hover:text-cta transition"><Pencil size={13} /></button>
           <button onClick={() => onDelete(pkg.id)}
-            className="p-1 text-lbl hover:text-red-500 transition"><Trash2 size={13} /></button>
+            className="p-1 text-lbl hover:text-danger transition"><Trash2 size={13} /></button>
         </div>
       )}
     </div>
@@ -88,7 +88,7 @@ function PackageForm({ initial, onSave, onCancel }) {
 }
 
 function RequestRow({ req, canEdit, onApprove, onReject }) {
-  const statusColor = { pending: 'text-amber-600 bg-amber-50', approved: 'text-green-600 bg-green-50', rejected: 'text-red-600 bg-red-50', expired: 'text-lbl bg-sf2' };
+  const statusColor = { pending: 'text-warn bg-[color-mix(in_oklab,var(--warn)_10%,transparent)]', approved: 'text-ok bg-[color-mix(in_oklab,var(--ok)_10%,transparent)]', rejected: 'text-danger bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]', expired: 'text-lbl bg-sf2' };
   const statusLabel = { pending: 'Ожидает', approved: 'Одобрена', rejected: 'Отклонена', expired: 'Истекла' };
   return (
     <div className="px-4 py-2.5 border-b border-bd last:border-0">
@@ -109,9 +109,9 @@ function RequestRow({ req, canEdit, onApprove, onReject }) {
           {canEdit && req.status === 'pending' && (
             <>
               <button onClick={() => onApprove(req.id)} title="Одобрить"
-                className="p-1 text-lbl hover:text-green-500 transition"><Check size={13} /></button>
+                className="p-1 text-lbl hover:text-ok transition"><Check size={13} /></button>
               <button onClick={() => onReject(req.id)} title="Отклонить"
-                className="p-1 text-lbl hover:text-red-500 transition"><X size={13} /></button>
+                className="p-1 text-lbl hover:text-danger transition"><X size={13} /></button>
             </>
           )}
         </div>
@@ -205,15 +205,15 @@ export default function TitlesPanel({ token, canEdit }) {
       {/* Заголовок */}
       <div className="flex items-center">
         <button onClick={() => setExpanded(v => !v)}
-          className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-red-50 transition text-left">
+          className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] transition text-left">
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-sm font-black text-tx">👑 Кастомные Титулы</span>
-              <span className="text-[9px] font-black px-2 py-0.5 bg-red-100 text-red-600 rounded-full uppercase tracking-widest">Платно</span>
+              <span className="text-[9px] font-black px-2 py-0.5 bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger rounded-full uppercase tracking-widest">Платно</span>
             </div>
             <div className="text-[10px] text-lbl mt-0.5">
               {stats ? `${stats.packages_enabled}/${stats.packages_total} пакетов активно` : 'Управление пакетами и заявками'}
-              {pendingCount > 0 && <span className="ml-2 text-amber-500 font-black">• {pendingCount} ожидают</span>}
+              {pendingCount > 0 && <span className="ml-2 text-warn font-black">• {pendingCount} ожидают</span>}
             </div>
           </div>
           <ChevronDown size={20} className={`text-lbl transition-transform duration-300 mr-4 ${expanded ? 'rotate-180' : ''}`} />
@@ -222,14 +222,14 @@ export default function TitlesPanel({ token, canEdit }) {
 
       {/* Тело */}
       {expanded && (
-        <div className="border-t border-red-100">
+        <div className="border-t border-[color-mix(in_oklab,var(--danger)_30%,transparent)]">
           {/* Пакеты */}
           <div className="px-4 pt-3 pb-1">
             <div className="flex items-center justify-between mb-1">
               <div className="text-[10px] font-black text-txd uppercase tracking-widest">Пакеты подписки</div>
               {canEdit && !addMode && !editPkg && (
                 <button onClick={() => setAddMode(true)}
-                  className="flex items-center gap-1 text-[10px] font-black text-blue-500 hover:text-blue-700 transition">
+                  className="flex items-center gap-1 text-[10px] font-black text-cta hover:text-cta transition">
                   <Plus size={11} /> Добавить
                 </button>
               )}
@@ -259,7 +259,7 @@ export default function TitlesPanel({ token, canEdit }) {
               <div className="text-[10px] font-black text-txd uppercase tracking-widest">Настройки</div>
               {canEdit && !editSettings && (
                 <button onClick={() => { setSettingsDraft({ ...settings }); setEditSettings(true); }}
-                  className="text-[10px] font-black text-blue-500 hover:text-blue-700 transition flex items-center gap-1">
+                  className="text-[10px] font-black text-cta hover:text-cta transition flex items-center gap-1">
                   <Pencil size={11} /> Изменить
                 </button>
               )}
@@ -305,7 +305,7 @@ export default function TitlesPanel({ token, canEdit }) {
               <div className="flex gap-1">
                 {['pending', 'approved', 'rejected', 'all'].map(tab => (
                   <button key={tab} onClick={() => setReqTab(tab)}
-                    className={`text-[9px] font-black px-2 py-0.5 rounded-full transition ${reqTab === tab ? 'bg-gray-800 text-white' : 'bg-sf2 text-txd hover:bg-gray-200'}`}>
+                    className={`text-[9px] font-black px-2 py-0.5 rounded-full transition ${reqTab === tab ? 'bg-gray-800 text-white' : 'bg-sf2 text-txd hover:bg-bd2'}`}>
                     {tab === 'pending' ? 'Ожидают' : tab === 'approved' ? 'Одобрены' : tab === 'rejected' ? 'Отклонены' : 'Все'}
                   </button>
                 ))}

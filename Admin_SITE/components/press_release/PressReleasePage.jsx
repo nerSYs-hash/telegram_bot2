@@ -124,8 +124,8 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
     <div className="space-y-3 pb-24">
       {/* Заголовок */}
       <div className="bg-sff rounded-3xl border border-bd shadow-sm p-4 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
-          <Megaphone size={16} className="text-violet-600" />
+        <div className="w-8 h-8 rounded-xl bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] flex items-center justify-center">
+          <Megaphone size={16} className="text-purple" />
         </div>
         <div className="flex-1">
           <h1 className="text-sm font-black uppercase tracking-widest text-tx">Пресс-Релизы</h1>

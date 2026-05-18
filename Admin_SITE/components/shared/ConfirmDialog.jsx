@@ -30,21 +30,21 @@ export default function ConfirmDialog({
   if (!open) return null;
 
   const Icon = variant === 'danger' ? AlertTriangle : Info;
-  const iconBg = variant === 'danger' ? 'bg-red-100'    : 'bg-amber-100';
-  const iconFg = variant === 'danger' ? 'text-red-600'  : 'text-amber-600';
+  const iconBg = variant === 'danger' ? 'bg-[color-mix(in_oklab,var(--danger)_16%,transparent)]'    : 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]';
+  const iconFg = variant === 'danger' ? 'text-danger'  : 'text-warn';
 
   return (
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
          onClick={onCancel}>
-      <div className="bg-white rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200"
+      <div className="bg-sff rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200"
            onClick={(e) => e.stopPropagation()}>
         <div className="flex items-start gap-3">
           <div className={`w-10 h-10 rounded-full ${iconBg} flex items-center justify-center flex-shrink-0 mt-0.5`}>
             <Icon size={20} className={iconFg}/>
           </div>
           <div>
-            <p className="font-black text-gray-900 text-base leading-tight">{title}</p>
-            <div className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+            <p className="font-black text-tx text-base leading-tight">{title}</p>
+            <div className="text-sm text-txd mt-1.5 leading-relaxed">
               {message}
             </div>
           </div>

@@ -3,7 +3,7 @@ import { forwardRef } from 'react';
 /**
  * Базовый компонент карточки дизайн-системы Pulse.
  *
- *   - bg-white, rounded-2xl (16px), border-gray-100, shadow-sm — общий стиль секций.
+ *   - bg-sff, rounded-2xl (16px), border-bd, shadow-sm — общий стиль секций.
  *   - hoverable: subtle lift (тень + цвет рамки) при наведении. Опц.
  *   - glow: вращающийся conic-gradient бордер на hover (Aceternity-style).
  *     Цвета через accent. Опц.

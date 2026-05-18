@@ -2,13 +2,13 @@ import { useState, useEffect } from 'react';
 import { ArrowRight } from 'lucide-react';
 
 const CATEGORY_THEME = {
-  mining:       { emoji: '⛏️',  gradient: 'from-amber-50 to-yellow-50',   border: 'border-amber-100',   accent: 'text-amber-600',  dot: 'bg-amber-400' },
-  vip_bbs:      { emoji: '💎',  gradient: 'from-blue-50 to-indigo-50',    border: 'border-blue-100',    accent: 'text-blue-600',   dot: 'bg-blue-400' },
-  lottery:      { emoji: '🎰',  gradient: 'from-purple-50 to-pink-50',    border: 'border-purple-100',  accent: 'text-purple-600', dot: 'bg-purple-400' },
-  bingo:        { emoji: '🎱',  gradient: 'from-teal-50 to-cyan-50',      border: 'border-teal-100',    accent: 'text-teal-600',   dot: 'bg-teal-400' },
-  monthly_gift: { emoji: '🎁',  gradient: 'from-rose-50 to-pink-50',      border: 'border-rose-100',    accent: 'text-rose-600',   dot: 'bg-rose-400' },
-  referral:     { emoji: '👥',  gradient: 'from-green-50 to-emerald-50',  border: 'border-green-100',   accent: 'text-green-600',  dot: 'bg-green-400' },
-  bbs_bonus:    { emoji: '❤️',  gradient: 'from-red-50 to-orange-50',     border: 'border-red-100',     accent: 'text-red-500',    dot: 'bg-red-400' },
+  mining:       { emoji: '⛏️',  gradient: 'from-amber-50 to-yellow-50',   border: 'border-[color-mix(in_oklab,var(--warn)_30%,transparent)]',   accent: 'text-warn',  dot: 'bg-amber-400' },
+  vip_bbs:      { emoji: '💎',  gradient: 'from-blue-50 to-indigo-50',    border: 'border-[color-mix(in_oklab,var(--cta)_30%,transparent)]',    accent: 'text-cta',   dot: 'bg-blue-400' },
+  lottery:      { emoji: '🎰',  gradient: 'from-purple-50 to-pink-50',    border: 'border-[color-mix(in_oklab,var(--purple)_30%,transparent)]',  accent: 'text-purple', dot: 'bg-purple-400' },
+  bingo:        { emoji: '🎱',  gradient: 'from-teal-50 to-cyan-50',      border: 'border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',    accent: 'text-ok',   dot: 'bg-teal-400' },
+  monthly_gift: { emoji: '🎁',  gradient: 'from-rose-50 to-pink-50',      border: 'border-[color-mix(in_oklab,var(--pink)_30%,transparent)]',    accent: 'text-pink',   dot: 'bg-rose-400' },
+  referral:     { emoji: '👥',  gradient: 'from-green-50 to-emerald-50',  border: 'border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',   accent: 'text-ok',  dot: 'bg-green-400' },
+  bbs_bonus:    { emoji: '❤️',  gradient: 'from-red-50 to-orange-50',     border: 'border-[color-mix(in_oklab,var(--danger)_30%,transparent)]',     accent: 'text-danger',    dot: 'bg-red-400' },
 };
 
 const DEFAULT_THEME = { emoji: '⚙️', gradient: 'from-gray-50 to-slate-50', border: 'border-bd', accent: 'text-txd', dot: 'bg-gray-400' };
@@ -80,8 +80,8 @@ export default function EconomyCategoryCard({
           <span className="text-2xl leading-none">{theme.emoji}</span>
           <div className="flex items-center gap-1.5">
             {isDisabled && (
-              <span className="text-[9px] font-black uppercase tracking-wider text-red-500
-                               bg-red-100 px-1.5 py-0.5 rounded-full">OFF</span>
+              <span className="text-[9px] font-black uppercase tracking-wider text-danger
+                               bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] px-1.5 py-0.5 rounded-full">OFF</span>
             )}
             {/* Мастер-свич */}
             <button
@@ -132,7 +132,7 @@ export default function EconomyCategoryCard({
       {showToggleForm && (
         <div
           onClick={(e) => e.stopPropagation()}
-          className="border-t border-amber-100 bg-amber-50/80 px-4 py-3 space-y-2 animate-in slide-in-from-bottom-1 duration-200"
+          className="border-t border-[color-mix(in_oklab,var(--warn)_30%,transparent)] bg-amber-50/80 px-4 py-3 space-y-2 animate-in slide-in-from-bottom-1 duration-200"
         >
           <div className="text-[11px] font-bold text-amber-900">
             {sectionEnabled ? '🔴 Выключить' : '🟢 Включить'} «{category.label}»?
@@ -142,7 +142,7 @@ export default function EconomyCategoryCard({
             value={toggleComment}
             onChange={(e) => setToggleComment(e.target.value)}
             placeholder="Причина (необязательно)"
-            className="w-full text-xs px-2.5 py-1.5 border border-amber-200 rounded-lg bg-sff
+            className="w-full text-xs px-2.5 py-1.5 border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-lg bg-sff
                        placeholder-amber-300 focus:outline-none focus:border-amber-400"
           />
           <div className="flex gap-2">

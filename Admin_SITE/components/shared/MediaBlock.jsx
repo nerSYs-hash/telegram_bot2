@@ -135,7 +135,7 @@ export default function MediaBlock({
             const meta = KIND_META[it.kind] || KIND_META.photo;
             const url = isUrl(it.fid) ? it.fid : null;
             return (
-              <div key={i} className="flex items-center gap-2 bg-gray-50 border border-gray-100 rounded-xl p-2">
+              <div key={i} className="flex items-center gap-2 bg-sf2 border border-bd rounded-xl p-2">
                 {/* Preview */}
                 <div className={`w-12 h-12 rounded-lg overflow-hidden flex items-center justify-center bg-${meta.color}-100 flex-shrink-0`}>
                   {url ? (
@@ -149,22 +149,22 @@ export default function MediaBlock({
                   )}
                 </div>
                 <div className="flex-1 min-w-0">
-                  <div className="text-[11px] font-black text-gray-800">{meta.label}</div>
-                  <div className="text-[10px] text-gray-400 font-mono truncate">
+                  <div className="text-[11px] font-black text-tx">{meta.label}</div>
+                  <div className="text-[10px] text-lbl font-mono truncate">
                     {url ? url.split('/').pop() : it.fid}
                   </div>
                 </div>
                 <div className="flex items-center gap-0.5">
                   <button onClick={() => moveItem(i, -1)} disabled={i === 0}
-                    className="p-1 text-gray-400 hover:text-blue-500 disabled:opacity-30">
+                    className="p-1 text-lbl hover:text-cta disabled:opacity-30">
                     <ArrowUp size={11} />
                   </button>
                   <button onClick={() => moveItem(i, 1)} disabled={i === items.length - 1}
-                    className="p-1 text-gray-400 hover:text-blue-500 disabled:opacity-30">
+                    className="p-1 text-lbl hover:text-cta disabled:opacity-30">
                     <ArrowDown size={11} />
                   </button>
                   <button onClick={() => removeItem(i)}
-                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded">
+                    className="p-1 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded">
                     <Trash2 size={11} />
                   </button>
                 </div>
@@ -175,7 +175,7 @@ export default function MediaBlock({
       )}
 
       {error && (
-        <div className="text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl px-3 py-2">
+        <div className="text-xs text-danger bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] rounded-xl px-3 py-2">
           {error}
         </div>
       )}
@@ -183,15 +183,15 @@ export default function MediaBlock({
       {/* Upload buttons */}
       {items.length < maxItems && (
         uploading ? (
-          <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-blue-200 rounded-xl">
-            <Loader2 size={14} className="animate-spin text-blue-500"/>
-            <span className="text-sm text-blue-500 font-bold">Загрузка…</span>
+          <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl">
+            <Loader2 size={14} className="animate-spin text-cta"/>
+            <span className="text-sm text-cta font-bold">Загрузка…</span>
           </div>
         ) : (
           <div className="grid grid-cols-3 gap-2">
             {Object.entries(KIND_META).map(([k, m]) => (
               <button key={k} onClick={() => pickFile(k)}
-                className={`flex flex-col items-center justify-center gap-1 py-3 border-2 border-gray-200 rounded-xl text-xs font-bold text-gray-600 hover:border-${m.color}-300 hover:bg-${m.color}-50 transition-all active:scale-95`}>
+                className={`flex flex-col items-center justify-center gap-1 py-3 border-2 border-bd2 rounded-xl text-xs font-bold text-txd hover:border-${m.color}-300 hover:bg-${m.color}-50 transition-all active:scale-95`}>
                 <m.Icon size={18} className={`text-${m.color}-500`} />
                 <span>{m.label}</span>
               </button>
@@ -201,7 +201,7 @@ export default function MediaBlock({
       )}
 
       {items.length < maxItems && !uploading && (
-        <p className="text-[10px] text-gray-400 text-center">
+        <p className="text-[10px] text-lbl text-center">
           Загружено: {items.length}/{maxItems}. Поддерживается: JPG, PNG, WEBP, MP4, GIF.
         </p>
       )}

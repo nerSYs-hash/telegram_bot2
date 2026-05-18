@@ -103,9 +103,9 @@ export default function EconomyPage({ token }) {
         <div className="flex justify-end">
           <button
             onClick={() => setCancellationsOpen(true)}
-            className="flex items-center gap-2 px-4 py-2.5 bg-sff border border-red-200
-                       text-red-600 rounded-2xl text-xs font-black uppercase tracking-widest
-                       hover:bg-red-50 active:scale-95 transition shadow-sm">
+            className="flex items-center gap-2 px-4 py-2.5 bg-sff border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]
+                       text-danger rounded-2xl text-xs font-black uppercase tracking-widest
+                       hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] active:scale-95 transition shadow-sm">
             <Ban size={14} /> Отмены выплат
           </button>
         </div>
@@ -291,14 +291,14 @@ function LiveBanner({ event }) {
   }
 
   return (
-    <div className="fixed top-4 right-4 z-50 max-w-sm bg-amber-50 border border-amber-200 rounded-2xl shadow-lg p-4
+    <div className="fixed top-4 right-4 z-50 max-w-sm bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-2xl shadow-lg p-4
                     animate-in slide-in-from-right duration-300">
       <div className="flex items-start gap-3">
         <span className="text-xl shrink-0">🔔</span>
         <div className="flex-1 min-w-0">
-          <div className="text-xs font-black text-amber-800 break-words">{text}</div>
+          <div className="text-xs font-black text-warn break-words">{text}</div>
           {event.comment && (
-            <div className="text-[11px] text-amber-700 italic mt-1">💬 {event.comment}</div>
+            <div className="text-[11px] text-warn italic mt-1">💬 {event.comment}</div>
           )}
         </div>
       </div>

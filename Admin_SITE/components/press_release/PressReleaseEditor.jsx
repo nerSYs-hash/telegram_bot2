@@ -66,7 +66,7 @@ function Section({ icon: Icon, title, children, right, dragHandle }) {
     <Card padding="md" className="space-y-3">
       <div className="flex items-center gap-2">
         {dragHandle}
-        {Icon && <Icon size={16} className="text-blue-500" />}
+        {Icon && <Icon size={16} className="text-cta" />}
         <h3 className="text-xs font-black uppercase tracking-widest text-tx">{title}</h3>
         {right && <div className="ml-auto">{right}</div>}
       </div>
@@ -189,15 +189,15 @@ function TargetsPicker({ chats, value, onChange }) {
                     />
                     <span className="text-xs text-txd">🧵 {t.name || `Топик #${t.thread_id}`}</span>
                     {t.source === 'manual' && (
-                      <span className="text-[8px] font-black uppercase text-purple-500">manual</span>
+                      <span className="text-[8px] font-black uppercase text-purple">manual</span>
                     )}
                   </label>
                 ))}
               </div>
             )}
             {chat.is_forum && (!chat.topics || chat.topics.length === 0) && (
-              <div className="border-t border-bd bg-amber-50 px-3 py-2">
-                <div className="text-[10px] text-amber-700 leading-relaxed">
+              <div className="border-t border-bd bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-3 py-2">
+                <div className="text-[10px] text-warn leading-relaxed">
                   📋 Топики собираются автоматически при сообщениях. Можно добавить вручную.
                 </div>
               </div>
@@ -256,19 +256,19 @@ function KeyboardEditor({ keyboard, onChange }) {
               </div>
               <input value={btn.text} onChange={(e) => updBtn(ri, bi, { text: e.target.value })}
                 placeholder="📢 Текст кнопки"
-                className="w-full px-2 py-1.5 text-xs font-bold bg-sff border border-bd rounded-lg focus:outline-none focus:border-blue-200" />
+                className="w-full px-2 py-1.5 text-xs font-bold bg-sff border border-bd rounded-lg focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
               <input value={btn.value} onChange={(e) => updBtn(ri, bi, { value: e.target.value })}
                 placeholder={btn.type === 'url' ? 'https://...' : 'pulses_get'}
-                className="w-full px-2 py-1.5 text-xs bg-sff border border-bd rounded-lg focus:outline-none focus:border-blue-200" />
+                className="w-full px-2 py-1.5 text-xs bg-sff border border-bd rounded-lg focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
             </div>
           ))}
         </div>
       ))}
       <div className="flex gap-2">
-        <button onClick={addBtn} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100">
+        <button onClick={addBtn} className="flex-1 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-xl text-xs font-bold hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]">
           <Plus size={12} className="inline mr-1" /> Кнопка в этот ряд
         </button>
-        <button onClick={newRow} className="flex-1 py-2 bg-sf2 text-txd rounded-xl text-xs font-bold hover:bg-gray-200">
+        <button onClick={newRow} className="flex-1 py-2 bg-sf2 text-txd rounded-xl text-xs font-bold hover:bg-bd2">
           + Новый ряд
         </button>
       </div>
@@ -453,7 +453,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
               value={draft.title || ''}
               onChange={(e) => upd({ title: e.target.value })}
               placeholder="Например: Анонс эфира 7 мая"
-              className="w-full px-4 py-3 bg-sf2 border-2 border-bd rounded-xl text-sm font-bold focus:outline-none focus:border-blue-200"
+              className="w-full px-4 py-3 bg-sf2 border-2 border-bd rounded-xl text-sm font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]"
             />
             <p className="text-[10px] text-lbl">Только для админки. В чате не отображается.</p>
           </Section>
@@ -497,7 +497,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
               minHeight={200}
             />
             {(isOverLimit || isOverCaption) && (
-              <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700 mt-2">
+              <div className="flex items-start gap-2 px-3 py-2 bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] rounded-xl text-[11px] text-warn mt-2">
                 <AlertTriangle size={12} className="flex-shrink-0 mt-0.5"/>
                 <div>
                   {isOverLimit
@@ -593,7 +593,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                   <div className="ml-12 flex items-center gap-2">
                     <input type="number" min="1" value={settings.delete_after_publish?.value || 1}
                       onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, value: parseInt(e.target.value, 10) || 1 }})}
-                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
+                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
                     <StyledSelect
                       value={settings.delete_after_publish?.unit || 'days'}
                       onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: v }})}
@@ -616,7 +616,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                     <span className="text-xs font-bold text-tx">Не более</span>
                     <input type="number" min="1" value={settings.throttle?.limit_per_hour || 5}
                       onChange={(e) => updSettings({ throttle: { ...settings.throttle, limit_per_hour: parseInt(e.target.value, 10) || 5 }})}
-                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
+                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
                     <span className="text-xs font-bold text-tx">в час</span>
                   </div>
                 )}
@@ -643,7 +643,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
             {draft.title || 'Новый пресс-релиз'}
           </div>
           {autosaveStatus === 'saving' && <span className="text-[10px] text-lbl">сохранение…</span>}
-          {autosaveStatus === 'saved'   && <span className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
+          {autosaveStatus === 'saved'   && <span className="text-[10px] text-ok flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
         </div>
         <Button
           variant="secondary" size="sm" icon={Save}
@@ -676,7 +676,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         )}
         {draft.id && userCan('press_release.delete') && (
           <Button variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}
-            aria-label="Удалить" className="text-red-400 hover:text-red-600 hover:bg-red-50" />
+            aria-label="Удалить" className="text-red-400 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" />
         )}
       </div>
 
@@ -684,8 +684,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       {(draft.status === 'failed' || draft.status === 'cancelled') ? (
         <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
           draft.status === 'failed'
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : 'bg-amber-50 border-amber-200 text-amber-700'
+            ? 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border-[color-mix(in_oklab,var(--danger)_40%,transparent)] text-danger'
+            : 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border-[color-mix(in_oklab,var(--warn)_40%,transparent)] text-warn'
         }`}>
           <AlertTriangle size={18} className="flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -709,8 +709,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       )}
 
       {/* Подсказка о drag&drop + сброс */}
-      <div className="flex items-center justify-between bg-blue-50/60 border border-blue-100 rounded-xl px-3 py-2">
-        <span className="text-[10px] text-blue-700 font-bold">
+      <div className="flex items-center justify-between bg-blue-50/60 border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-xl px-3 py-2">
+        <span className="text-[10px] text-cta font-bold">
           🎯 Перетащите секции за иконку <GripVertical size={10} className="inline"/> чтобы расположить как удобно
         </span>
         <Button variant="link" size="sm" icon={RefreshCw} onClick={resetOrder}>
@@ -769,7 +769,7 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
       <div className="bg-sff rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
         <div className="flex items-center justify-between p-4 border-b border-bd">
           <div className="flex items-center gap-2">
-            <Eye size={14} className="text-blue-500" />
+            <Eye size={14} className="text-cta" />
             <span className="text-xs font-black uppercase tracking-widest text-tx">Превью</span>
           </div>
           <button onClick={onClose} className="p-1 text-lbl hover:text-txd">
@@ -794,7 +794,7 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
                 {(draft.inline_keyboard || []).map((row, ri) => (
                   <div key={ri} className="flex gap-1">
                     {row.map((b, bi) => (
-                      <button key={bi} className="flex-1 py-2 px-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-100">
+                      <button key={bi} className="flex-1 py-2 px-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-lg text-xs font-bold border border-[color-mix(in_oklab,var(--cta)_30%,transparent)]">
                         {b.text || '(без текста)'}
                       </button>
                     ))}
@@ -828,8 +828,8 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
       <div className="grid grid-cols-2">
         <button
           onClick={() => setTab(tab === 'where' ? null : 'where')}
-          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-blue-50' : 'hover:bg-sf2'}`}>
-          <Megaphone size={14} className={tab === 'where' ? 'text-blue-600' : 'text-lbl'} />
+          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          <Megaphone size={14} className={tab === 'where' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Куда</div>
             <div className="text-sm font-black text-tx truncate">
@@ -839,8 +839,8 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
         </button>
         <button
           onClick={() => setTab(tab === 'when' ? null : 'when')}
-          className={`flex items-center gap-2 p-3 border-l border-bd transition-all ${tab === 'when' ? 'bg-blue-50' : 'hover:bg-sf2'}`}>
-          <Calendar size={14} className={tab === 'when' ? 'text-blue-600' : 'text-lbl'} />
+          className={`flex items-center gap-2 p-3 border-l border-bd transition-all ${tab === 'when' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          <Calendar size={14} className={tab === 'when' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Когда</div>
             <div className="text-sm font-black text-tx truncate">{dateLabel}</div>
@@ -877,10 +877,10 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
 function StatusBadge({ status }) {
   const map = {
     draft:     ['bg-sf2 text-txd',     'Черновик'],
-    scheduled: ['bg-blue-100 text-blue-700',     'Запланирован'],
-    published: ['bg-emerald-100 text-emerald-700','Опубликован'],
-    failed:    ['bg-red-100 text-red-700',       'Ошибка'],
-    cancelled: ['bg-amber-100 text-amber-700',   'Отменён'],
+    scheduled: ['bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',     'Запланирован'],
+    published: ['bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok','Опубликован'],
+    failed:    ['bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',       'Ошибка'],
+    cancelled: ['bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',   'Отменён'],
   };
   const [cls, label] = map[status] || ['bg-sf2 text-txd', status];
   return <span className={`px-1.5 py-0.5 rounded ${cls} font-black uppercase`}>{label}</span>;

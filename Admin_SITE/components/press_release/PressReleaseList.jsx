@@ -85,14 +85,14 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
         <button
           onClick={(e) => { e.stopPropagation(); onAction('edit', post); }}
           title="Редактировать"
-          className="p-1.5 text-lbl hover:text-blue-500 hover:bg-blue-50 rounded-lg">
+          className="p-1.5 text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-lg">
           <Edit3 size={12} />
         </button>
         {userCan('press_release.create') && (
           <button
             onClick={(e) => { e.stopPropagation(); onAction('clone', post); }}
             title="Дублировать"
-            className="p-1.5 text-lbl hover:text-violet-500 hover:bg-violet-50 rounded-lg">
+            className="p-1.5 text-lbl hover:text-purple hover:bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] rounded-lg">
             <Copy size={12} />
           </button>
         )}
@@ -100,7 +100,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('publish_now', post); }}
             title="Опубликовать сейчас"
-            className="p-1.5 text-lbl hover:text-emerald-500 hover:bg-emerald-50 rounded-lg">
+            className="p-1.5 text-lbl hover:text-ok hover:bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] rounded-lg">
             <Send size={12} />
           </button>
         )}
@@ -108,7 +108,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('cancel', post); }}
             title="Отменить"
-            className="p-1.5 text-lbl hover:text-amber-500 hover:bg-amber-50 rounded-lg">
+            className="p-1.5 text-lbl hover:text-warn hover:bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] rounded-lg">
             <XCircle size={12} />
           </button>
         )}
@@ -116,7 +116,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('restore', post); }}
             title="Восстановить (вернуть в черновик)"
-            className="p-1.5 text-lbl hover:text-blue-500 hover:bg-blue-50 rounded-lg">
+            className="p-1.5 text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-lg">
             <RotateCcw size={12} />
           </button>
         )}
@@ -124,7 +124,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('delete_from_tg', post); }}
             title="Удалить из Telegram (на сайте останется)"
-            className="p-1.5 text-lbl hover:text-red-500 hover:bg-red-50 rounded-lg ml-auto">
+            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
             <span className="text-[10px] font-black">TG</span>
           </button>
         )}
@@ -132,7 +132,7 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
             title="Удалить с сайта (сообщение в Telegram останется)"
-            className="p-1.5 text-lbl hover:text-red-500 hover:bg-red-50 rounded-lg ml-auto">
+            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
             <Trash2 size={12} />
           </button>
         )}
@@ -185,7 +185,7 @@ export default function PressReleaseList({
         <Search size={12} className="absolute left-3 top-1/2 -translate-y-1/2 text-lbl" />
         <input value={search} onChange={(e) => setSearch(e.target.value)}
           placeholder="Поиск по имени/тексту"
-          className="w-full pl-8 pr-3 py-2 bg-sff border border-bd rounded-xl text-xs font-bold focus:outline-none focus:border-blue-200" />
+          className="w-full pl-8 pr-3 py-2 bg-sff border border-bd rounded-xl text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
       </div>
 
       {/* List */}

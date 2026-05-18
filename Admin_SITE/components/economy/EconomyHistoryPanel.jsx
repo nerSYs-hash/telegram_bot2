@@ -15,10 +15,10 @@ function formatDate(str) {
 }
 
 const ACTION_LABELS = {
-  edit:     { label: 'Изменено',  cls: 'bg-blue-50 text-blue-700 border-blue-200' },
+  edit:     { label: 'Изменено',  cls: 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)]' },
   toggle:   { label: 'Тумблер',  cls: 'bg-sf2 text-txd border-bd2' },
-  rollback: { label: 'Откат',    cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-  create:   { label: 'Создано',  cls: 'bg-green-50 text-green-700 border-green-200' },
+  rollback: { label: 'Откат',    cls: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border-[color-mix(in_oklab,var(--warn)_40%,transparent)]' },
+  create:   { label: 'Создано',  cls: 'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border-[color-mix(in_oklab,var(--ok)_40%,transparent)]' },
 };
 
 export default function EconomyHistoryPanel({ settingKey, label, token, onClose, canEdit, onRolledBack }) {
@@ -93,7 +93,7 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
               <div className="text-3xl mb-3">⚠️</div>
               <div className="text-sm font-black text-txd">Не удалось загрузить историю</div>
               <div className="text-[11px] text-lbl mt-1">{loadErr}</div>
-              <button onClick={loadData} className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black">
+              <button onClick={loadData} className="mt-4 px-4 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-xl text-xs font-black">
                 Повторить
               </button>
             </div>
@@ -124,7 +124,7 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
                       <div className="flex items-center gap-2 text-sm font-bold mb-2">
                         <span className="line-through text-lbl">{e.old_value}</span>
                         <span className="text-lbl">→</span>
-                        <span className="text-blue-600">{e.new_value}</span>
+                        <span className="text-cta">{e.new_value}</span>
                       </div>
                     )}
                     {e.action === 'toggle' && (
@@ -140,16 +140,16 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
                     </div>
 
                     {e.is_rolled_back && (
-                      <div className="text-[9px] font-black text-orange-500 uppercase">↩ Откатили</div>
+                      <div className="text-[9px] font-black text-warn uppercase">↩ Откатили</div>
                     )}
 
                     {/* Кнопка Откатить */}
                     {canEdit && e.can_rollback && !e.is_rolled_back && e.action !== 'toggle' && (
                       <button
                         onClick={() => setRollbackTarget(e)}
-                        className="mt-2 px-3 py-1.5 bg-orange-50 text-orange-700 border border-orange-200
+                        className="mt-2 px-3 py-1.5 bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]
                                    rounded-xl text-[10px] font-black uppercase
-                                   hover:bg-orange-100 active:scale-95 transition">
+                                   hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] active:scale-95 transition">
                         ↩ Откатить к {e.old_value}
                       </button>
                     )}
@@ -160,8 +160,8 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
               {data.entries.length === PER_PAGE && (
                 <button
                   onClick={() => setPage(p => p + 1)}
-                  className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest
-                             hover:bg-blue-50 rounded-2xl transition">
+                  className="w-full py-3 text-[11px] font-black text-cta uppercase tracking-widest
+                             hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-2xl transition">
                   ↓ Загрузить ещё ↓
                 </button>
               )}

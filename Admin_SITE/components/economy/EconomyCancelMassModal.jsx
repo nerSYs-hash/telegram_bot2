@@ -72,7 +72,7 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
           {/* Шапка */}
           <div className="shrink-0 flex items-center justify-between p-5 border-b border-bd">
             <div>
-              <div className="text-[10px] font-black text-orange-500 uppercase tracking-widest">Только лог</div>
+              <div className="text-[10px] font-black text-warn uppercase tracking-widest">Только лог</div>
               <h2 className="text-base font-black text-tx">Массовая отмена выплат</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
@@ -154,16 +154,16 @@ export default function EconomyCancelMassModal({ token, onClose, onDone }) {
             </label>
 
             {/* Warn */}
-            <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
-              <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-amber-800 font-bold leading-tight">
+            <div className="flex gap-2 p-3 bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-2xl">
+              <AlertTriangle size={16} className="text-warn shrink-0 mt-0.5" />
+              <div className="text-[11px] text-warn font-bold leading-tight">
                 Массовая отмена работает только в режиме <span className="text-amber-900">log_only</span> —
                 балансы не трогаем, но фиксируем затронутую сумму и юзеров в журнале.
               </div>
             </div>
 
             {err && (
-              <div className="text-xs font-bold text-red-600 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+              <div className="text-xs font-bold text-danger px-3 py-2 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-xl">
                 ⚠️ {err}
               </div>
             )}

@@ -33,8 +33,8 @@ export default function InviteMemberModal({ token, wsId, onClose, onSuccess }) {
         className="bg-sff w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6 shadow-2xl">
         <div className="flex items-start justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-2xl bg-violet-100 flex items-center justify-center">
-              <UserPlus size={22} className="text-violet-600"/>
+            <div className="w-12 h-12 rounded-2xl bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] flex items-center justify-center">
+              <UserPlus size={22} className="text-purple"/>
             </div>
             <div>
               <h3 className="font-black text-tx text-base">Пригласить помощника</h3>
@@ -66,13 +66,13 @@ export default function InviteMemberModal({ token, wsId, onClose, onSuccess }) {
                     className={`py-3 rounded-2xl font-black text-xs uppercase tracking-wide transition-all
                                 ${role === r
                                   ? 'bg-blue-600 text-white'
-                                  : 'bg-sf2 text-txd hover:bg-gray-200'}`}>
+                                  : 'bg-sf2 text-txd hover:bg-bd2'}`}>
               {r === 'admin' ? '🛡 Админ' : '🔧 Модератор'}
             </button>
           ))}
         </div>
 
-        {err && <div className="bg-red-50 text-red-700 rounded-2xl p-3 text-xs font-medium mb-4">{err}</div>}
+        {err && <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger rounded-2xl p-3 text-xs font-medium mb-4">{err}</div>}
 
         <button type="submit" disabled={loading || !userId}
                 className="w-full py-4 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase

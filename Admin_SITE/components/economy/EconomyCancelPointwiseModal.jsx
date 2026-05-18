@@ -7,13 +7,13 @@ const MODES = [
     key: 'deduct',
     label: 'Списать с баланса',
     desc: 'Если хватает 💎 у юзера — спишем сумму, банк +amount.',
-    cls:  'bg-red-50 border-red-200 text-red-700',
+    cls:  'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border-[color-mix(in_oklab,var(--danger)_40%,transparent)] text-danger',
   },
   {
     key: 'debt',
     label: 'Уйти в долг',
     desc: 'Списать даже в минус (баланс может стать отрицательным).',
-    cls:  'bg-orange-50 border-orange-200 text-orange-700',
+    cls:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border-[color-mix(in_oklab,var(--warn)_40%,transparent)] text-warn',
   },
   {
     key: 'log_only',
@@ -66,7 +66,7 @@ export default function EconomyCancelPointwiseModal({ token, onClose, onDone }) 
           {/* Шапка */}
           <div className="flex items-center justify-between p-5 border-b border-bd">
             <div>
-              <div className="text-[10px] font-black text-red-500 uppercase tracking-widest">Опасно</div>
+              <div className="text-[10px] font-black text-danger uppercase tracking-widest">Опасно</div>
               <h2 className="text-base font-black text-tx">Точечная отмена выплаты</h2>
             </div>
             <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
@@ -123,15 +123,15 @@ export default function EconomyCancelPointwiseModal({ token, onClose, onDone }) 
             </label>
 
             {/* warn */}
-            <div className="flex gap-2 p-3 bg-amber-50 border border-amber-200 rounded-2xl">
-              <AlertTriangle size={16} className="text-amber-600 shrink-0 mt-0.5" />
-              <div className="text-[11px] text-amber-800 font-bold leading-tight">
+            <div className="flex gap-2 p-3 bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-2xl">
+              <AlertTriangle size={16} className="text-warn shrink-0 mt-0.5" />
+              <div className="text-[11px] text-warn font-bold leading-tight">
                 Действие необратимо. История сохранится в журнале отмен.
               </div>
             </div>
 
             {err && (
-              <div className="text-xs font-bold text-red-600 px-3 py-2 bg-red-50 border border-red-200 rounded-xl">
+              <div className="text-xs font-bold text-danger px-3 py-2 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-xl">
                 ⚠️ {err}
               </div>
             )}

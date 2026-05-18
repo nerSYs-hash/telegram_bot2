@@ -26,8 +26,8 @@ export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick
         <button
           onClick={onConnectClick}
           className="w-full flex items-center justify-center gap-2 py-3 rounded-xl
-                     bg-sff text-blue-700 font-black text-xs uppercase tracking-wide
-                     hover:bg-blue-50 active:scale-[0.98] transition-all shadow">
+                     bg-sff text-cta font-black text-xs uppercase tracking-wide
+                     hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] active:scale-[0.98] transition-all shadow">
           <Plug size={14}/> Подключить чат
         </button>
       </div>
@@ -37,9 +37,9 @@ export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick
   return (
     <div className="bg-sff rounded-[2rem] p-5 border border-bd space-y-2">
       <h3 className="font-black text-tx text-xs uppercase flex items-center mb-3">
-        <Users className="mr-2 text-blue-500" size={14}/> Мои сообщества
+        <Users className="mr-2 text-cta" size={14}/> Мои сообщества
       </h3>
-      {error && <div className="text-xs text-red-600 font-medium">{error}</div>}
+      {error && <div className="text-xs text-danger font-medium">{error}</div>}
       {loading && <div className="text-xs text-lbl font-medium">Загрузка…</div>}
       <div className="space-y-2">
         {workspaces.map(ws => (
@@ -47,11 +47,11 @@ export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick
             key={ws.id}
             onClick={() => onSelectWorkspace?.(ws.id)}
             className="w-full flex items-center justify-between p-3 bg-sf2 rounded-2xl
-                       hover:bg-blue-50 hover:border-blue-200 border border-transparent
+                       hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] border border-transparent
                        transition-all">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
-                <MessageCircle size={16} className="text-blue-600"/>
+              <div className="w-9 h-9 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center flex-shrink-0">
+                <MessageCircle size={16} className="text-cta"/>
               </div>
               <div className="text-left min-w-0">
                 <div className="font-black text-sm text-tx truncate">{ws.name}</div>
@@ -67,9 +67,9 @@ export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick
       <button
         onClick={onConnectClick}
         className="mt-3 w-full flex items-center justify-center gap-2 py-2.5
-                   border-2 border-dashed border-blue-200 rounded-2xl
-                   text-blue-600 font-black text-xs uppercase tracking-wide
-                   hover:bg-blue-50 transition-all">
+                   border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-2xl
+                   text-cta font-black text-xs uppercase tracking-wide
+                   hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] transition-all">
         <Plus size={14}/> Подключить ещё чат
       </button>
     </div>

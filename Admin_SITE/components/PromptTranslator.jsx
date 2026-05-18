@@ -191,7 +191,7 @@ export default function PromptTranslator() {
           </div>
 
           {error && (
-            <div className="rounded-3xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+            <div className="rounded-3xl border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] px-4 py-3 text-sm text-danger">
               {error}
             </div>
           )}

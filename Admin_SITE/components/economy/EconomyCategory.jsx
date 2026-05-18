@@ -95,7 +95,7 @@ export default function EconomyCategory({
             disabled={!canEdit}
             title={canEdit ? (enabled ? 'Выключить раздел' : 'Включить раздел') : 'Нет прав'}
             className={`mr-4 relative inline-flex items-center w-11 h-6 rounded-full transition-colors shrink-0 ${
-              enabled ? 'bg-green-500' : 'bg-gray-200'
+              enabled ? 'bg-green-500' : 'bg-bd2'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
             <span className={`inline-block w-4 h-4 bg-sff rounded-full shadow transform transition-transform duration-200 ${
               enabled ? 'translate-x-6' : 'translate-x-1'
@@ -105,7 +105,7 @@ export default function EconomyCategory({
 
         {/* Inline форма мастер-тумблера */}
         {masterModal && (
-          <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+          <div className="border-t border-[color-mix(in_oklab,var(--warn)_30%,transparent)] bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
             <EconomyToggleForm
               label={category.label}
               currentEnabled={enabled}

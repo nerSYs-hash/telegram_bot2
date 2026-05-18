@@ -11,15 +11,15 @@ import {
 
 const ROLE_LABEL = { owner: '👑 Владелец', admin: '🛡 Админ', moderator: '🔧 Модератор' };
 const ROLE_COLOR = {
-  owner:     'bg-amber-100 text-amber-700',
-  admin:     'bg-blue-100 text-blue-700',
+  owner:     'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+  admin:     'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
   moderator: 'bg-sf2 text-tx',
 };
 
 const CHAT_ROLES = [
-  { value: 'main',    label: 'Главный', icon: Crown,    color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { value: 'admin',   label: 'Админ',   icon: Shield,   color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'journal', label: 'Журнал',  icon: BookOpen, color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { value: 'main',    label: 'Главный', icon: Crown,    color: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn border-[color-mix(in_oklab,var(--warn)_40%,transparent)]' },
+  { value: 'admin',   label: 'Админ',   icon: Shield,   color: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)]' },
+  { value: 'journal', label: 'Журнал',  icon: BookOpen, color: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple border-[color-mix(in_oklab,var(--purple)_40%,transparent)]' },
 ];
 const CHAT_ROLE_META = Object.fromEntries(CHAT_ROLES.map(r => [r.value, r]));
 
@@ -128,11 +128,11 @@ export default function WorkspacePage({
   return (
     <div className="space-y-4">
       <button onClick={onBack}
-              className="flex items-center gap-2 text-blue-600 font-black text-xs uppercase tracking-wide hover:bg-blue-50 rounded-xl px-3 py-2">
+              className="flex items-center gap-2 text-cta font-black text-xs uppercase tracking-wide hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-xl px-3 py-2">
         <ArrowLeft size={14}/> Назад
       </button>
 
-      {err && <div className="bg-red-50 text-red-700 rounded-2xl p-3 text-xs font-medium">{err}</div>}
+      {err && <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger rounded-2xl p-3 text-xs font-medium">{err}</div>}
 
       {/* General */}
       <div className="bg-sff rounded-[2rem] p-5 border border-bd">
@@ -167,7 +167,7 @@ export default function WorkspacePage({
       <div className="bg-sff rounded-[2rem] p-5 border border-bd">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-black text-tx text-xs uppercase flex items-center">
-            <MessageCircle className="mr-2 text-emerald-500" size={14}/> Чаты ({details.chats.length})
+            <MessageCircle className="mr-2 text-ok" size={14}/> Чаты ({details.chats.length})
           </h3>
           {isOwner && connectLink && (
             <div className="flex items-center gap-2">
@@ -177,8 +177,8 @@ export default function WorkspacePage({
                 <Plus size={12}/> Подключить чат
               </a>
               <button onClick={handleCopyLink} title="Скопировать ссылку"
-                      className="p-2 rounded-xl bg-sf2 hover:bg-gray-200 text-tx">
-                {linkCopied ? <Check size={14} className="text-emerald-600"/> : <Copy size={14}/>}
+                      className="p-2 rounded-xl bg-sf2 hover:bg-bd2 text-tx">
+                {linkCopied ? <Check size={14} className="text-ok"/> : <Copy size={14}/>}
               </button>
             </div>
           )}
@@ -215,7 +215,7 @@ export default function WorkspacePage({
                       disabled={savingRole === c.chat_id}
                       onClick={() => handleDisconnectChat(c.chat_id, c.title || `Чат ${c.chat_id}`)}
                       title="Отключить чат — бот покинет его"
-                      className="p-2 rounded-xl hover:bg-red-50 text-red-500 disabled:opacity-50">
+                      className="p-2 rounded-xl hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger disabled:opacity-50">
                       <LogOut size={14}/>
                     </button>
                   )}
@@ -244,7 +244,7 @@ export default function WorkspacePage({
                               onClick={() => handleSetChatRole(c.chat_id, null)}
                               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px]
                                          font-black uppercase tracking-wide border bg-sff text-lbl
-                                         border-bd2 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
+                                         border-bd2 hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] hover:text-danger disabled:opacity-50">
                         <X size={11}/> Снять
                       </button>
                     )}
@@ -260,7 +260,7 @@ export default function WorkspacePage({
       <div className="bg-sff rounded-[2rem] p-5 border border-bd">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-black text-tx text-xs uppercase flex items-center">
-            <Users className="mr-2 text-violet-500" size={14}/> Помощники ({details.members.length})
+            <Users className="mr-2 text-purple" size={14}/> Помощники ({details.members.length})
           </h3>
           {isOwner && (
             <button onClick={onInviteClick}
@@ -274,7 +274,7 @@ export default function WorkspacePage({
           {details.members.map(m => (
             <div key={m.user_id} className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gray-200 flex items-center justify-center text-xs font-black text-txd">
+                <div className="w-8 h-8 rounded-xl bg-bd2 flex items-center justify-center text-xs font-black text-txd">
                   {String(m.user_id).slice(-2)}
                 </div>
                 <div>
@@ -286,7 +286,7 @@ export default function WorkspacePage({
               </div>
               {isOwner && m.role !== 'owner' && (
                 <button onClick={() => handleRemove(m.user_id)}
-                        className="p-2 rounded-xl hover:bg-red-50 text-red-500">
+                        className="p-2 rounded-xl hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger">
                   <Trash2 size={14}/>
                 </button>
               )}
@@ -297,11 +297,11 @@ export default function WorkspacePage({
 
       {/* Danger zone — удаление сообщества (только не-Pulse, только owner) */}
       {isOwner && !ws.is_pulse_themed && (
-        <div className="bg-red-50 border-2 border-dashed border-red-200 rounded-[2rem] p-5">
-          <h3 className="font-black text-red-800 text-xs uppercase mb-2 flex items-center">
-            <AlertTriangle className="mr-2 text-red-500" size={14}/> Опасная зона
+        <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border-2 border-dashed border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-[2rem] p-5">
+          <h3 className="font-black text-danger text-xs uppercase mb-2 flex items-center">
+            <AlertTriangle className="mr-2 text-danger" size={14}/> Опасная зона
           </h3>
-          <p className="text-xs text-red-700 font-medium mb-3">
+          <p className="text-xs text-danger font-medium mb-3">
             Удаление сообщества необратимо. Бот покинет все привязанные чаты, помощники потеряют доступ.
           </p>
           <button onClick={handleDeleteWorkspace}

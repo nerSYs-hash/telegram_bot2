@@ -77,7 +77,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
                   onChange={e => setValue(e.target.value)}
                   placeholder={`${row.min_value ?? 0} — ${row.max_value ?? '∞'}`}
                   className="w-full px-4 py-3 pr-12 rounded-2xl border-2 border-bd
-                             focus:border-blue-300 focus:outline-none text-base font-bold"
+                             focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] focus:outline-none text-base font-bold"
                 />
                 {row.unit && (
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-lbl text-sm">
@@ -86,7 +86,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
                 )}
               </div>
               {!isValidValue() && value !== '' && (
-                <div className="text-[10px] text-red-500 font-semibold mt-1 px-1">
+                <div className="text-[10px] text-danger font-semibold mt-1 px-1">
                   Допустимый диапазон: {row.min_value ?? '—'} — {row.max_value ?? '—'}
                 </div>
               )}
@@ -94,10 +94,10 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
           )}
 
           {/* Комментарий */}
-          <div className="bg-amber-50 border border-amber-100 rounded-2xl p-4">
+          <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] rounded-2xl p-4">
             <div className="flex items-center gap-2 mb-2">
-              <AlertCircle size={13} className="text-amber-600 shrink-0" />
-              <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest">
+              <AlertCircle size={13} className="text-warn shrink-0" />
+              <span className="text-[10px] font-black text-warn uppercase tracking-widest">
                 Причина (обязательно)
               </span>
             </div>
@@ -107,16 +107,16 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
               placeholder="Опишите причину изменения (мин. 5 символов)"
               rows={3}
               maxLength={500}
-              className="w-full px-3 py-2 rounded-xl border border-amber-200 focus:border-amber-400
+              className="w-full px-3 py-2 rounded-xl border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] focus:border-amber-400
                          focus:outline-none text-sm bg-sff resize-none"
             />
-            <div className={`text-[10px] mt-1 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
+            <div className={`text-[10px] mt-1 text-right ${comment.length > 450 ? 'text-warn' : 'text-warn'}`}>
               {comment.length}/500
             </div>
           </div>
 
           {error && (
-            <div className="bg-red-50 border border-red-200 rounded-2xl p-3 text-xs text-red-700 font-bold">
+            <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-2xl p-3 text-xs text-danger font-bold">
               {error}
             </div>
           )}
@@ -127,7 +127,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
           <button
             onClick={onClose}
             className="flex-1 py-3 bg-sf2 text-txd rounded-2xl font-black text-xs uppercase
-                       hover:bg-gray-200 active:scale-95 transition">
+                       hover:bg-bd2 active:scale-95 transition">
             Отмена
           </button>
           <button
@@ -135,7 +135,7 @@ export default function EconomyEditModal({ row, onClose, onSave, forceValue = nu
             disabled={!canSave}
             className="flex-1 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs uppercase
                        hover:bg-blue-700 active:scale-95 transition
-                       disabled:bg-gray-200 disabled:text-lbl disabled:cursor-not-allowed">
+                       disabled:bg-bd2 disabled:text-lbl disabled:cursor-not-allowed">
             {saving ? '⏳ Сохранение...' : isValueLocked ? '↩ Откатить' : '✅ Сохранить'}
           </button>
         </div>

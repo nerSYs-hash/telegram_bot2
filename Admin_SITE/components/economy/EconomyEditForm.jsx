@@ -48,7 +48,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
               onChange={e => setValue(e.target.value)}
               placeholder={`${row.min_value ?? 0} — ${row.max_value ?? '∞'}`}
               autoFocus
-              className="w-full px-3 py-2.5 pr-10 rounded-xl border-2 border-blue-100
+              className="w-full px-3 py-2.5 pr-10 rounded-xl border-2 border-[color-mix(in_oklab,var(--cta)_30%,transparent)]
                          focus:border-blue-400 focus:outline-none text-sm font-bold bg-sff"
             />
             {row.unit && (
@@ -58,7 +58,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
             )}
           </div>
           {!isValidValue() && value !== '' && (
-            <div className="text-[10px] text-red-500 font-semibold mt-1">
+            <div className="text-[10px] text-danger font-semibold mt-1">
               Допустимо: {row.min_value ?? '—'} — {row.max_value ?? '—'}
             </div>
           )}
@@ -68,7 +68,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
           <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-1.5 block">
             Откат к значению
           </label>
-          <div className="px-3 py-2.5 rounded-xl bg-orange-50 border-2 border-orange-100 text-sm font-black text-orange-700">
+          <div className="px-3 py-2.5 rounded-xl bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border-2 border-[color-mix(in_oklab,var(--warn)_30%,transparent)] text-sm font-black text-warn">
             {forceValue} {row.unit}
           </div>
         </div>
@@ -76,7 +76,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
 
       {/* Комментарий */}
       <div>
-        <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1.5 block flex items-center gap-1.5">
+        <label className="text-[10px] font-black text-warn uppercase tracking-widest mb-1.5 block flex items-center gap-1.5">
           <AlertCircle size={11} /> Причина (обязательно)
         </label>
         <textarea
@@ -85,10 +85,10 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
           placeholder="Опишите причину (мин. 5 символов)"
           rows={2}
           maxLength={500}
-          className="w-full px-3 py-2 rounded-xl border-2 border-amber-100 focus:border-amber-400
+          className="w-full px-3 py-2 rounded-xl border-2 border-[color-mix(in_oklab,var(--warn)_30%,transparent)] focus:border-amber-400
                      focus:outline-none text-sm bg-sff resize-none"
         />
-        <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
+        <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-warn' : 'text-warn'}`}>
           {comment.length}/500
         </div>
       </div>
@@ -100,7 +100,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
           disabled={!canSave}
           className="px-4 py-2.5 bg-blue-600 text-white rounded-xl font-black text-[11px] uppercase
                      hover:bg-blue-700 active:scale-95 transition whitespace-nowrap
-                     disabled:bg-gray-200 disabled:text-lbl disabled:cursor-not-allowed">
+                     disabled:bg-bd2 disabled:text-lbl disabled:cursor-not-allowed">
           {saving ? '⏳' : isValueLocked ? '↩ Откатить' : '✅ Сохранить'}
         </button>
         <button
@@ -112,7 +112,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
       </div>
 
       {error && (
-        <div className="md:col-span-3 bg-red-50 border border-red-200 rounded-xl p-2.5 text-xs text-red-700 font-bold">
+        <div className="md:col-span-3 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-xl p-2.5 text-xs text-danger font-bold">
           {error}
         </div>
       )}

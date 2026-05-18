@@ -97,8 +97,8 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
           рисуем — он дублирует обёртку Section «Подпись и брендинг». */}
       {!compact && (
         <div className="flex items-center gap-2.5">
-          <div className="w-7 h-7 rounded-xl bg-pink-100 flex items-center justify-center">
-            <Palette size={14} className="text-pink-600" />
+          <div className="w-7 h-7 rounded-xl bg-[color-mix(in_oklab,var(--pink)_16%,transparent)] flex items-center justify-center">
+            <Palette size={14} className="text-pink" />
           </div>
           <div className="flex-1 min-w-0">
             <h2 className="text-xs font-black uppercase tracking-widest text-tx">Шаблоны подписей</h2>
@@ -107,7 +107,7 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
             </p>
           </div>
           {savedAt > 0 && (
-            <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500">
+            <span className="flex items-center gap-1 text-[10px] font-black text-ok">
               <CheckCircle2 size={12}/> сохранено
             </span>
           )}
@@ -115,7 +115,7 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
       )}
       {compact && savedAt > 0 && (
         <div className="flex justify-end">
-          <span className="flex items-center gap-1 text-[10px] font-black text-emerald-500">
+          <span className="flex items-center gap-1 text-[10px] font-black text-ok">
             <CheckCircle2 size={12}/> сохранено
           </span>
         </div>
@@ -125,22 +125,22 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
       {list.length > 0 && (
         <div className="space-y-1.5">
           {list.map(s => (
-            <div key={s.id} className={`bg-sf2 border rounded-xl p-2.5 ${s.is_default ? 'border-amber-300 bg-amber-50' : 'border-bd'}`}>
+            <div key={s.id} className={`bg-sf2 border rounded-xl p-2.5 ${s.is_default ? 'border-[color-mix(in_oklab,var(--warn)_50%,transparent)] bg-[color-mix(in_oklab,var(--warn)_10%,transparent)]' : 'border-bd'}`}>
               <div className="flex items-center gap-2 mb-1">
-                {s.is_default && <Star size={12} className="text-amber-500 fill-amber-400" />}
+                {s.is_default && <Star size={12} className="text-warn fill-amber-400" />}
                 <div className="text-xs font-black text-tx truncate flex-1">{s.name}</div>
                 {!s.is_default && (
                   <button onClick={() => setDefault(s.id)} title="Сделать дефолтом"
-                    className="p-1 text-lbl hover:text-amber-500 hover:bg-amber-50 rounded">
+                    className="p-1 text-lbl hover:text-warn hover:bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] rounded">
                     <Star size={11} />
                   </button>
                 )}
                 <button onClick={() => startEdit(s)} title="Редактировать"
-                  className="p-1 text-lbl hover:text-blue-500 hover:bg-blue-50 rounded">
+                  className="p-1 text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded">
                   <Edit3 size={11} />
                 </button>
                 <button onClick={() => deleteOne(s.id)} title="Удалить"
-                  className="p-1 text-lbl hover:text-red-500 hover:bg-red-50 rounded">
+                  className="p-1 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded">
                   <Trash2 size={11} />
                 </button>
               </div>
@@ -153,9 +153,9 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
 
       {/* Editor inline */}
       {editing && (
-        <div className="bg-sff border-2 border-pink-100 rounded-2xl p-3 space-y-2">
+        <div className="bg-sff border-2 border-[color-mix(in_oklab,var(--pink)_30%,transparent)] rounded-2xl p-3 space-y-2">
           <div className="flex items-center gap-2">
-            <span className="text-[10px] font-black uppercase tracking-widest text-pink-600">
+            <span className="text-[10px] font-black uppercase tracking-widest text-pink">
               {editing.id ? 'Редактирование' : 'Новый шаблон'}
             </span>
             <button onClick={cancelEdit} className="ml-auto text-lbl hover:text-txd">
@@ -166,14 +166,14 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
             value={editing.name}
             onChange={(e) => setEditing(s => ({ ...s, name: e.target.value }))}
             placeholder="Название (например: Основная)"
-            className="w-full px-3 py-2 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-pink-300"
+            className="w-full px-3 py-2 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--pink)_50%,transparent)]"
           />
           <textarea
             value={editing.html}
             onChange={(e) => setEditing(s => ({ ...s, html: e.target.value }))}
             placeholder='— <b>Pulse Community</b> | @pulse_chat'
             rows={3}
-            className="w-full px-3 py-2 bg-sf2 border border-bd rounded-lg text-xs font-mono focus:outline-none focus:border-pink-300 resize-y"
+            className="w-full px-3 py-2 bg-sf2 border border-bd rounded-lg text-xs font-mono focus:outline-none focus:border-[color-mix(in_oklab,var(--pink)_50%,transparent)] resize-y"
           />
           {editing.html.trim() && (
             <div className="bg-sf2 border border-bd rounded-lg px-3 py-2 [&_b]:font-bold [&_i]:italic">
@@ -200,7 +200,7 @@ export default function BrandingPanel({ token, onChange, compact = false }) {
 
       {!editing && (
         <button onClick={startNew}
-          className="w-full py-2.5 bg-sf2 border-2 border-dashed border-bd2 rounded-xl text-xs font-black text-txd hover:bg-pink-50 hover:border-pink-200 hover:text-pink-600 flex items-center justify-center gap-1.5">
+          className="w-full py-2.5 bg-sf2 border-2 border-dashed border-bd2 rounded-xl text-xs font-black text-txd hover:bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] hover:border-[color-mix(in_oklab,var(--pink)_40%,transparent)] hover:text-pink flex items-center justify-center gap-1.5">
           <Plus size={12}/> Добавить шаблон подписи
         </button>
       )}

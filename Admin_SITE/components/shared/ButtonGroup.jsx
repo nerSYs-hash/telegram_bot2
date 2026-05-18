@@ -46,13 +46,13 @@ export default function ButtonGroup({
   return (
     <div
       ref={wrapRef}
-      className={`relative inline-flex items-center bg-gray-100 rounded-2xl ${padCls} ${block ? 'w-full' : ''} ${className}`}
+      className={`relative inline-flex items-center bg-sf2 rounded-2xl ${padCls} ${block ? 'w-full' : ''} ${className}`}
     >
       {/* «Пилюля»-индикатор активного */}
       {pill.ready && (
         <div
           aria-hidden
-          className="absolute top-1 bottom-1 bg-white rounded-xl shadow-sm transition-all duration-200 ease-out"
+          className="absolute top-1 bottom-1 bg-sff rounded-xl shadow-sm transition-all duration-200 ease-out"
           style={{ left: pill.x, width: pill.w }}
         />
       )}
@@ -66,7 +66,7 @@ export default function ButtonGroup({
             type="button"
             onClick={() => onChange?.(opt.value)}
             className={`relative z-10 inline-flex items-center justify-center gap-1.5 ${itemPad} rounded-xl font-black transition-colors ${
-              active ? 'text-blue-600' : 'text-gray-500 hover:text-gray-700'
+              active ? 'text-cta' : 'text-txd hover:text-tx'
             } ${block ? 'flex-1' : ''}`}
           >
             {Icon && <Icon size={size === 'sm' ? 11 : 13} />}
