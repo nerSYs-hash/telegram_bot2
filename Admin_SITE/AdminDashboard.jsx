@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
+import ModulesHub from './components/modules/ModulesHub';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -967,6 +968,7 @@ export default function App() {
 
   const navigation = [
     { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
+    { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
     { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'main',     resource: 'statistics' },
     { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'main',     resource: 'journal' },
     { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
@@ -979,6 +981,8 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
+      case 'modules':
+        return <ModulesHub onOpen={navigateTo} />;
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
