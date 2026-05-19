@@ -152,8 +152,13 @@ export const SECTIONS = [
 ];
 
 // Карта: id карточки каталога → id раздела в боковой панели.
+// Верхнеуровневые модули + дочерние с собственным `nav` (напр. Шиппер
+// внутри Экономики — у него есть своя страница, должен быть в сайдбаре).
 export const MODULE_NAV = SECTIONS.reduce((acc, s) => {
-  s.modules.forEach(m => { if (m.nav) acc[m.id] = m.nav; });
+  s.modules.forEach(m => {
+    if (m.nav) acc[m.id] = m.nav;
+    (m.children || []).forEach(c => { if (c.nav) acc[c.id] = c.nav; });
+  });
   return acc;
 }, {});
 
