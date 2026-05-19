@@ -358,7 +358,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
         <div className="flex items-center gap-2 text-[12px] font-bold">
           <button onClick={() => setOpenMod(null)}
             className="flex items-center gap-1 text-cta hover:underline">
-            <ArrowLeft size={14} /> {section.name}
+            <ArrowLeft size={14} /> Назад
           </button>
           <span className="text-lbl">/</span>
           <span className="text-tx">{openMod.name}</span>
@@ -390,7 +390,9 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
 
       <p className="text-[12px] text-lbl text-center">
         {view.inChild
-          ? 'Подключённые графики появляются на странице «Статистика» — не в боковом меню.'
+          ? (openMod?.id === 'statistics'
+              ? 'Подключённые графики появляются на странице «Статистика» — не в боковом меню.'
+              : `Подключённые суб-модули работают внутри «${openMod?.name}» — не в боковом меню.`)
           : `Каталог секции «${section.name}». Подключённые модули появляются в боковой панели.`}
       </p>
 
