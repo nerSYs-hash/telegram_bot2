@@ -131,13 +131,13 @@ export const MODULE_NAV = SECTIONS.reduce((acc, s) => {
 function StatusPill({ connected, soon }) {
   if (soon) {
     return (
-      <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-sf2 text-lbl border border-bd">
+      <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-sf2 text-lbl border border-bd">
         Скоро
       </span>
     );
   }
   return (
-    <span className={`text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full border ${
+    <span className={`whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${
       connected
         ? 'bg-[color-mix(in_oklab,var(--ok)_14%,transparent)] text-ok border-[color-mix(in_oklab,var(--ok)_35%,transparent)]'
         : 'bg-sf2 text-txd border-bd'
@@ -169,10 +169,10 @@ function ModuleCard({ mod, connected, onOpen, onConnect, onDisconnect }) {
         }`}>
           <Icon size={20} />
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex flex-nowrap items-center gap-1.5 flex-shrink-0">
           {mod.paid && (
-            <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]">
-              Донатный
+            <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]">
+              Донат
             </span>
           )}
           <StatusPill connected={connected} soon={mod.soon} />
@@ -229,8 +229,10 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
 
   return (
     <div className="space-y-6 pb-24">
-      {/* ── Под-навигация: underline · бренд-линия (скрин 102042) ── */}
-      <div className="border-b border-bd">
+      {/* ── Под-навигация: underline · бренд-линия (скрин 102042) ──
+           sticky: при скролле остаётся закреплённой сверху, секции
+           переключаются без подъёма наверх. ── */}
+      <div className="sticky top-0 z-20 bg-sf2 border-b border-bd">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
           {SECTIONS.map(s => {
             const isActive = s.id === section.id;
