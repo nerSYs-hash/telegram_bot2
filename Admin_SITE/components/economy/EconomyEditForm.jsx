@@ -38,7 +38,7 @@ export default function EconomyEditForm({ row, onCancel, onSave, forceValue = nu
       {/* Новое значение */}
       {!isValueLocked ? (
         <div>
-          <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-1.5 block">
+          <label className="text-[10px] font-black text-txd uppercase tracking-widest mb-1.5 flex items-center h-[14px] whitespace-nowrap">
             Новое значение
           </label>
           <div className="relative">

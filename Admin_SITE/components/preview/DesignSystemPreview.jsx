@@ -629,13 +629,6 @@ function RealShowcase() {
 
 /* ════════════════════════════════════════════════════════════════════ */
 export default function DesignSystemPreview() {
-  const [theme, setTheme] = useState('dark');
-  useEffect(() => {
-    const h = document.documentElement;
-    h.classList.toggle('theme-dark', theme === 'dark');
-    h.classList.toggle('theme-light', theme === 'light');
-  }, [theme]);
-
   return (
     <div className="ds-canvas min-h-screen">
       <style>{`@keyframes dsPing{0%,100%{transform:scale(1);opacity:.6}50%{transform:scale(1.7);opacity:0}}
@@ -648,13 +641,8 @@ export default function DesignSystemPreview() {
         </h1>
         <div className="flex items-center gap-3">
           <span className="inline-flex items-center gap-1.5 h-6 px-2.5 rounded-pill bg-sff border border-bd text-[10px] font-extrabold tracking-widest uppercase text-txd">
-            <span className="w-1.5 h-1.5 rounded-full bg-ok" />token-tree §2.5
+            <span className="w-1.5 h-1.5 rounded-full bg-ok" />token-tree §2.5 · light
           </span>
-          <div className="relative inline-flex items-center w-[104px] h-8 rounded-pill bg-sff border border-bd p-[3px]">
-            <div className={`absolute top-[3px] h-[calc(100%-6px)] w-[calc(50%-3px)] rounded-pill bg-[color-mix(in_oklab,var(--cta)_22%,var(--sff))] border border-[color-mix(in_oklab,var(--cta)_50%,transparent)] shadow-sm transition-transform duration-[220ms] ease-spring ${theme === 'light' ? 'translate-x-full' : ''}`} />
-            <button onClick={() => setTheme('dark')}  className={`flex-1 z-10 inline-flex justify-center transition-colors ${theme === 'dark' ? 'text-tx' : 'text-lbl'}`}><Moon size={16} strokeWidth={2.4} /></button>
-            <button onClick={() => setTheme('light')} className={`flex-1 z-10 inline-flex justify-center transition-colors ${theme === 'light' ? 'text-tx' : 'text-lbl'}`}><Sun size={16} strokeWidth={2.4} /></button>
-          </div>
         </div>
       </div>
 

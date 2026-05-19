@@ -1,13 +1,11 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
-import PromptTranslator from './components/PromptTranslator';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
 import WorkspaceSwitcher from './components/workspaces/WorkspaceSwitcher';
 import { getActiveWs } from './components/shared/api';
-import ThemeToggle from './components/shared/ThemeToggle';
 import { createPortal } from 'react-dom';
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid,
@@ -17,7 +15,7 @@ import {
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
   ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
   CheckCircle2, Info, Edit, ShieldBan, Clock, MessageSquareX, 
-  Zap, Bot, Sparkles, Loader2, Download, FileSpreadsheet,
+  Zap, Sparkles, Loader2, Download, FileSpreadsheet,
   FileText, TrendingUp, TrendingDown, Activity, ChevronRight,
   Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
@@ -958,10 +956,11 @@ export default function App() {
   const ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700">
-        <p className="text-[10px] font-black text-lbl uppercase mb-1">{label}</p>
-        <p className="text-2xl font-black leading-none">{(payload[0].value || 0).toLocaleString()}</p>
-        <p className="text-[9px] text-blue-400 font-bold mt-1">сообщений</p>
+      <div className="bg-sff/95 backdrop-blur-sm border border-bd rounded-xl px-3 py-2 shadow-lg">
+        <p className="text-[12px] font-bold text-tx leading-none">
+          <span className="text-cta">{(payload[0].value || 0).toLocaleString()}</span> сообщений
+        </p>
+        <p className="text-[10px] font-semibold text-lbl mt-1">{label}</p>
       </div>
     );
   };
@@ -973,7 +972,6 @@ export default function App() {
     { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
     { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release' },
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
-    { id: 'prompt',        name: 'AI-помощник',    icon: Bot,            group: 'modules' },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy' },
     { id: 'system',        name: 'Система',        icon: Settings,       group: 'main',     resource: 'system' },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
@@ -981,28 +979,29 @@ export default function App() {
 
   const renderContent = () => {
     switch (activeTab) {
-      case 'prompt':
-        return (
-          <div className="space-y-4 pb-24">
-            <PromptTranslator />
-          </div>
-        );
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
 
-            {/* ── Period switcher ── */}
-            <div className="flex space-x-2 overflow-x-auto pt-2 pb-2 -mx-4 px-4 scrollbar-hide">
-              {PERIODS.map(p => (
-                <button key={p.id} onClick={() => handlePeriodChange(p.id)}
-                  className={`flex-shrink-0 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wide transition-all duration-300 ${
-                    statsPeriod === p.id
-                      ? 'bg-cta text-white shadow-lg scale-105'
-                      : 'bg-sff text-txd border border-bd'
-                  }`}>
-                  {p.label}
-                </button>
-              ))}
+            {/* ── Период + компактная выгрузка (наверху, по выбранному периоду) ── */}
+            <div className="flex items-center gap-3">
+              <div className="flex space-x-2 overflow-x-auto pt-2 pb-2 -ml-4 pl-4 scrollbar-hide flex-1">
+                {PERIODS.map(p => (
+                  <button key={p.id} onClick={() => handlePeriodChange(p.id)}
+                    className={`flex-shrink-0 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wide transition-all duration-300 ${
+                      statsPeriod === p.id
+                        ? 'bg-cta text-white shadow-lg scale-105'
+                        : 'bg-sff text-txd border border-bd'
+                    }`}>
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+              <button onClick={exportExcel} title="Выгрузить выбранный период в Excel"
+                className="flex-shrink-0 flex items-center gap-2 px-4 py-2.5 rounded-2xl bg-sff border border-bd text-txd font-black text-[11px] uppercase tracking-wide hover:border-[color-mix(in_oklab,var(--ok)_45%,transparent)] hover:text-ok hover:bg-[color-mix(in_oklab,var(--ok)_8%,transparent)] active:scale-95 transition-all duration-200">
+                <FileSpreadsheet size={16} className="text-ok" />
+                <span className="hidden sm:inline">Excel · {PERIODS.find(p=>p.id===statsPeriod)?.label}</span>
+              </button>
             </div>
 
             {/* ── Hero: Health index ── */}
@@ -1031,18 +1030,16 @@ export default function App() {
                           {liveStats?.periodLabel || 'Сегодня'}
                         </span>
                         {/* ℹ кнопка — вверху справа */}
-                        <div className="relative">
-                          <button
-                            onClick={() => setShowHealthTooltip(v => !v)}
-                            className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-black hover:bg-white/30 transition-all"
-                          >ℹ</button>
-                          {showHealthTooltip && (
-                            <div className="absolute top-9 right-0 w-64 bg-gray-900 text-white text-xs rounded-2xl p-4 z-50 shadow-2xl">
-                              <p className="font-black mb-2">Формула индекса здоровья:</p>
-                              <p className="opacity-80 leading-relaxed">Общая акт.×25% + Диалоговость×15% + Эмоц.×15% + Медиа×10% + Вовлечённость×20% + Прирост×15%</p>
-                              <p className="opacity-60 mt-2 text-[10px]">Каждый субиндекс — реальные данные за выбранный период.</p>
-                            </div>
-                          )}
+                        <div className="relative group/health">
+                          <span
+                            className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-bold cursor-help select-none"
+                            aria-label="Формула индекса здоровья"
+                          >ℹ</span>
+                          <div className="absolute top-9 right-0 w-64 bg-white text-gray-700 text-xs rounded-xl p-4 z-50 shadow-xl border border-black/5 opacity-0 invisible translate-y-1 group-hover/health:opacity-100 group-hover/health:visible group-hover/health:translate-y-0 transition-all duration-200 pointer-events-none">
+                            <p className="font-bold mb-2 text-gray-900">Формула индекса здоровья</p>
+                            <p className="text-gray-600 leading-relaxed">Общая акт.×25% + Диалоговость×15% + Эмоц.×15% + Медиа×10% + Вовлечённость×20% + Прирост×15%</p>
+                            <p className="text-gray-400 mt-2 text-[10px]">Каждый субиндекс — реальные данные за выбранный период.</p>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -1060,22 +1057,20 @@ export default function App() {
                     {showDetailedIndices && (
                       <div className="space-y-1 pt-3 animate-in slide-in-from-top-2 duration-300">
                         {Object.entries(INDEX_META).map(([k, meta]) => (
-                          <div key={k}>
+                          <div key={k} className="relative group/idx">
                             <div className="flex items-center justify-between py-2 px-3 rounded-xl">
-                              <span className="text-xs font-bold opacity-75">{meta.label}</span>
+                              <span className="text-xs font-medium opacity-80">{meta.label}</span>
                               <div className="flex items-center space-x-2 flex-shrink-0">
-                                <span className="text-sm font-black">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
-                                <button
-                                  onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
-                                  className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black hover:bg-white/30 transition-all flex-shrink-0"
-                                >ℹ</button>
+                                <span className="text-sm font-bold tabular-nums">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
+                                <span
+                                  className="w-5 h-5 rounded-full bg-white/15 flex items-center justify-center text-[10px] font-bold cursor-help select-none flex-shrink-0"
+                                  aria-label={meta.label}
+                                >ℹ</span>
                               </div>
                             </div>
-                            {activeIndexTooltip === k && (
-                              <div className="mx-3 mb-2 bg-white/15 backdrop-blur-sm text-white text-[10px] rounded-xl p-3 leading-relaxed border border-white/10 animate-in slide-in-from-top-1 duration-200">
-                                {meta.desc}
-                              </div>
-                            )}
+                            <div className="absolute right-3 top-9 z-50 w-64 bg-white text-gray-600 text-[11px] rounded-xl p-3 leading-relaxed shadow-xl border border-black/5 opacity-0 invisible translate-y-1 group-hover/idx:opacity-100 group-hover/idx:visible group-hover/idx:translate-y-0 transition-all duration-200 pointer-events-none">
+                              {meta.desc}
+                            </div>
                           </div>
                         ))}
                       </div>
@@ -1150,23 +1145,9 @@ export default function App() {
               ))}
             </div>
 
-            {/* ── Банк ── */}
-            <div className={`bg-gradient-to-r from-indigo-600 to-blue-600 p-6 rounded-[2rem] text-white shadow-xl transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
-              <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1 flex items-center gap-1">
-                <Wallet size={10} /> Баланс банка
-              </span>
-              <span className="text-3xl font-black tracking-tight">
-                {(liveStats?.bankBalance ?? 0).toLocaleString()} 💳
-              </span>
-            </div>
-
-            {/* ── Кнопка Excel ── */}
-            <button onClick={exportExcel}
-              className="w-full flex items-center justify-center space-x-3 bg-sff border-2 border-bd text-tx p-5 rounded-[2rem] font-black active:scale-95 transition-all duration-200 hover:border-[color-mix(in_oklab,var(--ok)_40%,transparent)] hover:text-ok hover:bg-[color-mix(in_oklab,var(--ok)_10%,transparent)]">
-              <FileSpreadsheet size={22} className="text-ok" />
-              <span>Экспорт в Excel — {PERIODS.find(p=>p.id===statsPeriod)?.label}</span>
-              <Download size={18} className="text-lbl" />
-            </button>
+            {/* Баланс банка убран отсюда — это раздел Экономика/геймификация,
+                а не Статистика (решение владельца 19.05). Выгрузка Excel
+                перенесена наверх к выбору периода. */}
           </div>
         );
 
@@ -5568,7 +5549,6 @@ export default function App() {
               onSwitch={onWorkspaceSwitch}
             />
             <div className="flex items-center gap-2">
-              <ThemeToggle className="mr-1" />
               <button
                 onClick={() => navigateTo('profile')}
                 className="flex items-center gap-2 p-1 pr-2 rounded-2xl hover:bg-ih transition-all active:scale-95 cursor-pointer"
