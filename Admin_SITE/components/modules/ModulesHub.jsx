@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useLayoutEffect } from 'react';
 import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, ArrowLeft, AlertTriangle,
@@ -180,7 +180,7 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
   return (
     <div
       onClick={cardClick}
-      className={`relative rounded-[1.75rem] border bg-sff p-5 flex flex-col gap-3 transition-all duration-200 ${
+      className={`relative h-full rounded-[1.75rem] border bg-sff p-5 flex flex-col gap-3 transition-all duration-200 ${
         cardClick
           ? 'border-bd hover:border-[color-mix(in_oklab,var(--cta)_45%,transparent)] hover:shadow-lg cursor-pointer'
           : 'border-bd'
@@ -267,6 +267,37 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
 
+  // FLIP-анимация перестановки: подключённые модули — наверх,
+  // переезд плавный, но быстрый; освободившиеся места аккуратно
+  // занимают неподключённые.
+  const cardEls = useRef(new Map());
+  const prevRects = useRef(new Map());
+  useLayoutEffect(() => {
+    const els = cardEls.current;
+    els.forEach((el, id) => {
+      if (!el) return;
+      const nr = el.getBoundingClientRect();
+      const or = prevRects.current.get(id);
+      if (or) {
+        const dx = or.left - nr.left;
+        const dy = or.top - nr.top;
+        if (dx || dy) {
+          el.style.transition = 'none';
+          el.style.transform = `translate(${dx}px, ${dy}px)`;
+          el.getBoundingClientRect(); // reflow
+          requestAnimationFrame(() => {
+            el.style.transition = 'transform 280ms cubic-bezier(.22,1,.36,1)';
+            el.style.transform = '';
+          });
+        }
+      }
+      prevRects.current.set(id, nr);
+    });
+    prevRects.current.forEach((_, id) => {
+      if (!els.has(id)) prevRects.current.delete(id);
+    });
+  });
+
   const rootRef = useRef(null);
   const scrollToTop = () => {
     let el = rootRef.current?.parentElement;
@@ -334,18 +365,26 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
         </div>
       )}
 
-      {/* ── Каталог: карточки секции или графики под-каталога ── */}
+      {/* ── Каталог: подключённые наверх, FLIP-перестановка ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {view.items.map(m => (
-          <ModuleCard
+        {[...view.items]
+          .sort((a, b) => (isOn(b.id) ? 1 : 0) - (isOn(a.id) ? 1 : 0))
+          .map(m => (
+          <div
             key={m.id}
-            mod={m}
-            connected={isOn(m.id)}
-            onOpenModule={(mm) => { setOpenMod(mm); scrollToTop(); }}
-            onOpen={onOpen}
-            onConnect={handleConnect}
-            onDisconnect={setDisc}
-          />
+            ref={el => { const mp = cardEls.current; el ? mp.set(m.id, el) : mp.delete(m.id); }}
+            className="h-full"
+            style={{ willChange: 'transform' }}
+          >
+            <ModuleCard
+              mod={m}
+              connected={isOn(m.id)}
+              onOpenModule={(mm) => { setOpenMod(mm); scrollToTop(); }}
+              onOpen={onOpen}
+              onConnect={handleConnect}
+              onDisconnect={setDisc}
+            />
+          </div>
         ))}
       </div>
 
