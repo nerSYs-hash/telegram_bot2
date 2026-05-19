@@ -35,17 +35,17 @@ export const SECTIONS = [
         name: 'Статистика и графики',
         desc: 'Лента графиков. Нажми, чтобы выбрать какие графики показывать.',
         children: [
-          { id: 'chart:users',       icon: BarChart3, name: 'Статистика по пользователям', desc: 'Новые / покинувшие / удалённые + всего.' },
-          { id: 'chart:messages',    icon: BarChart3, name: 'Количество сообщений по дням', desc: 'Сообщения и уникальные авторы.' },
-          { id: 'chart:engagement',  icon: BarChart3, name: 'Коэффициент вовлечённости',    desc: 'Доля пишущих от всех участников.' },
-          { id: 'chart:active_hm',   icon: BarChart3, name: 'Активные (heatmap)',           desc: 'Тепловая карта активности.' },
-          { id: 'chart:msg_hm',      icon: BarChart3, name: 'Сообщения (heatmap)',          desc: 'Тепловая карта объёма сообщений.' },
-          { id: 'chart:newcomers',   icon: BarChart3, name: 'Сводная новых по дням',        desc: 'Новые / вернувшиеся / приглашённые.' },
-          { id: 'chart:first_msg',   icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
-          { id: 'chart:msg_stats',   icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Всего / ответы / отредактированные.' },
-          { id: 'chart:user_act',    icon: BarChart3, name: 'Активность пользователей',     desc: 'MAU / реплаи / упоминания / ссылки.' },
-          { id: 'chart:active_sum',  icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
-          { id: 'chart:kpi',         icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
+          { id: 'chart:users',       wip: true, icon: BarChart3, name: 'Статистика по пользователям', desc: 'Новые / покинувшие / удалённые + всего.' },
+          { id: 'chart:messages',    wip: true, icon: BarChart3, name: 'Количество сообщений по дням', desc: 'Сообщения и уникальные авторы.' },
+          { id: 'chart:engagement',  wip: true, icon: BarChart3, name: 'Коэффициент вовлечённости',    desc: 'Доля пишущих от всех участников.' },
+          { id: 'chart:active_hm',   wip: true, icon: BarChart3, name: 'Активные (heatmap)',           desc: 'Тепловая карта активности.' },
+          { id: 'chart:msg_hm',      wip: true, icon: BarChart3, name: 'Сообщения (heatmap)',          desc: 'Тепловая карта объёма сообщений.' },
+          { id: 'chart:newcomers',   wip: true, icon: BarChart3, name: 'Сводная новых по дням',        desc: 'Новые / вернувшиеся / приглашённые.' },
+          { id: 'chart:first_msg',   wip: true, icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
+          { id: 'chart:msg_stats',   wip: true, icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Всего / ответы / отредактированные.' },
+          { id: 'chart:user_act',    wip: true, icon: BarChart3, name: 'Активность пользователей',     desc: 'MAU / реплаи / упоминания / ссылки.' },
+          { id: 'chart:active_sum',  wip: true, icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
+          { id: 'chart:kpi',         wip: true, icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
         ] },
       { id: 'top5', nav: null, target: null, icon: Trophy,
         name: 'Топ-5',
@@ -164,8 +164,10 @@ SECTIONS.forEach(s => s.modules.forEach(m => {
   (m.children || []).forEach(c => { NAME_BY_ID[c.id] = c.name; });
 }));
 
-// «В разработке»: нет готовой страницы и нет под-каталога.
-const isWip = (mod) => !mod.target && !mod.children;
+// «В разработке» = модуля ещё нет в коде бота — ЯВНЫЙ флаг `wip`.
+// (Раньше был неверный эвристик по наличию страницы; почти всё в боте
+//  уже есть — реально не готовы только виджеты-графики Статистики.)
+const isWip = (mod) => !!mod.wip;
 
 function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconnect }) {
   const Icon = mod.icon;
