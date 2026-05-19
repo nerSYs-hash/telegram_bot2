@@ -221,15 +221,21 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         <p className="text-[12px] text-txd mt-1.5 leading-snug">{mod.desc}</p>
       </div>
 
-      <div onClick={e => e.stopPropagation()}>
+      <div className="flex gap-2" onClick={e => e.stopPropagation()}>
+        {hasChildren && (
+          <Button size="sm" variant={connected ? 'primary' : 'secondary'} icon={ArrowRight}
+            className="flex-1" onClick={() => onOpenModule(mod)}>
+            Открыть
+          </Button>
+        )}
         {connected ? (
-          <Button block size="sm" variant="secondary"
+          <Button size="sm" variant="secondary" className="flex-1"
             onClick={() => onDisconnect(mod)}>
             Отключить
           </Button>
         ) : (
-          <Button block size="sm" variant="primary" icon={Plus}
-            onClick={() => onConnect(mod.id)}>
+          <Button size="sm" variant="primary" icon={hasChildren ? undefined : Plus}
+            className="flex-1" onClick={() => onConnect(mod.id)}>
             Подключить
           </Button>
         )}
