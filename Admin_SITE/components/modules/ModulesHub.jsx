@@ -2,6 +2,7 @@ import { useState } from 'react';
 import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, AlertTriangle,
+  LogIn, LogOut, Image as ImageIcon, UserCog,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -9,27 +10,29 @@ import Button from '../shared/Button';
  * ModulesHub — хаб «Модули» = КАТАЛОГ (Шаг 2 IA_MODULES).
  *
  * Контракт: docs/IA_MODULES_Puls_Chat.md
- *  - Сверху под-навигация «underline · бренд-линия» (список секций).
- *  - Клик по секции → грид ВСЕХ карточек-модулей секции (каталог:
- *    модули тут лежат, отсюда их и подключаешь — не наоборот).
- *  - На каждой карточке прямо: «Подключить» / статус / «Отключить».
- *  - При ОТКЛЮЧЕНИИ — обязательна причина (единое правило, как в
- *    Экономике; «Функции бота» это нарушали).
+ *  - Сверху под-навигация «underline · бренд-линия» (секции).
+ *  - Клик по секции → грид ВСЕХ карточек-модулей (модули лежат тут,
+ *    отсюда их и подключаешь — каталог).
+ *  - «Подключить» на карточке → модуль появляется в боковой панели
+ *    (раздел «Подключённые»). «Отключить» → исчезает, причина обязательна.
+ *  - Журнал — не одна карточка, а отдельные СУБ-МОДУЛИ
+ *    (вход/регистрация, выход, смена фото, …), каждый подключается сам.
+ *    Все суб-модули Журнала ведут в один nav «journal»; в будущем —
+ *    под-раздел внутри подключённого Журнала.
  *
- * СКЕЛЕТ: статус подключения локальный (useState). Реальная
- * персистентность — section_toggles + RBAC (шаг #7).
- * `target` = id существующей вкладки; подключённая карточка
- * проваливает в текущую страницу секции (хаб полезен сразу).
+ * Контролируемый: connected (Set id) / onConnect / onDisconnect / onOpen
+ * приходят из AdminDashboard (он же держит sidebar + localStorage).
+ * Реальная персистентность с RBAC — section_toggles, шаг #7.
  *
  * monetization-пометки сюда НЕ выводим — внутренняя оптика.
  */
 
-const SECTIONS = [
+export const SECTIONS = [
   {
     id: 'analytics',
     name: 'Аналитика',
     modules: [
-      { id: 'statistics', target: 'statistics', icon: PieChart,
+      { id: 'statistics', nav: 'statistics', target: 'statistics', icon: PieChart,
         name: 'Статистика и графики',
         desc: 'Лента графиков: пользователи, сообщения, вовлечённость, активность.' },
     ],
@@ -38,7 +41,7 @@ const SECTIONS = [
     id: 'economy',
     name: 'Экономика',
     modules: [
-      { id: 'economy', target: 'economy', icon: Coins,
+      { id: 'economy', nav: 'economy', target: 'economy', icon: Coins,
         name: 'Экономика',
         desc: 'Пульсы, банк, награды и санкции. Тонкая настройка под чат.' },
     ],
@@ -47,10 +50,10 @@ const SECTIONS = [
     id: 'engagement',
     name: 'Вовлечение',
     modules: [
-      { id: 'activities', target: null, icon: Flame, soon: true,
+      { id: 'activities', nav: null, target: null, icon: Flame, soon: true,
         name: 'Активности',
         desc: 'Игры и события. Каждая активность — отдельный суб-модуль.' },
-      { id: 'shipper', target: 'shipper', icon: HeartHandshake,
+      { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
         name: 'Шиппер',
         desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
     ],
@@ -59,10 +62,10 @@ const SECTIONS = [
     id: 'content',
     name: 'Контент',
     modules: [
-      { id: 'press_release', target: 'press_release', icon: Megaphone,
+      { id: 'press_release', nav: 'press_release', target: 'press_release', icon: Megaphone,
         name: 'Пресс-релизы',
         desc: 'Анонсы и рассылки от лица чата с медиа и расписанием.' },
-      { id: 'triggers', target: 'triggers', icon: ShieldAlert,
+      { id: 'triggers', nav: 'triggers', target: 'triggers', icon: ShieldAlert,
         name: 'Триггеры',
         desc: 'Авто-реакции на слова и события. Нужен не всем чатам.' },
     ],
@@ -71,12 +74,28 @@ const SECTIONS = [
     id: 'journal',
     name: 'Журнал',
     modules: [
-      { id: 'journal', target: 'journal', icon: ScrollText,
-        name: 'Журнал',
-        desc: 'Лог событий. Внутри владелец сам подключает суб-модули: вход/регистрация, выход, смена фото.' },
+      { id: 'journal:join', nav: 'journal', target: 'journal', icon: LogIn,
+        name: 'Вход / Регистрация',
+        desc: 'Лог входов в чат и прохождения регистрации новичками.' },
+      { id: 'journal:leave', nav: 'journal', target: 'journal', icon: LogOut,
+        name: 'Выход',
+        desc: 'Лог выходов и удалений участников из чата.' },
+      { id: 'journal:photo', nav: 'journal', target: 'journal', icon: ImageIcon,
+        name: 'Смена фото',
+        desc: 'Лог смены аватара/фото профиля участниками.' },
+      { id: 'journal:name', nav: 'journal', target: 'journal', icon: UserCog,
+        name: 'Смена имени',
+        desc: 'Лог смены имени и @username участниками.' },
     ],
   },
 ];
+
+// Карта: id карточки каталога → id раздела в боковой панели.
+// AdminDashboard по ней решает, какие пункты показать в сайдбаре.
+export const MODULE_NAV = SECTIONS.reduce((acc, s) => {
+  s.modules.forEach(m => { if (m.nav) acc[m.id] = m.nav; });
+  return acc;
+}, {});
 
 function StatusPill({ connected, soon }) {
   if (soon) {
@@ -150,22 +169,18 @@ function ModuleCard({ mod, connected, onOpen, onConnect, onDisconnect }) {
   );
 }
 
-export default function ModulesHub({ onOpen }) {
+export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect }) {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
-  // СКЕЛЕТ: локальный статус подключения. TODO(#7): section_toggles + RBAC.
-  const [connected, setConnected] = useState({});
   const [disc, setDisc] = useState(null); // модуль на отключении
   const [reason, setReason] = useState('');
 
+  const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
-
-  const doConnect = (id) =>
-    setConnected(prev => ({ ...prev, [id]: true }));
 
   const confirmDisconnect = () => {
     if (!disc || !reason.trim()) return;
-    // TODO(#7): отправить причину в API вместе со снятием тумблера.
-    setConnected(prev => ({ ...prev, [disc.id]: false }));
+    // TODO(#7): причину — в API/журнал изменений модулей вместе со снятием тумблера.
+    onDisconnect?.(disc.id);
     setDisc(null);
     setReason('');
   };
@@ -201,16 +216,16 @@ export default function ModulesHub({ onOpen }) {
           <ModuleCard
             key={m.id}
             mod={m}
-            connected={!!connected[m.id]}
+            connected={isOn(m.id)}
             onOpen={onOpen}
-            onConnect={doConnect}
+            onConnect={onConnect}
             onDisconnect={setDisc}
           />
         ))}
       </div>
 
       <p className="text-[12px] text-lbl text-center">
-        Это каталог секции «{section.name}». Подключай модули прямо здесь — включённые появятся в работе.
+        Каталог секции «{section.name}». Подключённые модули появляются в боковой панели.
       </p>
 
       {/* ── Модал отключения: причина обязательна (единое правило) ── */}

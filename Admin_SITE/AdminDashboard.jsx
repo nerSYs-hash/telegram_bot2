@@ -1,7 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
-import ModulesHub from './components/modules/ModulesHub';
+import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -966,23 +966,51 @@ export default function App() {
     );
   };
 
+  // Сайдбар = только база (top) + сервис. Модули (isModule) показываются
+  // в боковой панели ТОЛЬКО когда подключены из каталога «Модули».
   const navigation = [
     { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
     { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
-    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'main',     resource: 'statistics' },
-    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'main',     resource: 'journal' },
-    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
-    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release' },
-    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
-    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy' },
-    { id: 'system',        name: 'Система',        icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'system',        name: 'Система',        icon: Settings,       group: 'top',      resource: 'system' },
+    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
+    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'modules',  resource: 'journal',       isModule: true },
+    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers',      isModule: true },
+    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release', isModule: true },
+    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
+    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
+
+  // Подключённые модули каталога (id карточек). СКЕЛЕТ: localStorage,
+  // потом — section_toggles + RBAC (#7). MODULE_NAV: card id → sidebar id.
+  const [connectedModules, setConnectedModules] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('pulse_connected_modules') || '[]')); }
+    catch { return new Set(); }
+  });
+  const _persistModules = (s) =>
+    localStorage.setItem('pulse_connected_modules', JSON.stringify([...s]));
+  const connectModule = (id) => setConnectedModules(prev => {
+    const n = new Set(prev); n.add(id); _persistModules(n); return n;
+  });
+  const disconnectModule = (id) => setConnectedModules(prev => {
+    const n = new Set(prev); n.delete(id); _persistModules(n); return n;
+  });
+  // Какие sidebar-разделы активны (через карту card→nav из ModulesHub).
+  const activeModuleNavs = new Set(
+    [...connectedModules].map(cid => MODULE_NAV[cid]).filter(Boolean)
+  );
+  // Если открытый модуль отключили — уводим на каталог «Модули».
+  useEffect(() => {
+    const cur = navigation.find(n => n.id === activeTab);
+    if (cur?.isModule && !activeModuleNavs.has(activeTab)) navigateTo('modules');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [connectedModules]);
 
   const renderContent = () => {
     switch (activeTab) {
       case 'modules':
-        return <ModulesHub onOpen={navigateTo} />;
+        return <ModulesHub onOpen={navigateTo} connected={connectedModules}
+                 onConnect={connectModule} onDisconnect={disconnectModule} />;
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
@@ -5504,14 +5532,22 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
-          {['top', 'main', 'modules', 'features'].map(group => (
+          {['top', 'modules', 'features'].map(group => {
+            const groupItems = navigation.filter(n =>
+              n.group === group
+              && (!n.ownerOnly || isOwner)
+              && (!n.resource || userCanAny(n.resource))
+              && (!n.isModule || activeModuleNavs.has(n.id))
+            );
+            if (groupItems.length === 0) return null;
+            return (
             <div key={group} className="space-y-2">
               {group !== 'top' && (
                 <p className="px-5 text-[11px] font-black text-lbl uppercase tracking-[0.3em] mb-6">
-                  {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
+                  {group === 'modules' ? 'Подключённые' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || isOwner) && (!n.resource || userCanAny(n.resource))).map((item) => (
+              {groupItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
@@ -5533,7 +5569,8 @@ export default function App() {
                 </button>
               ))}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
 
