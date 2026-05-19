@@ -54,9 +54,6 @@ export const SECTIONS = [
     // nav: null у активностей/донатных — без под-пунктов в боковом меню
     // (по требованию Ильи 19.05). paid: true → красная пометка «Донатный».
     modules: [
-      { id: 'activities', nav: null, target: null, icon: Flame,
-        name: 'Активности',
-        desc: 'Игры и события для чата. Перенесены из Экономики как модуль.' },
       { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
         name: 'Шиппер',
         desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
