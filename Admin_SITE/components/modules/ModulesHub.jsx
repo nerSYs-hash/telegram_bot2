@@ -58,7 +58,7 @@ export const SECTIONS = [
     modules: [
       { id: 'economy', nav: 'economy', target: 'economy', icon: Coins,
         name: 'Экономика',
-        desc: 'Подключение = «голая доска» экономики. Нажми, чтобы добавить тематические модули.',
+        desc: 'Базовая экономика: банк, пульсы, награды и санкции. Внутри — тематические модули.',
         children: [
           { id: 'eco:sprints', icon: Rocket, name: 'Спринты',
             desc: 'Краткосрочные челленджи на активность.' },
@@ -182,7 +182,7 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
   return (
     <div
       onClick={cardClick}
-      className={`relative h-full rounded-[1.75rem] border bg-sff p-5 flex flex-col gap-3 transition-all duration-200 ${
+      className={`relative h-full min-h-[210px] rounded-[1.75rem] border bg-sff p-5 flex flex-col gap-3 transition-all duration-200 ${
         cardClick
           ? 'border-bd hover:border-[color-mix(in_oklab,var(--cta)_45%,transparent)] hover:shadow-lg cursor-pointer'
           : 'border-bd'
@@ -217,8 +217,8 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
       </div>
 
       <div className="flex-1">
-        <h3 className="text-base font-black text-tx leading-tight">{mod.name}</h3>
-        <p className="text-[12px] text-txd mt-1.5 leading-snug">{mod.desc}</p>
+        <h3 className="text-base font-black text-tx leading-tight line-clamp-2 min-h-[2.5rem]">{mod.name}</h3>
+        <p className="text-[12px] text-txd mt-1.5 leading-snug line-clamp-2">{mod.desc}</p>
       </div>
 
       <div className="flex gap-2" onClick={e => e.stopPropagation()}>
