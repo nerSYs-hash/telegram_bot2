@@ -213,17 +213,18 @@
   .ds-canvas, .ds-canvas::before { transition: none; }
 }
 
-/* ── Полоса прокрутки: тонкая, БЕЗ кнопок-стрелок ▲▼ (глобально).
-   Убирает «оконную» полосу со стрелками по краю. ── */
+/* ── Полоса прокрутки ПОЛНОСТЬЮ скрыта во всём кабинете (глобально).
+   Скролл колесом/тачем и кнопкой «наверх» работает — просто полосы нет. ── */
 * {
-  scrollbar-width: thin;                                  /* Firefox */
-  scrollbar-color: rgba(15,23,42,.22) transparent;
+  scrollbar-width: none;            /* Firefox */
+  -ms-overflow-style: none;         /* старый Edge/IE */
 }
-*::-webkit-scrollbar { width: 8px; height: 8px; }
-*::-webkit-scrollbar-track { background: transparent; }
-*::-webkit-scrollbar-thumb {
-  background: rgba(15,23,42,.20); border-radius: 9999px;
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;         /* WebKit/Chrome/новый Edge */
 }
-*::-webkit-scrollbar-thumb:hover { background: rgba(15,23,42,.34); }
-*::-webkit-scrollbar-button { display: none; width: 0; height: 0; }
-*::-webkit-scrollbar-corner { background: transparent; }
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner { display: none !important; }
