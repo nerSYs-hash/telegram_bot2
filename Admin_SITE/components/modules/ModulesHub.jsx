@@ -232,7 +232,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
       {/* ── Под-навигация: underline · бренд-линия (скрин 102042) ──
            sticky: при скролле остаётся закреплённой сверху, секции
            переключаются без подъёма наверх. ── */}
-      <div className="sticky top-0 z-20 bg-sf2 border-b border-bd">
+      <div className="sticky top-0 z-30 -mt-4 sm:-mt-6 lg:-mt-8 pt-4 sm:pt-6 lg:pt-8 bg-sff border-b border-bd shadow-sm">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
           {SECTIONS.map(s => {
             const isActive = s.id === section.id;
