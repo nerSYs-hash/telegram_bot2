@@ -5,7 +5,7 @@ import {
   LogIn, LogOut, Image as ImageIcon, UserCog,
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
-  MoonStar,
+  MoonStar, ClipboardList, MoreHorizontal, Settings,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -64,6 +64,15 @@ export const SECTIONS = [
       { id: 'donations', nav: null, target: null, icon: Gift,
         name: 'Донаты',
         desc: 'Система донатов: переводы и поддержка между участниками.' },
+      { id: 'bbs_pulse', nav: null, target: null, icon: ClipboardList,
+        name: 'Пульс ББС',
+        desc: 'Доска знакомств: основная лента анкет участников.' },
+      { id: 'bbs_other', nav: null, target: null, icon: MoreHorizontal,
+        name: 'ББС Другое',
+        desc: 'Дополнительные разделы и форматы доски знакомств.' },
+      { id: 'bbs_edit', nav: null, target: null, icon: Settings,
+        name: 'Редактирование анкет ББС',
+        desc: 'Настройка и правка анкет в доске знакомств.' },
       { id: 'vip_bbs', nav: null, target: null, icon: Sparkles, paid: true,
         name: 'VIP BBS',
         desc: 'Платная VIP-анкета в доске знакомств: эффекты и закреп.' },
