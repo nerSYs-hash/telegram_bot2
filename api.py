@@ -674,6 +674,198 @@ def _compute_stats(period: str) -> dict:
     }
 
 
+def _series_window(period: str):
+    """Окно для лента-графиков: (start, end, monthly?).
+
+    today/yesterday/week → 7 дней по дням; month → 30 дней по дням;
+    year → 12 месяцев (monthly). Гранулярность — ДЕНЬ (почасовых нет,
+    см. docs/STATS_SPEC_Puls_Chat.md «Пробелы → бэкенд этап 2»).
+    """
+    today = _today_msk()
+    if period == 'month':
+        return today - timedelta(days=29), today, False
+    if period == 'year':
+        return today - timedelta(days=364), today, True
+    return today - timedelta(days=6), today, False
+
+
+def _date_spine(start_date, end_date, monthly: bool):
+    """Список точек оси X (без дыр): [(key, label), ...]."""
+    pts = []
+    if monthly:
+        seen = set()
+        cur = start_date
+        while cur <= end_date:
+            key = cur.strftime("%Y-%m")
+            if key not in seen:
+                seen.add(key)
+                pts.append((key, RU_MONTHS.get(cur.month, key)))
+            cur += timedelta(days=1)
+    else:
+        cur = start_date
+        while cur <= end_date:
+            pts.append((cur.isoformat(), cur.strftime("%d.%m")))
+            cur += timedelta(days=1)
+    return pts
+
+
+def _compute_series(period: str) -> dict:
+    """Лента графиков Статистики на РЕАЛЬНЫХ дневных данных.
+
+    Виджеты (см. docs/STATS_SPEC_Puls_Chat.md): 1 users, 2 messages,
+    3 engagement, 6 newcomers(part), 7 firstMessage, 10 activeSummary,
+    11 kpi. Виджеты 4/5/8/9 требуют почасовых/edited/links — этап 2.
+    """
+    start_date, end_date, monthly = _series_window(period)
+    s_iso, e_iso = start_date.isoformat(), end_date.isoformat()
+    today = _today_msk()
+    ws_id = getattr(db, '_DEFAULT_WS_ID', 1) if db else 1
+    spine = _date_spine(start_date, end_date, monthly)
+    bucket = (lambda d: d[:7]) if monthly else (lambda d: d)
+
+    if not db:
+        return {"period": period, "periodLabel": PERIOD_LABELS.get(period, period),
+                "granularity": "month" if monthly else "day",
+                "users": [], "messages": [], "engagement": [], "newcomers": [],
+                "firstMessage": {"firstDay": 0, "afterFirstDay": 0},
+                "activeSummary": {"newcomers": 0, "regular": 0, "active": 0},
+                "kpi": {}}
+
+    # ── joined / left по дням ──
+    db.cursor.execute(
+        "SELECT date(joined_at) d, COUNT(*) c FROM users "
+        "WHERE date(joined_at) BETWEEN ? AND ? AND is_admin=0 AND is_owner=0 "
+        "GROUP BY d", (s_iso, e_iso))
+    joined_by = {}
+    for r in db.cursor.fetchall():
+        joined_by[bucket(r['d'])] = joined_by.get(bucket(r['d']), 0) + int(r['c'])
+
+    db.cursor.execute(
+        "SELECT date(timestamp) d, COUNT(*) c FROM transactions "
+        "WHERE workspace_id=? AND transaction_type='return_on_leave' "
+        "AND date(timestamp) BETWEEN ? AND ? GROUP BY d", (ws_id, s_iso, e_iso))
+    left_by = {}
+    for r in db.cursor.fetchall():
+        left_by[bucket(r['d'])] = left_by.get(bucket(r['d']), 0) + int(r['c'])
+
+    # ── сообщения / писавшие по дням ──
+    db.cursor.execute(
+        "SELECT date, COALESCE(SUM(total_messages),0) m, COUNT(DISTINCT user_id) w "
+        "FROM user_stats WHERE date BETWEEN ? AND ? GROUP BY date", (s_iso, e_iso))
+    msg_by, wr_by = {}, {}
+    for r in db.cursor.fetchall():
+        k = bucket(r['date'])
+        msg_by[k] = msg_by.get(k, 0) + int(r['m'])
+        wr_by[k] = wr_by.get(k, 0) + int(r['w'])
+
+    # базовый размер сообщества до окна (для линии «Всего»)
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM users WHERE date(joined_at) < ? "
+        "AND is_admin=0 AND is_owner=0", (s_iso,))
+    base = int((db.cursor.fetchone() or {'c': 0})['c'])
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM transactions WHERE workspace_id=? "
+        "AND transaction_type='return_on_leave' AND date(timestamp) < ?", (ws_id, s_iso))
+    base -= int((db.cursor.fetchone() or {'c': 0})['c'])
+    base = max(base, 0)
+
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0")
+    total_users = int((db.cursor.fetchone() or {'c': 0})['c']) or 1
+
+    users, messages, engagement, newcomers = [], [], [], []
+    running = base
+    for key, label in spine:
+        j = joined_by.get(key, 0)
+        lf = left_by.get(key, 0)
+        running = max(running + j - lf, 0)
+        m = msg_by.get(key, 0)
+        w = wr_by.get(key, 0)
+        users.append({"day": label, "joined": j, "left": lf, "total": running})
+        messages.append({"day": label, "messages": m, "writers": w})
+        engagement.append({"day": label, "pct": round(w / total_users * 100, 1)})
+        newcomers.append({"day": label, "total": j})
+
+    # ── w7: первое сообщение в 1-й день / позже ──
+    db.cursor.execute('''
+        SELECT
+          COALESCE(SUM(CASE WHEN fm.fd = date(u.joined_at) THEN 1 ELSE 0 END),0) f1,
+          COALESCE(SUM(CASE WHEN fm.fd  > date(u.joined_at) THEN 1 ELSE 0 END),0) f2
+        FROM users u
+        JOIN (SELECT user_id, MIN(date) fd FROM user_stats
+              WHERE total_messages>0 GROUP BY user_id) fm ON fm.user_id=u.user_id
+        WHERE u.is_admin=0 AND u.is_owner=0 AND u.joined_at IS NOT NULL''')
+    fr = db.cursor.fetchone() or {'f1': 0, 'f2': 0}
+    first_message = {"firstDay": int(fr['f1']), "afterFirstDay": int(fr['f2'])}
+
+    # ── w10: сводная по активным за окно ──
+    d14 = (today - timedelta(days=14)).isoformat()
+    d30 = (today - timedelta(days=30)).isoformat()
+    db.cursor.execute('''
+        SELECT
+          COALESCE(SUM(CASE WHEN date(u.joined_at) >= ? THEN 1 ELSE 0 END),0) nw,
+          COALESCE(SUM(CASE WHEN date(u.joined_at) <= ? THEN 1 ELSE 0 END),0) rg,
+          COALESCE(SUM(CASE WHEN u.joined_at IS NULL
+                       OR (date(u.joined_at) > ? AND date(u.joined_at) < ?)
+                       THEN 1 ELSE 0 END),0) ac
+        FROM users u
+        WHERE u.is_admin=0 AND u.is_owner=0 AND u.user_id IN (
+          SELECT DISTINCT user_id FROM user_stats
+          WHERE date BETWEEN ? AND ? AND total_messages>0)
+    ''', (d14, d30, d30, d14, s_iso, e_iso))
+    ar = db.cursor.fetchone() or {'nw': 0, 'rg': 0, 'ac': 0}
+    active_summary = {"newcomers": int(ar['nw']), "regular": int(ar['rg']),
+                      "active": int(ar['ac'])}
+
+    # ── w11: mini-KPI за окно ──
+    tot_msg = sum(p["messages"] for p in messages)
+    n_pts = max(len(spine), 1)
+    db.cursor.execute(
+        "SELECT COUNT(DISTINCT user_id) c FROM user_stats "
+        "WHERE date BETWEEN ? AND ? AND total_messages>0", (s_iso, e_iso))
+    active_total = int((db.cursor.fetchone() or {'c': 0})['c'])
+    avg_writers = round(sum(p["writers"] for p in messages) / n_pts, 1)
+    kpi = {
+        "totalMsg": tot_msg,
+        "avgMsgPerPoint": round(tot_msg / n_pts, 1),
+        "activeTotal": active_total,
+        "avgActivePerPoint": avg_writers,
+        "points": n_pts,
+        "unit": "месяц" if monthly else "день",
+    }
+
+    return {
+        "period": period,
+        "periodLabel": PERIOD_LABELS.get(period, period),
+        "granularity": "month" if monthly else "day",
+        "users": users,
+        "messages": messages,
+        "engagement": engagement,
+        "newcomers": newcomers,
+        "firstMessage": first_message,
+        "activeSummary": active_summary,
+        "kpi": kpi,
+        # пробелы (этап 2, см. STATS_SPEC): почасовые heatmap'ы,
+        # edited/links, атрибуция новых, «удалён ботом», онлайн.
+        "gaps": ["hourly", "edited", "links", "removed_by_mod", "online",
+                 "newcomer_attribution"],
+    }
+
+
+@app.get("/api/stats/series")
+async def get_stats_series(period: str = Query('week')):
+    """Лента графиков Статистики на реальных дневных данных.
+
+    period: today/yesterday/week → 7д; month → 30д; year → 12 мес.
+    Виджеты с почасовыми/edited/links — этап 2 (поле gaps).
+    """
+    try:
+        return _compute_series(period)
+    except Exception as e:
+        logger.error(f"Error in /api/stats/series: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get("/api/stats")
 async def get_stats(period: str = Query('today')):
     """Статистика за период: today / yesterday / week / month / year"""
