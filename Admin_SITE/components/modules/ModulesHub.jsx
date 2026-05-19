@@ -186,39 +186,34 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         cardClick
           ? 'border-bd hover:border-[color-mix(in_oklab,var(--cta)_45%,transparent)] hover:shadow-lg cursor-pointer'
           : 'border-bd'
-      } ${
-        mod.paid
-          ? '!border-[color-mix(in_oklab,var(--danger)_55%,transparent)] ring-1 ring-[color-mix(in_oklab,var(--danger)_22%,transparent)]'
-          : ''
       }`}
     >
-      {/* оранжевая точка «новый/в разработке» */}
-      {wip && (
-        <span className="absolute top-3 left-3 w-2.5 h-2.5 rounded-full bg-[var(--warn)] ring-2 ring-sff"
-          title="Новый модуль — в разработке" />
+      {/* лента-закладка «донат»: монетка, конец раздвоен как язык змеи */}
+      {mod.paid && (
+        <div className="absolute -top-px right-5 w-7 pointer-events-none z-10" title="Донатная функция">
+          <div className="bg-amber-500 text-white flex items-center justify-center pt-1.5 pb-3 shadow-md"
+            style={{ clipPath: 'polygon(0 0,100% 0,100% 100%,50% 72%,0 100%)' }}>
+            <Coins size={12} />
+          </div>
+        </div>
       )}
 
-      <div className="flex items-start justify-between">
-        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
+      <div className="flex items-start justify-between gap-2">
+        <div className={`w-11 h-11 rounded-2xl flex items-center justify-center flex-shrink-0 ${
           connected ? 'bg-cta text-white' : 'bg-sf2 text-txd'
         }`}>
           <Icon size={20} />
         </div>
-        <div className="flex flex-nowrap items-center gap-1.5 flex-shrink-0">
-          {mod.paid && (
-            <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]">
-              Донат
-            </span>
-          )}
-          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${
-            connected
-              ? 'bg-[color-mix(in_oklab,var(--ok)_8%,var(--sff))] text-tx border-[color-mix(in_oklab,var(--ok)_26%,transparent)]'
-              : 'bg-sf2 text-txd border-bd'
-          }`}>
-            {connected && <span className="w-1.5 h-1.5 rounded-full bg-ok flex-shrink-0" />}
-            {connected ? 'Подключён' : 'Не подключён'}
+        {wip ? (
+          <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--warn)_14%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_38%,transparent)]">
+            В разработке
           </span>
-        </div>
+        ) : connected ? (
+          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--ok)_8%,var(--sff))] text-tx border border-[color-mix(in_oklab,var(--ok)_26%,transparent)]">
+            <span className="w-1.5 h-1.5 rounded-full bg-ok" />
+            Подключён
+          </span>
+        ) : null}
       </div>
 
       <div className="flex-1">
@@ -226,32 +221,15 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         <p className="text-[12px] text-txd mt-1.5 leading-snug">{mod.desc}</p>
       </div>
 
-      <div className="flex items-center justify-between gap-2 pt-1" onClick={e => e.stopPropagation()}>
-        {wip ? (
-          <span className="whitespace-nowrap text-[10px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--warn)_14%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_38%,transparent)]">
-            В разработке
-          </span>
-        ) : hasChildren ? (
-          <button onClick={() => onOpenModule(mod)}
-            className="text-[11px] font-black uppercase tracking-wide text-cta flex items-center gap-1">
-            Графики <ArrowRight size={13} />
-          </button>
-        ) : connected && mod.target ? (
-          <span className="text-[11px] font-black uppercase tracking-wide text-cta flex items-center gap-1">
-            Открыть <ArrowRight size={13} />
-          </span>
-        ) : <span />}
-
+      <div onClick={e => e.stopPropagation()}>
         {connected ? (
-          <button
-            onClick={() => onDisconnect(mod)}
-            className="text-[11px] font-bold text-lbl hover:text-danger transition-colors flex-shrink-0"
-          >
+          <Button block size="sm" variant="secondary"
+            onClick={() => onDisconnect(mod)}>
             Отключить
-          </button>
+          </Button>
         ) : (
-          <Button size="sm" variant="primary" icon={Plus}
-            onClick={() => onConnect(mod.id)} className="flex-shrink-0">
+          <Button block size="sm" variant="primary" icon={Plus}
+            onClick={() => onConnect(mod.id)}>
             Подключить
           </Button>
         )}
