@@ -1,10 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, AlertTriangle,
   LogIn, LogOut, Image as ImageIcon, UserCog,
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
-  ListChecks, UserCircle, Activity, Crown, Sparkles,
+  ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -219,6 +219,16 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
 
+  // Плавающая стрелка «наверх»: плашка остаётся на месте (не sticky),
+  // а быстро подняться можно этой кнопкой. Ищем ближайший
+  // прокручиваемый родитель и скроллим его в 0.
+  const rootRef = useRef(null);
+  const scrollToTop = () => {
+    let el = rootRef.current?.parentElement;
+    while (el && el.scrollHeight <= el.clientHeight + 4) el = el.parentElement;
+    (el || window).scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   const confirmDisconnect = () => {
     if (!disc || !reason.trim()) return;
     // TODO(#7): причину — в API/журнал изменений модулей вместе со снятием тумблера.
@@ -228,11 +238,11 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   };
 
   return (
-    <div className="space-y-6 pb-24">
+    <div ref={rootRef} className="space-y-6 pb-24">
       {/* ── Под-навигация: underline · бренд-линия (скрин 102042) ──
            sticky: при скролле остаётся закреплённой сверху, секции
            переключаются без подъёма наверх. ── */}
-      <div className="sticky top-0 z-30 bg-[var(--bg)] border-b border-bd">
+      <div className="border-b border-bd">
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
           {SECTIONS.map(s => {
             const isActive = s.id === section.id;
@@ -309,6 +319,16 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
           </div>
         </div>
       )}
+
+      {/* Плавающая стрелка «наверх» — всегда видна при скролле */}
+      <button
+        onClick={scrollToTop}
+        title="Наверх"
+        aria-label="Наверх"
+        className="fixed bottom-6 right-6 z-40 w-11 h-11 rounded-full bg-cta text-white shadow-lg flex items-center justify-center hover:brightness-110 active:scale-95 transition-all"
+      >
+        <ArrowUp size={20} />
+      </button>
     </div>
   );
 }
