@@ -208,11 +208,12 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
               Донат
             </span>
           )}
-          <span className={`whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${
+          <span className={`inline-flex items-center gap-1.5 whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full border ${
             connected
-              ? 'bg-[color-mix(in_oklab,var(--ok)_14%,transparent)] text-ok border-[color-mix(in_oklab,var(--ok)_35%,transparent)]'
+              ? 'bg-[color-mix(in_oklab,var(--ok)_8%,var(--sff))] text-tx border-[color-mix(in_oklab,var(--ok)_26%,transparent)]'
               : 'bg-sf2 text-txd border-bd'
           }`}>
+            {connected && <span className="w-1.5 h-1.5 rounded-full bg-ok flex-shrink-0" />}
             {connected ? 'Подключён' : 'Не подключён'}
           </span>
         </div>
@@ -436,8 +437,10 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
 
       {/* ── Тост-оповещение ── */}
       {toast && (
-        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2 px-5 py-3 rounded-2xl bg-[color-mix(in_oklab,var(--ok)_16%,var(--sff))] text-ok border border-[color-mix(in_oklab,var(--ok)_45%,transparent)] shadow-xl animate-in slide-in-from-bottom-3 fade-in">
-          <Check size={16} />
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-2.5 px-5 py-3 rounded-2xl bg-sff text-tx border border-bd shadow-xl animate-in slide-in-from-bottom-3 fade-in">
+          <span className="w-6 h-6 rounded-full bg-[color-mix(in_oklab,var(--ok)_16%,var(--sff))] text-ok flex items-center justify-center flex-shrink-0">
+            <Check size={14} />
+          </span>
           <span className="text-[12px] font-black">{toast}</span>
         </div>
       )}
