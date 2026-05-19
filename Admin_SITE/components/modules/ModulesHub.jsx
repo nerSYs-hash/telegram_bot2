@@ -4,7 +4,7 @@ import {
   ShieldAlert, ScrollText, Plus, ArrowRight, AlertTriangle,
   LogIn, LogOut, Image as ImageIcon, UserCog,
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
-  ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp,
+  ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -37,6 +37,9 @@ export const SECTIONS = [
       { id: 'statistics', nav: 'statistics', target: 'statistics', icon: PieChart,
         name: 'Статистика и графики',
         desc: 'Лента графиков: пользователи, сообщения, вовлечённость, активность.' },
+      { id: 'top5', nav: null, target: null, icon: Trophy,
+        name: 'Топ-5',
+        desc: 'Рейтинги участников: топы по активности, сообщениям и пульсам.' },
     ],
   },
   {
@@ -57,6 +60,9 @@ export const SECTIONS = [
       { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
         name: 'Шиппер',
         desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
+      { id: 'donations', nav: null, target: null, icon: Gift,
+        name: 'Донаты',
+        desc: 'Система донатов: переводы и поддержка между участниками.' },
       { id: 'vip_bbs', nav: null, target: null, icon: Sparkles, paid: true,
         name: 'VIP BBS',
         desc: 'Платная VIP-анкета в доске знакомств: эффекты и закреп.' },
