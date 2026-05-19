@@ -5,6 +5,7 @@ import {
   LogIn, LogOut, Image as ImageIcon, UserCog,
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
+  MoonStar,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -81,6 +82,9 @@ export const SECTIONS = [
       { id: 'triggers', nav: 'triggers', target: 'triggers', icon: ShieldAlert,
         name: 'Триггеры',
         desc: 'Авто-реакции на слова и события. Нужен не всем чатам.' },
+      { id: 'horoscope', nav: null, target: null, icon: MoonStar,
+        name: 'Гороскоп',
+        desc: 'Ежедневные гороскопы для участников чата.' },
     ],
   },
   {
