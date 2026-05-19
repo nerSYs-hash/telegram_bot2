@@ -3,6 +3,8 @@ import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, AlertTriangle,
   LogIn, LogOut, Image as ImageIcon, UserCog,
+  MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
+  ListChecks, UserCircle, Activity, Crown, Sparkles,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -49,13 +51,21 @@ export const SECTIONS = [
   {
     id: 'engagement',
     name: 'Вовлечение',
+    // nav: null у активностей/донатных — без под-пунктов в боковом меню
+    // (по требованию Ильи 19.05). paid: true → красная пометка «Донатный».
     modules: [
-      { id: 'activities', nav: null, target: null, icon: Flame, soon: true,
+      { id: 'activities', nav: null, target: null, icon: Flame,
         name: 'Активности',
-        desc: 'Игры и события. Каждая активность — отдельный суб-модуль.' },
+        desc: 'Игры и события для чата. Перенесены из Экономики как модуль.' },
       { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
         name: 'Шиппер',
         desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
+      { id: 'vip_bbs', nav: null, target: null, icon: Sparkles, paid: true,
+        name: 'VIP BBS',
+        desc: 'Платная VIP-анкета в доске знакомств: эффекты и закреп.' },
+      { id: 'titles', nav: null, target: null, icon: Crown, paid: true,
+        name: 'Титулы',
+        desc: 'Платные кастомные титулы участников. Донатная функция.' },
     ],
   },
   {
@@ -73,19 +83,40 @@ export const SECTIONS = [
   {
     id: 'journal',
     name: 'Журнал',
+    // Суб-модули = реальные категории фильтра страницы Журнал (logTags).
+    // id = journal:<log.type>; все ведут в один nav 'journal'.
+    // Подключённые типы определяют, какие чипы/события видны на странице.
     modules: [
-      { id: 'journal:join', nav: 'journal', target: 'journal', icon: LogIn,
-        name: 'Вход / Регистрация',
-        desc: 'Лог входов в чат и прохождения регистрации новичками.' },
-      { id: 'journal:leave', nav: 'journal', target: 'journal', icon: LogOut,
-        name: 'Выход',
-        desc: 'Лог выходов и удалений участников из чата.' },
-      { id: 'journal:photo', nav: 'journal', target: 'journal', icon: ImageIcon,
-        name: 'Смена фото',
-        desc: 'Лог смены аватара/фото профиля участниками.' },
-      { id: 'journal:name', nav: 'journal', target: 'journal', icon: UserCog,
-        name: 'Смена имени',
-        desc: 'Лог смены имени и @username участниками.' },
+      { id: 'journal:trigger',   nav: 'journal', target: 'journal', icon: ShieldAlert,
+        name: 'Триггеры',        desc: 'События срабатывания триггеров.' },
+      { id: 'journal:mute',      nav: 'journal', target: 'journal', icon: MicOff,
+        name: 'Муты',            desc: 'Выдачи мута участникам.' },
+      { id: 'journal:unmute',    nav: 'journal', target: 'journal', icon: Mic,
+        name: 'Размуты',         desc: 'Снятие мута с участников.' },
+      { id: 'journal:ban',       nav: 'journal', target: 'journal', icon: Ban,
+        name: 'Баны',            desc: 'Баны участников.' },
+      { id: 'journal:unban',     nav: 'journal', target: 'journal', icon: UserCheck,
+        name: 'Разбаны',         desc: 'Снятие бана.' },
+      { id: 'journal:kick',      nav: 'journal', target: 'journal', icon: UserMinus,
+        name: 'Исключения',      desc: 'Удаления (кик) из чата.' },
+      { id: 'journal:warn',      nav: 'journal', target: 'journal', icon: AlertTriangle,
+        name: 'Предупреждения',  desc: 'Выдачи предупреждений (варнов).' },
+      { id: 'journal:join',      nav: 'journal', target: 'journal', icon: LogIn,
+        name: 'Вход / Регистрация', desc: 'Входы в чат и регистрация новичков.' },
+      { id: 'journal:leave',     nav: 'journal', target: 'journal', icon: LogOut,
+        name: 'Выход',           desc: 'Выходы участников из чата.' },
+      { id: 'journal:blacklist', nav: 'journal', target: 'journal', icon: ShieldBan,
+        name: 'Блокировка',      desc: 'Чёрный список / блокировки.' },
+      { id: 'journal:admin',     nav: 'journal', target: 'journal', icon: UserCog,
+        name: 'Админ-действия',  desc: 'Действия администраторов.' },
+      { id: 'journal:survey',    nav: 'journal', target: 'journal', icon: ListChecks,
+        name: 'Опросы',          desc: 'Создание и итоги опросов.' },
+      { id: 'journal:profile',   nav: 'journal', target: 'journal', icon: UserCircle,
+        name: 'Профиль',         desc: 'Изменения профиля участников.' },
+      { id: 'journal:activity',  nav: 'journal', target: 'journal', icon: Activity,
+        name: 'Активность',      desc: 'События активности участников.' },
+      { id: 'journal:photo',     nav: 'journal', target: 'journal', icon: ImageIcon,
+        name: 'Смена фото',      desc: 'Смена аватара/фото профиля.' },
     ],
   },
 ];
@@ -126,7 +157,11 @@ function ModuleCard({ mod, connected, onOpen, onConnect, onDisconnect }) {
         clickable
           ? 'border-bd hover:border-[color-mix(in_oklab,var(--cta)_45%,transparent)] hover:shadow-lg cursor-pointer'
           : 'border-bd'
-      } ${mod.soon ? 'opacity-60' : ''}`}
+      } ${mod.soon ? 'opacity-60' : ''} ${
+        mod.paid
+          ? '!border-[color-mix(in_oklab,var(--danger)_55%,transparent)] ring-1 ring-[color-mix(in_oklab,var(--danger)_22%,transparent)]'
+          : ''
+      }`}
     >
       <div className="flex items-start justify-between">
         <div className={`w-11 h-11 rounded-2xl flex items-center justify-center ${
@@ -134,7 +169,14 @@ function ModuleCard({ mod, connected, onOpen, onConnect, onDisconnect }) {
         }`}>
           <Icon size={20} />
         </div>
-        <StatusPill connected={connected} soon={mod.soon} />
+        <div className="flex items-center gap-1.5">
+          {mod.paid && (
+            <span className="text-[9px] font-black uppercase tracking-widest px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]">
+              Донатный
+            </span>
+          )}
+          <StatusPill connected={connected} soon={mod.soon} />
+        </div>
       </div>
 
       <div className="flex-1">

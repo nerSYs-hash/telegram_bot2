@@ -1183,11 +1183,24 @@ export default function App() {
           </div>
         );
 
-      case 'journal':
+      case 'journal': {
+        // Суб-модули Журнала подключаются из хаба «Модули» как journal:<type>.
+        // Видны только чипы/события подключённых типов (1 подключил → 1 виден).
+        const enabledJ = new Set(
+          [...connectedModules].filter(x => x.startsWith('journal:')).map(x => x.slice(8))
+        );
+        const jTags = logTags.filter(t =>
+          t.id === 'all' ? enabledJ.size > 1 : enabledJ.has(t.id)
+        );
         return (
           <div className="space-y-4 pb-24">
+            {enabledJ.size === 0 && (
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
+                Подключите суб-модули Журнала в разделе «Модули»
+              </div>
+            )}
             <div className="flex space-x-2 overflow-x-auto pt-2 pb-2 scrollbar-hide -mx-4 px-4">
-              {logTags.map(tag => (
+              {jTags.map(tag => (
                 <button key={tag.id} onClick={() => setLogFilter(tag.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-[10px] uppercase border transition-all ${logFilter === tag.id ? 'bg-cta text-white border-cta scale-105 shadow-md' : 'bg-sff text-txd border-bd'}`}>{tag.label}</button>
               ))}
             </div>
@@ -1201,7 +1214,7 @@ export default function App() {
                 Событий пока нет
               </div>
             )}
-            {logs.filter(l => logFilter === 'all' || l.type === logFilter).map(log => {
+            {logs.filter(l => enabledJ.has(l.type) && (logFilter === 'all' || l.type === logFilter)).map(log => {
               const TAG_STYLE = {
                 trigger:      'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
                 mute:         'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
@@ -1283,6 +1296,7 @@ export default function App() {
             })}
           </div>
         );
+      }
 
       case 'shipper':
         return (
