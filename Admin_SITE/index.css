@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Шрифт всего проекта · Вариант B (20.05, выбор Ильи) ──
+   Onest для основного UI (современный геометрический, чёткий на мелких),
+   IBM Plex Mono для табличных чисел и кода. Тех-настройки шрифта
+   объявлены в :root ниже (--font-sans/--font-mono); тут применяем
+   их ко всему body и mono-классам — глобально, без .ds-canvas-обёртки. */
+html, body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1; /* tabular-nums везде по умолчанию */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+code, pre, kbd, samp,
+.tabular-nums, [class*="font-mono"] {
+  font-family: var(--font-mono);
+}
+
 /* ── Aceternity-style вращающийся glow-бордер ── */
 @property --pulse-btn-angle {
   syntax: '<angle>';
@@ -174,9 +191,9 @@
   --purple:#BF5AF2; --pink:#FF375F; --mint:#66D4CF; --neutral:#98989D;
   /* геометрия §3 */
   --r:16px; --rsm:12px; --rpill:9999px;
-  /* типографика §4 — Вариант A (Golos Text + JetBrains Mono) */
-  --font-sans:'Golos Text',ui-sans-serif,system-ui,-apple-system,sans-serif;
-  --font-mono:'JetBrains Mono',ui-monospace,'SF Mono',monospace;
+  /* типографика §4 — Вариант B (Onest + IBM Plex Mono, выбор Ильи 20.05) */
+  --font-sans:'Onest',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',monospace;
   /* моушн §6a */
   --tm:150ms; --ts:220ms;
   --e:cubic-bezier(.22,.61,.36,1); --esp:cubic-bezier(.34,1.56,.64,1);
