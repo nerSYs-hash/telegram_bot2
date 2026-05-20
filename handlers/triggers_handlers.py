@@ -1568,6 +1568,20 @@ async def process_triggers(
     if not user:
         return False
 
+    # ── module_toggles guard (V1.17.0h1): модуль OFF → silent skip ──
+    try:
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        from bot_core.module_guard import is_module_enabled_cached
+        _ws_id = resolve_workspace_for_chat(db.conn, target_chat_id)
+        if _ws_id is not None and not is_module_enabled_cached(
+            db.conn, _ws_id, "triggers"
+        ):
+            return False
+    except Exception as _e:
+        # Не блокируем триггеры из-за сбоя в guard. Логируем и продолжаем.
+        logger.warning(f"triggers module_guard skipped: {_e}")
+    # ── /guard ──
+
     # Игнорируем собственные сообщения бота
     try:
         if user.id == context.bot.id:
