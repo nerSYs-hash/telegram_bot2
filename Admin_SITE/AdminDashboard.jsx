@@ -2,6 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
+import { useModules } from './hooks/useModules';
+import ModulesTogglesTab from './components/modules/ModulesTogglesTab';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -23,7 +25,7 @@ import {
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
   GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
-  Crown, AtSign, Hash, Plug, LogOut
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight
 } from 'lucide-react';
 
 const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
@@ -341,6 +343,14 @@ export default function App() {
       .then(u => { if (u) setAuthUser(u); else localStorage.removeItem('auth_token'); })
       .catch(() => localStorage.removeItem('auth_token'))
       .finally(() => setAuthLoading(false));
+  }, []);
+
+  // Одноразовая чистка старого localStorage-скелета модулей.
+  useEffect(() => {
+    if (!localStorage.getItem('pulse_modules_migrated_v1')) {
+      localStorage.removeItem('pulse_connected_modules');
+      localStorage.setItem('pulse_modules_migrated_v1', '1');
+    }
   }, []);
 
   // ── ПРОФИЛЬ ──
@@ -979,26 +989,33 @@ export default function App() {
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
+    { id: 'module_toggles', name: 'Тумблеры модулей', icon: ToggleRight,  group: 'features' },
   ];
 
-  // Подключённые модули каталога (id карточек). СКЕЛЕТ: localStorage,
-  // потом — section_toggles + RBAC (#7). MODULE_NAV: card id → sidebar id.
-  const [connectedModules, setConnectedModules] = useState(() => {
-    try { return new Set(JSON.parse(localStorage.getItem('pulse_connected_modules') || '[]')); }
-    catch { return new Set(); }
-  });
-  const _persistModules = (s) =>
-    localStorage.setItem('pulse_connected_modules', JSON.stringify([...s]));
-  const connectModule = (id) => setConnectedModules(prev => {
-    const n = new Set(prev); n.add(id); _persistModules(n); return n;
-  });
-  const disconnectModule = (id) => setConnectedModules(prev => {
-    const n = new Set(prev); n.delete(id); _persistModules(n); return n;
-  });
-  // Какие sidebar-разделы активны (через карту card→nav из ModulesHub).
-  const activeModuleNavs = new Set(
-    [...connectedModules].map(cid => MODULE_NAV[cid]).filter(Boolean)
+  const wsId = getActiveWs();
+  const modulesApi = useModules(wsId);
+
+  // Подключённые модули = is_enabled из API.
+  // localStorage для модулей удалён, источник истины — API (см. spec 7.0).
+  const connectedModules = useMemo(
+    () => new Set((modulesApi.modules || []).filter(m => m.is_enabled).map(m => m.id)),
+    [modulesApi.modules]
   );
+
+  // connect/disconnect через API. Reason обязателен только для disable.
+  const connectModule = async (id) => {
+    try { await modulesApi.enable(id); } catch (e) { console.error('module.enable', e); }
+  };
+  const disconnectModule = async (id, reason) => {
+    try { await modulesApi.disable(id, reason); } catch (e) { console.error('module.disable', e); }
+  };
+
+  // Какие sidebar-разделы активны (через карту card→nav из ModulesHub).
+  const activeModuleNavs = useMemo(
+    () => new Set([...connectedModules].map(cid => MODULE_NAV[cid]).filter(Boolean)),
+    [connectedModules]
+  );
+
   // Если открытый модуль отключили — уводим на каталог «Модули».
   useEffect(() => {
     const cur = navigation.find(n => n.id === activeTab);
@@ -1011,6 +1028,8 @@ export default function App() {
       case 'modules':
         return <ModulesHub onOpen={navigateTo} connected={connectedModules}
                  onConnect={connectModule} onDisconnect={disconnectModule} />;
+      case 'module_toggles':
+        return <ModulesTogglesTab modulesApi={modulesApi} />;
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
