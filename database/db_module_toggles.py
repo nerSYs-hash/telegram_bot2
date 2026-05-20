@@ -53,7 +53,7 @@ def set_module_state(
            VALUES (?, ?, ?, ?, ?)''',
         (workspace_id, module_id, "enable" if is_enabled else "disable", reason, user_id),
     )
-    bump_cache_version(conn, workspace_id)
+    _bump_cache_version(conn, workspace_id)
     conn.commit()
 
 
@@ -102,7 +102,7 @@ def get_cache_version(conn: sqlite3.Connection, workspace_id: int) -> int:
     return row[0] if row else 0
 
 
-def bump_cache_version(conn: sqlite3.Connection, workspace_id: int) -> None:
+def _bump_cache_version(conn: sqlite3.Connection, workspace_id: int) -> None:
     conn.execute(
         '''INSERT INTO module_toggle_cache_version (workspace_id, version)
            VALUES (?, 1)

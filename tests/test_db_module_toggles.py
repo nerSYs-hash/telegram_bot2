@@ -25,7 +25,7 @@ import json
 from pathlib import Path
 from database.db_module_toggles import (
     is_module_enabled, set_module_state, get_modules,
-    list_history, get_cache_version, bump_cache_version,
+    list_history, get_cache_version,
     VALID_MODULE_IDS,
 )
 from database.migrations.module_toggles import up as _up
@@ -85,13 +85,6 @@ def test_history_records_action_and_reason():
     assert h[0]["reason"] == "тест"
 
 
-def test_bump_cache_version_increments():
-    conn = _fresh()
-    v0 = get_cache_version(conn, 1)
-    bump_cache_version(conn, 1)
-    assert get_cache_version(conn, 1) == v0 + 1
-
-
 def test_set_module_state_bumps_version():
     conn = _fresh()
     v0 = get_cache_version(conn, 1)
@@ -100,7 +93,8 @@ def test_set_module_state_bumps_version():
 
 
 def test_valid_module_ids_loaded_from_json():
-    cat = json.loads(Path("shared/modules_catalog.json").read_text(encoding="utf-8"))
+    catalog_path = Path(__file__).resolve().parent.parent / "shared" / "modules_catalog.json"
+    cat = json.loads(catalog_path.read_text(encoding="utf-8"))
     expected = {m["id"] for m in cat["modules"]}
     assert VALID_MODULE_IDS == expected
 
