@@ -10,6 +10,10 @@ def test_migration_creates_three_tables():
     assert "module_toggles" in tables
     assert "module_toggle_history" in tables
     assert "module_toggle_cache_version" in tables
+    indexes = {r[0] for r in conn.execute(
+        "SELECT name FROM sqlite_master WHERE type='index'"
+    ).fetchall()}
+    assert "idx_mth_ws_mod" in indexes
 
 def test_migration_is_idempotent():
     conn = sqlite3.connect(":memory:")

@@ -26,7 +26,7 @@ def up(conn: sqlite3.Connection) -> None:
             changed_at   TEXT    NOT NULL DEFAULT CURRENT_TIMESTAMP
         );
         CREATE INDEX IF NOT EXISTS idx_mth_ws_mod
-            ON module_toggle_history(workspace_id, module_id, changed_at DESC);
+            ON module_toggle_history(workspace_id, module_id, changed_at);
 
         CREATE TABLE IF NOT EXISTS module_toggle_cache_version (
             workspace_id INTEGER PRIMARY KEY,
@@ -34,3 +34,10 @@ def up(conn: sqlite3.Connection) -> None:
         );
     ''')
     conn.commit()
+
+
+def down(conn: sqlite3.Connection) -> None:
+    """Откат не реализован: миграция идемпотентна и вызывается из startup.
+    При необходимости — DROP TABLE module_toggles, module_toggle_history,
+    module_toggle_cache_version вручную."""
+    pass
