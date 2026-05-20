@@ -1319,7 +1319,7 @@ export default function App() {
                 <div key={cat.id} className="bg-sff p-5 rounded-3xl border border-bd shadow-sm flex items-center justify-between active:scale-[0.98] transition-all">
                   <div className="flex items-center space-x-4">
                     <div className="w-12 h-12 bg-sf2 rounded-2xl flex items-center justify-center text-xl">{cat.id === 'hot18' ? '🔥' : cat.id === 'funny' ? '😂' : '💘'}</div>
-                    <span className="font-black text-tx">{cat.name}</span>
+                    <span className="font-black text-tx">{cat.name.replace(/^[^\p{L}\p{N}]+/u, '')}</span>
                   </div>
                   <ChevronRight size={20} className="text-lbl" />
                 </div>
