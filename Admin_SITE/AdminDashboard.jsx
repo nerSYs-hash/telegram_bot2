@@ -3,8 +3,7 @@ import EconomyPage from './components/economy/EconomyPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import { useModules } from './hooks/useModules';
-import ModulesTogglesTab from './components/modules/ModulesTogglesTab';
-import ModuleHeader from './components/modules/ModuleHeader';
+import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -322,13 +321,18 @@ class EconomyErrorBoundary extends React.Component {
 
 export default function App() {
   // ── АВТОРИЗАЦИЯ ──
-  // DEV-ONLY превью-обход логина для дизайн-QA (cutover §2b). Двойная
-  // защита: только `vite dev` (import.meta.env.DEV) + ?preview в URL.
+  // DEV-ONLY превью-обход логина для дизайн-QA. Тройная защита:
+  // только `vite dev` (import.meta.env.DEV) + (localhost ИЛИ ?preview).
   // В прод-сборке import.meta.env.DEV=false → ветка мертва, не попадёт.
+  // V1.17.0h1c (20.05): автоматом на localhost, чтобы не помнить ?preview.
   const __devPreview =
     import.meta.env.DEV &&
     typeof window !== 'undefined' &&
-    new URLSearchParams(window.location.search).has('preview');
+    (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      new URLSearchParams(window.location.search).has('preview')
+    );
   const [authUser, setAuthUser]       = useState(
     __devPreview
       ? { user_id: 0, first_name: 'Preview', username: 'preview', is_admin: true, is_owner: true }
@@ -397,15 +401,17 @@ export default function App() {
     [profileData]
   );
   const userCan = useCallback((perm) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
     if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
-  }, [userPermissions, profileData]);
+  }, [userPermissions, profileData, __devPreview]);
 
   const userCanAny = useCallback((resourceKey) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
     if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     if (!profileData) return true;
     return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
-  }, [userPermissions, profileData]);
+  }, [userPermissions, profileData, __devPreview]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -990,7 +996,6 @@ export default function App() {
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
-    { id: 'module_toggles', name: 'Тумблеры модулей', icon: ToggleRight,  group: 'features' },
   ];
 
   const wsId = getActiveWs();
@@ -1017,20 +1022,14 @@ export default function App() {
     [connectedModules]
   );
 
-  // Если открытый модуль отключили — уводим на каталог «Модули».
-  useEffect(() => {
-    const cur = navigation.find(n => n.id === activeTab);
-    if (cur?.isModule && !activeModuleNavs.has(activeTab)) navigateTo('modules');
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [connectedModules]);
+  // (Удалено V1.17.0h1c) Перенаправление при отключении модуля больше
+  // не нужно — разделы модулей всегда видны, выкл не скрывает их.
 
   const renderContent = () => {
     switch (activeTab) {
       case 'modules':
         return <ModulesHub onOpen={navigateTo} connected={connectedModules}
                  onConnect={connectModule} onDisconnect={disconnectModule} />;
-      case 'module_toggles':
-        return <ModulesTogglesTab modulesApi={modulesApi} />;
       case 'statistics':
         return (
           <div className="space-y-4 pb-24">
@@ -4896,12 +4895,10 @@ export default function App() {
 
         return (
           <div className="space-y-4 pb-24">
-            {/* ── Паспорт модуля (V1.17.0h1b) ── */}
-            <ModuleHeader
+            {/* ── Статус-баннер модуля (V1.17.0h1c) ── */}
+            <ModuleStatusBanner
               moduleId="triggers"
-              icon={ShieldAlert}
-              name="Триггеры"
-              description="Авто-реакции на слова и события чата."
+              moduleName="Триггеры"
               modulesApi={modulesApi}
             />
 
@@ -5580,7 +5577,8 @@ export default function App() {
               n.group === group
               && (!n.ownerOnly || isOwner)
               && (!n.resource || userCanAny(n.resource))
-              && (!n.isModule || activeModuleNavs.has(n.id))
+              // Разделы модулей теперь всегда видны — тумблер влияет
+              // только на работу функции в боте (статус-баннер сверху страницы).
             );
             if (groupItems.length === 0) return null;
             return (
