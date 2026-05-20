@@ -105,6 +105,15 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения workspaces router: {e}")
 
+# Modules (V1.17.0h0 — module toggles)
+try:
+    from api.modules_routes import router as modules_router, _setup as _modules_setup
+    _modules_setup(db, lambda auth: _require_auth(auth))
+    app.include_router(modules_router)
+    logger.info("✅ modules: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения modules router: {e}")
+
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
