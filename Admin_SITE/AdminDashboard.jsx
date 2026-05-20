@@ -4,6 +4,7 @@ import PressReleasePage from './components/press_release/PressReleasePage';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import { useModules } from './hooks/useModules';
 import ModulesTogglesTab from './components/modules/ModulesTogglesTab';
+import ModuleHeader from './components/modules/ModuleHeader';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -4895,6 +4896,15 @@ export default function App() {
 
         return (
           <div className="space-y-4 pb-24">
+            {/* ── Паспорт модуля (V1.17.0h1b) ── */}
+            <ModuleHeader
+              moduleId="triggers"
+              icon={ShieldAlert}
+              name="Триггеры"
+              description="Авто-реакции на слова и события чата."
+              modulesApi={modulesApi}
+            />
+
             {/* ── Поиск ── */}
             <div className="relative">
               <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-lbl"/>
