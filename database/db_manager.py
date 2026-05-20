@@ -634,6 +634,14 @@ class Database:
             import logging
             logging.getLogger(__name__).error(f"init_press_release_tables: {e}")
 
+        # Migration V1.17.0h0b: тумблеры модулей (module_toggles + history + cache_version)
+        try:
+            from database.migrations.module_toggles import up as _up_module_toggles
+            _up_module_toggles(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"module_toggles migration: {e}")
+
     # ── Economy ──
     # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
     # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.
