@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useLayoutEffect, useMemo } from 'react';
 import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, ArrowLeft, AlertTriangle,
@@ -255,6 +255,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const [disc, setDisc] = useState(null);         // модуль на отключении
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState(null);
+  const [query, setQuery] = useState('');
 
   const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
@@ -309,21 +310,39 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const confirmDisconnect = () => {
     if (!disc || !reason.trim()) return;
     // TODO(#7): причину — в журнал изменений модулей вместе со снятием тумблера.
-    onDisconnect?.(disc.id);
+    onDisconnect?.(disc.id, reason.trim());
     flash(`Модуль «${disc.name}» отключён`);
     setDisc(null);
     setReason('');
   };
+
+  // Плоский список всех модулей и дочерних для поиска.
+  const allModules = useMemo(() => {
+    const out = [];
+    SECTIONS.forEach(s => s.modules.forEach(m => {
+      out.push(m);
+      (m.children || []).forEach(c => out.push({ ...c, _parentName: m.name }));
+    }));
+    return out;
+  }, []);
 
   // Что показываем: под-каталог открытого модуля или секцию.
   const view = openMod
     ? { title: openMod.name, items: openMod.children, inChild: true }
     : { title: section.name, items: section.modules, inChild: false };
 
+  const q = query.trim().toLowerCase();
+  const visibleItems = q
+    ? allModules.filter(m =>
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.desc || '').toLowerCase().includes(q)
+      )
+    : view.items;
+
   return (
     <div ref={rootRef} className="space-y-6 pb-24">
       {/* ── Под-навигация секций (бренд-линия) ── */}
-      <div className="border-b border-bd">
+      <div className={`border-b border-bd transition-opacity duration-200 ${q ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
           {SECTIONS.map(s => {
             const isActive = !openMod && s.id === section.id;
@@ -345,8 +364,20 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
         </div>
       </div>
 
+      {/* ── Поиск по всем секциям ── */}
+      <div className="-mt-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+          placeholder="Найти модуль…"
+          className="w-full max-w-sm px-4 py-2.5 rounded-2xl bg-sff border border-bd text-sm focus:outline-none focus:border-cta transition-colors"
+        />
+      </div>
+
       {/* ── Хлебные крошки под-каталога ── */}
-      {openMod && (
+      {!q && openMod && (
         <div className="flex items-center gap-2 text-[12px] font-bold">
           <button onClick={() => setOpenMod(null)}
             className="flex items-center gap-1 text-cta hover:underline">
@@ -359,7 +390,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
 
       {/* ── Каталог: подключённые наверх, FLIP-перестановка ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[...view.items]
+        {[...visibleItems]
           .sort((a, b) => (isOn(b.id) ? 1 : 0) - (isOn(a.id) ? 1 : 0))
           .map(m => (
           <div
@@ -379,6 +410,14 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
           </div>
         ))}
       </div>
+
+      {/* ── Empty state поиска ── */}
+      {q && visibleItems.length === 0 && (
+        <div className="text-center text-txd py-12">
+          Ничего не найдено по запросу «{query}».{' '}
+          <button onClick={() => setQuery('')} className="underline text-cta">сбросить</button>
+        </div>
+      )}
 
       <p className="text-[12px] text-lbl text-center">
         {view.inChild
