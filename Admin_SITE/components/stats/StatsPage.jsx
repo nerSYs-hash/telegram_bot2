@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
-  ResponsiveContainer, ComposedChart, Bar, Line, Brush,
+  ResponsiveContainer, ComposedChart, Area, Bar, Line, Brush,
   XAxis, YAxis, CartesianGrid, Tooltip,
 } from 'recharts';
 import {
@@ -45,7 +45,7 @@ function StatTooltip({ active, payload, label }) {
             <span className="text-[13px] font-bold text-tx tabular-nums">
               {typeof p.value === 'number'
                 ? p.value.toLocaleString('ru-RU')
-                : p.value}
+                : p.value}{p.unit || ''}
             </span>
           </div>
         ))}
@@ -293,6 +293,70 @@ function WidgetMessages({ cache, ensure }) {
   );
 }
 
+// ═══════════ Виджет №3 — Коэффициент вовлечённости ═══════════
+function WidgetEngagement({ cache, ensure }) {
+  const [gran, setGran] = useState('day');
+  const [activeIndex, setActiveIndex] = useState(null);
+
+  useEffect(() => { ensure(gran); }, [gran, ensure]);
+
+  const series = cache[gran];
+  const data = series?.engagement || [];
+  const loading = !series;
+  const error = series?.error;
+
+  return (
+    <WidgetCard
+      icon={Activity} accent={C.purple}
+      title="Коэффициент вовлечённости"
+      hint="Доля участников, написавших хотя бы одно сообщение за период, от общего числа участников чата. Чем выше — тем активнее живёт чат."
+      onExport={data.length ? () => downloadCSV(
+        `engagement_${gran}.csv`, ['Период', 'Вовлечённость, %'],
+        data.map((e) => [e.day, e.pct]),
+      ) : undefined}
+    >
+      <div className="px-2 pb-1">
+        <GranTabs value={gran} onChange={setGran} />
+      </div>
+
+      {loading ? <WidgetState kind="loading" />
+        : error ? <WidgetState kind="error" />
+        : (
+        <>
+          <ResponsiveContainer width="100%" height={290}>
+            <ComposedChart data={data} margin={{ top: 10, right: 6, left: -14, bottom: 0 }}
+              onMouseMove={(s) => setActiveIndex(s?.activeTooltipIndex ?? null)}
+              onMouseLeave={() => setActiveIndex(null)}>
+              <defs>
+                <linearGradient id="engGrad" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%"   stopColor={C.purple} stopOpacity={0.28} />
+                  <stop offset="100%" stopColor={C.purple} stopOpacity={0.02} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+              <XAxis dataKey="day" height={30} axisLine={false} tickLine={false}
+                     interval="preserveStartEnd"
+                     tick={<DateTick activeIndex={activeIndex} />} />
+              <YAxis width={40} domain={[0, 'auto']} unit="%"
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <Tooltip content={<StatTooltip />}
+                       cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
+              <Area type="monotone" dataKey="pct" name="Вовлечённость" unit="%"
+                    stroke={C.purple} strokeWidth={2.5} fill="url(#engGrad)"
+                    dot={{ r: 3, fill: C.purple, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: C.purple, stroke: '#fff', strokeWidth: 2 }}
+                    animationDuration={650} />
+              <Brush dataKey="day" height={24} stroke={C.purple} fill={C.brush}
+                     travellerWidth={9} tickFormatter={() => ''} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <ChartLegend items={[{ label: 'Вовлечённость', color: C.purple }]} />
+        </>
+      )}
+    </WidgetCard>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title, note }) {
   return (
@@ -350,9 +414,10 @@ export default function StatsPage() {
       {/* ── №2 — собран ── */}
       <WidgetMessages cache={cache} ensure={ensure} />
 
-      {/* ── №3–11 — проектируем по очереди ── */}
-      <SoonCard icon={Activity} title="Коэффициент вовлечённости"
-        note="Доля пишущих от общего числа участников." />
+      {/* ── №3 — собран ── */}
+      <WidgetEngagement cache={cache} ensure={ensure} />
+
+      {/* ── №4–11 — проектируем по очереди ── */}
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта"
         note="Нужны почасовые данные — бэкенд этап 2." />
       <SoonCard icon={MessageSquare} title="Статистика по сообщениям"
