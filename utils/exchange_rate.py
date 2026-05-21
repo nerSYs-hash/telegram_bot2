@@ -393,8 +393,8 @@ def scheduled_top5_percent_update(db):
     try:
         entries, ws, we = calculate_top5_percent(db)
         db.save_top5_percent(entries, ws, we)
-        # Чистим старые hourly-данные (оставляем 2 дня)
-        db.cleanup_old_hourly_stats(days_to_keep=2)
+        # Чистим старые hourly-данные (оставляем год — для теплокарт Статистики)
+        db.cleanup_old_hourly_stats(days_to_keep=365)
         logger.info(f"📊 TOP-5%% updated: {len(entries)} users | window {ws} → {we}")
         return entries
     except Exception as e:

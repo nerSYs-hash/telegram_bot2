@@ -606,6 +606,16 @@ class Database:
         except Exception:
             pass  # Column already exists
 
+        # Migration V1.17.0h11: статистика — учёт edited / links по сообщениям
+        # (виджеты Статистики №8/№9, бэкенд-этап 2 — сбор данных вперёд).
+        for _stat_col in ("edited_count", "links_sent"):
+            try:
+                self.cursor.execute(
+                    f"ALTER TABLE user_stats ADD COLUMN {_stat_col} INTEGER DEFAULT 0")
+                self.conn.commit()
+            except Exception:
+                pass  # колонка уже есть
+
         self.seed_shipper_phrases_if_empty()
 
         # Initialize economy tables
@@ -902,7 +912,7 @@ class Database:
     def get_top5_percent(self):
         return _get_top5_percent(self, self._DEFAULT_WS_ID)
 
-    def cleanup_old_hourly_stats(self, days_to_keep=2):
+    def cleanup_old_hourly_stats(self, days_to_keep=365):
         # cleanup_old_hourly_stats — cross-workspace (глобальная очистка по дате),
         # workspace_id не нужен.
         _cleanup_old_hourly_stats(self, days_to_keep)

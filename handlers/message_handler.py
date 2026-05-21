@@ -400,12 +400,17 @@ class MessageHandler:
                 and message.reply_to_message.from_user
                 and not message.reply_to_message.from_user.is_bot
             )
+            # Ссылка в сообщении — учёт для статистики (виджет №9).
+            _link_ents = list(message.entities or []) + list(message.caption_entities or [])
+            _has_link = any(getattr(e, 'type', None) in ('url', 'text_link')
+                            for e in _link_ents)
             stats_update = {
                 'total_chars': char_count,
                 'total_messages': 1,
                 'total_words': word_count,
                 'replies_sent': 1 if _reply_to_real_user else 0,
                 'media_sent': 1 if is_media else 0,
+                'links_sent': 1 if _has_link else 0,
                 # mentions_received УБРАНО отсюда — это счётчик ПОЛУЧАТЕЛЯ упоминания, не отправителя
                 'other_threads_posts': 1 if thread_id is not None else 0
             }
@@ -763,6 +768,25 @@ class MessageHandler:
         # === ОБРАБОТКА ВВОДА АДМИНА (пресс-релиз, курс, переводы, донаты) ===
         if await process_admin_input(message, user, context, self.db, self.main_admin_id, self.target_chat_id, update=update):
             return
+
+    async def handle_edited_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Учёт отредактированных сообщений для статистики (виджеты №8/№9).
+
+        Дедуп по message_id через event_id — повторная правка того же
+        сообщения считается один раз.
+        """
+        import logging
+        try:
+            msg = update.edited_message
+            if not msg or not msg.from_user or msg.from_user.is_bot:
+                return
+            today = get_today_date_msk()
+            eid = f"edited_{msg.from_user.id}_{msg.message_id}"
+            self.db.update_user_activity(
+                msg.from_user.id, today, event_id=eid, edited_count=1
+            )
+        except Exception as e:
+            logging.error(f"handle_edited_message: {e}")
 
     async def handle_forum_topic_event(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle forum topic created/edited/closed/reopened service messages to capture real topic names"""
