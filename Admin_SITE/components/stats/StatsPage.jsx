@@ -5,7 +5,7 @@ import {
 } from 'recharts';
 import {
   Users, HelpCircle, Download, Loader2,
-  BarChart3, Activity, Grid2x2, MessageSquare, UserPlus, Sparkles,
+  BarChart3, Activity, Grid2x2, MessageSquare, UserPlus,
 } from 'lucide-react';
 
 // ── Палитра. Хекс, а не CSS-переменные: var() не резолвится в SVG-
@@ -357,6 +357,71 @@ function WidgetEngagement({ cache, ensure }) {
   );
 }
 
+// ── Мини-спарклайн (CSS-столбики, без recharts). ──
+function Spark({ values, color }) {
+  if (!values || !values.length) return <div className="h-7" />;
+  const max = Math.max(...values, 1);
+  return (
+    <div className="flex items-end gap-[2px] h-7">
+      {values.map((v, i) => (
+        <div key={i} className="flex-1 rounded-[2px] min-w-[1px]"
+             style={{ height: `${Math.max(7, (v / max) * 100)}%`,
+                      background: color, opacity: 0.5 }} />
+      ))}
+    </div>
+  );
+}
+
+// ═══════════ Виджет №11 — Ряд mini-KPI ═══════════
+function WidgetKpi({ cache, ensure }) {
+  const [gran, setGran] = useState('day');
+
+  useEffect(() => { ensure(gran); }, [gran, ensure]);
+
+  const series = cache[gran];
+  const kpi = series?.kpi || {};
+  const msgs = series?.messages || [];
+
+  const tiles = [
+    { icon: Users,         color: C.cta,    label: 'Активные участники',
+      value: kpi.activeTotal,       spark: msgs.map((m) => m.writers) },
+    { icon: MessageSquare, color: C.ok,     label: 'Всего сообщений',
+      value: kpi.totalMsg,          spark: msgs.map((m) => m.messages) },
+    { icon: BarChart3,     color: C.purple, label: 'Сообщений в среднем',
+      value: kpi.avgMsgPerPoint,    spark: msgs.map((m) => m.messages) },
+    { icon: Activity,      color: C.warn,   label: 'Активных в среднем',
+      value: kpi.avgActivePerPoint, spark: msgs.map((m) => m.writers) },
+  ];
+
+  return (
+    <section className="bg-sff rounded-[20px] border border-bd shadow-sm p-4">
+      <div className="flex items-center justify-between gap-3 mb-3">
+        <h3 className="text-[13px] font-bold text-tx px-1">Сводка</h3>
+        <GranTabs value={gran} onChange={setGran} />
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        {tiles.map((t) => (
+          <div key={t.label} className="rounded-2xl border border-bd bg-sf2 p-3.5">
+            <div className="flex items-center gap-2 mb-2">
+              <div className="w-7 h-7 rounded-lg flex items-center justify-center flex-shrink-0"
+                   style={{ background: `${t.color}1A` }}>
+                <t.icon size={14} style={{ color: t.color }} />
+              </div>
+              <span className="text-[10px] font-bold text-lbl uppercase tracking-wide leading-tight">
+                {t.label}
+              </span>
+            </div>
+            <div className="text-2xl font-black text-tx tabular-nums mb-1.5">
+              {(t.value ?? 0).toLocaleString('ru-RU')}
+            </div>
+            <Spark values={t.spark} color={t.color} />
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title, note }) {
   return (
@@ -408,6 +473,9 @@ export default function StatsPage() {
         </button>
       </div>
 
+      {/* ── №11 — сводка-плитки сверху ── */}
+      <WidgetKpi cache={cache} ensure={ensure} />
+
       {/* ── №1 — собран ── */}
       <WidgetUsers cache={cache} ensure={ensure} />
 
@@ -424,8 +492,6 @@ export default function StatsPage() {
         note="Всего / Комментариев / Ответов / Отредактированных." />
       <SoonCard icon={UserPlus} title="Сводная новых по дням"
         note="Новые / Вернувшиеся / Приглашённые." />
-      <SoonCard icon={Sparkles} title="Ряд mini-KPI"
-        note="4 компактных показателя за период." />
     </div>
   );
 }
