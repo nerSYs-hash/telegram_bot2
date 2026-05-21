@@ -4,6 +4,49 @@ import { X } from 'lucide-react';
 import EconomyMiniChart from './EconomyMiniChart';
 import EconomyEditModal from './EconomyEditModal';
 
+// DEV-fallback (V1.17.0h2c): на localhost без бэкенда показываем тестовую
+// историю изменений для дизайн-QA. На проде ветка не активируется.
+const _DEV_PREVIEW = typeof window !== 'undefined'
+  && import.meta.env.DEV
+  && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const _MOCK_HISTORY = {
+  chart_data: [
+    { date: '01.05', value: 8 },
+    { date: '06.05', value: 10 },
+    { date: '11.05', value: 9 },
+    { date: '16.05', value: 12 },
+    { date: '21.05', value: 10 },
+  ],
+  entries: [
+    { id: 1, action: 'edit', old_value: 12, new_value: 10,
+      comment: 'Снизили ставку после фидбэка по инфляции',
+      changed_at: '2026-05-21T09:30:00',
+      changed_by: { username: 'nersys', role: 'developer' },
+      is_rolled_back: false, can_rollback: true },
+    { id: 2, action: 'toggle', new_enabled: true,
+      comment: 'Включили параметр обратно',
+      changed_at: '2026-05-20T16:10:00',
+      changed_by: { name: 'Витя', role: 'owner' },
+      is_rolled_back: false, can_rollback: false },
+    { id: 3, action: 'rollback', old_value: 15, new_value: 12,
+      comment: 'Откат к значению до эксперимента выходного дня',
+      changed_at: '2026-05-18T11:00:00',
+      changed_by: { username: 'nersys', role: 'developer' },
+      is_rolled_back: false, can_rollback: false },
+    { id: 4, action: 'edit', old_value: 10, new_value: 15,
+      comment: 'Тест повышенной ставки на выходные',
+      changed_at: '2026-05-16T08:00:00',
+      changed_by: { name: 'Витя', role: 'owner' },
+      is_rolled_back: true, can_rollback: false },
+    { id: 5, action: 'create', new_value: 10,
+      comment: 'Параметр создан',
+      changed_at: '2026-05-13T12:00:00',
+      changed_by: { username: 'nersys', role: 'developer' },
+      is_rolled_back: false, can_rollback: false },
+  ],
+};
+
 function formatDate(str) {
   if (!str) return '';
   try {
@@ -32,6 +75,11 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
   const loadData = () => {
     setLoading(true);
     setLoadErr(null);
+    if (!token && _DEV_PREVIEW) {
+      setData(_MOCK_HISTORY);
+      setLoading(false);
+      return;
+    }
     fetch(`/api/economy/settings/${settingKey}/history?limit=${PER_PAGE}&offset=${page * PER_PAGE}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
@@ -44,7 +92,11 @@ export default function EconomyHistoryPanel({ settingKey, label, token, onClose,
         setData(d);
         setLoading(false);
       })
-      .catch(e => { setLoadErr(e.message); setLoading(false); });
+      .catch(e => {
+        if (_DEV_PREVIEW) { setData(_MOCK_HISTORY); setLoading(false); return; }
+        setLoadErr(e.message);
+        setLoading(false);
+      });
   };
 
   useEffect(() => { loadData(); }, [settingKey, page]);

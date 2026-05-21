@@ -6,7 +6,7 @@ import {
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
   MoonStar, ClipboardList, MoreHorizontal, Settings, BarChart3, Check,
-  Rocket, Zap,
+  Pickaxe, Ticket, Dices, CalendarHeart, UserPlus, Award, Rocket, Zap, MinusCircle,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -60,10 +60,26 @@ export const SECTIONS = [
         name: 'Экономика',
         desc: 'Базовая экономика: банк, пульсы, награды и санкции. Внутри — тематические модули.',
         children: [
-          { id: 'eco:sprints', icon: Rocket, name: 'Спринты',
-            desc: 'Краткосрочные челленджи на активность.' },
-          { id: 'eco:combo',   icon: Zap,    name: 'Комбо',
-            desc: 'Серии действий с нарастающим бонусом.' },
+          { id: 'mining',       icon: Pickaxe,       name: 'Майнинг',
+            desc: 'Награды за активность. Внутри — Спринты, Комбо и Штрафы.',
+            children: [
+              { id: 'sprints', icon: Rocket,      name: 'Спринты',
+                desc: 'Забеги майнинга: бонус за результат в окне времени.' },
+              { id: 'combos',  icon: Zap,         name: 'Комбо',
+                desc: 'Бонусы майнинга за комбо-серии действий.' },
+              { id: 'penalty', icon: MinusCircle, name: 'Штрафы',
+                desc: 'Списание пульсов за спам и нарушения в чате.' },
+            ] },
+          { id: 'lottery',      icon: Ticket,        name: 'Лотерея',
+            desc: 'Розыгрыши призов среди участников.' },
+          { id: 'bingo',        icon: Dices,         name: 'Бинго',
+            desc: 'Игровое поле бинго на пульсы.' },
+          { id: 'monthly_gift', icon: CalendarHeart, name: 'Подарок месяца',
+            desc: 'Ежемесячный бонус активным участникам.' },
+          { id: 'referral',     icon: UserPlus,      name: 'Рефералы',
+            desc: 'Награды за приглашённых в чат друзей.' },
+          { id: 'bbs_bonus',    icon: Award,         name: 'BBS-бонусы',
+            desc: 'Бонусы за заполнение анкеты ББС.' },
           { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
             name: 'Шиппер',
             desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
@@ -166,7 +182,10 @@ export const MODULE_NAV = SECTIONS.reduce((acc, s) => {
 const NAME_BY_ID = {};
 SECTIONS.forEach(s => s.modules.forEach(m => {
   NAME_BY_ID[m.id] = m.name;
-  (m.children || []).forEach(c => { NAME_BY_ID[c.id] = c.name; });
+  (m.children || []).forEach(c => {
+    NAME_BY_ID[c.id] = c.name;
+    (c.children || []).forEach(g => { NAME_BY_ID[g.id] = g.name; });
+  });
 }));
 
 // «В разработке» = модуля ещё нет в коде бота — ЯВНЫЙ флаг `wip`.
@@ -251,7 +270,10 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
 
 export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect }) {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
-  const [openMod, setOpenMod] = useState(null);   // открытый под-каталог
+  // Стек открытых под-каталогов (drill-down). [] = корень секции.
+  // openMod = текущий (последний). Хлебные крошки строятся из стека.
+  const [modPath, setModPath] = useState([]);
+  const openMod = modPath.length ? modPath[modPath.length - 1] : null;
   const [disc, setDisc] = useState(null);         // модуль на отключении
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState(null);
@@ -321,7 +343,10 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
     const out = [];
     SECTIONS.forEach(s => s.modules.forEach(m => {
       out.push(m);
-      (m.children || []).forEach(c => out.push({ ...c, _parentName: m.name }));
+      (m.children || []).forEach(c => {
+        out.push({ ...c, _parentName: m.name });
+        (c.children || []).forEach(g => out.push({ ...g, _parentName: c.name }));
+      });
     }));
     return out;
   }, []);
@@ -349,7 +374,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
             return (
               <button
                 key={s.id}
-                onClick={() => { setOpenMod(null); setActiveSection(s.id); }}
+                onClick={() => { setModPath([]); setActiveSection(s.id); }}
                 className={`relative flex-shrink-0 px-5 py-3 text-sm font-black tracking-tight transition-colors ${
                   isActive ? 'text-cta' : 'text-txd hover:text-tx'
                 }`}
@@ -376,15 +401,26 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
         />
       </div>
 
-      {/* ── Хлебные крошки под-каталога ── */}
+      {/* ── Хлебные крошки под-каталога (полный путь drill-down) ── */}
       {!q && openMod && (
-        <div className="flex items-center gap-2 text-[12px] font-bold">
-          <button onClick={() => setOpenMod(null)}
+        <div className="flex items-center gap-2 text-[12px] font-bold flex-wrap">
+          <button onClick={() => setModPath(p => p.slice(0, -1))}
             className="flex items-center gap-1 text-cta hover:underline">
             <ArrowLeft size={14} /> Назад
           </button>
-          <span className="text-lbl">/</span>
-          <span className="text-tx">{openMod.name}</span>
+          {modPath.map((m, i) => (
+            <span key={m.id} className="flex items-center gap-2">
+              <span className="text-lbl">/</span>
+              {i === modPath.length - 1 ? (
+                <span className="text-tx">{m.name}</span>
+              ) : (
+                <button onClick={() => setModPath(p => p.slice(0, i + 1))}
+                  className="text-lbl hover:text-cta hover:underline">
+                  {m.name}
+                </button>
+              )}
+            </span>
+          ))}
         </div>
       )}
 
@@ -402,7 +438,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
             <ModuleCard
               mod={m}
               connected={isOn(m.id)}
-              onOpenModule={(mm) => { setOpenMod(mm); scrollToTop(); }}
+              onOpenModule={(mm) => { setModPath(p => [...p, mm]); scrollToTop(); }}
               onOpen={onOpen}
               onConnect={handleConnect}
               onDisconnect={setDisc}

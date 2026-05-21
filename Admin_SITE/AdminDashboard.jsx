@@ -5533,7 +5533,7 @@ export default function App() {
       case 'economy':
         return (
           <EconomyErrorBoundary>
-            <EconomyPage token={localStorage.getItem('auth_token')} />
+            <EconomyPage token={localStorage.getItem('auth_token')} modulesApi={modulesApi} />
           </EconomyErrorBoundary>
         );
 
