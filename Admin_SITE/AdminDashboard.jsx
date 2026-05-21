@@ -2,6 +2,7 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import StatsPage from './components/stats/StatsPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
+import RoadmapTree from './components/updates/RoadmapTree';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import { useModules } from './hooks/useModules';
 import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
@@ -26,7 +27,7 @@ import {
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
   GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
-  Crown, AtSign, Hash, Plug, LogOut, ToggleRight
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch
 } from 'lucide-react';
 
 const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
@@ -987,7 +988,7 @@ export default function App() {
   // Сайдбар = только база (top) + сервис. Модули (isModule) показываются
   // в боковой панели ТОЛЬКО когда подключены из каталога «Модули».
   const navigation = [
-    { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
+    { id: 'updates',       name: 'Карта проекта',  icon: GitBranch,      group: 'top' },
     { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
     { id: 'system',        name: 'Система',        icon: Settings,       group: 'top',      resource: 'system' },
     { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
@@ -4827,67 +4828,7 @@ export default function App() {
       }
 
       case 'updates':
-        return (
-          <div className="space-y-4 pb-24 animate-in fade-in duration-300">
-            <div className="bg-sff rounded-[2.5rem] p-6 border border-bd shadow-sm flex items-center space-x-4">
-              <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-lg">
-                <Megaphone size={26} className="text-white" />
-              </div>
-              <div>
-                <h2 className="font-black text-2xl text-tx leading-none">Обновления</h2>
-                <p className="text-xs text-lbl font-bold mt-1">История улучшений панели и бота</p>
-              </div>
-            </div>
-
-            {UPDATES.map((upd) => (
-              <div key={upd.version} className="bg-sff rounded-[2.5rem] p-6 border border-bd shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{upd.version}</span>
-                  <span className="text-xs text-lbl font-mono">{upd.date}</span>
-                </div>
-                <h3 className="font-black text-lg text-tx">{upd.title}</h3>
-                <div className="space-y-2">
-                  {upd.items.map((item, i) => {
-                    const typeCfg = {
-                      new:     { icon: PartyPopper, bg: 'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)]',  text: 'text-ok',  border: 'border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',  label: 'НОВОЕ'      },
-                      improve: { icon: Sparkles,    bg: 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]',   text: 'text-cta',   border: 'border-[color-mix(in_oklab,var(--cta)_30%,transparent)]',   label: 'УЛУЧШЕНО'   },
-                      fix:     { icon: Wrench,      bg: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)]', text: 'text-warn', border: 'border-[color-mix(in_oklab,var(--warn)_30%,transparent)]', label: 'ИСПРАВЛЕНО' },
-                    }[item.type] || { icon: Info, bg: 'bg-sf2', text: 'text-txd', border: 'border-bd', label: '' };
-                    const tagCfg = {
-                      site:       { emoji: '🌐', label: 'Сайт',       color: 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta' },
-                      statistics: { emoji: '📊', label: 'Статистика', color: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple' },
-                      journal:    { emoji: '📋', label: 'Журнал',     color: 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta'       },
-                      triggers:   { emoji: '⚡', label: 'Триггеры',   color: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn' },
-                      bot:        { emoji: '🤖', label: 'Бот',        color: 'bg-sf2 text-txd'    },
-                    }[item.tag] || null;
-                    const Icon = typeCfg.icon;
-                    return (
-                      <div key={i} className={`flex items-start space-x-3 p-3 rounded-2xl border ${typeCfg.bg} ${typeCfg.border}`}>
-                        <div className={`flex-shrink-0 flex items-center space-x-1 ${typeCfg.text}`}>
-                          <Icon size={14} />
-                          <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
-                        </div>
-                        <p className="text-xs text-tx font-medium leading-relaxed flex-1">{item.text}</p>
-                        {tagCfg && (() => {
-                          const key = `${upd.version}-${i}`;
-                          return (
-                            <span
-                              onClick={() => triggerJiggle(key)}
-                              onAnimationEnd={() => setJigglingTag(null)}
-                              className={`flex-shrink-0 text-[9px] font-black px-2 py-1 rounded-full cursor-pointer select-none hover:scale-110 transition-transform ${tagCfg.color} ${jigglingTag === key ? 'tag-jiggle' : ''}`}
-                            >
-                              {tagCfg.emoji} {tagCfg.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
+        return <RoadmapTree updates={UPDATES} />;
 
       case 'profile': {
         const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
