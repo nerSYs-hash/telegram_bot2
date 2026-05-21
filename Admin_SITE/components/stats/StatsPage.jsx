@@ -530,17 +530,16 @@ function WidgetActiveSummary({ cache, ensure }) {
 }
 
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
-function SoonCard({ icon: Icon, title, note }) {
+function SoonCard({ icon: Icon, title }) {
   return (
     <section className="bg-sff rounded-[20px] border border-bd border-dashed shadow-sm
-                        px-5 py-8 flex flex-col items-center text-center gap-2">
+                        px-5 py-8 flex flex-col items-center text-center gap-2.5">
       <div className="w-10 h-10 rounded-xl bg-sf2 flex items-center justify-center">
         <Icon size={18} className="text-lbl" />
       </div>
       <h3 className="text-[13px] font-bold text-txd">{title}</h3>
-      <span className="text-[11px] text-lbl max-w-[300px] leading-relaxed">{note}</span>
       <span className="text-[10px] font-black text-lbl uppercase tracking-wide
-                       bg-sf2 px-2.5 py-1 rounded-full mt-1">Скоро</span>
+                       bg-sf2 px-2.5 py-1 rounded-full">Скоро</span>
     </section>
   );
 }
@@ -598,13 +597,10 @@ export default function StatsPage() {
       {/* ── №10 — собран ── */}
       <WidgetActiveSummary cache={cache} ensure={ensure} />
 
-      {/* ── №4–11 — проектируем по очереди ── */}
-      <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта"
-        note="Нужны почасовые данные — бэкенд этап 2." />
-      <SoonCard icon={MessageSquare} title="Статистика по сообщениям"
-        note="Всего / Комментариев / Ответов / Отредактированных." />
-      <SoonCard icon={UserPlus} title="Сводная новых по дням"
-        note="Новые / Вернувшиеся / Приглашённые." />
+      {/* ── №4,5,6,8,9 — в работе ── */}
+      <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта" />
+      <SoonCard icon={MessageSquare} title="Статистика по сообщениям" />
+      <SoonCard icon={UserPlus} title="Сводная новых по дням" />
     </div>
   );
 }
