@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   ResponsiveContainer, ComposedChart, Area, Bar, Line, Brush,
-  XAxis, YAxis, CartesianGrid, Tooltip,
+  XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
 import {
   Users, HelpCircle, Download, Loader2,
@@ -422,6 +422,60 @@ function WidgetKpi({ cache, ensure }) {
   );
 }
 
+// ═══════════ Виджет №7 — Первое сообщение в чате ═══════════
+// Снимок «за всё время» — от градации не зависит.
+function WidgetFirstMessage({ cache, ensure }) {
+  useEffect(() => { ensure('day'); }, [ensure]);
+
+  const series = cache.day;
+  const fm = series?.firstMessage;
+  const loading = !series;
+  const error = series?.error;
+
+  const data = fm ? [
+    { name: 'В первый день', value: fm.firstDay,      fill: C.ok },
+    { name: 'Позже',         value: fm.afterFirstDay, fill: C.warn },
+  ] : [];
+  const total = fm ? fm.firstDay + fm.afterFirstDay : 0;
+  const pct = total ? Math.round((fm.firstDay / total) * 100) : 0;
+
+  return (
+    <WidgetCard
+      icon={MessageSquare} accent={C.ok}
+      title="Первое сообщение в чате"
+      hint="Среди участников, которые хоть раз писали: сколько отправили первое сообщение в день вступления, а сколько — позже."
+      onExport={fm ? () => downloadCSV(
+        'first_message.csv', ['Когда', 'Участников'],
+        [['В первый день', fm.firstDay], ['Позже', fm.afterFirstDay]],
+      ) : undefined}
+    >
+      {loading ? <WidgetState kind="loading" />
+        : error ? <WidgetState kind="error" />
+        : (
+        <>
+          <ResponsiveContainer width="100%" height={240}>
+            <ComposedChart data={data} margin={{ top: 26, right: 12, left: -16, bottom: 0 }}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+              <XAxis dataKey="name" axisLine={false} tickLine={false}
+                     tick={{ fontSize: 11, fontWeight: 600, fill: C.txd }} />
+              <YAxis width={36} allowDecimals={false}
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={96} animationDuration={550}>
+                {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+                <LabelList dataKey="value" position="top"
+                           fill={C.tx} fontSize={13} fontWeight={800} />
+              </Bar>
+            </ComposedChart>
+          </ResponsiveContainer>
+          <div className="text-center text-[12px] text-txd pt-1">
+            <span className="font-black text-tx">{pct}%</span> пишут в первый же день
+          </div>
+        </>
+      )}
+    </WidgetCard>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title, note }) {
   return (
@@ -484,6 +538,9 @@ export default function StatsPage() {
 
       {/* ── №3 — собран ── */}
       <WidgetEngagement cache={cache} ensure={ensure} />
+
+      {/* ── №7 — собран ── */}
+      <WidgetFirstMessage cache={cache} ensure={ensure} />
 
       {/* ── №4–11 — проектируем по очереди ── */}
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта"
