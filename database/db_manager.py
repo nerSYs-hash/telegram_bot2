@@ -642,6 +642,15 @@ class Database:
             import logging
             logging.getLogger(__name__).error(f"module_toggles migration: {e}")
 
+        # Migration V1.17.0h3: backfill эконом-модулей для ws=1 после разбивки
+        # каталога economy → mining/sprints/combos/penalty/lottery/bingo/...
+        try:
+            from database.migrations.economy_module_backfill import up as _up_econ_modules
+            _up_econ_modules(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"economy_module_backfill migration: {e}")
+
     # ── Economy ──
     # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
     # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.
@@ -661,7 +670,17 @@ class Database:
         return _toggle_econ_section(self, self._DEFAULT_WS_ID, category, comment, changed_by, changed_by_role)
 
     def is_econ_section_enabled(self, category):
-        return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
+        """V1.17.0h3: единая точка истины — состояние раздела Экономики
+        берём из module_toggles (тот же тумблер, что щёлкает владелец на
+        сайте). `category` совпадает с module_id 1:1 (mining, combos,
+        sprints, penalty, lottery, bingo, monthly_gift, referral,
+        bbs_bonus). При сбое новой системы — fallback на legacy-таблицу
+        economy_section_toggles (поведение «по умолчанию включено»)."""
+        try:
+            from bot_core.module_guard import is_module_enabled_cached
+            return is_module_enabled_cached(self.conn, self._DEFAULT_WS_ID, category)
+        except Exception:
+            return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
 
     def get_econ_categories(self):
         return _get_econ_categories(self, self._DEFAULT_WS_ID)
