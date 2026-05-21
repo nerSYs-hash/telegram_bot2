@@ -2156,7 +2156,7 @@ async def get_staff():
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         rows = conn.execute(
             "SELECT user_id, username, first_name, is_owner, is_admin "
             "FROM users WHERE is_admin = 1 OR is_owner = 1 "
@@ -2183,7 +2183,7 @@ async def add_staff(req: StaffAddRequest):
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         uid_str = req.user_id.strip().lstrip('@')
         # Пробуем найти по числовому ID или по username
         if uid_str.isdigit():
@@ -2216,7 +2216,7 @@ async def remove_staff(user_id: int):
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         row = conn.execute(
             "SELECT is_owner FROM users WHERE user_id = ?", (user_id,)
         ).fetchone()
