@@ -606,6 +606,16 @@ class Database:
         except Exception:
             pass  # Column already exists
 
+        # Migration V1.17.0h11: статистика — учёт edited / links по сообщениям
+        # (виджеты Статистики №8/№9, бэкенд-этап 2 — сбор данных вперёд).
+        for _stat_col in ("edited_count", "links_sent"):
+            try:
+                self.cursor.execute(
+                    f"ALTER TABLE user_stats ADD COLUMN {_stat_col} INTEGER DEFAULT 0")
+                self.conn.commit()
+            except Exception:
+                pass  # колонка уже есть
+
         self.seed_shipper_phrases_if_empty()
 
         # Initialize economy tables
@@ -634,6 +644,23 @@ class Database:
             import logging
             logging.getLogger(__name__).error(f"init_press_release_tables: {e}")
 
+        # Migration V1.17.0h0b: тумблеры модулей (module_toggles + history + cache_version)
+        try:
+            from database.migrations.module_toggles import up as _up_module_toggles
+            _up_module_toggles(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"module_toggles migration: {e}")
+
+        # Migration V1.17.0h3: backfill эконом-модулей для ws=1 после разбивки
+        # каталога economy → mining/sprints/combos/penalty/lottery/bingo/...
+        try:
+            from database.migrations.economy_module_backfill import up as _up_econ_modules
+            _up_econ_modules(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"economy_module_backfill migration: {e}")
+
     # ── Economy ──
     # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
     # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.
@@ -653,7 +680,17 @@ class Database:
         return _toggle_econ_section(self, self._DEFAULT_WS_ID, category, comment, changed_by, changed_by_role)
 
     def is_econ_section_enabled(self, category):
-        return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
+        """V1.17.0h3: единая точка истины — состояние раздела Экономики
+        берём из module_toggles (тот же тумблер, что щёлкает владелец на
+        сайте). `category` совпадает с module_id 1:1 (mining, combos,
+        sprints, penalty, lottery, bingo, monthly_gift, referral,
+        bbs_bonus). При сбое новой системы — fallback на legacy-таблицу
+        economy_section_toggles (поведение «по умолчанию включено»)."""
+        try:
+            from bot_core.module_guard import is_module_enabled_cached
+            return is_module_enabled_cached(self.conn, self._DEFAULT_WS_ID, category)
+        except Exception:
+            return _is_econ_section_enabled(self, self._DEFAULT_WS_ID, category)
 
     def get_econ_categories(self):
         return _get_econ_categories(self, self._DEFAULT_WS_ID)
@@ -875,7 +912,7 @@ class Database:
     def get_top5_percent(self):
         return _get_top5_percent(self, self._DEFAULT_WS_ID)
 
-    def cleanup_old_hourly_stats(self, days_to_keep=2):
+    def cleanup_old_hourly_stats(self, days_to_keep=365):
         # cleanup_old_hourly_stats — cross-workspace (глобальная очистка по дате),
         # workspace_id не нужен.
         _cleanup_old_hourly_stats(self, days_to_keep)

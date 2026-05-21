@@ -66,7 +66,8 @@ def update_user_activity(db, workspace_id, user_id, date, event_id: str = None, 
     allowed_cols = [
         'total_chars', 'total_messages', 'total_words', 'reactions_given',
         'reactions_received', 'replies_received', 'replies_sent',
-        'mentions_received', 'media_sent', 'other_threads_posts'
+        'mentions_received', 'media_sent', 'other_threads_posts',
+        'edited_count', 'links_sent',
     ]
 
     # Очищаем входящие данные

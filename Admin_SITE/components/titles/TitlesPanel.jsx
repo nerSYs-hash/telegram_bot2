@@ -9,33 +9,53 @@ function Toggle({ value, onChange, disabled }) {
     <button
       onClick={() => !disabled && onChange(!value)}
       disabled={disabled}
-      className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-green-500' : 'bg-bd2'}`}>
+      className={`relative inline-flex items-center w-10 h-5 rounded-full transition-colors shrink-0 ${value ? 'bg-ok' : 'bg-bd2'}`}>
       <span className={`inline-block w-3.5 h-3.5 bg-sff rounded-full shadow transform transition-transform duration-200 ${value ? 'translate-x-5' : 'translate-x-1'}`} />
     </button>
+  );
+}
+
+// Заголовок секции в стиле строк-параметров EconomyCategoryCard:
+// мелкая капс-метка слева + слот действия справа.
+function Section({ title, action, children }) {
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-2 px-1 min-h-[20px]">
+        <div className="text-[10px] font-black text-lbl uppercase tracking-widest">{title}</div>
+        {action}
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
   );
 }
 
 function PackageRow({ pkg, canEdit, onToggle, onDelete, onEdit }) {
   const dur = pkg.duration_days ? `${pkg.duration_days} дн.` : '∞';
   return (
-    <div className={`flex items-center gap-2 px-4 py-2.5 border-b border-bd last:border-0 ${!pkg.is_enabled ? 'opacity-50' : ''}`}>
-      <div className="flex-1 min-w-0">
-        <div className="text-sm font-black text-tx truncate">{pkg.label}</div>
-        <div className="text-[10px] text-lbl mt-0.5 flex gap-2">
-          <span>💎 {pkg.price_pulses.toLocaleString()}</span>
-          {pkg.price_rub && <span>· 💳 {pkg.price_rub} ₽</span>}
-          <span>· {dur}</span>
+    <div className={`rounded-xl border border-bd hover:border-bd2 bg-sff px-2.5 py-2 transition ${!pkg.is_enabled ? 'opacity-50' : ''}`}>
+      <div className="flex items-center gap-2">
+        <div className="flex-1 min-w-0">
+          <div className="text-[12px] font-bold text-tx leading-tight truncate">{pkg.label}</div>
+          <div className="text-[10px] text-lbl mt-0.5 flex gap-2 flex-wrap">
+            <span>💎 {pkg.price_pulses.toLocaleString()}</span>
+            {pkg.price_rub && <span>· 💳 {pkg.price_rub} ₽</span>}
+            <span>· {dur}</span>
+          </div>
         </div>
+        {canEdit && (
+          <div className="flex items-center gap-1.5 shrink-0">
+            <Toggle value={!!pkg.is_enabled} onChange={() => onToggle(pkg.id)} />
+            <button onClick={() => onEdit(pkg)} title="Изменить"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-cta transition">
+              <Pencil size={12} />
+            </button>
+            <button onClick={() => onDelete(pkg.id)} title="Удалить"
+              className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-danger transition">
+              <Trash2 size={12} />
+            </button>
+          </div>
+        )}
       </div>
-      {canEdit && (
-        <div className="flex items-center gap-2 shrink-0">
-          <Toggle value={!!pkg.is_enabled} onChange={() => onToggle(pkg.id)} />
-          <button onClick={() => onEdit(pkg)}
-            className="p-1 text-lbl hover:text-cta transition"><Pencil size={13} /></button>
-          <button onClick={() => onDelete(pkg.id)}
-            className="p-1 text-lbl hover:text-danger transition"><Trash2 size={13} /></button>
-        </div>
-      )}
     </div>
   );
 }
@@ -59,28 +79,32 @@ function PackageForm({ initial, onSave, onCancel }) {
     setSaving(false);
   };
 
+  const inputCls = 'px-2 py-1.5 rounded-lg text-[12px] bg-sff border border-bd2 focus:border-cta outline-none';
+
   return (
-    <div className="bg-sf2 rounded-2xl p-3 m-3 space-y-2">
+    <div className="rounded-xl border border-cta bg-sff px-2.5 py-2 space-y-2">
       <div className="grid grid-cols-2 gap-2">
         <input value={label} onChange={e => setLabel(e.target.value)}
-          placeholder="Название пакета"
-          className="col-span-2 border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          placeholder="Название пакета" autoFocus
+          className={`col-span-2 ${inputCls}`} />
         <input value={pulses} onChange={e => setPulses(e.target.value)}
           type="number" min="1" placeholder="💎 Пульсы"
-          className="border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          className={`font-mono ${inputCls}`} />
         <input value={rub} onChange={e => setRub(e.target.value)}
           type="number" min="0" placeholder="💳 Рублей (необяз.)"
-          className="border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          className={`font-mono ${inputCls}`} />
         <input value={days} onChange={e => setDays(e.target.value)}
           type="number" min="1" placeholder="Дней (пусто = бесконечно)"
-          className="col-span-2 border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
+          className={`col-span-2 font-mono ${inputCls}`} />
       </div>
-      <div className="flex gap-2 justify-end">
+      <div className="flex gap-1.5">
         <button onClick={onCancel}
-          className="px-3 py-1.5 text-xs text-txd hover:text-tx transition">Отмена</button>
+          className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-sf2 border border-bd2 text-txd hover:bg-bd transition">
+          Отмена
+        </button>
         <button onClick={handleSave} disabled={saving || !label.trim() || !pulses}
-          className="px-3 py-1.5 bg-blue-500 text-white text-xs font-black rounded-xl disabled:opacity-50 hover:bg-blue-600 active:scale-95 transition">
-          {saving ? '...' : 'Сохранить'}
+          className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cta text-white hover:brightness-110 transition disabled:opacity-40 disabled:cursor-not-allowed">
+          {saving ? '…' : 'Сохранить'}
         </button>
       </div>
     </div>
@@ -91,10 +115,10 @@ function RequestRow({ req, canEdit, onApprove, onReject }) {
   const statusColor = { pending: 'text-warn bg-[color-mix(in_oklab,var(--warn)_10%,transparent)]', approved: 'text-ok bg-[color-mix(in_oklab,var(--ok)_10%,transparent)]', rejected: 'text-danger bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]', expired: 'text-lbl bg-sf2' };
   const statusLabel = { pending: 'Ожидает', approved: 'Одобрена', rejected: 'Отклонена', expired: 'Истекла' };
   return (
-    <div className="px-4 py-2.5 border-b border-bd last:border-0">
+    <div className="rounded-xl border border-bd bg-sff px-2.5 py-2">
       <div className="flex items-start gap-2">
         <div className="flex-1 min-w-0">
-          <div className="text-sm font-black text-tx truncate">«{req.title_text}»</div>
+          <div className="text-[12px] font-bold text-tx leading-tight truncate">«{req.title_text}»</div>
           <div className="text-[10px] text-lbl mt-0.5 flex gap-2 flex-wrap">
             <span>user #{req.user_id}</span>
             <span>· 💳 {req.price_rub} ₽</span>
@@ -109,9 +133,13 @@ function RequestRow({ req, canEdit, onApprove, onReject }) {
           {canEdit && req.status === 'pending' && (
             <>
               <button onClick={() => onApprove(req.id)} title="Одобрить"
-                className="p-1 text-lbl hover:text-ok transition"><Check size={13} /></button>
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-ok transition">
+                <Check size={13} />
+              </button>
               <button onClick={() => onReject(req.id)} title="Отклонить"
-                className="p-1 text-lbl hover:text-danger transition"><X size={13} /></button>
+                className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-danger transition">
+                <X size={13} />
+              </button>
             </>
           )}
         </div>
@@ -120,12 +148,14 @@ function RequestRow({ req, canEdit, onApprove, onReject }) {
   );
 }
 
-export default function TitlesPanel({ token, canEdit }) {
+export default function TitlesPanel({ token, canEdit, embedded = false }) {
   const [packages, setPackages]     = useState([]);
   const [requests, setRequests]     = useState([]);
   const [stats, setStats]           = useState(null);
   const [settings, setSettings]     = useState(null);
-  const [expanded, setExpanded]     = useState(false);
+  // embedded=true → сразу раскрыто (используется внутри карточки
+  // Экономики, где обёртка-аккордеон не нужна).
+  const [expanded, setExpanded]     = useState(embedded);
   const [addMode, setAddMode]       = useState(false);
   const [editPkg, setEditPkg]       = useState(null);
   const [reqTab, setReqTab]         = useState('pending');
@@ -200,9 +230,137 @@ export default function TitlesPanel({ token, canEdit }) {
 
   const pendingCount = stats?.requests_pending ?? 0;
 
+  // Общее тело — пакеты, настройки, заявки. Все блоки в едином стиле
+  // строк-параметров: секция = капс-заголовок + карточки-строки.
+  const body = (
+    <div className="space-y-4">
+      {/* ── Пакеты подписки ── */}
+      <Section
+        title="📦 Пакеты подписки"
+        action={canEdit && !addMode && !editPkg && (
+          <button onClick={() => setAddMode(true)}
+            className="flex items-center gap-1 text-[10px] font-black text-cta hover:brightness-110 transition">
+            <Plus size={11} /> Добавить
+          </button>
+        )}
+      >
+        {addMode && (
+          <PackageForm onSave={handleSave} onCancel={() => setAddMode(false)} />
+        )}
+        {packages.length === 0 && !addMode && (
+          <div className="text-center py-3 text-[11px] text-lbl">Нет пакетов</div>
+        )}
+        {packages.map(pkg =>
+          editPkg?.id === pkg.id ? (
+            <PackageForm key={pkg.id} initial={editPkg} onSave={handleSave} onCancel={() => setEditPkg(null)} />
+          ) : (
+            <PackageRow key={pkg.id} pkg={pkg} canEdit={canEdit}
+              onToggle={handleToggle} onDelete={handleDelete} onEdit={setEditPkg} />
+          )
+        )}
+      </Section>
+
+      {/* ── Настройки ── */}
+      <Section
+        title="⚙️ Настройки"
+        action={canEdit && !editSettings && settings && (
+          <button onClick={() => { setSettingsDraft({ ...settings }); setEditSettings(true); }}
+            className="flex items-center gap-1 text-[10px] font-black text-cta hover:brightness-110 transition">
+            <Pencil size={11} /> Изменить
+          </button>
+        )}
+      >
+        {!editSettings && !settings && (
+          <div className="text-center py-3 text-[11px] text-lbl">Загрузка…</div>
+        )}
+        {!editSettings && settings && (
+          <>
+            <div className="rounded-xl border border-bd bg-sff px-2.5 py-2 flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-bold text-tx leading-tight">Смена имени титула</div>
+                <div className="text-[10px] text-lbl mt-0.5 truncate">Сколько пульсов стоит переименовать купленный титул</div>
+              </div>
+              <div className="text-[13px] font-black text-tx font-mono shrink-0 whitespace-nowrap">
+                {settings.rename_price_pulses}
+                <span className="text-[10px] text-lbl font-normal ml-1">💎</span>
+              </div>
+            </div>
+            <div className="rounded-xl border border-bd bg-sff px-2.5 py-2 flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <div className="text-[12px] font-bold text-tx leading-tight">Срок жизни заявки</div>
+                <div className="text-[10px] text-lbl mt-0.5 truncate">Через сколько часов неоплаченная заявка истекает</div>
+              </div>
+              <div className="text-[13px] font-black text-tx font-mono shrink-0 whitespace-nowrap">
+                {settings.request_ttl_hours}
+                <span className="text-[10px] text-lbl font-normal ml-1">ч</span>
+              </div>
+            </div>
+          </>
+        )}
+        {editSettings && (
+          <div className="rounded-xl border border-cta bg-sff px-2.5 py-2 space-y-2">
+            <div className="grid grid-cols-2 gap-2">
+              <div>
+                <div className="text-[9px] text-lbl mb-0.5">Смена имени (💎)</div>
+                <input type="number" value={settingsDraft.rename_price_pulses ?? ''}
+                  onChange={e => setSettingsDraft(d => ({ ...d, rename_price_pulses: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1.5 rounded-lg text-[12px] font-mono bg-sff border border-bd2 focus:border-cta outline-none" />
+              </div>
+              <div>
+                <div className="text-[9px] text-lbl mb-0.5">Срок заявки (часы)</div>
+                <input type="number" value={settingsDraft.request_ttl_hours ?? ''}
+                  onChange={e => setSettingsDraft(d => ({ ...d, request_ttl_hours: parseInt(e.target.value) || 0 }))}
+                  className="w-full px-2 py-1.5 rounded-lg text-[12px] font-mono bg-sff border border-bd2 focus:border-cta outline-none" />
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              <button onClick={() => setEditSettings(false)}
+                className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-sf2 border border-bd2 text-txd hover:bg-bd transition">
+                Отмена
+              </button>
+              <button onClick={handleSaveSettings}
+                className="flex-1 py-1.5 text-[10px] font-bold uppercase tracking-wider rounded-lg bg-cta text-white hover:brightness-110 transition">
+                Сохранить
+              </button>
+            </div>
+          </div>
+        )}
+      </Section>
+
+      {/* ── Заявки на рублёвую оплату ── */}
+      <Section
+        title="📨 Заявки на оплату"
+        action={
+          <div className="flex gap-1">
+            {['pending', 'approved', 'rejected', 'all'].map(tab => (
+              <button key={tab} onClick={() => setReqTab(tab)}
+                className={`text-[9px] font-black px-2 py-0.5 rounded-full transition ${reqTab === tab ? 'bg-cta text-white' : 'bg-sf2 text-txd hover:bg-bd2'}`}>
+                {tab === 'pending' ? 'Ожидают' : tab === 'approved' ? 'Одобрены' : tab === 'rejected' ? 'Отклонены' : 'Все'}
+              </button>
+            ))}
+          </div>
+        }
+      >
+        {requests.length === 0 ? (
+          <div className="text-center py-3 text-[11px] text-lbl">Нет заявок</div>
+        ) : (
+          requests.map(req => (
+            <RequestRow key={req.id} req={req} canEdit={canEdit}
+              onApprove={handleApprove} onReject={handleReject} />
+          ))
+        )}
+      </Section>
+    </div>
+  );
+
+  // embedded: только тело, без обёртки и accordion (заголовок уже даёт
+  // EconomyCategoryCard — там «КАТЕГОРИЯ / Кастомные Титулы»).
+  if (embedded) return body;
+
+  // Старый режим (если кто-то импортирует TitlesPanel напрямую):
+  // отдельная карточка с accordion-шапкой и красной рамкой.
   return (
     <div className="bg-sff rounded-3xl border-2 border-red-400 shadow-sm overflow-hidden">
-      {/* Заголовок */}
       <div className="flex items-center">
         <button onClick={() => setExpanded(v => !v)}
           className="flex-1 flex items-center gap-3 px-5 py-3.5 hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] transition text-left">
@@ -219,107 +377,9 @@ export default function TitlesPanel({ token, canEdit }) {
           <ChevronDown size={20} className={`text-lbl transition-transform duration-300 mr-4 ${expanded ? 'rotate-180' : ''}`} />
         </button>
       </div>
-
-      {/* Тело */}
       {expanded && (
-        <div className="border-t border-[color-mix(in_oklab,var(--danger)_30%,transparent)]">
-          {/* Пакеты */}
-          <div className="px-4 pt-3 pb-1">
-            <div className="flex items-center justify-between mb-1">
-              <div className="text-[10px] font-black text-txd uppercase tracking-widest">Пакеты подписки</div>
-              {canEdit && !addMode && !editPkg && (
-                <button onClick={() => setAddMode(true)}
-                  className="flex items-center gap-1 text-[10px] font-black text-cta hover:text-cta transition">
-                  <Plus size={11} /> Добавить
-                </button>
-              )}
-            </div>
-          </div>
-
-          {addMode && (
-            <PackageForm onSave={handleSave} onCancel={() => setAddMode(false)} />
-          )}
-
-          {packages.length === 0 && !addMode && (
-            <div className="px-4 py-4 text-center text-xs text-lbl">Нет пакетов</div>
-          )}
-
-          {packages.map(pkg =>
-            editPkg?.id === pkg.id ? (
-              <PackageForm key={pkg.id} initial={editPkg} onSave={handleSave} onCancel={() => setEditPkg(null)} />
-            ) : (
-              <PackageRow key={pkg.id} pkg={pkg} canEdit={canEdit}
-                onToggle={handleToggle} onDelete={handleDelete} onEdit={setEditPkg} />
-            )
-          )}
-
-          {/* Настройки */}
-          <div className="border-t border-bd px-4 py-2.5">
-            <div className="flex items-center justify-between">
-              <div className="text-[10px] font-black text-txd uppercase tracking-widest">Настройки</div>
-              {canEdit && !editSettings && (
-                <button onClick={() => { setSettingsDraft({ ...settings }); setEditSettings(true); }}
-                  className="text-[10px] font-black text-cta hover:text-cta transition flex items-center gap-1">
-                  <Pencil size={11} /> Изменить
-                </button>
-              )}
-            </div>
-            {!editSettings && settings && (
-              <div className="flex gap-4 mt-1.5 text-xs text-txd">
-                <span>💎 Смена имени: <b className="text-tx">{settings.rename_price_pulses}</b></span>
-                <span>⏱ TTL заявки: <b className="text-tx">{settings.request_ttl_hours}ч</b></span>
-              </div>
-            )}
-            {editSettings && (
-              <div className="mt-2 space-y-2">
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <div className="text-[9px] text-lbl mb-0.5">Смена имени (💎)</div>
-                    <input type="number" value={settingsDraft.rename_price_pulses ?? ''}
-                      onChange={e => setSettingsDraft(d => ({ ...d, rename_price_pulses: parseInt(e.target.value) || 0 }))}
-                      className="w-full border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                  </div>
-                  <div className="flex-1">
-                    <div className="text-[9px] text-lbl mb-0.5">TTL заявки (часы)</div>
-                    <input type="number" value={settingsDraft.request_ttl_hours ?? ''}
-                      onChange={e => setSettingsDraft(d => ({ ...d, request_ttl_hours: parseInt(e.target.value) || 0 }))}
-                      className="w-full border border-bd2 rounded-xl px-3 py-1.5 text-sm focus:outline-none focus:border-blue-400" />
-                  </div>
-                </div>
-                <div className="flex gap-2 justify-end">
-                  <button onClick={() => setEditSettings(false)}
-                    className="px-3 py-1.5 text-xs text-txd hover:text-tx transition">Отмена</button>
-                  <button onClick={handleSaveSettings}
-                    className="px-3 py-1.5 bg-blue-500 text-white text-xs font-black rounded-xl hover:bg-blue-600 active:scale-95 transition">
-                    Сохранить
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Заявки на рублёвую оплату */}
-          <div className="border-t border-bd">
-            <div className="px-4 pt-2.5 pb-1 flex items-center justify-between">
-              <div className="text-[10px] font-black text-txd uppercase tracking-widest">Заявки на оплату</div>
-              <div className="flex gap-1">
-                {['pending', 'approved', 'rejected', 'all'].map(tab => (
-                  <button key={tab} onClick={() => setReqTab(tab)}
-                    className={`text-[9px] font-black px-2 py-0.5 rounded-full transition ${reqTab === tab ? 'bg-gray-800 text-white' : 'bg-sf2 text-txd hover:bg-bd2'}`}>
-                    {tab === 'pending' ? 'Ожидают' : tab === 'approved' ? 'Одобрены' : tab === 'rejected' ? 'Отклонены' : 'Все'}
-                  </button>
-                ))}
-              </div>
-            </div>
-            {requests.length === 0 ? (
-              <div className="px-4 py-4 text-center text-xs text-lbl">Нет заявок</div>
-            ) : (
-              requests.map(req => (
-                <RequestRow key={req.id} req={req} canEdit={canEdit}
-                  onApprove={handleApprove} onReject={handleReject} />
-              ))
-            )}
-          </div>
+        <div className="border-t border-[color-mix(in_oklab,var(--danger)_30%,transparent)] p-3">
+          {body}
         </div>
       )}
     </div>

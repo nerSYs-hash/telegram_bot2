@@ -1055,35 +1055,47 @@ def process_mining_reward(
         # claimed_combos = {combo_name: claimed_at_datetime} — на КД
         claimed_combos = _get_claimed_combos(db, user_id, now)
 
-        combo_coeff, new_combos = calculate_instant_combos(
-            text=text, char_count=char_count, word_count=word_count,
-            has_photo=has_photo, has_video=has_video,
-            completed_today=list(claimed_combos.keys()),
-            coeff_overrides=_combo_coeffs,
-        )
+        # ── module_toggles guard: модуль «Комбо» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('combos'):
+            combo_coeff, new_combos = calculate_instant_combos(
+                text=text, char_count=char_count, word_count=word_count,
+                has_photo=has_photo, has_video=has_video,
+                completed_today=list(claimed_combos.keys()),
+                coeff_overrides=_combo_coeffs,
+            )
+        else:
+            combo_coeff, new_combos = 0.0, []
 
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 3: СПРИНТЫ
         # ══════════════════════════════════════════════════════════════════
 
         claimed_sprints = _get_claimed_sprints(db, user_id, now)
-        m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str)
 
-        sprint_coeff, new_sprints = check_completed_sprints(
-            metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
-            current_thread_id=thread_id, already_claimed=claimed_sprints,
-            sprint_config_overrides=_sprint_coeffs,
-        )
+        # ── module_toggles guard: модуль «Спринты» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('sprints'):
+            m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str)
+            sprint_coeff, new_sprints = check_completed_sprints(
+                metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
+                current_thread_id=thread_id, already_claimed=claimed_sprints,
+                sprint_config_overrides=_sprint_coeffs,
+            )
+        else:
+            sprint_coeff, new_sprints = 0.0, []
 
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 4: ШТРАФЫ
         # ══════════════════════════════════════════════════════════════════
 
-        penalty_coeff, penalties = calculate_penalties(
-            text=text, thread_id=thread_id, db=db,
-            user_id=user_id, chat_id=chat_id,
-            coeff_overrides=_penalty_coeffs,
-        )
+        # ── module_toggles guard: модуль «Штрафы» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('penalty'):
+            penalty_coeff, penalties = calculate_penalties(
+                text=text, thread_id=thread_id, db=db,
+                user_id=user_id, chat_id=chat_id,
+                coeff_overrides=_penalty_coeffs,
+            )
+        else:
+            penalty_coeff, penalties = 0.0, []
 
         # ══════════════════════════════════════════════════════════════════
         #  ЛОГИРОВАНИЕ (подробное, по блокам)

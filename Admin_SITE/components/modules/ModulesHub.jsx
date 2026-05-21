@@ -1,4 +1,4 @@
-import { useState, useRef, useLayoutEffect } from 'react';
+import { useState, useRef, useLayoutEffect, useMemo } from 'react';
 import {
   PieChart, Coins, Flame, HeartHandshake, Megaphone,
   ShieldAlert, ScrollText, Plus, ArrowRight, ArrowLeft, AlertTriangle,
@@ -6,7 +6,7 @@ import {
   MicOff, Mic, Ban, UserCheck, UserMinus, ShieldBan,
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
   MoonStar, ClipboardList, MoreHorizontal, Settings, BarChart3, Check,
-  Rocket, Zap,
+  Pickaxe, Ticket, Dices, CalendarHeart, UserPlus, Award, Rocket, Zap, MinusCircle,
 } from 'lucide-react';
 import Button from '../shared/Button';
 
@@ -35,17 +35,17 @@ export const SECTIONS = [
         name: 'Статистика и графики',
         desc: 'Лента графиков. Нажми, чтобы выбрать какие графики показывать.',
         children: [
-          { id: 'chart:users',       wip: true, icon: BarChart3, name: 'Статистика по пользователям', desc: 'Новые / покинувшие / удалённые + всего.' },
-          { id: 'chart:messages',    wip: true, icon: BarChart3, name: 'Количество сообщений по дням', desc: 'Сообщения и уникальные авторы.' },
-          { id: 'chart:engagement',  wip: true, icon: BarChart3, name: 'Коэффициент вовлечённости',    desc: 'Доля пишущих от всех участников.' },
+          { id: 'chart:users',       icon: BarChart3, name: 'Статистика по пользователям', desc: 'Новые / покинувшие / удалённые + всего.' },
+          { id: 'chart:messages',    icon: BarChart3, name: 'Количество сообщений по дням', desc: 'Сообщения и уникальные авторы.' },
+          { id: 'chart:engagement',  icon: BarChart3, name: 'Коэффициент вовлечённости',    desc: 'Доля пишущих от всех участников.' },
           { id: 'chart:active_hm',   wip: true, icon: BarChart3, name: 'Активные (heatmap)',           desc: 'Тепловая карта активности.' },
           { id: 'chart:msg_hm',      wip: true, icon: BarChart3, name: 'Сообщения (heatmap)',          desc: 'Тепловая карта объёма сообщений.' },
           { id: 'chart:newcomers',   wip: true, icon: BarChart3, name: 'Сводная новых по дням',        desc: 'Новые / вернувшиеся / приглашённые.' },
-          { id: 'chart:first_msg',   wip: true, icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
+          { id: 'chart:first_msg',   icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
           { id: 'chart:msg_stats',   wip: true, icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Всего / ответы / отредактированные.' },
           { id: 'chart:user_act',    wip: true, icon: BarChart3, name: 'Активность пользователей',     desc: 'MAU / реплаи / упоминания / ссылки.' },
-          { id: 'chart:active_sum',  wip: true, icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
-          { id: 'chart:kpi',         wip: true, icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
+          { id: 'chart:active_sum',  icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
+          { id: 'chart:kpi',         icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
         ] },
       { id: 'top5', nav: null, target: null, icon: Trophy,
         name: 'Топ-5',
@@ -60,10 +60,26 @@ export const SECTIONS = [
         name: 'Экономика',
         desc: 'Базовая экономика: банк, пульсы, награды и санкции. Внутри — тематические модули.',
         children: [
-          { id: 'eco:sprints', icon: Rocket, name: 'Спринты',
-            desc: 'Краткосрочные челленджи на активность.' },
-          { id: 'eco:combo',   icon: Zap,    name: 'Комбо',
-            desc: 'Серии действий с нарастающим бонусом.' },
+          { id: 'mining',       icon: Pickaxe,       name: 'Майнинг',
+            desc: 'Награды за активность. Внутри — Спринты, Комбо и Штрафы.',
+            children: [
+              { id: 'sprints', icon: Rocket,      name: 'Спринты',
+                desc: 'Забеги майнинга: бонус за результат в окне времени.' },
+              { id: 'combos',  icon: Zap,         name: 'Комбо',
+                desc: 'Бонусы майнинга за комбо-серии действий.' },
+              { id: 'penalty', icon: MinusCircle, name: 'Штрафы',
+                desc: 'Списание пульсов за спам и нарушения в чате.' },
+            ] },
+          { id: 'lottery',      icon: Ticket,        name: 'Лотерея',
+            desc: 'Розыгрыши призов среди участников.' },
+          { id: 'bingo',        icon: Dices,         name: 'Бинго',
+            desc: 'Игровое поле бинго на пульсы.' },
+          { id: 'monthly_gift', icon: CalendarHeart, name: 'Подарок месяца',
+            desc: 'Ежемесячный бонус активным участникам.' },
+          { id: 'referral',     icon: UserPlus,      name: 'Рефералы',
+            desc: 'Награды за приглашённых в чат друзей.' },
+          { id: 'bbs_bonus',    icon: Award,         name: 'BBS-бонусы',
+            desc: 'Бонусы за заполнение анкеты ББС.' },
           { id: 'shipper', nav: 'shipper', target: 'shipper', icon: HeartHandshake,
             name: 'Шиппер',
             desc: 'Случайные пары участников. Лёгкий ice-breaker для чата.' },
@@ -166,7 +182,10 @@ export const MODULE_NAV = SECTIONS.reduce((acc, s) => {
 const NAME_BY_ID = {};
 SECTIONS.forEach(s => s.modules.forEach(m => {
   NAME_BY_ID[m.id] = m.name;
-  (m.children || []).forEach(c => { NAME_BY_ID[c.id] = c.name; });
+  (m.children || []).forEach(c => {
+    NAME_BY_ID[c.id] = c.name;
+    (c.children || []).forEach(g => { NAME_BY_ID[g.id] = g.name; });
+  });
 }));
 
 // «В разработке» = модуля ещё нет в коде бота — ЯВНЫЙ флаг `wip`.
@@ -251,10 +270,14 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
 
 export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect }) {
   const [activeSection, setActiveSection] = useState(SECTIONS[0].id);
-  const [openMod, setOpenMod] = useState(null);   // открытый под-каталог
+  // Стек открытых под-каталогов (drill-down). [] = корень секции.
+  // openMod = текущий (последний). Хлебные крошки строятся из стека.
+  const [modPath, setModPath] = useState([]);
+  const openMod = modPath.length ? modPath[modPath.length - 1] : null;
   const [disc, setDisc] = useState(null);         // модуль на отключении
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState(null);
+  const [query, setQuery] = useState('');
 
   const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
@@ -309,28 +332,49 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const confirmDisconnect = () => {
     if (!disc || !reason.trim()) return;
     // TODO(#7): причину — в журнал изменений модулей вместе со снятием тумблера.
-    onDisconnect?.(disc.id);
+    onDisconnect?.(disc.id, reason.trim());
     flash(`Модуль «${disc.name}» отключён`);
     setDisc(null);
     setReason('');
   };
+
+  // Плоский список всех модулей и дочерних для поиска.
+  const allModules = useMemo(() => {
+    const out = [];
+    SECTIONS.forEach(s => s.modules.forEach(m => {
+      out.push(m);
+      (m.children || []).forEach(c => {
+        out.push({ ...c, _parentName: m.name });
+        (c.children || []).forEach(g => out.push({ ...g, _parentName: c.name }));
+      });
+    }));
+    return out;
+  }, []);
 
   // Что показываем: под-каталог открытого модуля или секцию.
   const view = openMod
     ? { title: openMod.name, items: openMod.children, inChild: true }
     : { title: section.name, items: section.modules, inChild: false };
 
+  const q = query.trim().toLowerCase();
+  const visibleItems = q
+    ? allModules.filter(m =>
+        (m.name || '').toLowerCase().includes(q) ||
+        (m.desc || '').toLowerCase().includes(q)
+      )
+    : view.items;
+
   return (
     <div ref={rootRef} className="space-y-6 pb-24">
       {/* ── Под-навигация секций (бренд-линия) ── */}
-      <div className="border-b border-bd">
+      <div className={`border-b border-bd transition-opacity duration-200 ${q ? 'opacity-40 pointer-events-none' : ''}`}>
         <div className="flex gap-1 overflow-x-auto scrollbar-hide -mb-px">
           {SECTIONS.map(s => {
             const isActive = !openMod && s.id === section.id;
             return (
               <button
                 key={s.id}
-                onClick={() => { setOpenMod(null); setActiveSection(s.id); }}
+                onClick={() => { setModPath([]); setActiveSection(s.id); }}
                 className={`relative flex-shrink-0 px-5 py-3 text-sm font-black tracking-tight transition-colors ${
                   isActive ? 'text-cta' : 'text-txd hover:text-tx'
                 }`}
@@ -345,21 +389,44 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
         </div>
       </div>
 
-      {/* ── Хлебные крошки под-каталога ── */}
-      {openMod && (
-        <div className="flex items-center gap-2 text-[12px] font-bold">
-          <button onClick={() => setOpenMod(null)}
+      {/* ── Поиск по всем секциям ── */}
+      <div className="-mt-2">
+        <input
+          type="text"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+          onKeyDown={(e) => e.key === 'Escape' && setQuery('')}
+          placeholder="Найти модуль…"
+          className="w-full max-w-sm px-4 py-2.5 rounded-2xl bg-sff border border-bd text-sm focus:outline-none focus:border-cta transition-colors"
+        />
+      </div>
+
+      {/* ── Хлебные крошки под-каталога (полный путь drill-down) ── */}
+      {!q && openMod && (
+        <div className="flex items-center gap-2 text-[12px] font-bold flex-wrap">
+          <button onClick={() => setModPath(p => p.slice(0, -1))}
             className="flex items-center gap-1 text-cta hover:underline">
             <ArrowLeft size={14} /> Назад
           </button>
-          <span className="text-lbl">/</span>
-          <span className="text-tx">{openMod.name}</span>
+          {modPath.map((m, i) => (
+            <span key={m.id} className="flex items-center gap-2">
+              <span className="text-lbl">/</span>
+              {i === modPath.length - 1 ? (
+                <span className="text-tx">{m.name}</span>
+              ) : (
+                <button onClick={() => setModPath(p => p.slice(0, i + 1))}
+                  className="text-lbl hover:text-cta hover:underline">
+                  {m.name}
+                </button>
+              )}
+            </span>
+          ))}
         </div>
       )}
 
       {/* ── Каталог: подключённые наверх, FLIP-перестановка ── */}
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-        {[...view.items]
+        {[...visibleItems]
           .sort((a, b) => (isOn(b.id) ? 1 : 0) - (isOn(a.id) ? 1 : 0))
           .map(m => (
           <div
@@ -371,7 +438,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
             <ModuleCard
               mod={m}
               connected={isOn(m.id)}
-              onOpenModule={(mm) => { setOpenMod(mm); scrollToTop(); }}
+              onOpenModule={(mm) => { setModPath(p => [...p, mm]); scrollToTop(); }}
               onOpen={onOpen}
               onConnect={handleConnect}
               onDisconnect={setDisc}
@@ -379,6 +446,14 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
           </div>
         ))}
       </div>
+
+      {/* ── Empty state поиска ── */}
+      {q && visibleItems.length === 0 && (
+        <div className="text-center text-txd py-12">
+          Ничего не найдено по запросу «{query}».{' '}
+          <button onClick={() => setQuery('')} className="underline text-cta">сбросить</button>
+        </div>
+      )}
 
       <p className="text-[12px] text-lbl text-center">
         {view.inChild
