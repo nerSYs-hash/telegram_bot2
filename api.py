@@ -683,58 +683,91 @@ def _compute_stats(period: str) -> dict:
     }
 
 
-def _series_window(period: str):
-    """Окно для лента-графиков: (start, end, monthly?).
+# ── Гранулярности ленты-графиков Статистики ──────────────────────────────────
+# Каждый виджет сам выбирает масштаб: день/неделя/месяц/квартал/год.
+_GRAN_WINDOWS = {'day': 30, 'week': 16, 'month': 12, 'quarter': 8, 'year': 6}
+_GRAN_UNIT = {'day': 'день', 'week': 'неделя', 'month': 'месяц',
+              'quarter': 'квартал', 'year': 'год'}
+_GRAN_LABELS = {'day': 'По дням', 'week': 'По неделям', 'month': 'По месяцам',
+                'quarter': 'По кварталам', 'year': 'По годам'}
 
-    today/yesterday/week → 7 дней по дням; month → 30 дней по дням;
-    year → 12 месяцев (monthly). Гранулярность — ДЕНЬ (почасовых нет,
-    см. docs/STATS_SPEC_Puls_Chat.md «Пробелы → бэкенд этап 2»).
-    """
+
+def _bucket_key(gran: str, iso: str) -> str:
+    """ISO-дата 'YYYY-MM-DD' → ключ бакета выбранной гранулярности."""
+    if gran == 'day':
+        return iso
+    if gran == 'month':
+        return iso[:7]
+    if gran == 'year':
+        return iso[:4]
+    y, m, d = (int(x) for x in iso.split('-'))
+    if gran == 'quarter':
+        return f"{y}-Q{(m - 1) // 3 + 1}"
+    iy, iw, _ = datetime(y, m, d).isocalendar()   # ISO-неделя
+    return f"{iy}-W{iw:02d}"
+
+
+def _bucket_label(gran: str, d) -> str:
+    """Подпись точки оси X по первой дате бакета d (date)."""
+    if gran == 'day':
+        return d.strftime('%d.%m')
+    if gran == 'week':
+        return (d - timedelta(days=d.weekday())).strftime('%d.%m')
+    if gran == 'month':
+        return RU_MONTHS.get(d.month, d.strftime('%Y-%m'))
+    if gran == 'quarter':
+        return f"Q{(d.month - 1) // 3 + 1} {d.year % 100:02d}"
+    return str(d.year)
+
+
+def _granularity_spine(gran: str):
+    """→ (start_date, end_date, bucket_fn, spine[(key,label)]) без дыр."""
+    if gran not in _GRAN_WINDOWS:
+        gran = 'day'
     today = _today_msk()
-    if period == 'month':
-        return today - timedelta(days=29), today, False
-    if period == 'year':
-        return today - timedelta(days=364), today, True
-    return today - timedelta(days=6), today, False
+    n = _GRAN_WINDOWS[gran]
+    if gran == 'day':
+        start = today - timedelta(days=n - 1)
+    elif gran == 'week':
+        start = today - timedelta(weeks=n - 1)
+        start = start - timedelta(days=start.weekday())
+    elif gran == 'month':
+        start = (today.replace(day=1) - timedelta(days=31 * (n - 1))).replace(day=1)
+    elif gran == 'quarter':
+        start = (today.replace(day=1) - timedelta(days=92 * (n - 1))).replace(day=1)
+    else:  # year
+        start = today.replace(month=1, day=1)
+        try:
+            start = start.replace(year=start.year - (n - 1))
+        except ValueError:
+            pass
+    spine, seen = [], set()
+    cur = start
+    while cur <= today:
+        k = _bucket_key(gran, cur.isoformat())
+        if k not in seen:
+            seen.add(k)
+            spine.append((k, _bucket_label(gran, cur)))
+        cur += timedelta(days=1)
+    return start, today, (lambda iso: _bucket_key(gran, iso)), spine
 
 
-def _date_spine(start_date, end_date, monthly: bool):
-    """Список точек оси X (без дыр): [(key, label), ...]."""
-    pts = []
-    if monthly:
-        seen = set()
-        cur = start_date
-        while cur <= end_date:
-            key = cur.strftime("%Y-%m")
-            if key not in seen:
-                seen.add(key)
-                pts.append((key, RU_MONTHS.get(cur.month, key)))
-            cur += timedelta(days=1)
-    else:
-        cur = start_date
-        while cur <= end_date:
-            pts.append((cur.isoformat(), cur.strftime("%d.%m")))
-            cur += timedelta(days=1)
-    return pts
+def _compute_series(granularity: str = 'day') -> dict:
+    """Лента графиков Статистики на РЕАЛЬНЫХ данных.
 
-
-def _compute_series(period: str) -> dict:
-    """Лента графиков Статистики на РЕАЛЬНЫХ дневных данных.
-
-    Виджеты (см. docs/STATS_SPEC_Puls_Chat.md): 1 users, 2 messages,
+    granularity: day/week/month/quarter/year (см. _granularity_spine).
+    Виджеты (docs/STATS_SPEC_Puls_Chat.md): 1 users, 2 messages,
     3 engagement, 6 newcomers(part), 7 firstMessage, 10 activeSummary,
     11 kpi. Виджеты 4/5/8/9 требуют почасовых/edited/links — этап 2.
     """
-    start_date, end_date, monthly = _series_window(period)
+    gran = granularity if granularity in _GRAN_WINDOWS else 'day'
+    start_date, end_date, bucket, spine = _granularity_spine(gran)
     s_iso, e_iso = start_date.isoformat(), end_date.isoformat()
     today = _today_msk()
     ws_id = getattr(db, '_DEFAULT_WS_ID', 1) if db else 1
-    spine = _date_spine(start_date, end_date, monthly)
-    bucket = (lambda d: d[:7]) if monthly else (lambda d: d)
 
     if not db:
-        return {"period": period, "periodLabel": PERIOD_LABELS.get(period, period),
-                "granularity": "month" if monthly else "day",
+        return {"granularity": gran, "granularityLabel": _GRAN_LABELS[gran],
                 "users": [], "messages": [], "engagement": [], "newcomers": [],
                 "firstMessage": {"firstDay": 0, "afterFirstDay": 0},
                 "activeSummary": {"newcomers": 0, "regular": 0, "active": 0},
@@ -840,13 +873,12 @@ def _compute_series(period: str) -> dict:
         "activeTotal": active_total,
         "avgActivePerPoint": avg_writers,
         "points": n_pts,
-        "unit": "месяц" if monthly else "день",
+        "unit": _GRAN_UNIT[gran],
     }
 
     return {
-        "period": period,
-        "periodLabel": PERIOD_LABELS.get(period, period),
-        "granularity": "month" if monthly else "day",
+        "granularity": gran,
+        "granularityLabel": _GRAN_LABELS[gran],
         "users": users,
         "messages": messages,
         "engagement": engagement,
@@ -862,14 +894,14 @@ def _compute_series(period: str) -> dict:
 
 
 @app.get("/api/stats/series")
-async def get_stats_series(period: str = Query('week')):
-    """Лента графиков Статистики на реальных дневных данных.
+async def get_stats_series(granularity: str = Query('day')):
+    """Лента графиков Статистики на реальных данных.
 
-    period: today/yesterday/week → 7д; month → 30д; year → 12 мес.
+    granularity: day / week / month / quarter / year.
     Виджеты с почасовыми/edited/links — этап 2 (поле gaps).
     """
     try:
-        return _compute_series(period)
+        return _compute_series(granularity)
     except Exception as e:
         logger.error(f"Error in /api/stats/series: {e}")
         raise HTTPException(status_code=500, detail=str(e))
