@@ -230,6 +230,69 @@ function WidgetUsers({ cache, ensure }) {
   );
 }
 
+// ═══════════ Виджет №2 — Количество сообщений ═══════════
+function WidgetMessages({ cache, ensure }) {
+  const [gran, setGran] = useState('day');
+  const [activeIndex, setActiveIndex] = useState(null);
+
+  useEffect(() => { ensure(gran); }, [gran, ensure]);
+
+  const series = cache[gran];
+  const data = series?.messages || [];
+  const loading = !series;
+  const error = series?.error;
+
+  return (
+    <WidgetCard
+      icon={BarChart3} accent={C.cta}
+      title="Количество сообщений"
+      hint="Сообщения — сколько всего написано за период. Писали — сколько уникальных участников отправили хотя бы одно сообщение. У показателей разный масштаб, поэтому две оси: сообщения слева, писали справа."
+      onExport={data.length ? () => downloadCSV(
+        `messages_${gran}.csv`,
+        ['Период', 'Сообщения', 'Писали'],
+        data.map((m) => [m.day, m.messages, m.writers]),
+      ) : undefined}
+    >
+      <div className="px-2 pb-1">
+        <GranTabs value={gran} onChange={setGran} />
+      </div>
+
+      {loading ? <WidgetState kind="loading" />
+        : error ? <WidgetState kind="error" />
+        : (
+        <>
+          <ResponsiveContainer width="100%" height={290}>
+            <ComposedChart data={data} margin={{ top: 10, right: 6, left: -14, bottom: 0 }}
+              onMouseMove={(s) => setActiveIndex(s?.activeTooltipIndex ?? null)}
+              onMouseLeave={() => setActiveIndex(null)}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+              <XAxis dataKey="day" height={30} axisLine={false} tickLine={false}
+                     interval="preserveStartEnd"
+                     tick={<DateTick activeIndex={activeIndex} />} />
+              <YAxis yAxisId="msg" width={40} allowDecimals={false}
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="wr" orientation="right" width={30} allowDecimals={false}
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <Tooltip content={<StatTooltip />}
+                       cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
+              <Bar yAxisId="msg" dataKey="messages" name="Сообщения" fill={C.cta}
+                   radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
+              <Bar yAxisId="wr" dataKey="writers" name="Писали" fill={C.purple}
+                   radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
+              <Brush dataKey="day" height={24} stroke={C.cta} fill={C.brush}
+                     travellerWidth={9} tickFormatter={() => ''} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <ChartLegend items={[
+            { label: 'Сообщения', color: C.cta },
+            { label: 'Писали',    color: C.purple },
+          ]} />
+        </>
+      )}
+    </WidgetCard>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title, note }) {
   return (
@@ -284,9 +347,10 @@ export default function StatsPage() {
       {/* ── №1 — собран ── */}
       <WidgetUsers cache={cache} ensure={ensure} />
 
-      {/* ── №2–11 — проектируем по очереди ── */}
-      <SoonCard icon={BarChart3} title="Количество сообщений по дням"
-        note="Следующий на очереди — собираем по одному." />
+      {/* ── №2 — собран ── */}
+      <WidgetMessages cache={cache} ensure={ensure} />
+
+      {/* ── №3–11 — проектируем по очереди ── */}
       <SoonCard icon={Activity} title="Коэффициент вовлечённости"
         note="Доля пишущих от общего числа участников." />
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта"
