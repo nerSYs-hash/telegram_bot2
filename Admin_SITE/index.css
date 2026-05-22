@@ -299,15 +299,13 @@ code, pre, kbd, samp,
           drop-shadow(0 0 9px color-mix(in oklab, var(--node-color) 65%, transparent));
 }
 
-/* карточка новости подхватывает цвет своего типа на hover */
+/* карточка месяца — мягкая подсветка границы на hover (без сдвига) */
 .roadmap-card {
-  transition: border-color .22s var(--e), box-shadow .22s var(--e),
-              transform .22s var(--e);
+  transition: border-color .22s var(--e), box-shadow .22s var(--e);
 }
 .roadmap-node:hover .roadmap-card {
-  border-color: color-mix(in oklab, var(--node-color) 48%, transparent);
-  box-shadow: 0 8px 24px -12px color-mix(in oklab, var(--node-color) 60%, transparent);
-  transform: translateX(2px);
+  border-color: color-mix(in oklab, var(--node-color) 30%, var(--bd));
+  box-shadow: 0 10px 30px -16px color-mix(in oklab, var(--node-color) 45%, transparent);
 }
 
 /* общая вертикальная ветка — сверху бренд-акцент «сейчас», ниже нейтраль */
@@ -322,10 +320,22 @@ code, pre, kbd, samp,
   );
 }
 
+/* ── Оповещение об обновлении: мягкий выезд снизу ── */
+@keyframes news-toast-in {
+  from { opacity: 0; transform: translateY(18px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);   }
+}
+@keyframes news-toast-out {
+  to { opacity: 0; transform: translateY(18px) scale(.96); }
+}
+.news-toast-in  { animation: news-toast-in  .34s var(--esp) both; }
+.news-toast-out { animation: news-toast-out .22s var(--e)   both; }
+
 @media (prefers-reduced-motion: reduce) {
   .roadmap-ring  { animation: none; }
   .roadmap-card,
   .roadmap-svg,
   .roadmap-ring-circle,
   .roadmap-dot   { transition: none; }
+  .news-toast-in, .news-toast-out { animation-duration: .01ms; }
 }

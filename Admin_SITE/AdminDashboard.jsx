@@ -2,7 +2,8 @@ import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import StatsPage from './components/stats/StatsPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
-import RoadmapTree from './components/updates/RoadmapTree';
+import NewsTree from './components/updates/NewsTree';
+import UpdateToast from './components/updates/UpdateToast';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import { useModules } from './hooks/useModules';
 import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
@@ -27,7 +28,7 @@ import {
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
   GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
-  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch, Newspaper
 } from 'lucide-react';
 
 const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
@@ -50,10 +51,99 @@ const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
 });
 
 // ═══════════════════════════════════════════
-//  СПИСОК ОБНОВЛЕНИЙ — добавляй сюда при каждом релизе
-//  type: 'new' | 'fix' | 'improve'
+//  НОВОСТИ — добавляй запись при каждом релизе бота/сайта.
+//  ПРАВИЛО ТОНА: всегда от лица «Мы» / «Наша команда».
+//  cat: 'feature' (новинка) | 'update' (обновление) | 'promo' (акция)
+//  Старые записи на поле type (new/improve/fix) нормализуются в UI.
+//  changelog копит техдетали — сюда кладём только выжимку для юзера.
 // ═══════════════════════════════════════════
 const UPDATES = [
+  {
+    version: 'V1.17.0h',
+    date: '22 мая 2026',
+    title: '🗺️ Карта проекта и новая Статистика',
+    items: [
+      { cat: 'feature', tag: 'site',       text: 'Мы превратили раздел «Обновления» в живой Новостной раздел — дерево новостей по месяцам с анимированными узлами' },
+      { cat: 'feature', tag: 'statistics', text: 'Мы переделали Статистику — теперь это лента графиков с переключателем периода: день, неделя, месяц, квартал, год' },
+      { cat: 'update',  tag: 'statistics', text: 'Мы добавили на каждый график приближение диапазона и выбор детализации' },
+      { cat: 'feature', tag: 'bot',        text: 'Мы разбили Экономику на 9 отдельных модулей — майнинг, спринты, комбо, штрафы, лотерея, бинго, подарок месяца, рефералы, BBS-бонус' },
+      { cat: 'update',  tag: 'bot',        text: 'Теперь каждый модуль экономики включается и выключается отдельно — выключенный не работает в боте' },
+      { cat: 'update',  tag: 'site',       text: 'Мы починили управление администраторами — список снова загружается без ошибок' },
+    ],
+  },
+  {
+    version: 'V1.17.0g',
+    date: '20 мая 2026',
+    title: '🧩 Хаб «Модули»',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы собрали все функции бота в новый раздел «Модули» — единый каталог, где нужное подключается карточками' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили под-навигацию секций с фирменным подчёркиванием: Аналитика, Экономика, Вовлечение, Контент, Журнал' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход в кабинет одним тапом из бота — кнопка «🔑 Войти в кабинет», без пароля' },
+      { cat: 'update',  tag: 'site', text: 'Теперь при подключении модуля карточка плавно уезжает в начало каталога' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили всплывающее оповещение при подключении и отключении модуля' },
+    ],
+  },
+  {
+    version: 'V1.17.0e–f',
+    date: '19 мая 2026',
+    title: '🎨 Единая дизайн-система Puls Chat',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы перевели весь кабинет на единую дизайн-систему — общий язык цветов, скруглений и анимаций' },
+      { cat: 'update',  tag: 'site', text: 'Мы привели все экраны и компоненты к одному визуальному стилю' },
+      { cat: 'update',  tag: 'site', text: 'Мы вылечили неровное свечение у кнопок и карточек — теперь ореол ровный и мягкий' },
+    ],
+  },
+  {
+    version: 'V1.17.0d',
+    date: '16 мая 2026',
+    title: '🌐 Несколько сообществ в одном кабинете',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы добавили переключатель сообществ в шапку — управляй несколькими чатами из одного аккаунта' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход и права в кабинете отдельными для каждого сообщества' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь помощник получает доступ строго к тому сообществу, куда его пригласили' },
+    ],
+  },
+  {
+    version: 'V1.17.0b–c',
+    date: '14 мая 2026',
+    title: '🔗 Подключение бота и кабинет сообщества',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали само-подключение — добавил бота в чат, и кабинет сообщества создаётся автоматически' },
+      { cat: 'feature', tag: 'site', text: 'Мы открыли кабинет сообщества: список чатов, помощники и роли чатов — главный, админский, журнальный' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь при добавлении в чат бот сам предлагает выбрать, к какому сообществу его привязать' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы добавили команду /get_thread_id — она помогает настроить нужные топики чата' },
+    ],
+  },
+  {
+    version: 'V1.17.0a',
+    date: '12 мая 2026',
+    title: '🏢 Фундамент мульти-сообществ',
+    items: [
+      { cat: 'feature', tag: 'bot', text: 'Мы научили бота обслуживать несколько независимых сообществ одновременно' },
+      { cat: 'update',  tag: 'bot', text: 'Мы полностью изолировали данные каждого сообщества друг от друга' },
+    ],
+  },
+  {
+    version: 'V1.16',
+    date: '9 мая 2026',
+    title: '🎫 Кастомные титулы и пресс-релизы',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы запустили кастомные титулы — покупка за Пульсы или рубли, заявки и пакеты' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили раздел «Пресс-релизы» — редактор с оформлением, медиа, шаблоны подписей и планировщик' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы обновили Баг-Трекер до версии 2.0 — разделение тикетов и защита карточек от потери' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы вернули восстановление последней удалённой анкеты BBS командой /restore_last_bbs' },
+    ],
+  },
+  {
+    version: 'V1.16.5',
+    date: '5 мая 2026',
+    title: '💰 Экономика — карточки-категории',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы переделали Экономику на сайте в карточки категорий с главным переключателем у каждой' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили блок «В обороте» — курс Пульса, баланс банка и у участников, эмиссия за 24 часа' },
+      { cat: 'update',  tag: 'site', text: 'Теперь категории показывают живые данные из бота, а сетка подстраивается под экран' },
+    ],
+  },
   {
     version: 'V1.12.9',
     date: '20 апреля 2026',
@@ -476,6 +566,8 @@ export default function App() {
   const [hasNewUpdate, setHasNewUpdate] = useState(
     () => localStorage.getItem('lastSeenUpdate') !== LATEST_VERSION
   );
+  // версия прошлого визита — по ней дерево Новостей метит свежие записи
+  const [newsBaseline] = useState(() => localStorage.getItem('lastSeenUpdate'));
   const [jigglingTag, setJigglingTag] = useState(null);
   const triggerJiggle = (key) => { setJigglingTag(key); };
   const [jigglingNav, setJigglingNav] = useState(null);
@@ -988,7 +1080,7 @@ export default function App() {
   // Сайдбар = только база (top) + сервис. Модули (isModule) показываются
   // в боковой панели ТОЛЬКО когда подключены из каталога «Модули».
   const navigation = [
-    { id: 'updates',       name: 'Карта проекта',  icon: GitBranch,      group: 'top' },
+    { id: 'updates',       name: 'Новости',        icon: Newspaper,      group: 'top' },
     { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
     { id: 'system',        name: 'Система',        icon: Settings,       group: 'top',      resource: 'system' },
     { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
@@ -4828,7 +4920,7 @@ export default function App() {
       }
 
       case 'updates':
-        return <RoadmapTree updates={UPDATES} />;
+        return <NewsTree updates={UPDATES} baseline={newsBaseline} />;
 
       case 'profile': {
         const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
@@ -5387,6 +5479,17 @@ export default function App() {
           })}
         </nav>
       </aside>
+
+      {hasNewUpdate && activeTab !== 'updates' && (
+        <UpdateToast
+          latest={UPDATES[0]}
+          onOpen={() => navigateTo('updates')}
+          onDismiss={() => {
+            localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+            setHasNewUpdate(false);
+          }}
+        />
+      )}
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-transparent">
         <header className="h-16 lg:h-16 bg-sff border-b border-bd flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
