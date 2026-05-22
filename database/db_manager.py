@@ -661,6 +661,15 @@ class Database:
             import logging
             logging.getLogger(__name__).error(f"economy_module_backfill migration: {e}")
 
+        # Migration V1.17.0h17: правки текстов описаний эконом-параметров
+        # (toxic без «AI-модератор», defib без статичного %, «ставку» → «базовую»)
+        try:
+            from database.migrations.economy_text_fixes import up as _up_econ_text
+            _up_econ_text(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"economy_text_fixes migration: {e}")
+
     # ── Economy ──
     # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
     # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.

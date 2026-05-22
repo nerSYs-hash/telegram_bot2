@@ -11,6 +11,11 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
   const isNew = row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 86_400_000;
   const isExpanded = editing || toggling;
 
+  // defib-множитель: «(xN = +M%)» считаем динамически по текущему значению
+  const descText = (row.key === 'defib.buff_multiplier' && row.description)
+    ? `${row.description} (x${Number(row.value)} = +${Math.round((Number(row.value) - 1) * 100)}%)`
+    : row.description;
+
   const handleSave = async (newValue, comment) => {
     const res = await fetch(`/api/economy/settings/${row.key}`, {
       method: 'PATCH',
@@ -58,8 +63,8 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
               </span>
             )}
           </div>
-          {row.description && (
-            <div className="text-[10px] text-lbl mt-0.5 truncate">{row.description}</div>
+          {descText && (
+            <div className="text-[10px] text-lbl mt-0.5 truncate">{descText}</div>
           )}
         </div>
 

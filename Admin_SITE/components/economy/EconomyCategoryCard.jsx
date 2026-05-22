@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import {
   X, Pickaxe, Gem, Ticket, Grid2x2, Gift, UsersRound, Heart, Settings,
-  Edit, BarChart3, Coins, Crown, Ban, HelpCircle,
+  Edit, BarChart3, Coins, Crown, Ban, HelpCircle, AlertTriangle,
 } from 'lucide-react';
 import Toggle from '../shared/Toggle';
 import Tooltip from '../shared/Tooltip';
@@ -343,6 +343,20 @@ export default function EconomyCategoryCard({
                 modulesApi={modulesApi}
               />
             )}
+            {/* Дисклеймер донатных категорий — ответственность за платежи */}
+            {meta.paid && (
+              <div className="rounded-xl border px-3 py-2.5 flex items-start gap-2
+                              border-[color-mix(in_oklab,var(--warn)_35%,transparent)]
+                              bg-[color-mix(in_oklab,var(--warn)_8%,transparent)]">
+                <span className="text-warn flex-shrink-0 mt-0.5"><AlertTriangle size={14} /></span>
+                <p className="text-[10px] text-txd leading-relaxed">
+                  <strong className="text-tx">Донатная система.</strong> Мы не несём
+                  ответственности за приём и обработку платежей. Вы можете подключить
+                  сторонние сервисы приёма оплаты или принимать оплату звёздами
+                  Telegram внутри бота.
+                </p>
+              </div>
+            )}
             {/* Спец-случай: «Отмены выплат» — системная карточка, всегда
                 первая, относится ко всем модулям Экономики. В expanded:
                 сводка + кнопка «Открыть полную панель» (drawer с журналом). */}
@@ -410,6 +424,10 @@ export default function EconomyCategoryCard({
 
 function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit }) {
   const isRecent = recentlyChanged?.has(row.key);
+  // defib-множитель: «(xN = +M%)» считаем динамически по текущему значению
+  const descText = (row.key === 'defib.buff_multiplier' && row.description)
+    ? `${row.description} (x${Number(row.value)} = +${Math.round((Number(row.value) - 1) * 100)}%)`
+    : row.description;
   // mode: 'view' | 'edit' | 'toggle' — inline-формы прямо в карточке
   const [mode, setMode] = useState('view');
   const [value, setValue] = useState(String(row.value));
@@ -467,8 +485,8 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
         <div className="flex items-center gap-2">
           <div className="flex-1 min-w-0">
             <div className="text-[12px] font-bold text-tx leading-tight truncate">{row.label}</div>
-            {row.description && (
-              <div className="text-[10px] text-lbl mt-0.5 truncate">{row.description}</div>
+            {descText && (
+              <div className="text-[10px] text-lbl mt-0.5 truncate">{descText}</div>
             )}
           </div>
           <div className="text-[13px] font-black text-tx font-mono flex-shrink-0 whitespace-nowrap">
