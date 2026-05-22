@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import {
   X, Pickaxe, Gem, Ticket, Grid2x2, Gift, UsersRound, Heart, Settings,
   Edit, BarChart3, Coins, Crown, Ban, HelpCircle, AlertTriangle,
+  Hash, ChevronDown, Check,
 } from 'lucide-react';
 import Toggle from '../shared/Toggle';
 import Tooltip from '../shared/Tooltip';
@@ -50,6 +51,16 @@ const UNIT_HINT = {
   'ч':   'часы',
   'мин': 'минуты',
 };
+
+// Подкатегории, у которых параметр можно ограничить топиками чата (#5/#9).
+const TOPIC_SUBCATS = new Set(['penalty', 'combo', 'sprint']);
+
+function pluralTopic(n) {
+  const d = n % 10, h = n % 100;
+  if (d === 1 && h !== 11) return 'топик';
+  if (d >= 2 && d <= 4 && (h < 10 || h >= 20)) return 'топика';
+  return 'топиков';
+}
 
 // DEV-fallback: тестовые параметры для каждой категории, видны в expanded
 // когда бэкенд не отвечает (для дизайн-QA на localhost).
@@ -118,6 +129,8 @@ export default function EconomyCategoryCard({
   const [loading, setLoading] = useState(false);
   const [topRow, setTopRow] = useState(null);
   const [hover, setHover] = useState(false);
+  const [topics, setTopics] = useState([]);
+  const [topicsLoaded, setTopicsLoaded] = useState(false);
 
   // Главный параметр для collapsed-state (один fetch при монтировании)
   useEffect(() => {
@@ -162,6 +175,17 @@ export default function EconomyCategoryCard({
       .finally(() => setLoading(false));
   }, [active, category.key, token, settings]);
 
+  // Топики чата — для пикера «в каких ветках работает параметр» (#5/#9).
+  // /api/topics без авторизации (как в Триггерах). Пусто на localhost —
+  // топики появятся, когда бота подключат к чату с темами.
+  useEffect(() => {
+    if (!active || topicsLoaded) return;
+    fetch('/api/topics')
+      .then(r => r.ok ? r.json() : [])
+      .then(d => { setTopics(Array.isArray(d) ? d : []); setTopicsLoaded(true); })
+      .catch(() => setTopicsLoaded(true));
+  }, [active, topicsLoaded]);
+
   const grouped = useMemo(() => {
     if (!settings) return {};
     return settings.reduce((acc, s) => {
@@ -198,6 +222,19 @@ export default function EconomyCategoryCard({
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
     }
     setSettings(prev => prev?.map(s => s.key === row.key ? { ...s, is_enabled: !s.is_enabled, history_count: (s.history_count || 0) + 1 } : s));
+  };
+
+  // Топики срабатывания параметра (penalty / combo / sprint). [] = весь чат.
+  const handleRowTopics = async (row, ids) => {
+    if (token) {
+      const r = await fetch(`/api/economy/settings/${row.key}/topics`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ topics: ids }),
+      });
+      if (!r.ok) throw new Error((await r.json().catch(() => ({}))).detail || 'Ошибка');
+    }
+    setSettings(prev => prev?.map(s => s.key === row.key ? { ...s, topic_scope: ids } : s));
   };
 
   return (
@@ -423,6 +460,9 @@ export default function EconomyCategoryCard({
                           onEdit={(value, comment) => handleRowEdit(row, value, comment)}
                           onToggle={(comment) => handleRowToggle(row, comment)}
                           onHistory={() => onOpenHistory?.(row.key, row.label)}
+                          onTopics={(ids) => handleRowTopics(row, ids)}
+                          topics={topics}
+                          topicsLoaded={topicsLoaded}
                           recentlyChanged={recentlyChanged}
                           canEdit={canEdit}
                         />
@@ -438,7 +478,7 @@ export default function EconomyCategoryCard({
   );
 }
 
-function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit }) {
+function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit, topics, topicsLoaded, onTopics }) {
   const isRecent = recentlyChanged?.has(row.key);
   // defib-множитель: «(xN = +M%)» считаем динамически по текущему значению
   const descText = (row.key === 'defib.buff_multiplier' && row.description)
@@ -498,6 +538,7 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
     >
       {/* ── VIEW: обычное состояние строки ── */}
       {mode === 'view' && (
+        <>
         <div className="flex items-center gap-2.5">
           {/* что за параметр — название + полное пояснение (не обрезаем) */}
           <div className="flex-1 min-w-0">
@@ -544,6 +585,16 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
             <BarChart3 size={13} />
           </button>
         </div>
+        {TOPIC_SUBCATS.has(row.subcategory) && (
+          <TopicPicker
+            value={row.topic_scope || []}
+            topics={topics}
+            topicsLoaded={topicsLoaded}
+            canEdit={canEdit}
+            onChange={onTopics}
+          />
+        )}
+        </>
       )}
 
       {/* ── EDIT: inline-форма редактирования значения ── */}
@@ -640,6 +691,98 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
               {busy ? '…' : 'Подтвердить'}
             </button>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── Пикер топиков: в каких ветках чата работает параметр (#5/#9) ──
+// Пусто = весь чат. Мультивыбор. Список топиков — из /api/topics.
+function TopicPicker({ value = [], topics = [], topicsLoaded, canEdit, onChange }) {
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const selected = new Set(value);
+  const label = value.length === 0
+    ? 'Весь чат'
+    : `${value.length} ${pluralTopic(value.length)}`;
+
+  const apply = async (ids) => {
+    if (busy) return;
+    setBusy(true);
+    try { await onChange(ids); } catch { /* ошибку покажет родитель */ }
+    finally { setBusy(false); }
+  };
+  const toggleTopic = (tid) => {
+    const next = new Set(selected);
+    next.has(tid) ? next.delete(tid) : next.add(tid);
+    apply([...next]);
+  };
+
+  return (
+    <div className="mt-2 pt-2 border-t border-bd">
+      <button
+        type="button"
+        onClick={() => canEdit && setOpen(o => !o)}
+        disabled={!canEdit}
+        title="В каких ветках чата срабатывает этот параметр"
+        className="flex items-center gap-1.5 text-[10px] font-bold text-txd hover:text-cta transition disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        <Hash size={11} />
+        <span>Работает в:</span>
+        <span className="text-cta">{label}</span>
+        {busy
+          ? <span className="text-lbl">…</span>
+          : <ChevronDown size={11} className={`transition-transform ${open ? 'rotate-180' : ''}`} />}
+      </button>
+
+      {open && (
+        <div className="mt-1.5 space-y-0.5">
+          <button
+            type="button"
+            onClick={() => apply([])}
+            disabled={busy}
+            className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] text-left transition
+                        ${value.length === 0
+                          ? 'bg-[color-mix(in_oklab,var(--cta)_12%,transparent)] text-cta font-bold'
+                          : 'text-txd hover:bg-sf2'}`}
+          >
+            <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0
+                              ${value.length === 0 ? 'bg-cta border-cta text-white' : 'border-bd2'}`}>
+              {value.length === 0 && <Check size={10} />}
+            </span>
+            Весь чат (все топики)
+          </button>
+
+          {!topicsLoaded ? (
+            <div className="text-[10px] text-lbl px-2 py-1.5">Загрузка топиков…</div>
+          ) : topics.length === 0 ? (
+            <div className="text-[10px] text-lbl px-2 py-1.5 leading-relaxed">
+              Топиков пока нет — появятся, когда к боту подключат чат с темами.
+            </div>
+          ) : (
+            topics.map(t => {
+              const on = selected.has(t.thread_id);
+              return (
+                <button
+                  key={t.thread_id}
+                  type="button"
+                  onClick={() => toggleTopic(t.thread_id)}
+                  disabled={busy}
+                  className={`w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-[11px] text-left transition
+                              ${on
+                                ? 'bg-[color-mix(in_oklab,var(--cta)_12%,transparent)] text-cta font-bold'
+                                : 'text-txd hover:bg-sf2'}`}
+                >
+                  <span className={`w-4 h-4 rounded-md border flex items-center justify-center flex-shrink-0
+                                    ${on ? 'bg-cta border-cta text-white' : 'border-bd2'}`}>
+                    {on && <Check size={10} />}
+                  </span>
+                  <span className="truncate">{t.name}</span>
+                </button>
+              );
+            })
+          )}
         </div>
       )}
     </div>

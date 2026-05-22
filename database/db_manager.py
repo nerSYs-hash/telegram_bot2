@@ -670,6 +670,15 @@ class Database:
             import logging
             logging.getLogger(__name__).error(f"economy_text_fixes migration: {e}")
 
+        # Migration V1.17.0h19: колонка topic_scope (топики срабатывания
+        # для penalty / combo / sprint параметров экономики)
+        try:
+            from database.migrations.economy_topic_scope import up as _up_econ_topics
+            _up_econ_topics(self.conn)
+        except Exception as e:
+            import logging
+            logging.getLogger(__name__).error(f"economy_topic_scope migration: {e}")
+
     # ── Economy ──
     # TODO(multi-tenancy): workspace_id=1 placeholder. Когда WorkspaceContext
     # будет проброшен в handlers (Task 15), wrapper'ы примут workspace_id явно.

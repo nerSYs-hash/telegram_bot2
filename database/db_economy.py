@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS economy_settings (
     is_enabled     INTEGER NOT NULL DEFAULT 1,
     is_hidden      INTEGER NOT NULL DEFAULT 0,
     sort_order     INTEGER NOT NULL DEFAULT 0,
+    topic_scope    TEXT,
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -325,6 +326,10 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
         rows = db.cursor.fetchall()
         result = []
         for r in rows:
+            try:
+                _ts_raw = r['topic_scope']
+            except (IndexError, KeyError):
+                _ts_raw = None
             result.append({
                 "key":          r['key'],
                 "category":     r['category'],
@@ -343,6 +348,7 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
                 "last_change":  r['last_change'],
                 "created_at":   r['created_at'],
                 "updated_at":   r['updated_at'],
+                "topic_scope":  json.loads(_ts_raw) if _ts_raw else [],
             })
         return result
     except Exception as e:
@@ -351,6 +357,41 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
 
 
 # ── WRITE ─────────────────────────────────────────────────────────────────────
+
+def set_econ_topics(db, workspace_id: int, key: str, thread_ids: list) -> dict:
+    """Сохраняет топики, в которых работает параметр. [] / None = весь чат."""
+    ids = []
+    for t in (thread_ids or []):
+        try:
+            ids.append(int(t))
+        except (TypeError, ValueError):
+            continue
+    scope = json.dumps(ids) if ids else None
+    db.cursor.execute(
+        "UPDATE economy_settings SET topic_scope = ?, updated_at = datetime('now') "
+        "WHERE workspace_id = ? AND key = ?",
+        (scope, workspace_id, key),
+    )
+    db.conn.commit()
+    return {"key": key, "topic_scope": ids}
+
+
+def get_econ_topic_scope(db, workspace_id: int, key: str) -> list:
+    """Список thread_id, в которых работает параметр. Пусто = весь чат."""
+    try:
+        db.cursor.execute(
+            "SELECT topic_scope FROM economy_settings WHERE workspace_id = ? AND key = ?",
+            (workspace_id, key),
+        )
+        row = db.cursor.fetchone()
+        if not row:
+            return []
+        raw = row[0]
+        return json.loads(raw) if raw else []
+    except Exception as e:
+        logger.error(f"get_econ_topic_scope error: {e}")
+        return []
+
 
 def set_econ(db, workspace_id: int, key: str, value, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Обновляет значение настройки + пишет историю. Атомарно."""
