@@ -33,11 +33,22 @@ const DEFAULT_META = { Icon: Settings, accent: 'var(--lbl)', rgb: '156,163,175',
 const CATEGORY_TO_MODULE = { vip_bbs: 'bbs_vip' };
 
 const SUBCAT_LABELS = {
-  base:    '📑 Базовые ставки',
-  combo:   '📑 Комбо-квесты',
-  sprint:  '📑 Спринты',
-  shipper: '📑 Шиппер-резонанс',
-  defib:   '📑 Дефибриллятор',
+  base:       '📑 Базовые ставки',
+  base_coeff: '📑 Базовые коэффициенты',
+  combo:      '📑 Комбо-квесты',
+  sprint:     '📑 Спринты',
+  penalty:    '📑 Штрафы',
+  shipper:    '⚡ Буст · Шиппер-резонанс',
+  defib:      '⚡ Буст · Дефибриллятор',
+};
+
+// Подсказка к единице значения (tooltip) — чтобы было понятно, что за число.
+const UNIT_HINT = {
+  'x':   'коэффициент / множитель',
+  '×':   'коэффициент / множитель',
+  '💎':  'Пульсы',
+  'ч':   'часы',
+  'мин': 'минуты',
 };
 
 // DEV-fallback: тестовые параметры для каждой категории, видны в expanded
@@ -394,6 +405,11 @@ export default function EconomyCategoryCard({
                     Параметров пока нет
                   </div>
                 )}
+                {!loading && settings && settings.length > 0 && (
+                  <p className="text-[10px] text-lbl leading-relaxed px-1">
+                    Нажми на значение, чтобы изменить его. Тумблер включает или выключает параметр.
+                  </p>
+                )}
                 {!loading && settings && Object.entries(grouped).map(([subKey, rows]) => (
                   <div key={subKey}>
                     <div className="text-[10px] font-black text-lbl uppercase tracking-widest mb-2 px-1">
@@ -482,17 +498,34 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
     >
       {/* ── VIEW: обычное состояние строки ── */}
       {mode === 'view' && (
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2.5">
+          {/* что за параметр — название + полное пояснение (не обрезаем) */}
           <div className="flex-1 min-w-0">
-            <div className="text-[12px] font-bold text-tx leading-tight truncate">{row.label}</div>
+            <div className="text-[12px] font-bold text-tx leading-snug">{row.label}</div>
             {descText && (
-              <div className="text-[10px] text-lbl mt-0.5 truncate">{descText}</div>
+              <div className="text-[11px] text-lbl mt-0.5 leading-relaxed">{descText}</div>
             )}
           </div>
-          <div className="text-[13px] font-black text-tx font-mono flex-shrink-0 whitespace-nowrap">
-            {row.value}
-            <span className="text-[10px] text-lbl font-normal ml-1">{row.unit}</span>
-          </div>
+          {/* значение — кликабельное поле, открывает редактирование */}
+          <button
+            type="button"
+            onClick={() => {
+              if (!canEdit) return;
+              setValue(String(row.value)); setComment(''); setError(null); setMode('edit');
+            }}
+            disabled={!canEdit}
+            title={canEdit ? 'Нажми, чтобы изменить значение' : 'Нет прав на изменение'}
+            className={`flex items-baseline gap-1 px-2.5 py-1.5 rounded-lg border flex-shrink-0 transition
+                        ${canEdit
+                          ? 'bg-sf2 border-bd2 hover:border-cta hover:bg-sff cursor-pointer'
+                          : 'bg-sf2 border-bd cursor-not-allowed'}`}
+          >
+            <span className="text-[14px] font-black text-tx font-mono whitespace-nowrap">{row.value}</span>
+            <span className="text-[10px] text-lbl font-bold" title={UNIT_HINT[row.unit] || ''}>
+              {row.unit}
+            </span>
+          </button>
+          {/* вкл/выкл этого начисления */}
           <Toggle
             checked={row.is_enabled}
             onChange={() => {
@@ -501,22 +534,14 @@ function DetailRow({ row, onEdit, onToggle, onHistory, recentlyChanged, canEdit 
             }}
             className={!canEdit ? 'opacity-50 pointer-events-none' : ''}
           />
+          {/* история изменений параметра */}
           <button
             type="button"
             onClick={onHistory}
             className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-cta transition shrink-0"
-            title="История"
+            title="История изменений"
           >
             <BarChart3 size={13} />
-          </button>
-          <button
-            type="button"
-            onClick={() => { setValue(String(row.value)); setComment(''); setError(null); setMode('edit'); }}
-            disabled={!canEdit}
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-lbl hover:bg-sf2 hover:text-cta transition shrink-0 disabled:opacity-30 disabled:cursor-not-allowed"
-            title="Изменить"
-          >
-            <Edit size={12} />
           </button>
         </div>
       )}
