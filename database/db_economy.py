@@ -393,6 +393,32 @@ def get_econ_topic_scope(db, workspace_id: int, key: str) -> list:
         return []
 
 
+def get_econ_topic_scopes(db, workspace_id: int, category: str = None) -> dict:
+    """{key: [thread_id, ...]} для параметров с заданным topic_scope.
+    Параметры без topic_scope (= весь чат) в результат НЕ попадают —
+    пустой результат означает, что ограничений по топикам нет вообще."""
+    try:
+        sql = ("SELECT key, topic_scope FROM economy_settings "
+               "WHERE workspace_id = ? AND topic_scope IS NOT NULL AND topic_scope != ''")
+        params = [workspace_id]
+        if category:
+            sql += " AND category = ?"
+            params.append(category)
+        db.cursor.execute(sql, params)
+        result = {}
+        for r in db.cursor.fetchall():
+            try:
+                ids = json.loads(r['topic_scope'])
+            except Exception:
+                ids = None
+            if ids:
+                result[r['key']] = ids
+        return result
+    except Exception as e:
+        logger.error(f"get_econ_topic_scopes error: {e}")
+        return {}
+
+
 def set_econ(db, workspace_id: int, key: str, value, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Обновляет значение настройки + пишет историю. Атомарно."""
     db.cursor.execute(

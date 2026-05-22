@@ -716,6 +716,12 @@ class Database:
     def get_econ_settings(self, category=None, subcategory=None):
         return _get_econ_settings(self, self._DEFAULT_WS_ID, category=category, subcategory=subcategory)
 
+    def get_econ_topic_scopes(self, category=None):
+        """{key: [thread_id]} — топики срабатывания эконом-параметров.
+        Пусто = ограничений нет (параметр работает во всём чате)."""
+        from database.db_economy import get_econ_topic_scopes as _fn
+        return _fn(self, self._DEFAULT_WS_ID, category=category)
+
     def rollback_econ(self, history_id, comment, changed_by, changed_by_role):
         return _rollback_econ(self, self._DEFAULT_WS_ID, history_id, comment, changed_by, changed_by_role)
 

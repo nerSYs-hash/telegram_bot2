@@ -443,6 +443,15 @@ def _is_thread_allowed(cfg: dict, thread_id: Optional[int]) -> bool:
     return thread_id in allowed
 
 
+def _topic_scope_ok(topic_scopes: dict, key: str, thread_id: Optional[int]) -> bool:
+    """Owner-настройка топиков (#5/#9): в каких ветках работает параметр.
+    Пусто / нет ключа = весь чат (никаких ограничений)."""
+    scope = (topic_scopes or {}).get(key)
+    if not scope:
+        return True
+    return thread_id is not None and thread_id in scope
+
+
 def check_completed_sprints(
     metrics_1h:  dict[str, int],
     metrics_12h: dict[str, int],
@@ -1026,6 +1035,13 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
         _econ_rate, _base_coeffs, _combo_coeffs, _sprint_coeffs, _penalty_coeffs, _defib_cfg = get_dynamic_economy_config(db)
 
+        # Owner-настройка топиков срабатывания (#5/#9). Пусто = весь чат —
+        # тогда фильтры ниже просто не применяются (нулевой риск регресса).
+        try:
+            _topic_scopes = db.get_econ_topic_scopes('mining')
+        except Exception:
+            _topic_scopes = {}
+
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 1: БАЗА
         # ══════════════════════════════════════════════════════════════════
@@ -1066,6 +1082,15 @@ def process_mining_reward(
         else:
             combo_coeff, new_combos = 0.0, []
 
+        # Топик-фильтр комбо (#9): оставляем только разрешённые в этой ветке
+        if new_combos and _topic_scopes:
+            _allowed = [c for c in new_combos
+                        if _topic_scope_ok(_topic_scopes, f'combo.{c}', thread_id)]
+            if len(_allowed) != len(new_combos):
+                combo_coeff = sum(_combo_coeffs.get(c, COMBO_COEFFICIENTS.get(c, 0))
+                                  for c in _allowed)
+                new_combos = _allowed
+
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 3: СПРИНТЫ
         # ══════════════════════════════════════════════════════════════════
@@ -1083,6 +1108,15 @@ def process_mining_reward(
         else:
             sprint_coeff, new_sprints = 0.0, []
 
+        # Топик-фильтр спринтов (#9): срабатывают только в разрешённых ветках
+        if new_sprints and _topic_scopes:
+            _allowed = [s for s in new_sprints
+                        if _topic_scope_ok(_topic_scopes, f'sprint.{s}', thread_id)]
+            if len(_allowed) != len(new_sprints):
+                sprint_coeff = sum(_sprint_coeffs.get(s, SPRINTS_CONFIG[s]['coeff'])
+                                   for s in _allowed)
+                new_sprints = _allowed
+
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 4: ШТРАФЫ
         # ══════════════════════════════════════════════════════════════════
@@ -1096,6 +1130,14 @@ def process_mining_reward(
             )
         else:
             penalty_coeff, penalties = 0.0, []
+
+        # Топик-фильтр штрафов (#5): действуют только в разрешённых ветках
+        if penalties and _topic_scopes:
+            _allowed = [p for p in penalties
+                        if _topic_scope_ok(_topic_scopes, f'penalty.{p}', thread_id)]
+            if len(_allowed) != len(penalties):
+                penalty_coeff = sum(_penalty_coeffs.get(p, 0) for p in _allowed)
+                penalties = _allowed
 
         # ══════════════════════════════════════════════════════════════════
         #  ЛОГИРОВАНИЕ (подробное, по блокам)
