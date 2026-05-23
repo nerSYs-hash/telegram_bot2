@@ -1,3 +1,6 @@
+// EconomyMiniChart — мини-график истории изменений значения параметра
+// (для popover/inline-инспектора в строках Экономики).
+
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function EconomyMiniChart({ data }) {

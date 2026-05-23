@@ -1,3 +1,5 @@
+"""Тесты миграции ws_runtime_seed (стартовые данные workspace из .env)."""
+
 import sqlite3
 import pytest
 from database.migrations.ws_runtime_seed import up_add_kind_column, seed_pulse_ws1

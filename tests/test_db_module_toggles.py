@@ -1,3 +1,5 @@
+"""Тесты DB-слоя module_toggles (get/set/upsert тумблеров)."""
+
 import sqlite3
 from database.migrations.module_toggles import up
 

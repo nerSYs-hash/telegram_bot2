@@ -1,3 +1,7 @@
+// PressReleasePage — страница раздела «Пресс-релизы»:
+// список (PressReleaseList) → редактор (PressReleaseEditor)
+// → предпросмотр и планировщик публикаций.
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Megaphone, Loader2, Plus } from 'lucide-react';
 import { makeApi } from './useApi';

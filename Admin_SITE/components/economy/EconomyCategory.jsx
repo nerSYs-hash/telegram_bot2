@@ -1,3 +1,6 @@
+// EconomyCategory — карточка категории Экономики (legacy-табличный вид
+// до перехода на карточки-модули V1.17.0h2b).
+
 import { useState, useEffect } from 'react';
 import { ChevronDown } from 'lucide-react';
 import EconomySubTable from './EconomySubTable';

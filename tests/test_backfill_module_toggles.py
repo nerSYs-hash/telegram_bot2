@@ -1,3 +1,5 @@
+"""Тесты миграции бэкфилла module_toggles (V1.17.0h0b/h3)."""
+
 import runpy
 import sqlite3
 import sys

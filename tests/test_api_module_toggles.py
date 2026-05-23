@@ -1,3 +1,5 @@
+"""Тесты API тумблеров модулей (/api/modules/*)."""
+
 import sqlite3
 import pytest
 from fastapi import FastAPI, HTTPException

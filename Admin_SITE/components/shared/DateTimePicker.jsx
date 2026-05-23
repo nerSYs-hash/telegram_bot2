@@ -1,3 +1,6 @@
+// DateTimePicker — общий компонент выбора даты и времени.
+// Используется в Пресс-релизах для назначения времени публикации.
+
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Calendar, Clock } from 'lucide-react';
 import StyledSelect from './StyledSelect';

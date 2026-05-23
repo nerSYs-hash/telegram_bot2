@@ -1,3 +1,6 @@
+// PressReleaseList — список пресс-релизов с фильтрами по статусу
+// (черновик/запланирован/опубликован) и кнопкой создания нового.
+
 import { useState, useMemo } from 'react';
 import {
   FileText, Calendar, CheckCircle2, XCircle, AlertTriangle, Trash2,

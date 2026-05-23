@@ -1,3 +1,5 @@
+"""Тесты lifecycle подключения бота к чату (Подпроект #2 connect-flow)."""
+
 import os
 import sqlite3
 import pytest

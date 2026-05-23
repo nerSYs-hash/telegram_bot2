@@ -1,3 +1,5 @@
+"""Утилита-хотфикс данных пользователя в БД (ручная операция)."""
+
 import sqlite3
 conn = sqlite3.connect('pulse_bot.db')
 conn.execute("UPDATE users SET status='approved' WHERE tg_id=8376708692")

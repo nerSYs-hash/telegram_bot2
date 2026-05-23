@@ -1,3 +1,5 @@
+"""Тесты миграций connect-flow (composite PK, схема таблиц подключения)."""
+
 import sqlite3
 from database.db_migrations import add_removed_at_to_bot_chats
 

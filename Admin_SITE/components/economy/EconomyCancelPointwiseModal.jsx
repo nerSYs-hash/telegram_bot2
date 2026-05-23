@@ -1,3 +1,5 @@
+// EconomyCancelPointwiseModal — модалка точечной отмены по ID транзакции.
+
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';

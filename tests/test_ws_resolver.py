@@ -1,3 +1,5 @@
+"""Тесты ws_resolver — резолв workspace_id по chat_id / thread_id."""
+
 import sqlite3
 import pytest
 from bot_core.ws_resolver import resolve_role_chat, resolve_thread, invalidate_resolver_cache

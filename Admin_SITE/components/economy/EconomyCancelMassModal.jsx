@@ -1,3 +1,6 @@
+// EconomyCancelMassModal — модалка «Массовая отмена выплат»
+// (откат начислений по периоду и категории).
+
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertTriangle } from 'lucide-react';

@@ -1,3 +1,6 @@
+// EconomyEditForm — inline-форма редактирования значения параметра
+// экономики (новое значение + обязательная причина-комментарий).
+
 import { useState } from 'react';
 import { AlertCircle } from 'lucide-react';
 

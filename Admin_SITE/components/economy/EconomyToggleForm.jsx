@@ -1,3 +1,6 @@
+// EconomyToggleForm — inline-форма подтверждения вкл/выкл параметра
+// экономики (с обязательной причиной-комментарием в журнал).
+
 import { useState } from 'react';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 

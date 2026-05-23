@@ -1,3 +1,5 @@
+"""Тесты module_guard (is_module_enabled / гарды модулей в боте)."""
+
 import asyncio
 import sqlite3
 import pytest

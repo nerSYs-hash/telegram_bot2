@@ -1,3 +1,9 @@
+"""
+FastAPI-приложение Puls Chat — основной HTTP/WS API сайта.
+Аутентификация (Telegram), endpoints для чатов/админов/статистики/
+триггеров/пресс-релизов/титулов; подключает economy_router и WS-канал.
+"""
+
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 import io

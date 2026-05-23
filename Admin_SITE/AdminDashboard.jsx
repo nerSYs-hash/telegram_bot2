@@ -1,3 +1,8 @@
+// AdminDashboard — корневой компонент админ-панели Puls Chat.
+// Сайдбар + навигация по разделам (Новости/Модули/Статистика/Журнал/
+// Триггеры/Пресс-релизы/Шиппер/Экономика/Система/Права).
+// Хранит массив UPDATES — данные для дерева Новостей.
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import StatsPage from './components/stats/StatsPage';

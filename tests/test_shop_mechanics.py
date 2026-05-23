@@ -1,3 +1,5 @@
+"""Тесты shop_mechanics — внутриботная логика магазина."""
+
 import sys
 import os
 import pytest

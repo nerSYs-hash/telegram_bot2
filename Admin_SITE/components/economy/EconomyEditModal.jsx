@@ -1,3 +1,6 @@
+// EconomyEditModal — модальная версия формы редактирования параметра
+// экономики (legacy; в новых карточках используется inline-EditForm).
+
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertCircle } from 'lucide-react';

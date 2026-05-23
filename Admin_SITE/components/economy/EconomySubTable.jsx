@@ -1,3 +1,6 @@
+// EconomySubTable — под-таблица параметров одной подкатегории
+// Экономики (legacy табличный вид).
+
 import { PlusCircle } from 'lucide-react';
 import EconomyRow from './EconomyRow';
 

@@ -1,3 +1,5 @@
+"""Тесты консолидации workspace-ов (объединение ws5/ws6 в ws1)."""
+
 import sqlite3, pytest
 from scripts.consolidate_workspaces import consolidate, ConsolidateBlocked
 

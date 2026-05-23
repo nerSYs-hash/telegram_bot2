@@ -1,3 +1,6 @@
+// EconomyToggleModal — модальная версия формы подтверждения вкл/выкл
+// параметра экономики (legacy; в новых карточках inline-ToggleForm).
+
 import { useState } from 'react';
 import { createPortal } from 'react-dom';
 import { X, AlertCircle, AlertTriangle } from 'lucide-react';
