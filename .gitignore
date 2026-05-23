@@ -25,3 +25,9 @@ telegram_bot2/
 # Admin_SITE — сборка React
 Admin_SITE/node_modules/
 # dist собирается локально и коммитится в репо (сервер слабый)
+
+# Карта проекта — НЕ хранится в git, чтобы не конфликтовать с открытым Excel.
+# Скачивается из GitHub Actions (artifact на странице каждого запуска).
+Pulse_Auto_Map.xlsx
+~$Pulse_Auto_Map.xlsx
+
