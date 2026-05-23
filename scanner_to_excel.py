@@ -70,6 +70,16 @@ def determine_category(rel_path):
     if rel_path in ['bot.py', 'main.py']: return "🚀 Ядро (Core)"
     return "📁 Прочее"
 
+def _safe(v):
+    """openpyxl интерпретирует строки, начинающиеся с =/+/-/@, как формулы.
+    Excel при открытии видит «битую формулу» → ругается «Удалены формулы».
+    Префикс zero-width-space безопасно отключает это: для глаз не видно,
+    парсер формул больше не срабатывает."""
+    if isinstance(v, str) and v and v[0] in '=+-@':
+        return '​' + v
+    return v
+
+
 def create_dynamic_project_map():
     print("🔍 Начинаю сканирование проекта...")
     
@@ -136,7 +146,7 @@ def create_dynamic_project_map():
     # Заполнение
     for i, data in enumerate(files_data, start=2):
         for col_idx, value in enumerate(data, 1):
-            cell = ws.cell(row=i, column=col_idx, value=value)
+            cell = ws.cell(row=i, column=col_idx, value=_safe(value))
             cell.border = border_thin
             cell.alignment = align_left if col_idx in [2, 4] else align_center
 
