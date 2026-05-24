@@ -135,21 +135,21 @@ export default function EconomyCategoryCard({
   // Главный параметр для collapsed-state (один fetch при монтировании)
   useEffect(() => {
     if (category.key === 'titles') return; // Титулы без topRow в collapsed
-    const useDevMock = () => {
+    const applyDevMock = () => {
       if (!_DEV_PREVIEW) return;
       const arr = _MOCK_SETTINGS[category.key] || [];
       if (arr.length) setTopRow(arr[0]);
     };
-    if (!token) { useDevMock(); return; }
+    if (!token) { applyDevMock(); return; }
     fetch(`/api/economy/settings?category=${category.key}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
       .then(r => r.ok ? r.json() : null)
       .then(d => {
         if (Array.isArray(d) && d.length > 0) setTopRow(d[0]);
-        else useDevMock();
+        else applyDevMock();
       })
-      .catch(() => useDevMock());
+      .catch(() => applyDevMock());
   }, [category.key, token]);
 
   // Полная подгрузка параметров при раскрытии (+dev-fallback на mock)
