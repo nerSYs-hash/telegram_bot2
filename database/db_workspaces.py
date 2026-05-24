@@ -38,7 +38,17 @@ def create_workspace(
     conn: sqlite3.Connection, name: str, owner_user_id: int,
     is_pulse_themed: bool = False, plan: str = 'free',
 ) -> int:
-    """Создаёт workspace, возвращает его id. Owner автоматически добавляется в members."""
+    """Создаёт workspace, возвращает его id. Owner автоматически добавляется в members.
+
+    V1.17.0k3: после создания ws запускает seed_default_modules — новый владелец
+    получает работающий набор модулей вместо «все OFF». Pulse-themed → расширенный
+    набор (mining/lottery/bbs/...), обычный ws → утилитарный набор (statistics/
+    top5/triggers/press_release/journal). Идемпотентно: повторный create на том
+    же ws_id уже не сработает (PK), seed внутри тоже ON CONFLICT DO NOTHING.
+
+    Если таблиц module_toggles ещё нет (тесты со старой схемой), seed тихо
+    пропускается — workspace всё равно создаётся.
+    """
     cur = conn.execute(
         'INSERT INTO workspaces (name, owner_user_id, is_pulse_themed, plan) '
         'VALUES (?, ?, ?, ?)',
@@ -50,6 +60,18 @@ def create_workspace(
         (ws_id, owner_user_id, 'owner')
     )
     conn.commit()
+
+    # Seed дефолтных модулей. Импорт лениво — db_module_toggles тянет
+    # shared/modules_catalog.json, лишний impact на холодный старт ни к чему.
+    try:
+        from database.db_module_toggles import seed_default_modules
+        seed_default_modules(
+            conn, ws_id, is_pulse_themed=is_pulse_themed, user_id=owner_user_id
+        )
+    except sqlite3.OperationalError:
+        # module_toggles ещё не создана (старые тесты, ранняя миграция) — ок.
+        pass
+
     return ws_id
 
 

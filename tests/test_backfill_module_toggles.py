@@ -40,4 +40,7 @@ def test_backfill_is_idempotent(tmp_path):
     rows = conn.execute(
         "SELECT COUNT(*) FROM module_toggle_history WHERE workspace_id=1"
     ).fetchone()
-    assert rows[0] == 14  # ровно 14 модулей в ENABLED_FOR_WS1
+    # V1.17.0k3: список переехал в DEFAULT_PULSE_ENABLED (общий для backfill +
+    # seed нового Pulse-ws). Сверяем по живому источнику, а не по магическому числу.
+    from database.db_module_toggles import DEFAULT_PULSE_ENABLED
+    assert rows[0] == len(DEFAULT_PULSE_ENABLED)

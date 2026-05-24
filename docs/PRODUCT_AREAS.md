@@ -37,7 +37,7 @@
 ## Осталось в направлении
 - ✅ Экономика жёстко `ws=1` (V1.17.0k1, 24.05) — все роутеры на `current_ws_id()`
 - ✅ Комбо/спринты Pulse размазан по ws=1/5/6 (V1.17.0k2, 25.05) — TENANT_TABLES расширен, миграция-скрипт + runbook готовы, ждёт apply на проде
-- ⏳ Дефолт-сидинг module_toggles для нового workspace (сейчас по дефолту всё OFF — нужен seed список «что включать на старте»)
+- ✅ Дефолт-сидинг module_toggles для нового workspace (V1.17.0k3, 25.05) — `seed_default_modules` в `create_workspace`: generic-ws получает утилитарный набор (5 модулей), Pulse-themed — расширенный (20 модулей). Source of truth: `DEFAULT_GENERIC_ENABLED` / `DEFAULT_PULSE_ENABLED` в `db_module_toggles.py`. Backfill ws=1 переведён на тот же список.
 
 ## Зависит от — / Питает —
 Не зависит ни от чего (это фундамент). Питает все остальные направления.

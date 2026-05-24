@@ -14,6 +14,78 @@ VALID_MODULE_IDS = {m["id"] for m in _CATALOG["modules"]}
 _MODULE_META = {m["id"]: m for m in _CATALOG["modules"]}
 
 
+# ── Default seed lists для нового workspace (V1.17.0k3) ───────────────────────
+#
+# Generic ws (is_pulse_themed=False) — пробный набор «без денежной механики»:
+# что точно полезно любому новому владельцу любого чата сразу из коробки.
+# Экономика/майнинг/BBS/донаты — opt-in: их владелец сам включает по мере
+# готовности (тренируется на каталоге, не ловит сюрпризов).
+DEFAULT_GENERIC_ENABLED = (
+    "statistics", "top5", "triggers", "press_release", "journal",
+)
+
+# Pulse-themed ws (is_pulse_themed=True) — расширенный набор: исторически
+# на ws=1 у Вити включены все эти модули (см. scripts/backfill_module_toggles_ws1.py).
+# Сюда переезжаем как «канонический список Pulse-сообщества» — чтобы новый
+# Pulse-владелец получал тот же опыт без отдельного backfill-прогона.
+# NB: sprints/combos исключены — функционал майнинга есть, но эти подмодули
+# в каталоге как отдельные тумблеры пока не enforce'ятся в боте (см. план 7.x).
+DEFAULT_PULSE_ENABLED = (
+    "statistics", "top5", "triggers", "press_release", "journal",
+    "mining", "penalty", "lottery", "bingo", "monthly_gift", "referral",
+    "bbs_bonus", "bbs_pulse", "bbs_other", "bbs_anketa", "bbs_vip",
+    "shipper", "donations", "titles", "horoscope",
+)
+
+
+def seed_default_modules(
+    conn: sqlite3.Connection,
+    workspace_id: int,
+    is_pulse_themed: bool = False,
+    user_id: int = 0,
+) -> int:
+    """Включает дефолтный набор модулей для свежего workspace.
+
+    Идемпотентна: повторный вызов не перезаписывает уже выставленные
+    тумблеры (ON CONFLICT DO NOTHING). Это важно — owner мог явно
+    выключить что-то после создания ws, повторный seed не должен это
+    откатить (например, при повторном run create_workspace в тестах).
+
+    Args:
+        is_pulse_themed: True → расширенный набор (Pulse-фичи).
+                         False → утилитарный набор (statistics/top5/triggers/...).
+        user_id: автор записи в module_toggle_history; 0 = system/seed.
+
+    Returns:
+        Сколько модулей реально включено (новых строк в module_toggles).
+    """
+    targets = DEFAULT_PULSE_ENABLED if is_pulse_themed else DEFAULT_GENERIC_ENABLED
+    # Фильтруем по каталогу: если какой-то id устарел/удалён — тихо пропускаем,
+    # не падаем. Каталог = единственная правда (shared/modules_catalog.json).
+    targets = [mid for mid in targets if mid in VALID_MODULE_IDS]
+
+    inserted = 0
+    for mid in targets:
+        cur = conn.execute(
+            '''INSERT INTO module_toggles (workspace_id, module_id, is_enabled, updated_by)
+               VALUES (?, ?, 1, ?)
+               ON CONFLICT(workspace_id, module_id) DO NOTHING''',
+            (workspace_id, mid, user_id),
+        )
+        if cur.rowcount:
+            inserted += 1
+            conn.execute(
+                '''INSERT INTO module_toggle_history
+                   (workspace_id, module_id, action, reason, changed_by)
+                   VALUES (?, ?, 'enable', 'seed (new workspace defaults)', ?)''',
+                (workspace_id, mid, user_id),
+            )
+    if inserted:
+        _bump_cache_version(conn, workspace_id)
+    conn.commit()
+    return inserted
+
+
 def _validate_module_id(module_id: str) -> None:
     if module_id not in VALID_MODULE_IDS:
         raise ValueError(f"Unknown module_id: {module_id}")
