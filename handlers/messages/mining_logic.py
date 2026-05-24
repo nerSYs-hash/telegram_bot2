@@ -443,6 +443,15 @@ def _is_thread_allowed(cfg: dict, thread_id: Optional[int]) -> bool:
     return thread_id in allowed
 
 
+def _topic_scope_ok(topic_scopes: dict, key: str, thread_id: Optional[int]) -> bool:
+    """Owner-настройка топиков (#5/#9): в каких ветках работает параметр.
+    Пусто / нет ключа = весь чат (никаких ограничений)."""
+    scope = (topic_scopes or {}).get(key)
+    if not scope:
+        return True
+    return thread_id is not None and thread_id in scope
+
+
 def check_completed_sprints(
     metrics_1h:  dict[str, int],
     metrics_12h: dict[str, int],
@@ -1026,6 +1035,13 @@ def process_mining_reward(
         # ══════════════════════════════════════════════════════════════════
         _econ_rate, _base_coeffs, _combo_coeffs, _sprint_coeffs, _penalty_coeffs, _defib_cfg = get_dynamic_economy_config(db)
 
+        # Owner-настройка топиков срабатывания (#5/#9). Пусто = весь чат —
+        # тогда фильтры ниже просто не применяются (нулевой риск регресса).
+        try:
+            _topic_scopes = db.get_econ_topic_scopes('mining')
+        except Exception:
+            _topic_scopes = {}
+
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 1: БАЗА
         # ══════════════════════════════════════════════════════════════════
@@ -1055,35 +1071,73 @@ def process_mining_reward(
         # claimed_combos = {combo_name: claimed_at_datetime} — на КД
         claimed_combos = _get_claimed_combos(db, user_id, now)
 
-        combo_coeff, new_combos = calculate_instant_combos(
-            text=text, char_count=char_count, word_count=word_count,
-            has_photo=has_photo, has_video=has_video,
-            completed_today=list(claimed_combos.keys()),
-            coeff_overrides=_combo_coeffs,
-        )
+        # ── module_toggles guard: модуль «Комбо» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('combos'):
+            combo_coeff, new_combos = calculate_instant_combos(
+                text=text, char_count=char_count, word_count=word_count,
+                has_photo=has_photo, has_video=has_video,
+                completed_today=list(claimed_combos.keys()),
+                coeff_overrides=_combo_coeffs,
+            )
+        else:
+            combo_coeff, new_combos = 0.0, []
+
+        # Топик-фильтр комбо (#9): оставляем только разрешённые в этой ветке
+        if new_combos and _topic_scopes:
+            _allowed = [c for c in new_combos
+                        if _topic_scope_ok(_topic_scopes, f'combo.{c}', thread_id)]
+            if len(_allowed) != len(new_combos):
+                combo_coeff = sum(_combo_coeffs.get(c, COMBO_COEFFICIENTS.get(c, 0))
+                                  for c in _allowed)
+                new_combos = _allowed
 
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 3: СПРИНТЫ
         # ══════════════════════════════════════════════════════════════════
 
         claimed_sprints = _get_claimed_sprints(db, user_id, now)
-        m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str)
 
-        sprint_coeff, new_sprints = check_completed_sprints(
-            metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
-            current_thread_id=thread_id, already_claimed=claimed_sprints,
-            sprint_config_overrides=_sprint_coeffs,
-        )
+        # ── module_toggles guard: модуль «Спринты» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('sprints'):
+            m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str)
+            sprint_coeff, new_sprints = check_completed_sprints(
+                metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
+                current_thread_id=thread_id, already_claimed=claimed_sprints,
+                sprint_config_overrides=_sprint_coeffs,
+            )
+        else:
+            sprint_coeff, new_sprints = 0.0, []
+
+        # Топик-фильтр спринтов (#9): срабатывают только в разрешённых ветках
+        if new_sprints and _topic_scopes:
+            _allowed = [s for s in new_sprints
+                        if _topic_scope_ok(_topic_scopes, f'sprint.{s}', thread_id)]
+            if len(_allowed) != len(new_sprints):
+                sprint_coeff = sum(_sprint_coeffs.get(s, SPRINTS_CONFIG[s]['coeff'])
+                                   for s in _allowed)
+                new_sprints = _allowed
 
         # ══════════════════════════════════════════════════════════════════
         #  БЛОК 4: ШТРАФЫ
         # ══════════════════════════════════════════════════════════════════
 
-        penalty_coeff, penalties = calculate_penalties(
-            text=text, thread_id=thread_id, db=db,
-            user_id=user_id, chat_id=chat_id,
-            coeff_overrides=_penalty_coeffs,
-        )
+        # ── module_toggles guard: модуль «Штрафы» OFF → блок пропускается ──
+        if db.is_econ_section_enabled('penalty'):
+            penalty_coeff, penalties = calculate_penalties(
+                text=text, thread_id=thread_id, db=db,
+                user_id=user_id, chat_id=chat_id,
+                coeff_overrides=_penalty_coeffs,
+            )
+        else:
+            penalty_coeff, penalties = 0.0, []
+
+        # Топик-фильтр штрафов (#5): действуют только в разрешённых ветках
+        if penalties and _topic_scopes:
+            _allowed = [p for p in penalties
+                        if _topic_scope_ok(_topic_scopes, f'penalty.{p}', thread_id)]
+            if len(_allowed) != len(penalties):
+                penalty_coeff = sum(_penalty_coeffs.get(p, 0) for p in _allowed)
+                penalties = _allowed
 
         # ══════════════════════════════════════════════════════════════════
         #  ЛОГИРОВАНИЕ (подробное, по блокам)

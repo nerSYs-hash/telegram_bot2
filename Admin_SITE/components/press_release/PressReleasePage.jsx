@@ -1,3 +1,7 @@
+// PressReleasePage — страница раздела «Пресс-релизы»:
+// список (PressReleaseList) → редактор (PressReleaseEditor)
+// → предпросмотр и планировщик публикаций.
+
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { Megaphone, Loader2, Plus } from 'lucide-react';
 import { makeApi } from './useApi';
@@ -123,13 +127,13 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
   return (
     <div className="space-y-3 pb-24">
       {/* Заголовок */}
-      <div className="bg-white rounded-3xl border border-gray-100 shadow-sm p-4 flex items-center gap-2.5">
-        <div className="w-8 h-8 rounded-xl bg-violet-100 flex items-center justify-center">
-          <Megaphone size={16} className="text-violet-600" />
+      <div className="bg-sff rounded-3xl border border-bd shadow-sm p-4 flex items-center gap-2.5">
+        <div className="w-8 h-8 rounded-xl bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] flex items-center justify-center">
+          <Megaphone size={16} className="text-purple" />
         </div>
         <div className="flex-1">
-          <h1 className="text-sm font-black uppercase tracking-widest text-gray-900">Пресс-Релизы</h1>
-          <p className="text-[10px] text-gray-400 mt-0.5">
+          <h1 className="text-sm font-black uppercase tracking-widest text-tx">Пресс-Релизы</h1>
+          <p className="text-[10px] text-lbl mt-0.5">
             Создание, планирование и история публикаций в чаты/каналы
           </p>
         </div>
@@ -188,10 +192,10 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
 
 function EmptyEditor({ onCreate }) {
   return (
-    <div className="bg-white rounded-3xl border-2 border-dashed border-gray-200 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">
-      <Megaphone size={40} className="text-gray-300 mb-3" />
-      <h3 className="text-sm font-black text-gray-700 mb-1">Выберите пресс-релиз справа</h3>
-      <p className="text-xs text-gray-400 mb-4">или создайте новый</p>
+    <div className="bg-sff rounded-3xl border-2 border-dashed border-bd2 p-12 flex flex-col items-center justify-center text-center min-h-[400px]">
+      <Megaphone size={40} className="text-lbl mb-3" />
+      <h3 className="text-sm font-black text-tx mb-1">Выберите пресс-релиз справа</h3>
+      <p className="text-xs text-lbl mb-4">или создайте новый</p>
       <Button variant="primary" size="md" icon={Plus} onClick={onCreate}>
         Новый пресс-релиз
       </Button>

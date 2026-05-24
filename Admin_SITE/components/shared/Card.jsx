@@ -3,7 +3,7 @@ import { forwardRef } from 'react';
 /**
  * Базовый компонент карточки дизайн-системы Pulse.
  *
- *   - bg-white, rounded-2xl (16px), border-gray-100, shadow-sm — общий стиль секций.
+ *   - bg-sff, rounded-2xl (16px), border-bd, shadow-sm — общий стиль секций.
  *   - hoverable: subtle lift (тень + цвет рамки) при наведении. Опц.
  *   - glow: вращающийся conic-gradient бордер на hover (Aceternity-style).
  *     Цвета через accent. Опц.
@@ -28,26 +28,27 @@ const PADDING = {
 };
 
 // Тщательно перечисляем классы, чтобы Tailwind JIT их подхватил.
+// Токен-скин (§12.1). active = tint через color-mix (не битый Tailwind/alpha).
 const ACCENTS = {
   blue: {
     glow:   '--card-glow-from:#60a5fa; --card-glow-via:#a855f7;  --card-glow-to:#60a5fa;',
-    active: 'bg-blue-50/60 border-blue-200',
+    active: 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border-[color-mix(in_oklab,var(--cta)_45%,transparent)]',
   },
   emerald: {
-    glow:   '--card-glow-from:#34d399; --card-glow-via:#10b981;  --card-glow-to:#34d399;',
-    active: 'bg-emerald-50/60 border-emerald-200',
+    glow:   '--card-glow-from:#34d399; --card-glow-via:#32D74B;  --card-glow-to:#34d399;',
+    active: 'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] border-[color-mix(in_oklab,var(--ok)_45%,transparent)]',
   },
   violet: {
-    glow:   '--card-glow-from:#a78bfa; --card-glow-via:#7c3aed;  --card-glow-to:#a78bfa;',
-    active: 'bg-violet-50/60 border-violet-200',
+    glow:   '--card-glow-from:#c084fc; --card-glow-via:#BF5AF2;  --card-glow-to:#c084fc;',
+    active: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] border-[color-mix(in_oklab,var(--purple)_45%,transparent)]',
   },
   rose: {
-    glow:   '--card-glow-from:#fb7185; --card-glow-via:#f43f5e;  --card-glow-to:#fb7185;',
-    active: 'bg-rose-50/60 border-rose-200',
+    glow:   '--card-glow-from:#fb7185; --card-glow-via:#FF375F;  --card-glow-to:#fb7185;',
+    active: 'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] border-[color-mix(in_oklab,var(--pink)_45%,transparent)]',
   },
   amber: {
-    glow:   '--card-glow-from:#fbbf24; --card-glow-via:#f59e0b;  --card-glow-to:#fbbf24;',
-    active: 'bg-amber-50/60 border-amber-200',
+    glow:   '--card-glow-from:#fbbf24; --card-glow-via:#FF9F0A;  --card-glow-to:#fbbf24;',
+    active: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border-[color-mix(in_oklab,var(--warn)_45%,transparent)]',
   },
 };
 
@@ -71,9 +72,9 @@ const Card = forwardRef(function Card({
       ref={ref}
       style={{ ...accentVars, ...style }}
       className={[
-        'relative bg-white rounded-2xl border shadow-sm transition-all',
-        active ? a.active : 'border-gray-100',
-        hoverable ? 'hover:shadow-md hover:border-gray-200' : '',
+        'relative bg-sff rounded-2xl border shadow-sm transition-all',
+        active ? a.active : 'border-bd',
+        hoverable ? 'hover:shadow-md hover:border-bd2' : '',
         glow ? 'pulse-card-glow' : '',
         PADDING[padding],
         className,

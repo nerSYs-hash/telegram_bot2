@@ -622,13 +622,21 @@ class TelegramBot:
             # on_bot_added_to_chat handler, поэтому fallback ws=1 больше не
             # нужен и был бы опасен (utечка Pulse-данных в чужой чат).
 
-            context.user_data['ws_ctx'] = ws_ctx  # may be None
-            context.chat_data['ws_ctx'] = ws_ctx
+            # V1.17.0h14-fix: на канале PTB отдаёт context.user_data=None
+            # (нет effective_user). Прямое присваивание None['ws_ctx']
+            # роняло middleware на КАЖДОМ апдейте канала. Присваиваем
+            # только в существующие mapping'и.
+            if context.user_data is not None:
+                context.user_data['ws_ctx'] = ws_ctx  # may be None
+            if context.chat_data is not None:
+                context.chat_data['ws_ctx'] = ws_ctx
         except Exception as e:
             logger.error(f"resolve_workspace_middleware: {e}", exc_info=True)
             # При ошибке резолва — None, handlers безопасно скипают.
-            context.user_data['ws_ctx'] = None
-            context.chat_data['ws_ctx'] = None
+            if context.user_data is not None:
+                context.user_data['ws_ctx'] = None
+            if context.chat_data is not None:
+                context.chat_data['ws_ctx'] = None
 
     def setup_handlers(self):
         """Setup all handlers"""
@@ -646,6 +654,10 @@ class TelegramBot:
         # V1.17.0c6 (F follow-up): /get_thread_id — узнать ID текущего топика
         from handlers.get_thread_id import get_thread_id_command
         self.application.add_handler(CommandHandler("get_thread_id", get_thread_id_command))
+        # Срез D (V1.17.0g): /login — LoginUrl-кнопка в кабинет (за флагом
+        # LOGIN_URL_BUTTON; OFF → хендлер молчит = байт-в-байт)
+        from handlers.commands.login_command import login_command
+        self.application.add_handler(CommandHandler("login", login_command))
 
         # Command handlers
         self.application.add_handler(CommandHandler("start", self.command_handler.start_command))
@@ -707,7 +719,20 @@ class TelegramBot:
             )
         )
         
-        # Callback handler
+        # V1.17.0c (F): callback от кнопок «куда подключить чат».
+        # ВАЖНО: регистрируется ПЕРЕД беспаттерновым catch-all
+        # `handle_callback` — иначе catch-all (та же группа 0) ловит
+        # `connect_chat:` первым и кнопки подключения чата мертвы.
+        from handlers.bot_membership import on_connect_chat_callback
+        self.application.add_handler(
+            CallbackQueryHandler(
+                lambda u, c: on_connect_chat_callback(u, c, self.db),
+                pattern=r'^connect_chat:'
+            )
+        )
+
+        # Callback handler (беспаттерновый catch-all — ДОЛЖЕН быть после
+        # всех профильных CallbackQueryHandler в группе 0)
         self.application.add_handler(CallbackQueryHandler(self.callback_handler.handle_callback))
         
         # Message reaction handler (для подсчёта реакций)
@@ -725,20 +750,14 @@ class TelegramBot:
         # добавлении бота в чат. Регистрируется ПЕРЕД bot_chat_tracker,
         # чтобы успеть создать workspace до того как tracker upsert'нет
         # bot_chats запись.
-        from handlers.bot_membership import on_bot_added_to_chat, on_connect_chat_callback
+        from handlers.bot_membership import on_bot_added_to_chat
         self.application.add_handler(
             ChatMemberHandler(
                 lambda u, c: on_bot_added_to_chat(u, c, self.db),
                 ChatMemberHandler.MY_CHAT_MEMBER
             )
         )
-        # V1.17.0c (F): callback от кнопок «куда подключить чат»
-        self.application.add_handler(
-            CallbackQueryHandler(
-                lambda u, c: on_connect_chat_callback(u, c, self.db),
-                pattern=r'^connect_chat:'
-            )
-        )
+        # connect_chat callback зарегистрирован выше (перед catch-all).
 
         # Press-Releases (V1.16.14): отслеживание чатов где есть бот
         from handlers.bot_chat_tracker import handle_my_chat_member

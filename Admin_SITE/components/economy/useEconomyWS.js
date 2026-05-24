@@ -1,3 +1,6 @@
+// Хук useEconomyWS — подключение к WebSocket экономики
+// (живые апдейты значений параметров и тумблеров).
+
 import { useState, useEffect, useRef } from 'react';
 
 export function useEconomyWS(token) {

@@ -14,12 +14,13 @@ import { Check } from 'lucide-react';
  */
 
 // Все классы перечисляем явно, иначе Tailwind JIT не подхватит при динамической интерполяции.
+// Токен-скин (§12.1: ключи/API те же — step.color). Свето-онли ring/shadow убраны.
 const COLOR_MAP = {
-  blue:    { bg: 'bg-blue-500',    text: 'text-blue-700',    ring: 'ring-blue-100',    shadow: 'shadow-blue-300/60'    },
-  emerald: { bg: 'bg-emerald-500', text: 'text-emerald-700', ring: 'ring-emerald-100', shadow: 'shadow-emerald-300/60' },
-  violet:  { bg: 'bg-violet-500',  text: 'text-violet-700',  ring: 'ring-violet-100',  shadow: 'shadow-violet-300/60'  },
-  amber:   { bg: 'bg-amber-500',   text: 'text-amber-700',   ring: 'ring-amber-100',   shadow: 'shadow-amber-300/60'   },
-  rose:    { bg: 'bg-rose-500',    text: 'text-rose-700',    ring: 'ring-rose-100',    shadow: 'shadow-rose-300/60'    },
+  blue:    { bg: 'bg-cta',    text: 'text-cta'    },
+  emerald: { bg: 'bg-ok',     text: 'text-ok'     },
+  violet:  { bg: 'bg-purple', text: 'text-purple' },
+  amber:   { bg: 'bg-warn',   text: 'text-warn'   },
+  rose:    { bg: 'bg-pink',   text: 'text-pink'   },
 };
 
 export default function Stepper({
@@ -46,16 +47,16 @@ export default function Stepper({
 
         // ── Кружок ──
         const circleCls = state === 'complete'
-          ? 'bg-emerald-500 text-white border-2 border-emerald-500'
+          ? 'bg-ok text-white border-2 border-ok'
           : state === 'current'
-            ? `${color.bg} text-white border-2 border-white shadow-lg ${color.shadow} ring-4 ${color.ring}`
-            : 'bg-white text-gray-400 border-2 border-gray-200';
+            ? `${color.bg} text-white border-2 border-transparent`
+            : 'bg-transparent text-lbl border-2 border-bd2';
 
         // ── Линия после кружка ──
         const isLast = i === steps.length - 1;
         const lineCls = state === 'complete'
-          ? 'bg-emerald-500'
-          : 'bg-gray-200';
+          ? 'bg-ok'
+          : 'bg-bd2';
 
         return (
           <div key={step.id} className={`flex items-center ${isLast ? '' : 'flex-1'}`}>
@@ -75,8 +76,8 @@ export default function Stepper({
               {!compact && (
                 <span className={`text-[10px] font-black uppercase tracking-wide whitespace-nowrap ${
                   state === 'current' ? color.text :
-                  state === 'complete' ? 'text-emerald-600' :
-                  'text-gray-400'
+                  state === 'complete' ? 'text-ok' :
+                  'text-lbl'
                 }`}>
                   {step.label}
                 </span>

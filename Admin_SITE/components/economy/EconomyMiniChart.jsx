@@ -1,11 +1,14 @@
+// EconomyMiniChart — мини-график истории изменений значения параметра
+// (для popover/inline-инспектора в строках Экономики).
+
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 
 export default function EconomyMiniChart({ data }) {
   if (!data || data.length < 2) return null;
 
   return (
-    <div className="bg-gray-50 rounded-2xl p-4">
-      <div className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-3">
+    <div className="bg-sf2 rounded-2xl p-4">
+      <div className="text-[10px] font-black text-lbl uppercase tracking-widest mb-3">
         График изменений
       </div>
       <ResponsiveContainer width="100%" height={80}>

@@ -1,77 +1,54 @@
-
 name: Auto-Update Project Map
 
-# Запускать скрипт автоматически на push в main с изменениями кода.
-# Раньше триггер был на любую ветку — это плодило мусорные ветки <branch>-map
-# на каждый feature/fix. Теперь карта обновляется только для main.
+# Воркфлоу запускается на push в main с изменениями кода (.py/.js/.jsx),
+# генерирует Pulse_Auto_Map.xlsx и кладёт его в Artifacts текущего запуска.
+# Скачать: Actions → Auto-Update Project Map → последний run → внизу Artifacts.
+# Файл намеренно НЕ коммитится в репо — git pull тогда не сталкивается с
+# открытым Excel, который держит файл заблокированным под Windows.
+
 on:
   push:
-    branches:
-      - main
+    branches: [main]
     paths:
       - '**.py'
       - '**.js'
       - '**.jsx'
   workflow_dispatch:
+
 jobs:
   update-excel:
     runs-on: ubuntu-latest
-    permissions:
-      contents: write # Даем право сохранять файл в репозиторий
-
     steps:
       - name: Скачиваем код проекта
         uses: actions/checkout@v4
 
-      - name: Проверяем расположение файла
-        run: |
-          pwd
-          ls -la scanner_to_excel.py 2>/dev/null || echo "❌ Файл не найден в текущей директории"
-          ls -la Скрпиты/scanner_to_excel.py 2>/dev/null || echo "❌ Файл не найден в Скрпиты/"
-
       - name: Устанавливаем Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11' # Работает на любой стабильной версии
+          python-version: '3.11'
 
-      - name: Устанавливаем библиотеку openpyxl
+      - name: Устанавливаем openpyxl
         run: pip install openpyxl
 
-      - name: Запускаем наш сканер
-        run: python scanner_to_excel.py # Убедись, что файл сканера называется именно так
+      - name: Запускаем сканер
+        run: python scanner_to_excel.py
+
+      - name: Загружаем карту как Artifact (90 дней)
+        if: hashFiles('Pulse_Auto_Map.xlsx') != ''
+        uses: actions/upload-artifact@v4
+        with:
+          name: Pulse_Auto_Map
+          path: Pulse_Auto_Map.xlsx
+          retention-days: 90
+
+      - name: Отправка файла в Telegram (если настроены секреты)
+        if: hashFiles('Pulse_Auto_Map.xlsx') != ''
         continue-on-error: true
-
-      - name: Сохраняем новый Excel в подветку
         run: |
-          git config --global user.name "Pulse Bot Auto-Scanner"
-          git config --global user.email "scanner@pulse.bot"
-
-          if [ -f "Pulse_Auto_Map.xlsx" ]; then
-            CURRENT_BRANCH=${GITHUB_REF_NAME}
-            MAP_BRANCH="${CURRENT_BRANCH}-map"
-
-            # 1. Переходим в отдельную ветку для карты
-            git checkout -b $MAP_BRANCH
-
-            # 2. Добавляем файл
-            git add -f Pulse_Auto_Map.xlsx
-            
-            # 3. Делаем коммит (если файл не изменился, || true не даст экшену упасть)
-            git commit -m "🗺 Карта проекта PULSE для $CURRENT_BRANCH" || true
-            
-            # 4. ПРИНУДИТЕЛЬНО отправляем именно в ветку-карту
-            git push -f origin $MAP_BRANCH
-          else
-            echo "⚠️ Файл Pulse_Auto_Map.xlsx не был создан"
-          fi
-
-      - name: Отправка файла в Telegram
-        run: |
-          if [ -f "Pulse_Auto_Map.xlsx" ]; then
+          if [ -n "${{ secrets.TELEGRAM_BOT_TOKEN }}" ] && [ -n "${{ secrets.TELEGRAM_CHAT_ID }}" ]; then
             curl -F document=@"Pulse_Auto_Map.xlsx" \
-                 -F caption="✅ Карта проекта **PULSE** обновлена!" \
-                 -F parse_mode="Markdown" \
+                 -F caption="✅ Карта проекта PULSE обновлена" \
                  https://api.telegram.org/bot${{ secrets.TELEGRAM_BOT_TOKEN }}/sendDocument?chat_id=${{ secrets.TELEGRAM_CHAT_ID }}
           else
-            echo "⚠️ Файл для отправки не найден"
+            echo "ℹ️ Telegram-секреты не настроены — отправка пропущена"
           fi

@@ -1,3 +1,6 @@
+// DateTimePicker — общий компонент выбора даты и времени.
+// Используется в Пресс-релизах для назначения времени публикации.
+
 import { useState, useMemo, useRef, useEffect } from 'react';
 import { ChevronLeft, ChevronRight, X, Calendar, Clock } from 'lucide-react';
 import StyledSelect from './StyledSelect';
@@ -135,11 +138,11 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
   };
 
   return (
-    <div className={`bg-white rounded-2xl border-2 border-gray-100 p-4 ${className}`}>
+    <div className={`bg-sff rounded-2xl border-2 border-bd p-4 ${className}`}>
       {/* Header: month/year */}
       <div className="flex items-center justify-between mb-3">
-        <button onClick={prevMonth} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
-          <ChevronLeft size={16} className="text-gray-500" />
+        <button onClick={prevMonth} className="w-7 h-7 rounded-lg hover:bg-sf2 flex items-center justify-center">
+          <ChevronLeft size={16} className="text-txd" />
         </button>
         <div className="flex items-center gap-2">
           <StyledSelect
@@ -155,15 +158,15 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
             size="sm"
           />
         </div>
-        <button onClick={nextMonth} className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
-          <ChevronRight size={16} className="text-gray-500" />
+        <button onClick={nextMonth} className="w-7 h-7 rounded-lg hover:bg-sf2 flex items-center justify-center">
+          <ChevronRight size={16} className="text-txd" />
         </button>
       </div>
 
       {/* Weekdays */}
       <div className="grid grid-cols-7 gap-1 mb-1">
         {WEEKDAYS.map((w) => (
-          <div key={w} className="text-center text-[10px] font-black uppercase tracking-widest text-gray-400 py-1">
+          <div key={w} className="text-center text-[10px] font-black uppercase tracking-widest text-lbl py-1">
             {w}
           </div>
         ))}
@@ -181,10 +184,10 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
               disabled={dis}
               className={[
                 'h-9 rounded-full text-sm font-bold transition-all',
-                cell.current ? '' : 'text-gray-300',
+                cell.current ? '' : 'text-lbl',
                 sel ? 'bg-blue-500 text-white shadow-md shadow-blue-100'
                     : (dis ? 'cursor-not-allowed text-gray-200'
-                           : 'text-gray-700 hover:bg-blue-50 hover:text-blue-600'),
+                           : 'text-tx hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] hover:text-cta'),
               ].join(' ')}
             >
               {cell.d}
@@ -194,9 +197,9 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
       </div>
 
       {/* Time */}
-      <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-2">
-        <Clock size={14} className="text-gray-400" />
-        <span className="text-[10px] font-black uppercase tracking-widest text-gray-400">МСК</span>
+      <div className="mt-4 pt-3 border-t border-bd flex items-center gap-2">
+        <Clock size={14} className="text-lbl" />
+        <span className="text-[10px] font-black uppercase tracking-widest text-lbl">МСК</span>
         <div className="ml-auto flex items-center gap-1">
           <input
             type="text" inputMode="numeric"
@@ -205,9 +208,9 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
             onFocus={(e) => e.target.select()}
             onBlur={handleHhBlur}
             placeholder="чч"
-            className="w-12 text-center px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-sm font-black focus:outline-none focus:border-blue-200"
+            className="w-12 text-center px-2 py-1.5 bg-sf2 border border-bd rounded-lg text-sm font-black focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]"
           />
-          <span className="font-black text-gray-400">:</span>
+          <span className="font-black text-lbl">:</span>
           <input
             type="text" inputMode="numeric"
             value={mm}
@@ -215,21 +218,21 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
             onFocus={(e) => e.target.select()}
             onBlur={handleMmBlur}
             placeholder="мм"
-            className="w-12 text-center px-2 py-1.5 bg-gray-50 border border-gray-100 rounded-lg text-sm font-black focus:outline-none focus:border-blue-200"
+            className="w-12 text-center px-2 py-1.5 bg-sf2 border border-bd rounded-lg text-sm font-black focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]"
           />
         </div>
       </div>
 
       {/* Selected display + reset */}
       {selected && (
-        <div className="mt-3 flex items-center justify-between bg-blue-50 rounded-xl px-3 py-2">
-          <div className="flex items-center gap-2 text-sm font-bold text-blue-700">
+        <div className="mt-3 flex items-center justify-between bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-xl px-3 py-2">
+          <div className="flex items-center gap-2 text-sm font-bold text-cta">
             <Calendar size={14} />
             {selected.toLocaleDateString('ru-RU', { day: '2-digit', month: 'long', year: 'numeric' })}
             {' · '}
             {hh}:{mm}
           </div>
-          <button onClick={reset} className="text-blue-400 hover:text-blue-600">
+          <button onClick={reset} className="text-blue-400 hover:text-cta">
             <X size={14} />
           </button>
         </div>

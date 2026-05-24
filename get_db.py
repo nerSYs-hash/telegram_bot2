@@ -1,3 +1,5 @@
+"""Утилита: скачивание/локальная копия БД бота (вспомогательный скрипт)."""
+
 import sqlite3
 conn = sqlite3.connect('bot_database.db')
 cursor = conn.cursor()

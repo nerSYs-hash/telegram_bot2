@@ -33,10 +33,10 @@ const PH_GROUPS = [
 ];
 
 const COLOR_MAP = {
-  blue:   'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100',
-  purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-100',
-  green:  'bg-green-50 text-green-700 hover:bg-green-100 border-green-100',
-  amber:  'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-100',
+  blue:   'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] border-[color-mix(in_oklab,var(--cta)_30%,transparent)]',
+  purple: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple hover:bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] border-[color-mix(in_oklab,var(--purple)_30%,transparent)]',
+  green:  'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',
+  amber:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] border-[color-mix(in_oklab,var(--warn)_30%,transparent)]',
 };
 
 const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','👍','👎','🙏','🔥','❤️','💯','🎉','😊','😭','🤣','😱','💪','✅','❌','⚠️','💡','📌','🚀','👋','🌟','💬','🎯','⭐','🏆','🔑','💎','🍀','🎵'];
@@ -175,15 +175,15 @@ export default function RichTextEditor({
   const isOver  = textLen > maxLength;
 
   return (
-    <div className="bg-white rounded-xl border-2 border-gray-100 overflow-hidden">
+    <div className="bg-sff rounded-xl border-2 border-bd overflow-hidden">
       {/* Tabs */}
-      <div className="flex items-center gap-0.5 px-2 pt-2 pb-1 border-b border-gray-50">
+      <div className="flex items-center gap-0.5 px-2 pt-2 pb-1 border-b border-bd">
         <button onClick={() => setTab('editor')}
-          className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${tab === 'editor' ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+          className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${tab === 'editor' ? 'bg-blue-500 text-white' : 'text-txd hover:bg-sf2'}`}>
           ✏ Редактор
         </button>
         <button onClick={() => setTab('code')}
-          className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${tab === 'code' ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+          className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${tab === 'code' ? 'bg-blue-500 text-white' : 'text-txd hover:bg-sf2'}`}>
           {'<>'} Код
         </button>
       </div>
@@ -191,14 +191,14 @@ export default function RichTextEditor({
       {tab === 'editor' && (
         <>
           {/* Toolbar */}
-          <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
+          <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-bd flex-wrap">
             {TOOLBAR.map((f) => {
               const isActive = f.cmd ? fmtState[f.cmd] : false;
               return (
                 <button key={f.l}
                   title={f.tip}
                   onMouseDown={(e) => { e.preventDefault(); f.cmd ? execFmt(f.cmd) : f.custom(); }}
-                  className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                  className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
                   {f.l}
                 </button>
               );
@@ -208,16 +208,16 @@ export default function RichTextEditor({
             <div className="relative">
               <button title="Эмодзи"
                 onMouseDown={(e) => { e.preventDefault(); saveRange(); setEmojiOpen(o => !o); }}
-                className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
                 😊
               </button>
               {emojiOpen && (
-                <div className="absolute left-0 top-9 z-50 bg-white border border-gray-200 rounded-xl shadow-xl p-1.5"
+                <div className="absolute left-0 top-9 z-50 bg-sff border border-bd2 rounded-xl shadow-xl p-1.5"
                      style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', width: 220 }}>
                   {EMOJIS.map(em => (
                     <button key={em}
                       onMouseDown={(ev) => { ev.preventDefault(); insertEmoji(em); }}
-                      className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-gray-100">
+                      className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-sf2">
                       {em}
                     </button>
                   ))}
@@ -229,7 +229,7 @@ export default function RichTextEditor({
             {showHeaderButton && (
               <button title="Вставить блок-шапку"
                 onMouseDown={(e) => { e.preventDefault(); onInsertHeader?.(); }}
-                className="px-2 py-1 ml-1 text-[10px] font-black uppercase rounded-lg bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100">
+                className="px-2 py-1 ml-1 text-[10px] font-black uppercase rounded-lg bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]">
                 📌 Шапка
               </button>
             )}
@@ -238,14 +238,14 @@ export default function RichTextEditor({
             <div className="ml-auto relative">
               <button
                 onMouseDown={(e) => { e.preventDefault(); saveRange(); setPhOpen(o => !o); }}
-                className={`px-2 py-1 text-[10px] font-bold border rounded-lg whitespace-nowrap transition-all ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-blue-500 border-blue-200 hover:bg-blue-50'}`}>
+                className={`px-2 py-1 text-[10px] font-bold border rounded-lg whitespace-nowrap transition-all ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]'}`}>
                 %плейсхолдеры%
               </button>
               {phOpen && (
-                <div className="absolute right-0 top-9 z-50 w-[280px] bg-white border border-gray-200 rounded-xl shadow-xl p-2 max-h-[280px] overflow-y-auto">
+                <div className="absolute right-0 top-9 z-50 w-[280px] bg-sff border border-bd2 rounded-xl shadow-xl p-2 max-h-[280px] overflow-y-auto">
                   {PH_GROUPS.map(grp => (
                     <div key={grp.label} className="mb-2 last:mb-0">
-                      <div className="text-[9px] font-black uppercase tracking-widest text-gray-400 mb-1">{grp.label}</div>
+                      <div className="text-[9px] font-black uppercase tracking-widest text-lbl mb-1">{grp.label}</div>
                       <div className="flex flex-wrap gap-1">
                         {grp.items.map(it => (
                           <button key={it.key}
@@ -264,28 +264,28 @@ export default function RichTextEditor({
 
             {/* ? Help */}
             <button onMouseDown={(e) => { e.preventDefault(); setHelpOpen(o => !o); }}
-              className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 font-black rounded hover:bg-blue-50 flex items-center justify-center"
+              className="w-6 h-6 text-[10px] text-lbl hover:text-cta font-black rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center"
               title="Справка по тегам">?</button>
 
             {/* ↗ Preview */}
             {onPreview && (
               <button onMouseDown={(e) => { e.preventDefault(); onPreview(); }}
-                className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 rounded hover:bg-blue-50 flex items-center justify-center"
+                className="w-6 h-6 text-[10px] text-lbl hover:text-cta rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center"
                 title="Предпросмотр">↗</button>
             )}
           </div>
 
           {/* Help */}
           {helpOpen && (
-            <div className="px-3 py-2 bg-blue-50 text-[11px] text-blue-800 border-b border-blue-100 leading-relaxed">
-              Поддерживаются HTML-теги Telegram: <code className="bg-white px-1 rounded">&lt;b&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;i&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;u&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;s&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;code&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;a href&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;blockquote&gt;</code>{' '}
-              <code className="bg-white px-1 rounded">&lt;tg-spoiler&gt;</code>.
+            <div className="px-3 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-[11px] text-cta border-b border-[color-mix(in_oklab,var(--cta)_30%,transparent)] leading-relaxed">
+              Поддерживаются HTML-теги Telegram: <code className="bg-sff px-1 rounded">&lt;b&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;i&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;u&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;s&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;code&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;a href&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;blockquote&gt;</code>{' '}
+              <code className="bg-sff px-1 rounded">&lt;tg-spoiler&gt;</code>.
               %плейсхолдеры% подставятся при отправке.
             </div>
           )}
@@ -293,7 +293,7 @@ export default function RichTextEditor({
           {/* Editor */}
           <div className="relative">
             {!value && (
-              <span className="absolute top-3 left-4 text-sm text-gray-300 italic pointer-events-none select-none">
+              <span className="absolute top-3 left-4 text-sm text-lbl italic pointer-events-none select-none">
                 {placeholder}
               </span>
             )}
@@ -320,10 +320,10 @@ export default function RichTextEditor({
                   });
                 } catch {}
               }}
-              className="w-full px-4 py-3 text-sm font-medium text-gray-700 outline-none bg-white"
+              className="w-full px-4 py-3 text-sm font-medium text-tx outline-none bg-sff"
               style={{ minHeight, wordBreak: 'break-word', whiteSpace: 'pre-wrap' }}
             />
-            <span className={`absolute bottom-2 right-3 text-[10px] font-black bg-white px-1 ${isOver ? 'text-red-500' : 'text-blue-500'}`}>
+            <span className={`absolute bottom-2 right-3 text-[10px] font-black bg-sff px-1 ${isOver ? 'text-danger' : 'text-cta'}`}>
               {textLen}/{maxLength}
             </span>
           </div>
@@ -336,7 +336,7 @@ export default function RichTextEditor({
           onChange={(e) => onChange?.(e.target.value)}
           placeholder="HTML-код сообщения…"
           rows={8}
-          className="w-full px-4 py-3 font-mono text-sm text-gray-700 outline-none resize-y bg-white"
+          className="w-full px-4 py-3 font-mono text-sm text-tx outline-none resize-y bg-sff"
           style={{ minHeight }}
         />
       )}

@@ -1,0 +1,26 @@
+{
+  "modules": [
+    {"id": "statistics",    "name": "Статистика",     "section": "analytics",  "description": "11 виджетов-графиков активности чата."},
+    {"id": "top5",          "name": "Топ-5",          "section": "analytics",  "description": "Рейтинги участников по периодам."},
+    {"id": "mining",        "name": "Майнинг",        "section": "economy",    "description": "Награды пульсами за активность в чате."},
+    {"id": "sprints",       "name": "Спринты",        "section": "economy",    "description": "Забеги майнинга: бонус за результат в окне времени."},
+    {"id": "combos",        "name": "Комбо",          "section": "economy",    "description": "Бонусы майнинга за комбо-серии действий."},
+    {"id": "penalty",       "name": "Штрафы",         "section": "economy",    "description": "Списание пульсов за спам и нарушения в чате."},
+    {"id": "lottery",       "name": "Лотерея",        "section": "economy",    "description": "Розыгрыши призов среди участников."},
+    {"id": "bingo",         "name": "Бинго",          "section": "economy",    "description": "Игровое поле бинго на пульсы."},
+    {"id": "monthly_gift",  "name": "Подарок месяца", "section": "economy",    "description": "Ежемесячный бонус активным участникам."},
+    {"id": "referral",      "name": "Рефералы",       "section": "economy",    "description": "Награды за приглашённых в чат друзей."},
+    {"id": "bbs_bonus",     "name": "BBS-бонусы",     "section": "economy",    "description": "Бонусы за заполнение анкеты ББС."},
+    {"id": "shipper",       "name": "Шиппер",         "section": "engagement", "description": "Шипперинг участников + награды."},
+    {"id": "donations",     "name": "Донаты",         "section": "engagement", "description": "Сбор донатов через бота."},
+    {"id": "bbs_pulse",     "name": "Пульс ББС",      "section": "engagement", "description": "ББС-механика для активных."},
+    {"id": "bbs_other",     "name": "ББС Другое",     "section": "engagement", "description": "Прочие ББС-функции."},
+    {"id": "bbs_anketa",    "name": "Ред.анкет ББС",  "section": "engagement", "description": "Редактирование анкет ББС."},
+    {"id": "bbs_vip",       "name": "VIP BBS",        "section": "engagement", "description": "Платная ББС-метка VIP."},
+    {"id": "titles",        "name": "Титулы",         "section": "engagement", "description": "Платные титулы."},
+    {"id": "press_release", "name": "Пресс-релизы",   "section": "content",    "description": "Публикация постов в чат."},
+    {"id": "triggers",      "name": "Триггеры",       "section": "content",    "description": "Авто-реакции на слова/фразы."},
+    {"id": "horoscope",     "name": "Гороскоп",       "section": "content",    "description": "Авто-гороскоп для участников."},
+    {"id": "journal",       "name": "Журнал",         "section": "journal",    "description": "Лог событий чата (15 суб-журналов)."}
+  ]
+}

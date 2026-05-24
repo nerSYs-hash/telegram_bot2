@@ -1,7 +1,17 @@
+// AdminDashboard — корневой компонент админ-панели Puls Chat.
+// Сайдбар + навигация по разделам (Новости/Модули/Статистика/Журнал/
+// Триггеры/Пресс-релизы/Шиппер/Экономика/Система/Права).
+// Хранит массив UPDATES — данные для дерева Новостей.
+
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
-import PromptTranslator from './components/PromptTranslator';
+import StatsPage from './components/stats/StatsPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
+import NewsTree from './components/updates/NewsTree';
+import UpdateToast from './components/updates/UpdateToast';
+import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
+import { useModules } from './hooks/useModules';
+import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
 import WorkspaceList from './components/workspaces/WorkspaceList';
 import WorkspacePage from './components/workspaces/WorkspacePage';
 import InviteMemberModal from './components/workspaces/InviteMemberModal';
@@ -16,14 +26,14 @@ import {
   Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
   ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
   CheckCircle2, Info, Edit, ShieldBan, Clock, MessageSquareX, 
-  Zap, Bot, Sparkles, Loader2, Download, FileSpreadsheet,
+  Zap, Sparkles, Loader2, Download, FileSpreadsheet,
   FileText, TrendingUp, TrendingDown, Activity, ChevronRight,
   Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
   ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
   GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
-  Crown, AtSign, Hash, Plug, LogOut
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch, Newspaper
 } from 'lucide-react';
 
 const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
@@ -46,10 +56,99 @@ const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
 });
 
 // ═══════════════════════════════════════════
-//  СПИСОК ОБНОВЛЕНИЙ — добавляй сюда при каждом релизе
-//  type: 'new' | 'fix' | 'improve'
+//  НОВОСТИ — добавляй запись при каждом релизе бота/сайта.
+//  ПРАВИЛО ТОНА: всегда от лица «Мы» / «Наша команда».
+//  cat: 'feature' (новинка) | 'update' (обновление) | 'promo' (акция)
+//  Старые записи на поле type (new/improve/fix) нормализуются в UI.
+//  changelog копит техдетали — сюда кладём только выжимку для юзера.
 // ═══════════════════════════════════════════
 const UPDATES = [
+  {
+    version: 'V1.17.0h',
+    date: '22 мая 2026',
+    title: '🗺️ Карта проекта и новая Статистика',
+    items: [
+      { cat: 'feature', tag: 'site',       text: 'Мы превратили раздел «Обновления» в живой Новостной раздел — дерево новостей по месяцам с анимированными узлами' },
+      { cat: 'feature', tag: 'statistics', text: 'Мы переделали Статистику — теперь это лента графиков с переключателем периода: день, неделя, месяц, квартал, год' },
+      { cat: 'update',  tag: 'statistics', text: 'Мы добавили на каждый график приближение диапазона и выбор детализации' },
+      { cat: 'feature', tag: 'bot',        text: 'Мы разбили Экономику на 9 отдельных модулей — майнинг, спринты, комбо, штрафы, лотерея, бинго, подарок месяца, рефералы, BBS-бонус' },
+      { cat: 'update',  tag: 'bot',        text: 'Теперь каждый модуль экономики включается и выключается отдельно — выключенный не работает в боте' },
+      { cat: 'update',  tag: 'site',       text: 'Мы починили управление администраторами — список снова загружается без ошибок' },
+    ],
+  },
+  {
+    version: 'V1.17.0g',
+    date: '20 мая 2026',
+    title: '🧩 Хаб «Модули»',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы собрали все функции бота в новый раздел «Модули» — единый каталог, где нужное подключается карточками' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили под-навигацию секций с фирменным подчёркиванием: Аналитика, Экономика, Вовлечение, Контент, Журнал' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход в кабинет одним тапом из бота — кнопка «🔑 Войти в кабинет», без пароля' },
+      { cat: 'update',  tag: 'site', text: 'Теперь при подключении модуля карточка плавно уезжает в начало каталога' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили всплывающее оповещение при подключении и отключении модуля' },
+    ],
+  },
+  {
+    version: 'V1.17.0e–f',
+    date: '19 мая 2026',
+    title: '🎨 Единая дизайн-система Puls Chat',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы перевели весь кабинет на единую дизайн-систему — общий язык цветов, скруглений и анимаций' },
+      { cat: 'update',  tag: 'site', text: 'Мы привели все экраны и компоненты к одному визуальному стилю' },
+      { cat: 'update',  tag: 'site', text: 'Мы вылечили неровное свечение у кнопок и карточек — теперь ореол ровный и мягкий' },
+    ],
+  },
+  {
+    version: 'V1.17.0d',
+    date: '16 мая 2026',
+    title: '🌐 Несколько сообществ в одном кабинете',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы добавили переключатель сообществ в шапку — управляй несколькими чатами из одного аккаунта' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход и права в кабинете отдельными для каждого сообщества' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь помощник получает доступ строго к тому сообществу, куда его пригласили' },
+    ],
+  },
+  {
+    version: 'V1.17.0b–c',
+    date: '14 мая 2026',
+    title: '🔗 Подключение бота и кабинет сообщества',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали само-подключение — добавил бота в чат, и кабинет сообщества создаётся автоматически' },
+      { cat: 'feature', tag: 'site', text: 'Мы открыли кабинет сообщества: список чатов, помощники и роли чатов — главный, админский, журнальный' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь при добавлении в чат бот сам предлагает выбрать, к какому сообществу его привязать' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы добавили команду /get_thread_id — она помогает настроить нужные топики чата' },
+    ],
+  },
+  {
+    version: 'V1.17.0a',
+    date: '12 мая 2026',
+    title: '🏢 Фундамент мульти-сообществ',
+    items: [
+      { cat: 'feature', tag: 'bot', text: 'Мы научили бота обслуживать несколько независимых сообществ одновременно' },
+      { cat: 'update',  tag: 'bot', text: 'Мы полностью изолировали данные каждого сообщества друг от друга' },
+    ],
+  },
+  {
+    version: 'V1.16',
+    date: '9 мая 2026',
+    title: '🎫 Кастомные титулы и пресс-релизы',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы запустили кастомные титулы — покупка за Пульсы или рубли, заявки и пакеты' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили раздел «Пресс-релизы» — редактор с оформлением, медиа, шаблоны подписей и планировщик' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы обновили Баг-Трекер до версии 2.0 — разделение тикетов и защита карточек от потери' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы вернули восстановление последней удалённой анкеты BBS командой /restore_last_bbs' },
+    ],
+  },
+  {
+    version: 'V1.16.5',
+    date: '5 мая 2026',
+    title: '💰 Экономика — карточки-категории',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы переделали Экономику на сайте в карточки категорий с главным переключателем у каждой' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили блок «В обороте» — курс Пульса, баланс банка и у участников, эмиссия за 24 часа' },
+      { cat: 'update',  tag: 'site', text: 'Теперь категории показывают живые данные из бота, а сетка подстраивается под экран' },
+    ],
+  },
   {
     version: 'V1.12.9',
     date: '20 апреля 2026',
@@ -299,10 +398,10 @@ class EconomyErrorBoundary extends React.Component {
   render() {
     if (this.state.error) {
       return (
-        <div className="bg-white rounded-3xl border border-red-100 p-12 text-center space-y-3">
+        <div className="bg-sff rounded-3xl border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] p-12 text-center space-y-3">
           <div className="text-4xl">⚠️</div>
-          <div className="font-black text-gray-900">Ошибка загрузки раздела Экономика</div>
-          <div className="text-xs text-red-500 font-mono bg-red-50 rounded-xl p-3 text-left break-all">
+          <div className="font-black text-tx">Ошибка загрузки раздела Экономика</div>
+          <div className="text-xs text-danger font-mono bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-xl p-3 text-left break-all">
             {this.state.error?.message || String(this.state.error)}
           </div>
           <button
@@ -319,8 +418,24 @@ class EconomyErrorBoundary extends React.Component {
 
 export default function App() {
   // ── АВТОРИЗАЦИЯ ──
-  const [authUser, setAuthUser]       = useState(null);
-  const [authLoading, setAuthLoading] = useState(true);
+  // DEV-ONLY превью-обход логина для дизайн-QA. Тройная защита:
+  // только `vite dev` (import.meta.env.DEV) + (localhost ИЛИ ?preview).
+  // В прод-сборке import.meta.env.DEV=false → ветка мертва, не попадёт.
+  // V1.17.0h1c (20.05): автоматом на localhost, чтобы не помнить ?preview.
+  const __devPreview =
+    import.meta.env.DEV &&
+    typeof window !== 'undefined' &&
+    (
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      new URLSearchParams(window.location.search).has('preview')
+    );
+  const [authUser, setAuthUser]       = useState(
+    __devPreview
+      ? { user_id: 0, first_name: 'Preview', username: 'preview', is_admin: true, is_owner: true }
+      : null
+  );
+  const [authLoading, setAuthLoading] = useState(!__devPreview);
 
   useEffect(() => {
     const token = localStorage.getItem('auth_token');
@@ -330,6 +445,14 @@ export default function App() {
       .then(u => { if (u) setAuthUser(u); else localStorage.removeItem('auth_token'); })
       .catch(() => localStorage.removeItem('auth_token'))
       .finally(() => setAuthLoading(false));
+  }, []);
+
+  // Одноразовая чистка старого localStorage-скелета модулей.
+  useEffect(() => {
+    if (!localStorage.getItem('pulse_modules_migrated_v1')) {
+      localStorage.removeItem('pulse_connected_modules');
+      localStorage.setItem('pulse_modules_migrated_v1', '1');
+    }
   }, []);
 
   // ── ПРОФИЛЬ ──
@@ -375,15 +498,17 @@ export default function App() {
     [profileData]
   );
   const userCan = useCallback((perm) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
     if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     return userPermissions.has(perm);
-  }, [userPermissions, profileData]);
+  }, [userPermissions, profileData, __devPreview]);
 
   const userCanAny = useCallback((resourceKey) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
     if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
     if (!profileData) return true;
     return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
-  }, [userPermissions, profileData]);
+  }, [userPermissions, profileData, __devPreview]);
 
   // ── ПРАВА ДОСТУПА ──
   const [permCatalog, setPermCatalog]             = useState(null);
@@ -446,6 +571,8 @@ export default function App() {
   const [hasNewUpdate, setHasNewUpdate] = useState(
     () => localStorage.getItem('lastSeenUpdate') !== LATEST_VERSION
   );
+  // версия прошлого визита — по ней дерево Новостей метит свежие записи
+  const [newsBaseline] = useState(() => localStorage.getItem('lastSeenUpdate'));
   const [jigglingTag, setJigglingTag] = useState(null);
   const triggerJiggle = (key) => { setJigglingTag(key); };
   const [jigglingNav, setJigglingNav] = useState(null);
@@ -946,259 +1073,119 @@ export default function App() {
   const ChartTooltip = ({ active, payload, label }) => {
     if (!active || !payload?.length) return null;
     return (
-      <div className="bg-gray-900 text-white px-4 py-3 rounded-2xl shadow-2xl border border-gray-700">
-        <p className="text-[10px] font-black text-gray-400 uppercase mb-1">{label}</p>
-        <p className="text-2xl font-black leading-none">{(payload[0].value || 0).toLocaleString()}</p>
-        <p className="text-[9px] text-blue-400 font-bold mt-1">сообщений</p>
+      <div className="bg-sff/95 backdrop-blur-sm border border-bd rounded-xl px-3 py-2 shadow-lg">
+        <p className="text-[12px] font-bold text-tx leading-none">
+          <span className="text-cta">{(payload[0].value || 0).toLocaleString()}</span> сообщений
+        </p>
+        <p className="text-[10px] font-semibold text-lbl mt-1">{label}</p>
       </div>
     );
   };
 
+  // Сайдбар = только база (top) + сервис. Модули (isModule) показываются
+  // в боковой панели ТОЛЬКО когда подключены из каталога «Модули».
   const navigation = [
-    { id: 'updates',       name: 'Обновления',     icon: Megaphone,      group: 'top' },
-    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'main',     resource: 'statistics' },
-    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'main',     resource: 'journal' },
-    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers' },
-    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release' },
-    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper' },
-    { id: 'prompt',        name: 'AI-помощник',    icon: Bot,            group: 'modules' },
-    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy' },
-    { id: 'system',        name: 'Система',        icon: Settings,       group: 'main',     resource: 'system' },
+    { id: 'updates',       name: 'Новости',        icon: Newspaper,      group: 'top' },
+    { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
+    { id: 'system',        name: 'Система',        icon: Settings,       group: 'top',      resource: 'system' },
+    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
+    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'modules',  resource: 'journal',       isModule: true },
+    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers',      isModule: true },
+    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release', isModule: true },
+    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
+    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
+  const wsId = getActiveWs();
+  const modulesApi = useModules(wsId);
+
+  // Подключённые модули = is_enabled из API.
+  // localStorage для модулей удалён, источник истины — API (см. spec 7.0).
+  const connectedModules = useMemo(
+    () => new Set((modulesApi.modules || []).filter(m => m.is_enabled).map(m => m.id)),
+    [modulesApi.modules]
+  );
+
+  // connect/disconnect через API. Reason обязателен только для disable.
+  const connectModule = async (id) => {
+    try { await modulesApi.enable(id); } catch (e) { console.error('module.enable', e); }
+  };
+  const disconnectModule = async (id, reason) => {
+    try { await modulesApi.disable(id, reason); } catch (e) { console.error('module.disable', e); }
+  };
+
+  // Какие sidebar-разделы активны (через карту card→nav из ModulesHub).
+  const activeModuleNavs = useMemo(
+    () => new Set([...connectedModules].map(cid => MODULE_NAV[cid]).filter(Boolean)),
+    [connectedModules]
+  );
+
+  // (Удалено V1.17.0h1c) Перенаправление при отключении модуля больше
+  // не нужно — разделы модулей всегда видны, выкл не скрывает их.
+
   const renderContent = () => {
     switch (activeTab) {
-      case 'prompt':
-        return (
-          <div className="space-y-4 pb-24">
-            <PromptTranslator />
-          </div>
-        );
+      case 'modules':
+        return <ModulesHub onOpen={navigateTo} connected={connectedModules}
+                 onConnect={connectModule} onDisconnect={disconnectModule} />;
       case 'statistics':
-        return (
-          <div className="space-y-4 pb-24">
+        return <StatsPage />;
 
-            {/* ── Period switcher ── */}
-            <div className="flex space-x-2 overflow-x-auto pb-1 -mx-4 px-4 scrollbar-hide">
-              {PERIODS.map(p => (
-                <button key={p.id} onClick={() => handlePeriodChange(p.id)}
-                  className={`flex-shrink-0 px-5 py-2.5 rounded-2xl font-black text-[11px] uppercase tracking-wide transition-all duration-300 ${
-                    statsPeriod === p.id
-                      ? 'bg-gray-900 text-white shadow-lg scale-105'
-                      : 'bg-white text-gray-400 border border-gray-100'
-                  }`}>
-                  {p.label}
-                </button>
-              ))}
-            </div>
-
-            {/* ── Hero: Health index ── */}
-            {(() => {
-              const INDEX_META = {
-                oksp:   { label: 'Общая активность',      desc: 'Среднее кол-во сообщений на одного активного участника × 10. Показывает насколько активно общается каждый.' },
-                sdsp:   { label: 'Диалоговость',          desc: 'Доля сообщений с ответами (reply) от общего числа сообщений. Высокое значение = живое общение, не монологи.' },
-                cho:    { label: 'Эмоциональность',       desc: 'Доля сообщений, получивших реакции. Чем больше — тем сильнее люди реагируют на контент.' },
-                media:  { label: 'Медиаактивность',       desc: 'Доля медиафайлов (фото, видео, GIF) от всех сообщений. Отражает разнообразие контента.' },
-                korp:   { label: 'Вовлечённость',         desc: 'Суммарный отклик (ответы + реакции) к числу сообщений. Главный показатель живости чата.' },
-                kopyup: { label: 'Прирост участников',    desc: '(Вступили − Вышли) / Всего участников. Положительное значение = чат растёт.' },
-              };
-              const idxData = liveStats?.indices || {};
-              return (
-                <div className={`bg-gradient-to-br from-indigo-700 via-blue-700 to-blue-500 rounded-[3rem] p-8 text-white shadow-xl relative overflow-hidden border border-white/10 transition-all duration-500 ${statsLoading ? 'opacity-60' : 'opacity-100'}`}>
-                  <div className="absolute -top-10 -right-10 opacity-10 scale-150 rotate-12"><Activity size={200} /></div>
-                  <div className="relative z-10">
-                    {/* Строка 1: бейдж + период */}
-                    <div className="flex items-center justify-between mb-5">
-                      <div className="flex items-center space-x-2 bg-white/20 px-4 py-1.5 rounded-full backdrop-blur-md">
-                        <Zap size={14} className="text-yellow-300 fill-yellow-300" />
-                        <span className="text-[10px] font-black uppercase tracking-widest">Индекс здоровья</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full uppercase">
-                          {liveStats?.periodLabel || 'Сегодня'}
-                        </span>
-                        {/* ℹ кнопка — вверху справа */}
-                        <div className="relative">
-                          <button
-                            onClick={() => setShowHealthTooltip(v => !v)}
-                            className="w-7 h-7 rounded-full bg-white/20 flex items-center justify-center text-xs font-black hover:bg-white/30 transition-all"
-                          >ℹ</button>
-                          {showHealthTooltip && (
-                            <div className="absolute top-9 right-0 w-64 bg-gray-900 text-white text-xs rounded-2xl p-4 z-50 shadow-2xl">
-                              <p className="font-black mb-2">Формула индекса здоровья:</p>
-                              <p className="opacity-80 leading-relaxed">Общая акт.×25% + Диалоговость×15% + Эмоц.×15% + Медиа×10% + Вовлечённость×20% + Прирост×15%</p>
-                              <p className="opacity-60 mt-2 text-[10px]">Каждый субиндекс — реальные данные за выбранный период.</p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-                    {/* Строка 2: большое число */}
-                    <div className="text-8xl font-black tracking-tighter leading-none mb-6">
-                      {statsLoading ? <Loader2 size={48} className="animate-spin opacity-50" /> : (liveStats?.healthIndex ?? 0)}
-                      {!statsLoading && <span className="text-2xl ml-1 opacity-50">%</span>}
-                    </div>
-                    {/* Кнопка раскрытия субиндексов */}
-                    <button onClick={() => setShowDetailedIndices(!showDetailedIndices)}
-                      className="w-full flex justify-between items-center text-[10px] font-black uppercase tracking-widest border-t border-white/10 pt-4">
-                      <span>Детальные показатели</span>
-                      {showDetailedIndices ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                    </button>
-                    {showDetailedIndices && (
-                      <div className="space-y-1 pt-3 animate-in slide-in-from-top-2 duration-300">
-                        {Object.entries(INDEX_META).map(([k, meta]) => (
-                          <div key={k}>
-                            <div className="flex items-center justify-between py-2 px-3 rounded-xl">
-                              <span className="text-xs font-bold opacity-75">{meta.label}</span>
-                              <div className="flex items-center space-x-2 flex-shrink-0">
-                                <span className="text-sm font-black">{idxData[k] !== undefined ? idxData[k] : '—'}</span>
-                                <button
-                                  onClick={() => setActiveIndexTooltip(activeIndexTooltip === k ? null : k)}
-                                  className="w-5 h-5 rounded-full bg-white/20 flex items-center justify-center text-[10px] font-black hover:bg-white/30 transition-all flex-shrink-0"
-                                >ℹ</button>
-                              </div>
-                            </div>
-                            {activeIndexTooltip === k && (
-                              <div className="mx-3 mb-2 bg-white/15 backdrop-blur-sm text-white text-[10px] rounded-xl p-3 leading-relaxed border border-white/10 animate-in slide-in-from-top-1 duration-200">
-                                {meta.desc}
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* ── Recharts AreaChart ── */}
-            <div className={`bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
-              <div className="flex items-center justify-between mb-4">
-                <h3 className="text-[10px] font-black text-gray-400 uppercase tracking-widest flex items-center">
-                  <Activity size={14} className="mr-2 text-blue-500" /> Пульс активности
-                </h3>
-                <span className="text-[10px] font-black text-blue-500 bg-blue-50 px-3 py-1 rounded-full">
-                  {(liveStats?.history || []).reduce((s, d) => s + d.val, 0).toLocaleString()} сообщ.
-                </span>
-              </div>
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={liveStats?.history || []} margin={{ top: 5, right: 5, left: -30, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%"  stopColor="#3b82f6" stopOpacity={0.25} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0}    />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f4f8" vertical={false} />
-                  <XAxis dataKey="day" tick={{ fontSize: 10, fontWeight: 900, fill: '#9ca3af' }} axisLine={false} tickLine={false} />
-                  <YAxis tick={{ fontSize: 9, fill: '#d1d5db' }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<ChartTooltip />} cursor={{ stroke: '#e2e8f0', strokeWidth: 2 }} />
-                  <Area type="monotone" dataKey="val" stroke="#3b82f6" strokeWidth={3}
-                    fill="url(#areaGrad)" dot={false} activeDot={{ r: 6, fill: '#3b82f6', stroke: '#fff', strokeWidth: 2 }}
-                    animationDuration={600} animationEasing="ease-out" />
-                  <Brush
-                    dataKey="day"
-                    height={38}
-                    stroke="#3b82f6"
-                    fill="#dbeafe"
-                    travellerWidth={14}
-                    tickFormatter={() => ''}
-                    startIndex={Math.max(0, (liveStats?.history?.length || 0) - 10)}
-                    traveller={({ x, y, width, height: h }) => (
-                      <g>
-                        <rect x={x} y={y + 4} width={width} height={h - 8}
-                          rx={6} fill="#3b82f6" stroke="#fff" strokeWidth={2} />
-                        <line x1={x + width/2} y1={y + h/2 - 5} x2={x + width/2} y2={y + h/2 + 5}
-                          stroke="#fff" strokeWidth={1.5} strokeLinecap="round" />
-                      </g>
-                    )}
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* ── Метрики 2×2 ── */}
-            <div className={`grid grid-cols-2 gap-4 transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
-              {[
-                { label: 'Сообщений',      val: (liveStats?.messages    ?? 0).toLocaleString(), color: 'text-blue-500',   bg: 'bg-blue-50',   icon: MessageSquareX },
-                { label: 'Активных',       val: (liveStats?.activeUsers ?? 0).toString(),        color: 'text-indigo-500', bg: 'bg-indigo-50', icon: Users          },
-                { label: 'Вступили',       val: `+${liveStats?.joined   ?? 0}`,                  color: 'text-green-500',  bg: 'bg-green-50',  icon: TrendingUp     },
-                { label: 'Вышли',          val: `-${liveStats?.left     ?? 0}`,                  color: 'text-red-500',    bg: 'bg-red-50',    icon: TrendingDown   },
-              ].map((m, i) => (
-                <div key={i} className="bg-white p-6 rounded-[2rem] border border-gray-100 shadow-sm active:scale-95 transition-all duration-200"
-                  style={{ animationDelay: `${i * 60}ms` }}>
-                  <div className={`w-9 h-9 ${m.bg} rounded-2xl flex items-center justify-center mb-3`}>
-                    <m.icon size={18} className={m.color} />
-                  </div>
-                  <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block mb-1">{m.label}</span>
-                  <span className="text-3xl font-black text-gray-900 leading-none">{m.val}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* ── Банк ── */}
-            <div className={`bg-gradient-to-r from-indigo-600 to-blue-600 p-6 rounded-[2rem] text-white shadow-xl transition-all duration-500 ${statsLoading ? 'opacity-40' : 'opacity-100'}`}>
-              <span className="text-[10px] font-black opacity-60 uppercase tracking-widest block mb-1 flex items-center gap-1">
-                <Wallet size={10} /> Баланс банка
-              </span>
-              <span className="text-3xl font-black tracking-tight">
-                {(liveStats?.bankBalance ?? 0).toLocaleString()} 💳
-              </span>
-            </div>
-
-            {/* ── Кнопка Excel ── */}
-            <button onClick={exportExcel}
-              className="w-full flex items-center justify-center space-x-3 bg-white border-2 border-gray-100 text-gray-700 p-5 rounded-[2rem] font-black active:scale-95 transition-all duration-200 hover:border-green-200 hover:text-green-700 hover:bg-green-50">
-              <FileSpreadsheet size={22} className="text-green-600" />
-              <span>Экспорт в Excel — {PERIODS.find(p=>p.id===statsPeriod)?.label}</span>
-              <Download size={18} className="text-gray-400" />
-            </button>
-          </div>
+      case 'journal': {
+        // Суб-модули Журнала подключаются из хаба «Модули» как journal:<type>.
+        // Видны только чипы/события подключённых типов (1 подключил → 1 виден).
+        const enabledJ = new Set(
+          [...connectedModules].filter(x => x.startsWith('journal:')).map(x => x.slice(8))
         );
-
-      case 'journal':
+        const jTags = logTags.filter(t =>
+          t.id === 'all' ? enabledJ.size > 1 : enabledJ.has(t.id)
+        );
         return (
           <div className="space-y-4 pb-24">
-            <div className="flex space-x-2 overflow-x-auto pb-2 scrollbar-hide -mx-4 px-4">
-              {logTags.map(tag => (
-                <button key={tag.id} onClick={() => setLogFilter(tag.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-[10px] uppercase border transition-all ${logFilter === tag.id ? 'bg-gray-900 text-white border-gray-900 scale-105 shadow-md' : 'bg-white text-gray-400 border-gray-100'}`}>{tag.label}</button>
+            {enabledJ.size === 0 && (
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
+                Подключите суб-модули Журнала в разделе «Модули»
+              </div>
+            )}
+            <div className="flex space-x-2 overflow-x-auto pt-2 pb-2 scrollbar-hide -mx-4 px-4">
+              {jTags.map(tag => (
+                <button key={tag.id} onClick={() => setLogFilter(tag.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-[10px] uppercase border transition-all ${logFilter === tag.id ? 'bg-cta text-white border-cta scale-105 shadow-md' : 'bg-sff text-txd border-bd'}`}>{tag.label}</button>
               ))}
             </div>
             {logsLoading && (
-              <div className="text-center py-8 text-gray-400 font-black text-sm">
+              <div className="text-center py-8 text-txd font-black text-sm">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2" /> Загрузка журнала...
               </div>
             )}
             {!logsLoading && logs.length === 0 && (
-              <div className="text-center py-12 text-gray-300 font-black text-sm uppercase tracking-widest">
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
                 Событий пока нет
               </div>
             )}
-            {logs.filter(l => logFilter === 'all' || l.type === logFilter).map(log => {
+            {logs.filter(l => enabledJ.has(l.type) && (logFilter === 'all' || l.type === logFilter)).map(log => {
               const TAG_STYLE = {
-                trigger:      'bg-orange-50 text-orange-600 border border-orange-200',
-                mute:         'bg-yellow-50 text-yellow-700 border border-yellow-200',
-                unmute:       'bg-lime-50 text-lime-700 border border-lime-200',
-                ban:          'bg-red-50 text-red-600 border border-red-200',
-                unban:        'bg-blue-50 text-blue-600 border border-blue-200',
-                kick:         'bg-rose-50 text-rose-600 border border-rose-200',
-                warn:         'bg-amber-50 text-amber-600 border border-amber-200',
-                join:         'bg-green-50 text-green-600 border border-green-200',
-                leave:        'bg-gray-100 text-gray-500 border border-gray-200',
-                blacklist:    'bg-slate-100 text-slate-600 border border-slate-300',
-                admin:        'bg-indigo-50 text-indigo-600 border border-indigo-200',
-                survey:       'bg-purple-50 text-purple-600 border border-purple-200',
-                profile:      'bg-teal-50 text-teal-600 border border-teal-200',
-                activity:     'bg-cyan-50 text-cyan-600 border border-cyan-200',
-                photo:        'bg-pink-50 text-pink-600 border border-pink-200',
+                trigger:      'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                mute:         'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                unmute:       'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                ban:          'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]',
+                unban:        'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                kick:         'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_40%,transparent)]',
+                warn:         'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                join:         'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                leave:        'bg-sf2 text-txd border border-bd2',
+                blacklist:    'bg-sf2 text-txd border border-bd2',
+                admin:        'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                survey:       'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple border border-[color-mix(in_oklab,var(--purple)_40%,transparent)]',
+                profile:      'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                activity:     'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                photo:        'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_40%,transparent)]',
               };
-              const tagStyle = TAG_STYLE[log.type] || 'bg-blue-50 text-blue-600 border border-blue-200';
+              const tagStyle = TAG_STYLE[log.type] || 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]';
               const isExpanded = expandedLogs.has(log.id);
               const hasActions = ['join','ban','mute','blacklist'].includes(log.type);
               return (
-                <div key={log.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm animate-in slide-in-from-bottom-2 overflow-hidden">
+                <div key={log.id} className="bg-sff rounded-2xl border border-bd shadow-sm animate-in slide-in-from-bottom-2 overflow-hidden">
 
                   {/* ── Шапка: аватар + имя + тег + стрелка ── */}
                   <div
@@ -1207,12 +1194,12 @@ export default function App() {
                   >
                     <UserAvatar userId={log.user_id} name={log.user} size={34}/>
                     <div className="flex-1 min-w-0">
-                      <div className="font-black text-[12px] text-gray-900 truncate leading-tight">{log.user || '—'}</div>
-                      <div className="text-[9px] text-gray-400 font-mono">{log.time?.replace('T',' ')}</div>
+                      <div className="font-black text-[12px] text-tx truncate leading-tight">{log.user || '—'}</div>
+                      <div className="text-[9px] text-lbl font-mono">{log.time?.replace('T',' ')}</div>
                     </div>
                     <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
                     {hasActions && (
-                      <button className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isExpanded ? 'bg-gray-100 text-gray-500' : 'text-gray-300 hover:text-gray-400'}`}>
+                      <button className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isExpanded ? 'bg-ih text-txd' : 'text-lbl hover:text-txd'}`}>
                         {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
                       </button>
                     )}
@@ -1227,14 +1214,14 @@ export default function App() {
                     }}
                   >
                     <div
-                      className="journal-html text-[11.5px] text-gray-600 leading-snug break-words [&_a]:text-blue-500 [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-gray-800"
+                      className="journal-html text-[11.5px] text-txd leading-snug break-words [&_a]:text-cta [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-tx"
                       dangerouslySetInnerHTML={{ __html: log.text }}
                     />
                   </div>
 
                   {/* ── Кнопки действий — только при раскрытии ── */}
                   {isExpanded && (
-                    <div className="px-3 pb-3 space-y-1.5 border-t border-gray-50 pt-2">
+                    <div className="px-3 pb-3 space-y-1.5 border-t border-bd pt-2">
                       <a
                         href={`tg://user?id=${log.user_id}`}
                         className="flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2.5 rounded-xl font-black text-[9px] uppercase shadow-sm shadow-blue-100 active:scale-[0.98] transition-all"
@@ -1242,14 +1229,14 @@ export default function App() {
                         <MessageCircle size={12}/><span>Написать в ЛС</span>
                       </a>
                       <div className="grid grid-cols-2 gap-1.5">
-                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')} className="flex items-center justify-center gap-1 bg-green-50 text-green-700 py-2 rounded-xl font-black text-[9px] uppercase border border-green-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
-                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
-                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}  className="flex items-center justify-center gap-1 bg-blue-50 text-blue-700 py-2 rounded-xl font-black text-[9px] uppercase border border-blue-200 active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
-                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
-                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
-                        {log.type === 'join'      && <button className="flex items-center justify-center gap-1 bg-indigo-50 text-indigo-700 py-2 rounded-xl font-black text-[9px] uppercase border border-indigo-200 active:scale-95 transition-all"><UserSearch size={12}/><span>Досье</span></button>}
-                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-red-50 text-red-700 py-2 rounded-xl font-black text-[9px] uppercase border border-red-200 active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
-                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-rose-50 text-rose-700 py-2 rounded-xl font-black text-[9px] uppercase border border-rose-200 active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')} className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--ok)_40%,transparent)] active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}  className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--pink)_40%,transparent)] active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'join'      && <button className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] active:scale-95 transition-all"><UserSearch size={12}/><span>Досье</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--pink)_40%,transparent)] active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
                       </div>
                     </div>
                   )}
@@ -1258,31 +1245,32 @@ export default function App() {
             })}
           </div>
         );
+      }
 
       case 'shipper':
         return (
           <div className="space-y-6 pb-24 animate-in fade-in duration-500">
-            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm flex items-center justify-between">
+            <div className="bg-sff rounded-[2.5rem] p-6 border border-bd shadow-sm flex items-center justify-between">
               <div>
-                <h3 className="font-black text-xl text-gray-900 mb-1">Модуль Шиппер</h3>
-                <span className={`text-[10px] font-black uppercase tracking-widest ${shipperSettings.enabled ? 'text-green-500' : 'text-red-500'}`}>
+                <h3 className="font-black text-xl text-tx mb-1">Модуль Шиппер</h3>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${shipperSettings.enabled ? 'text-ok' : 'text-danger'}`}>
                    {shipperSettings.enabled ? '● Активен' : '○ Отключен'}
                 </span>
               </div>
-              <button onClick={() => setShipperSettings({...shipperSettings, enabled: !shipperSettings.enabled})} className={`w-14 h-8 rounded-full transition-colors relative ${shipperSettings.enabled ? 'bg-green-500' : 'bg-gray-200'}`}>
-                <div className={`absolute top-1 w-6 h-6 bg-white rounded-full transition-all ${shipperSettings.enabled ? 'left-7' : 'left-1'}`} />
+              <button onClick={() => setShipperSettings({...shipperSettings, enabled: !shipperSettings.enabled})} className={`w-14 h-8 rounded-full transition-colors relative ${shipperSettings.enabled ? 'bg-green-500' : 'bg-bd2'}`}>
+                <div className={`absolute top-1 w-6 h-6 bg-sff rounded-full transition-all ${shipperSettings.enabled ? 'left-7' : 'left-1'}`} />
               </button>
             </div>
 
             <div className="grid grid-cols-1 gap-3">
-              <h3 className="px-4 text-[10px] font-black text-gray-400 uppercase tracking-widest">Категории</h3>
+              <h3 className="px-4 text-[10px] font-black text-lbl uppercase tracking-widest">Категории</h3>
               {shipperSettings.categories.map(cat => (
-                <div key={cat.id} className="bg-white p-5 rounded-3xl border border-gray-100 shadow-sm flex items-center justify-between active:scale-[0.98] transition-all">
+                <div key={cat.id} className="bg-sff p-5 rounded-3xl border border-bd shadow-sm flex items-center justify-between active:scale-[0.98] transition-all">
                   <div className="flex items-center space-x-4">
-                    <div className="w-12 h-12 bg-gray-50 rounded-2xl flex items-center justify-center text-xl">{cat.id === 'hot18' ? '🔥' : cat.id === 'funny' ? '😂' : '💘'}</div>
-                    <span className="font-black text-gray-900">{cat.name}</span>
+                    <div className="w-12 h-12 bg-sf2 rounded-2xl flex items-center justify-center text-xl">{cat.id === 'hot18' ? '🔥' : cat.id === 'funny' ? '😂' : '💘'}</div>
+                    <span className="font-black text-tx">{cat.name.replace(/^[^\p{L}\p{N}]+/u, '')}</span>
                   </div>
-                  <ChevronRight size={20} className="text-gray-300" />
+                  <ChevronRight size={20} className="text-lbl" />
                 </div>
               ))}
             </div>
@@ -1292,7 +1280,7 @@ export default function App() {
                   <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center"><Dices size={14} className="mr-2"/> Режим отбора</h4>
                   <div className="grid grid-cols-2 gap-2">
                     {['active_48', 'active_72', 'inactive', 'random'].map(m => (
-                      <button key={m} onClick={() => setShipperSettings({...shipperSettings, mode: m})} className={`p-4 rounded-2xl font-black text-[9px] uppercase border transition-all ${shipperSettings.mode === m ? 'bg-blue-600 border-blue-600 text-white' : 'bg-gray-800 border-gray-700 text-gray-400'}`}>
+                      <button key={m} onClick={() => setShipperSettings({...shipperSettings, mode: m})} className={`p-4 rounded-2xl font-black text-[9px] uppercase border transition-all ${shipperSettings.mode === m ? 'bg-blue-600 border-blue-600 text-white' : 'bg-gray-800 border-gray-700 text-lbl'}`}>
                         {m === 'active_48' ? '48ч' : m === 'active_72' ? '72ч' : m === 'inactive' ? 'Спящие' : 'Рандом'}
                       </button>
                     ))}
@@ -1306,26 +1294,26 @@ export default function App() {
         return (
           <div className="space-y-6 pb-24 animate-in fade-in duration-500">
              <div className="grid grid-cols-1 gap-4">
-                <div className="bg-white p-8 rounded-[2.5rem] border border-gray-100 shadow-sm flex items-center justify-between">
+                <div className="bg-sff p-8 rounded-[2.5rem] border border-bd shadow-sm flex items-center justify-between">
                    <div>
-                      <span className="text-[10px] font-black text-blue-500 uppercase block mb-2">Курс Пульса</span>
+                      <span className="text-[10px] font-black text-cta uppercase block mb-2">Курс Пульса</span>
                       <div className="flex items-baseline space-x-2">
-                         <span className="text-5xl font-black text-gray-900">{liveStats?.pulseRate ?? systemStats.pulseRate}</span>
-                         <span className="text-gray-400 font-bold uppercase text-xs"> manual</span>
+                         <span className="text-5xl font-black text-tx">{liveStats?.pulseRate ?? systemStats.pulseRate}</span>
+                         <span className="text-lbl font-bold uppercase text-xs"> manual</span>
                       </div>
                    </div>
-                   <button className="p-5 bg-blue-50 text-blue-600 rounded-3xl"><Edit size={24}/></button>
+                   <button className="p-5 bg-[color-mix(in_oklab,var(--cta)_14%,transparent)] text-cta rounded-3xl"><Edit size={24}/></button>
                 </div>
 
              </div>
 
              {/* ─── АДМИНИСТРАТОРЫ ─── */}
-             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd space-y-4">
                <div className="flex items-center justify-between">
-                 <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                   <ShieldCheck className="mr-3 text-green-500" size={16}/> Администраторы
+                 <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                   <ShieldCheck className="mr-3 text-ok" size={16}/> Администраторы
                  </h3>
-                 <button onClick={fetchStaff} className="text-xs text-gray-400 font-bold px-3 py-1.5 bg-gray-50 rounded-xl active:scale-95 transition-all">
+                 <button onClick={fetchStaff} className="text-xs text-txd font-bold px-3 py-1.5 bg-sf2 rounded-xl active:scale-95 transition-all">
                    Обновить
                  </button>
                </div>
@@ -1337,50 +1325,50 @@ export default function App() {
                    onChange={e => { setNewAdminId(e.target.value); setStaffError(''); }}
                    onKeyDown={e => e.key === 'Enter' && addAdmin()}
                    placeholder="ID или @username"
-                   className="flex-1 bg-gray-50 border border-gray-100 rounded-2xl px-4 py-3 text-sm font-bold focus:outline-none focus:border-blue-300"
+                   className="flex-1 bg-sf2 border border-bd rounded-2xl px-4 py-3 text-sm font-bold text-tx placeholder:text-lbl focus:outline-none focus:border-cta"
                  />
                  <button
                    onClick={addAdmin}
                    disabled={staffAdding || !newAdminId.trim()}
-                   className="px-5 py-3 bg-gray-900 text-white rounded-2xl font-black text-xs disabled:opacity-40 active:scale-95 transition-all flex items-center space-x-1"
+                   className="px-5 py-3 bg-cta text-white rounded-2xl font-black text-xs disabled:opacity-40 active:scale-95 transition-all flex items-center space-x-1"
                  >
                    {staffAdding ? <Loader2 size={14} className="animate-spin"/> : <PlusCircle size={14}/>}
                    <span>Добавить</span>
                  </button>
                </div>
-               {staffError && <p className="text-xs text-red-500 font-bold px-1">{staffError}</p>}
+               {staffError && <p className="text-xs text-danger font-bold px-1">{staffError}</p>}
 
                {/* Список */}
                {staffLoading ? (
-                 <div className="flex items-center justify-center py-6 text-gray-400">
+                 <div className="flex items-center justify-center py-6 text-txd">
                    <Loader2 size={18} className="animate-spin mr-2"/> Загрузка...
                  </div>
                ) : (
                  <div className="space-y-2">
                    {staffList.length === 0 && (
-                     <p className="text-center text-gray-300 font-black text-xs uppercase tracking-widest py-4">
+                     <p className="text-center text-lbl font-black text-xs uppercase tracking-widest py-4">
                        Нет данных
                      </p>
                    )}
                    {staffList.map(m => (
-                     <div key={m.user_id} className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl">
+                     <div key={m.user_id} className="flex items-center justify-between p-4 bg-sf2 rounded-2xl">
                        <div>
-                         <div className="font-black text-sm text-gray-900">
+                         <div className="font-black text-sm text-tx">
                            {m.username ? `@${m.username}` : `ID ${m.user_id}`}
                            {m.first_name ? ` · ${m.first_name}` : ''}
                          </div>
                          <div className="flex items-center gap-2 mt-1">
-                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${m.is_owner ? 'bg-yellow-100 text-yellow-700' : 'bg-green-100 text-green-700'}`}>
+                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${m.is_owner ? 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn' : 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok'}`}>
                              {m.is_owner ? '👑 Владелец' : '🛡 Админ'}
                            </span>
-                           <span className="text-[9px] text-gray-400 font-mono">{m.user_id}</span>
+                           <span className="text-[9px] text-lbl font-mono">{m.user_id}</span>
                          </div>
                        </div>
                        {!m.is_owner && (
                          <button
                            onClick={() => removeAdmin(m.user_id)}
                            disabled={staffRemoving === m.user_id}
-                           className="p-2.5 bg-red-50 text-red-500 rounded-xl active:scale-95 transition-all disabled:opacity-40"
+                           className="p-2.5 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger rounded-xl active:scale-95 transition-all disabled:opacity-40"
                          >
                            {staffRemoving === m.user_id
                              ? <Loader2 size={15} className="animate-spin"/>
@@ -1394,21 +1382,21 @@ export default function App() {
              </div>
 
              {/* ─── УПРАВЛЕНИЕ ФУНКЦИЯМИ ─── */}
-             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd">
                <div className="flex items-center justify-between mb-5">
-                 <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                   <Wrench className="mr-3 text-purple-500" size={16}/> Функции бота
+                 <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                   <Wrench className="mr-3 text-purple" size={16}/> Функции бота
                  </h3>
                  <button
                    onClick={fetchFeatures}
-                   className="text-xs text-gray-400 font-bold px-3 py-1.5 bg-gray-50 rounded-xl active:scale-95 transition-all"
+                   className="text-xs text-txd font-bold px-3 py-1.5 bg-sf2 rounded-xl active:scale-95 transition-all"
                  >
                    Обновить
                  </button>
                </div>
 
                {featuresLoading && (
-                 <div className="flex items-center justify-center py-8 text-gray-400">
+                 <div className="flex items-center justify-center py-8 text-txd">
                    <Loader2 size={20} className="animate-spin mr-2"/> Загрузка...
                  </div>
                )}
@@ -1416,16 +1404,16 @@ export default function App() {
                {!featuresLoading && (
                  <div className="space-y-2">
                    {botFeatures.map(f => (
-                     <div key={f.id} className="flex items-center justify-between p-3.5 bg-gray-50 rounded-2xl">
-                       <span className="font-bold text-sm text-gray-800">{f.name}</span>
+                     <div key={f.id} className="flex items-center justify-between p-3.5 bg-sf2 rounded-2xl">
+                       <span className="font-bold text-sm text-tx">{f.name}</span>
                        <button
                          onClick={() => toggleFeature(f.id)}
                          disabled={togglingFeature === f.id}
                          className={`relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
-                           f.enabled ? 'bg-green-500' : 'bg-gray-300'
+                           f.enabled ? 'bg-ok' : 'bg-bd2'
                          } ${togglingFeature === f.id ? 'opacity-50' : 'active:scale-95'}`}
                        >
-                         <span className={`absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-all duration-200 ${
+                         <span className={`absolute top-0.5 w-5 h-5 bg-sff rounded-full shadow transition-all duration-200 ${
                            f.enabled ? 'left-[calc(100%-1.375rem)]' : 'left-0.5'
                          }`}/>
                        </button>
@@ -1436,9 +1424,9 @@ export default function App() {
              </div>
 
              {/* ─── СТИЛЬ ЦИТАТ ЖУРНАЛА ─── */}
-             <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 space-y-4">
-               <h3 className="font-black text-gray-900 text-sm uppercase flex items-center">
-                 <ScrollText className="mr-3 text-orange-400" size={16}/> Стиль цитат журнала
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd space-y-4">
+               <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                 <ScrollText className="mr-3 text-warn" size={16}/> Стиль цитат журнала
                </h3>
 
                {/* Превью */}
@@ -1449,27 +1437,27 @@ export default function App() {
                    '--q-stripe-2': quoteCfg.stripeMode === 'alternating' ? quoteCfg.stripe2 : quoteCfg.stripe1,
                  }}
                >
-                 <p className="text-[10px] text-gray-400 font-bold uppercase mb-1">Превью:</p>
+                 <p className="text-[10px] text-lbl font-bold uppercase mb-1">Превью:</p>
                  <blockquote>Пример текста нарушения от пользователя — это цитата сообщения</blockquote>
                </div>
 
                {/* Цвет фона */}
-               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
-                 <span className="text-sm font-bold text-gray-700">Фон цитаты</span>
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">Фон цитаты</span>
                  <div className="flex items-center gap-2">
                    <input type="color" value={quoteCfg.bg} onChange={e => setQuoteCfg(p => ({...p, bg: e.target.value}))}
-                     className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
-                   <span className="text-xs font-mono text-gray-400">{quoteCfg.bg}</span>
+                     className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-lbl">{quoteCfg.bg}</span>
                  </div>
                </div>
 
                {/* Режим полоски */}
-               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
-                 <span className="text-sm font-bold text-gray-700">Полоска</span>
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">Полоска</span>
                  <div className="flex gap-2">
                    {['solid', 'alternating'].map(m => (
                      <button key={m} onClick={() => setQuoteCfg(p => ({...p, stripeMode: m}))}
-                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${quoteCfg.stripeMode === m ? 'bg-gray-900 text-white' : 'bg-white text-gray-400 border border-gray-200'}`}>
+                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${quoteCfg.stripeMode === m ? 'bg-gray-900 text-white' : 'bg-sff text-lbl border border-bd2'}`}>
                        {m === 'solid' ? 'Одноцветная' : 'Чередование'}
                      </button>
                    ))}
@@ -1477,23 +1465,23 @@ export default function App() {
                </div>
 
                {/* Цвет 1 */}
-               <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
-                 <span className="text-sm font-bold text-gray-700">{quoteCfg.stripeMode === 'alternating' ? 'Цвет 1' : 'Цвет полоски'}</span>
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">{quoteCfg.stripeMode === 'alternating' ? 'Цвет 1' : 'Цвет полоски'}</span>
                  <div className="flex items-center gap-2">
                    <input type="color" value={quoteCfg.stripe1} onChange={e => setQuoteCfg(p => ({...p, stripe1: e.target.value}))}
-                     className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
-                   <span className="text-xs font-mono text-gray-400">{quoteCfg.stripe1}</span>
+                     className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-lbl">{quoteCfg.stripe1}</span>
                  </div>
                </div>
 
                {/* Цвет 2 — только при alternating */}
                {quoteCfg.stripeMode === 'alternating' && (
-                 <div className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
-                   <span className="text-sm font-bold text-gray-700">Цвет 2</span>
+                 <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                   <span className="text-sm font-bold text-tx">Цвет 2</span>
                    <div className="flex items-center gap-2">
                      <input type="color" value={quoteCfg.stripe2} onChange={e => setQuoteCfg(p => ({...p, stripe2: e.target.value}))}
-                       className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0.5"/>
-                     <span className="text-xs font-mono text-gray-400">{quoteCfg.stripe2}</span>
+                       className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                     <span className="text-xs font-mono text-lbl">{quoteCfg.stripe2}</span>
                    </div>
                  </div>
                )}
@@ -1508,12 +1496,12 @@ export default function App() {
                  Сохранить настройки
                </button>
                {!isOwnerOrDeveloper && (
-                 <p className="text-center text-xs font-semibold text-gray-500">
+                 <p className="text-center text-xs font-semibold text-txd">
                    Только владелец или разработчик может сохранить внешний вид цитат.
                  </p>
                )}
                {quoteSaveMsg && (
-                 <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-green-600' : 'text-red-500'}`}>
+                 <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-ok' : 'text-danger'}`}>
                    {quoteSaveMsg}
                  </p>
                )}
@@ -1747,12 +1735,12 @@ export default function App() {
             <div className="pb-24 animate-in fade-in duration-300">
 
               {/* ── Шапка редактора ── */}
-              <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5 mb-5 space-y-4">
+              <div className="bg-sff rounded-[2rem] border border-bd shadow-sm p-5 mb-5 space-y-4">
 
                 {/* Кнопки действий */}
                 <div className="flex items-center gap-2">
                   <button onClick={() => { setLeaveTarget(null); setShowLeaveConfirm(true); }}
-                    className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all mr-auto">
+                    className="p-2 text-lbl hover:text-txd active:scale-90 transition-all mr-auto">
                     <X size={20}/>
                   </button>
                   <button onClick={saveTrigger}
@@ -1761,21 +1749,21 @@ export default function App() {
                   </button>
                   <div className="relative">
                     <button onClick={() => setShowTriggerEditMenu(v=>!v)}
-                      className="px-3 py-2.5 bg-gray-100 text-gray-500 rounded-xl font-black text-sm active:scale-95 transition-all hover:bg-gray-200">
+                      className="px-3 py-2.5 bg-sf2 text-txd rounded-xl font-black text-sm active:scale-95 transition-all hover:bg-bd2">
                       ···
                     </button>
                     {showTriggerEditMenu && (
-                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-10 overflow-hidden"
+                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-sff border border-bd rounded-2xl shadow-xl z-10 overflow-hidden"
                         onClick={() => setShowTriggerEditMenu(false)}>
-                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed border-b border-gray-50">
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-lbl cursor-not-allowed border-b border-bd">
                           <FileText size={14} className="text-gray-200"/>
                           <span>Сохранить и продолжить</span>
-                          <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                          <span className="ml-auto text-[9px] bg-sf2 text-lbl px-1.5 py-0.5 rounded font-black">***</span>
                         </button>
-                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-gray-300 cursor-not-allowed">
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-lbl cursor-not-allowed">
                           <Download size={14} className="text-gray-200"/>
                           <span>Экспортировать триггер</span>
-                          <span className="ml-auto text-[9px] bg-gray-100 text-gray-300 px-1.5 py-0.5 rounded font-black">***</span>
+                          <span className="ml-auto text-[9px] bg-sf2 text-lbl px-1.5 py-0.5 rounded font-black">***</span>
                         </button>
                       </div>
                     )}
@@ -1790,40 +1778,40 @@ export default function App() {
 
                 {/* Имя триггера */}
                 <div>
-                  <p className="text-xs font-black text-gray-800 mb-0.5">
-                    Имя триггера <span className="text-red-500">*</span>
+                  <p className="text-xs font-black text-tx mb-0.5">
+                    Имя триггера <span className="text-danger">*</span>
                   </p>
-                  <p className="text-[10px] text-gray-400 font-medium mb-2">
+                  <p className="text-[10px] text-lbl font-medium mb-2">
                     Позволяет быстро найти нужный триггер и включить его
                   </p>
                   <input type="text" placeholder="Например: Мут за спам"
                     value={editingTrigger.name} onChange={e => upd('name', e.target.value)}
-                    className="w-full px-4 py-3.5 bg-gray-50 border-2 border-gray-100 rounded-2xl font-black text-base outline-none focus:border-blue-200 transition-all"/>
+                    className="w-full px-4 py-3.5 bg-sf2 border-2 border-bd rounded-2xl font-black text-base outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] transition-all"/>
                 </div>
               </div>
 
               {/* ── Вероятность + Лимит срабатываний ── */}
               <div className="grid grid-cols-2 gap-3 mb-5">
-                <div className="bg-amber-50 p-4 rounded-2xl border border-amber-100">
+                <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] p-4 rounded-2xl border border-[color-mix(in_oklab,var(--warn)_30%,transparent)]">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest flex items-center gap-1">
+                    <span className="text-[10px] font-black text-warn uppercase tracking-widest flex items-center gap-1">
                       <Percent size={11}/> Шанс срабатывания
                     </span>
-                    <span className="text-xl font-black text-amber-800">{editingTrigger.probability}%</span>
+                    <span className="text-xl font-black text-warn">{editingTrigger.probability}%</span>
                   </div>
                   <input type="range" min="1" max="100" value={editingTrigger.probability}
                     onChange={e => upd('probability', parseInt(e.target.value))}
-                    className="w-full h-2 bg-amber-200 rounded-full appearance-none cursor-pointer accent-amber-600"/>
+                    className="w-full h-2 bg-[color-mix(in_oklab,var(--warn)_24%,transparent)] rounded-full appearance-none cursor-pointer accent-amber-600"/>
                 </div>
-                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                <div className="bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] p-4 rounded-2xl border border-[color-mix(in_oklab,var(--cta)_30%,transparent)]">
                   <div className="flex items-center justify-between mb-2">
-                    <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">Лимит срабатываний</span>
+                    <span className="text-[10px] font-black text-cta uppercase tracking-widest">Лимит срабатываний</span>
                     <span className="text-[10px] font-bold text-blue-400">{(editingTrigger.fire_limit || 0) === 0 ? '∞' : editingTrigger.fire_limit}</span>
                   </div>
                   <input type="number" min="0" max="9999"
                     value={editingTrigger.fire_limit || 0}
                     onChange={e => upd('fire_limit', parseInt(e.target.value) || 0)}
-                    className="w-full px-3 py-2 bg-white border border-blue-200 rounded-xl font-black text-sm outline-none focus:border-blue-400 transition-all text-center"/>
+                    className="w-full px-3 py-2 bg-sff border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl font-black text-sm outline-none focus:border-blue-400 transition-all text-center"/>
                   <p className="text-[9px] text-blue-400 mt-1 text-center">0 = без лимита</p>
                 </div>
               </div>
@@ -1835,7 +1823,7 @@ export default function App() {
               <div className="space-y-3">
                 {/* Заголовок блока */}
                 <div className="flex items-center gap-2 px-1">
-                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Условия</span>
+                  <span className="text-[10px] font-black text-txd uppercase tracking-widest">Условия</span>
                   <div className="relative">
                     <button
                       onClick={() => setCondTooltip(condTooltip === 'block' ? null : 'block')}
@@ -1850,7 +1838,7 @@ export default function App() {
                     )}
                   </div>
                   {conditionGroups.length > 1 && (
-                    <span className="ml-auto text-[9px] font-black text-gray-400 bg-gray-100 px-2 py-0.5 rounded-full uppercase">
+                    <span className="ml-auto text-[9px] font-black text-lbl bg-sf2 px-2 py-0.5 rounded-full uppercase">
                       {conditionGroups.length} группы
                     </span>
                   )}
@@ -1859,23 +1847,23 @@ export default function App() {
                 {/* Группы условий */}
                 {conditionGroups.map((group, gIdx) => {
                   return (
-                    <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+                    <div key={group.id} className="bg-sff rounded-2xl border border-bd shadow-sm">
                       {/* Шапка группы */}
-                      <div className="flex items-center gap-2 px-4 py-2.5 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
-                        <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
+                        <span className="text-[10px] font-black text-txd uppercase tracking-widest flex-1">
                           {conditionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Условия'}
                           {conditionGroups.length > 1 && gIdx < conditionGroups.length - 1 && (
-                            <span className="ml-2 text-[9px] font-black text-blue-500 bg-blue-50 px-1.5 py-0.5 rounded-full">ИЛИ ↓</span>
+                            <span className="ml-2 text-[9px] font-black text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] px-1.5 py-0.5 rounded-full">ИЛИ ↓</span>
                           )}
                         </span>
                         <div className="flex items-center gap-0.5">
                           <button onClick={() => moveCondGroup(gIdx, -1)} disabled={gIdx === 0}
-                            className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                            className="p-1 text-lbl hover:text-txd disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
                           <button onClick={() => moveCondGroup(gIdx, 1)} disabled={gIdx === conditionGroups.length - 1}
-                            className="p-1 text-gray-300 hover:text-gray-500 disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                            className="p-1 text-lbl hover:text-txd disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
                           {conditionGroups.length > 1 && (
                             <button onClick={() => removeCondGroup(gIdx)}
-                              className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all ml-0.5">
+                              className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all ml-0.5">
                               <Trash2 size={12}/>
                             </button>
                           )}
@@ -1885,7 +1873,7 @@ export default function App() {
                       {/* Условия внутри группы */}
                       <div className="p-3">
                         {group.conditions.length === 0 && (
-                          <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
+                          <div className="text-center py-4 text-lbl text-[11px] font-black uppercase tracking-widest">
                             Список пуст
                           </div>
                         )}
@@ -1898,35 +1886,35 @@ export default function App() {
                             {cIdx > 0 && (
                               <div className="flex justify-center my-3">
                                 <div className="flex flex-col items-center">
-                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
-                                  <div className="w-px h-6 bg-blue-100"/>
-                                  <div className="w-2 h-2 rounded-full bg-blue-200"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]"/>
+                                  <div className="w-px h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]"/>
                                 </div>
                               </div>
                             )}
-                          <div className="bg-white rounded-2xl border border-gray-200"
+                          <div className="bg-sff rounded-2xl border border-bd2"
                             style={condOpenDropdown && condOpenDropdown.endsWith(`_${gIdx}_${cIdx}`) ? {position:'relative', zIndex:9999} : {}}>
                             {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
                               <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
-                                className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all flex-shrink-0">
+                                className="p-1 text-lbl hover:text-txd active:scale-90 transition-all flex-shrink-0">
                                 <Settings size={12}/>
                               </button>
-                              <span className="text-[11px] font-black text-gray-700 flex-1">Условие {cIdx + 1}</span>
+                              <span className="text-[11px] font-black text-tx flex-1">Условие {cIdx + 1}</span>
                               {cond.placeholder_key && (
-                                <span className="text-[9px] font-bold text-purple-500 bg-purple-50 px-1.5 py-0.5 rounded-full">%{cond.placeholder_key}%</span>
+                                <span className="text-[9px] font-bold text-purple bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] px-1.5 py-0.5 rounded-full">%{cond.placeholder_key}%</span>
                               )}
                               <div className="flex items-center gap-0.5">
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, -1)} disabled={cIdx === 0}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                                   <ChevronUp size={14}/>
                                 </button>
                                 <button onClick={() => moveCondInGroup(gIdx, cIdx, 1)} disabled={cIdx === group.conditions.length - 1}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                                   <ChevronDown size={14}/>
                                 </button>
                                 <button onClick={() => removeCond(gIdx, cIdx)}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-red-300 hover:text-red-500 hover:bg-red-50 active:scale-90 transition-all ml-0.5">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-red-300 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] active:scale-90 transition-all ml-0.5">
                                   <Trash2 size={11}/>
                                 </button>
                               </div>
@@ -1939,7 +1927,7 @@ export default function App() {
                                 <>
                                   {/* Заголовок "Тип ответа" + ? */}
                                   <div className="flex items-center gap-1.5 relative">
-                                    <span className="text-[13px] font-black text-gray-800">Тип ответа</span>
+                                    <span className="text-[13px] font-black text-tx">Тип ответа</span>
                                     <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_info_${gIdx}_${cIdx}` ? null : `rt_info_${gIdx}_${cIdx}`); }}
                                       className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
                                     {condTooltip === `rt_info_${gIdx}_${cIdx}` && (
@@ -1948,13 +1936,13 @@ export default function App() {
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                                  <p className="text-[10px] text-warn font-semibold -mt-1">
                                     Сигнал для вызова триггера: 📋 Сообщение
                                   </p>
                                   {/* Значения условия (multi-select) */}
                                   <div onClick={e => e.stopPropagation()}>
                                     <div className="flex items-center gap-1.5 mb-2">
-                                      <p className="text-[9px] font-black text-gray-500 uppercase">
+                                      <p className="text-[9px] font-black text-txd uppercase">
                                         Значения условия <span className="text-red-400">*</span>
                                       </p>
                                       <button
@@ -1964,32 +1952,32 @@ export default function App() {
                                     <div className="relative">
                                       <button
                                         onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? null : `rt_dd_${gIdx}_${cIdx}`)}
-                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-white border-2 border-gray-200 rounded-xl hover:border-gray-300 transition-all">
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-sff border-2 border-bd2 rounded-xl hover:border-gray-300 transition-all">
                                         <div className="flex flex-wrap gap-1 flex-1">
-                                          {(cond.chips||[]).length === 0 && <span className="text-gray-300 text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).length === 0 && <span className="text-lbl text-sm font-medium">—</span>}
                                           {(cond.chips||[]).map((key, ci) => {
                                             const lbl = REPLY_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
                                             return (
-                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold">
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 text-tx rounded-lg text-[10px] font-bold">
                                                 {lbl}
-                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-gray-400 hover:text-gray-700 leading-none ml-0.5">×</button>
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-lbl hover:text-tx leading-none ml-0.5">×</button>
                                               </span>
                                             );
                                           })}
                                         </div>
-                                        <ChevronDown size={14} className={`text-gray-400 flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                        <ChevronDown size={14} className={`text-lbl flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
                                       </button>
                                       {condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` && (
-                                        <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
                                           {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
                                             <button key={o.key}
                                               onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
-                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-gray-700 hover:bg-gray-50">
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-tx hover:bg-sf2">
                                               {o.label}
                                             </button>
                                           ))}
                                           {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
-                                            <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">Все опции выбраны</div>
+                                            <div className="px-4 py-3 text-xs text-lbl text-center font-medium">Все опции выбраны</div>
                                           )}
                                         </div>
                                       )}
@@ -2000,23 +1988,23 @@ export default function App() {
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                        <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
                                         <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_inv_${gIdx}_${cIdx}` ? null : `rt_inv_${gIdx}_${cIdx}`); }}
                                           className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
                                       </div>
                                       <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
-                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
                                       </button>
                                     </div>
-                                    <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                    <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
                                   </div>
                                 </>
                               ) : cond.type === 'msg_type' ? (
                                 <>
                                   {/* Заголовок "Тип сообщения" + ? */}
                                   <div className="flex items-center gap-1.5 relative">
-                                    <span className="text-[13px] font-black text-gray-800">Тип сообщения</span>
+                                    <span className="text-[13px] font-black text-tx">Тип сообщения</span>
                                     <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_info_${gIdx}_${cIdx}` ? null : `mt_info_${gIdx}_${cIdx}`); }}
                                       className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
                                     {condTooltip === `mt_info_${gIdx}_${cIdx}` && (
@@ -2025,13 +2013,13 @@ export default function App() {
                                       </div>
                                     )}
                                   </div>
-                                  <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                                  <p className="text-[10px] text-warn font-semibold -mt-1">
                                     Сигнал для вызова триггера: 📨 Сообщение
                                   </p>
                                   {/* Мультивыбор типов */}
                                   <div onClick={e => e.stopPropagation()}>
                                     <div className="flex items-center gap-1.5 mb-2">
-                                      <p className="text-[9px] font-black text-gray-500 uppercase">
+                                      <p className="text-[9px] font-black text-txd uppercase">
                                         Тип сообщения <span className="text-red-400">*</span>
                                       </p>
                                       <button
@@ -2041,32 +2029,32 @@ export default function App() {
                                     <div className="relative">
                                       <button
                                         onClick={() => setCondOpenDropdown(condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? null : `mt_dd_${gIdx}_${cIdx}`)}
-                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-white border-2 border-gray-200 rounded-xl hover:border-gray-300 transition-all">
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-sff border-2 border-bd2 rounded-xl hover:border-gray-300 transition-all">
                                         <div className="flex flex-wrap gap-1 flex-1">
-                                          {(cond.chips||[]).length === 0 && <span className="text-gray-300 text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).length === 0 && <span className="text-lbl text-sm font-medium">—</span>}
                                           {(cond.chips||[]).map((key, ci) => {
                                             const lbl = MSG_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
                                             return (
-                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 text-gray-700 rounded-lg text-[10px] font-bold">
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 text-tx rounded-lg text-[10px] font-bold">
                                                 {lbl}
-                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-gray-400 hover:text-gray-700 leading-none ml-0.5">×</button>
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-lbl hover:text-tx leading-none ml-0.5">×</button>
                                               </span>
                                             );
                                           })}
                                         </div>
-                                        <ChevronDown size={14} className={`text-gray-400 flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                        <ChevronDown size={14} className={`text-lbl flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
                                       </button>
                                       {condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` && (
-                                        <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
                                           {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
                                             <button key={o.key}
                                               onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
-                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-gray-700 hover:bg-gray-50">
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-tx hover:bg-sf2">
                                               {o.label}
                                             </button>
                                           ))}
                                           {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
-                                            <div className="px-4 py-3 text-xs text-gray-400 text-center font-medium">Список пуст</div>
+                                            <div className="px-4 py-3 text-xs text-lbl text-center font-medium">Список пуст</div>
                                           )}
                                         </div>
                                       )}
@@ -2077,22 +2065,22 @@ export default function App() {
                                   <div className="space-y-1">
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                        <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
                                         <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_inv_${gIdx}_${cIdx}` ? null : `mt_inv_${gIdx}_${cIdx}`); }}
                                           className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
                                       </div>
                                       <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
-                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
                                       </button>
                                     </div>
-                                    <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                    <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
                                   </div>
                                 </>
                               ) : (<>
                               {/* Сигнал */}
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[12px] font-black text-gray-800">
+                                <span className="text-[12px] font-black text-tx">
                                   {cond.signal === 'message' ? 'Сообщение' : 'Цитируемое'}
                                 </span>
                                 <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `sig_${gIdx}_${cIdx}` ? null : `sig_${gIdx}_${cIdx}`); }}
@@ -2106,22 +2094,22 @@ export default function App() {
 
                               {/* Тип условия */}
                               <div onClick={e => e.stopPropagation()}>
-                                <p className="text-[9px] font-black text-gray-500 uppercase mb-1.5">
+                                <p className="text-[9px] font-black text-txd uppercase mb-1.5">
                                   Выберите тип условия <span className="text-red-400">*</span>
                                 </p>
                                 <div className="relative">
                                   <button
                                     onClick={() => setCondOpenDropdown(condOpenDropdown === typeKey ? null : typeKey)}
-                                    className="w-full flex items-center justify-between px-3 py-2.5 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
+                                    className="w-full flex items-center justify-between px-3 py-2.5 bg-sff border-2 border-bd2 rounded-xl text-sm font-bold text-tx hover:border-gray-300 transition-all">
                                     <span>{COND_TYPE_LABELS[cond.condition] || cond.condition}</span>
-                                    <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${condOpenDropdown === typeKey ? 'rotate-180' : ''}`}/>
+                                    <ChevronDown size={14} className={`text-lbl transition-transform duration-200 ${condOpenDropdown === typeKey ? 'rotate-180' : ''}`}/>
                                   </button>
                                   {condOpenDropdown === typeKey && (
-                                    <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                       {Object.entries(COND_TYPE_LABELS).map(([key, lbl]) => (
                                         <button key={key}
                                           onClick={() => { updCond(gIdx, cIdx, 'condition', key); setCondOpenDropdown(null); }}
-                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.condition === key ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.condition === key ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                           {lbl}
                                         </button>
                                       ))}
@@ -2131,14 +2119,14 @@ export default function App() {
                               </div>
 
                               {/* Сигнал для вызова */}
-                              <p className="text-[10px] text-orange-500 font-semibold -mt-1">
+                              <p className="text-[10px] text-warn font-semibold -mt-1">
                                 Сигнал для вызова триггера: {cond.signal === 'message' ? '📋 Сообщение' : '↩️ Цитируемое'}
                               </p>
 
                               {/* Значения условия (Chips / Text) */}
                               <div onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center gap-1.5 mb-2">
-                                  <p className="text-[9px] font-black text-gray-500 uppercase">
+                                  <p className="text-[9px] font-black text-txd uppercase">
                                     Значения условия <span className="text-red-400">*</span>
                                   </p>
                                   <div className="relative">
@@ -2148,9 +2136,9 @@ export default function App() {
                                       ⚙
                                     </button>
                                     {condOpenDropdown === `kw_${gIdx}_${cIdx}` && (
-                                      <div className="absolute left-0 top-6 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+                                      <div className="absolute left-0 top-6 z-[500] bg-sff border border-bd rounded-xl shadow-xl overflow-hidden min-w-[160px]">
                                         <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); updCond(gIdx, cIdx, 'keyword', ''); setCondOpenDropdown(null); setCondChipInput(''); }}
-                                          className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-red-500 hover:bg-red-50 transition-all text-left">
+                                          className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] transition-all text-left">
                                           <RotateCcw size={11}/> Отменить изменения
                                         </button>
                                       </div>
@@ -2158,13 +2146,13 @@ export default function App() {
                                   </div>
                                 </div>
                                 {/* Табы */}
-                                <div className="flex border-b border-gray-200 mb-2">
+                                <div className="flex border-b border-bd2 mb-2">
                                   <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'chips')}
-                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'chips' ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'chips' ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
                                     🏷 Chips ({(cond.chips||[]).length})
                                   </button>
                                   <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'text')}
-                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'text' ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'text' ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
                                     📄 Text
                                   </button>
                                 </div>
@@ -2173,9 +2161,9 @@ export default function App() {
                                     {(cond.chips||[]).length > 0 && (
                                       <div className="flex flex-wrap gap-1 mb-2">
                                         {(cond.chips||[]).map((chip, ci) => (
-                                          <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-blue-100 text-blue-700 rounded-lg text-[10px] font-bold">
+                                          <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta rounded-lg text-[10px] font-bold">
                                             {chip}
-                                            <button onClick={() => removeChip(gIdx, cIdx, ci)} className="text-blue-400 hover:text-blue-700 leading-none ml-0.5">×</button>
+                                            <button onClick={() => removeChip(gIdx, cIdx, ci)} className="text-blue-400 hover:text-cta leading-none ml-0.5">×</button>
                                           </span>
                                         ))}
                                       </div>
@@ -2186,13 +2174,13 @@ export default function App() {
                                         onChange={e => setChipInput(gIdx, cIdx, e.target.value)}
                                         onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip(gIdx, cIdx, getChipInput(gIdx, cIdx)); }}}
                                         placeholder=""
-                                        className="flex-1 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
+                                        className="flex-1 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                       <button onClick={() => addChip(gIdx, cIdx, getChipInput(gIdx, cIdx))}
-                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${getChipInput(gIdx, cIdx).trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-gray-100 hover:bg-gray-200 text-gray-500'}`}>
+                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${getChipInput(gIdx, cIdx).trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-sf2 hover:bg-bd2 text-txd'}`}>
                                         <Check size={13}/>
                                       </button>
                                     </div>
-                                    <p className="text-[9px] text-gray-400 mt-1">* Введите значения по одному с помощью «Enter»</p>
+                                    <p className="text-[9px] text-lbl mt-1">* Введите значения по одному с помощью «Enter»</p>
                                     {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-0.5">Обязательное поле</p>}
                                   </div>
                                 ) : (
@@ -2201,8 +2189,8 @@ export default function App() {
                                       value={(cond.chips||[]).join(', ')}
                                       onChange={e => { const chips = e.target.value.split(',').map(s=>s.trim()).filter(Boolean); updCond(gIdx, cIdx, 'chips', chips); updCond(gIdx, cIdx, 'keyword', e.target.value); }}
                                       rows={2}
-                                      className="w-full p-2.5 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
-                                    <p className="text-[9px] text-gray-400 mt-1">* Перечислите значения через запятую</p>
+                                      className="w-full p-2.5 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] resize-none transition-all"/>
+                                    <p className="text-[9px] text-lbl mt-1">* Перечислите значения через запятую</p>
                                   </div>
                                 )}
                               </div>
@@ -2210,7 +2198,7 @@ export default function App() {
                               {/* Модификаторы */}
                               <div onClick={e => e.stopPropagation()}>
                                 <div className="flex items-center gap-1 mb-1.5">
-                                  <p className="text-[9px] font-black text-gray-500 uppercase">Модификаторы</p>
+                                  <p className="text-[9px] font-black text-txd uppercase">Модификаторы</p>
                                   <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `modtip_${gIdx}_${cIdx}` ? null : `modtip_${gIdx}_${cIdx}`); }}
                                     className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
                                   {condTooltip === `modtip_${gIdx}_${cIdx}` && (
@@ -2221,21 +2209,21 @@ export default function App() {
                                 </div>
                                 <div className="relative">
                                   <button onClick={() => setCondOpenDropdown(condOpenDropdown === modKey ? null : modKey)}
-                                    className="w-full flex items-center justify-between px-3 py-2 bg-white border-2 border-gray-200 rounded-xl text-sm hover:border-gray-300 transition-all">
+                                    className="w-full flex items-center justify-between px-3 py-2 bg-sff border-2 border-bd2 rounded-xl text-sm hover:border-gray-300 transition-all">
                                     <div className="flex items-center gap-1.5 flex-1 flex-wrap">
                                       {cond.modifier === 'nocase' ? (
-                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-100 rounded-lg text-[10px] font-bold text-gray-600">
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 rounded-lg text-[10px] font-bold text-txd">
                                           Не учитывать регистр
-                                          <button onClick={e => { e.stopPropagation(); updCond(gIdx, cIdx, 'modifier', ''); }} className="ml-0.5 text-gray-400 hover:text-gray-700 leading-none">×</button>
+                                          <button onClick={e => { e.stopPropagation(); updCond(gIdx, cIdx, 'modifier', ''); }} className="ml-0.5 text-lbl hover:text-tx leading-none">×</button>
                                         </span>
-                                      ) : <span className="text-gray-400 text-sm font-medium">—</span>}
+                                      ) : <span className="text-lbl text-sm font-medium">—</span>}
                                     </div>
-                                    <ChevronDown size={13} className={`text-gray-400 flex-shrink-0 transition-transform ${condOpenDropdown === modKey ? 'rotate-180' : ''}`}/>
+                                    <ChevronDown size={13} className={`text-lbl flex-shrink-0 transition-transform ${condOpenDropdown === modKey ? 'rotate-180' : ''}`}/>
                                   </button>
                                   {condOpenDropdown === modKey && (
-                                    <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                       <button onClick={() => { updCond(gIdx, cIdx, 'modifier', 'nocase'); setCondOpenDropdown(null); }}
-                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.modifier === 'nocase' ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.modifier === 'nocase' ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                         Не учитывать регистр
                                       </button>
                                     </div>
@@ -2247,16 +2235,16 @@ export default function App() {
                               <div className="space-y-1">
                                 <div className="flex items-center justify-between">
                                   <div className="flex items-center gap-1.5">
-                                    <span className="text-[11px] font-black text-gray-700">Инвертировать условие</span>
+                                    <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
                                     <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `inv_${gIdx}_${cIdx}` ? null : `inv_${gIdx}_${cIdx}`); }}
                                       className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
                                   </div>
                                   <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
-                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                    <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
                                   </button>
                                 </div>
-                                <p className="text-[9px] text-gray-400 leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
                               </div>
                               </>)}
 
@@ -2269,7 +2257,7 @@ export default function App() {
                         {/* Добавить условие в эту группу */}
                         <button
                           onClick={() => { setCondPickerGroupIdx(gIdx); setCondPickerTab('message'); setCondPickerSearch(''); setShowCondPickerModal(true); }}
-                          className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
+                          className="w-full py-2.5 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-cta transition-all bg-blue-50/30 active:scale-[0.98]">
                           <PlusCircle size={12}/> Добавить условие
                         </button>
                       </div>
@@ -2280,7 +2268,7 @@ export default function App() {
                 {/* Добавить группу условий */}
                 <button
                   onClick={addCondGroup}
-                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
+                  className="w-full py-2.5 border-2 border-dashed border-bd2 rounded-2xl text-lbl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:text-blue-400 transition-all bg-sff active:scale-[0.98]">
                   <PlusCircle size={11}/> Добавить группу условий
                 </button>
               </div>{/* конец левой колонки */}
@@ -2289,7 +2277,7 @@ export default function App() {
               <div className="space-y-3">
                 {/* Заголовок */}
                 <div className="flex items-center gap-2 px-1">
-                  <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">Действия</span>
+                  <span className="text-[10px] font-black text-txd uppercase tracking-widest">Действия</span>
                   <div className="relative">
                     <button
                       onClick={() => setCondTooltip(condTooltip === 'actions_block' ? null : 'actions_block')}
@@ -2307,35 +2295,35 @@ export default function App() {
 
                 {/* Группы действий */}
                 {actionGroups.map((group, gIdx) => (
-                  <div key={group.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm">
+                  <div key={group.id} className="bg-sff rounded-2xl border border-bd shadow-sm">
                     {/* Шапка группы */}
-                    <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
+                    <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
                       {/* Шестерёнка */}
                       <div className="relative">
                         <button
                           onClick={e => { e.stopPropagation(); setActGroupSettingsIdx(gIdx); }}
-                          className="p-1 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                          className="p-1 text-lbl hover:text-txd active:scale-90 transition-all">
                           <Settings size={12}/>
                         </button>
                       </div>
-                      <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest flex-1">
+                      <span className="text-[10px] font-black text-txd uppercase tracking-widest flex-1">
                         {actionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Действия'}
                         {group.probability < 100 && (
-                          <span className="ml-1.5 text-[9px] font-black text-orange-500 bg-orange-50 px-1.5 py-0.5 rounded-full">{group.probability}%</span>
+                          <span className="ml-1.5 text-[9px] font-black text-warn bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-1.5 py-0.5 rounded-full">{group.probability}%</span>
                         )}
                       </span>
                       <div className="flex items-center gap-0.5">
                         <button onClick={() => moveActionGroup(gIdx, -1)} disabled={gIdx === 0}
-                          className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                           <ChevronUp size={14}/>
                         </button>
                         <button onClick={() => moveActionGroup(gIdx, 1)} disabled={gIdx === actionGroups.length - 1}
-                          className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                           <ChevronDown size={14}/>
                         </button>
                         {actionGroups.length > 1 && (
                           <button onClick={() => removeActionGroup(gIdx)}
-                            className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all ml-0.5">
+                            className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all ml-0.5">
                             <Trash2 size={12}/>
                           </button>
                         )}
@@ -2345,7 +2333,7 @@ export default function App() {
                     {/* Действия внутри группы */}
                     <div className="p-2.5">
                       {group.actions.length === 0 && (
-                        <div className="text-center py-4 text-gray-300 text-[11px] font-black uppercase tracking-widest">
+                        <div className="text-center py-4 text-lbl text-[11px] font-black uppercase tracking-widest">
                           Список пуст
                         </div>
                       )}
@@ -2378,32 +2366,32 @@ export default function App() {
                             {aIdx > 0 && (
                               <div className="flex justify-center my-3">
                                 <div className={`flex flex-col items-center ${newActionIds.has(action.id) ? 'connector-insert' : ''}`}>
-                                  <div className="w-2 h-2 rounded-full bg-blue-200 connector-dot-top"/>
-                                  <div className="w-px h-6 bg-blue-100 connector-line"/>
-                                  <div className="w-2 h-2 rounded-full bg-blue-200 connector-dot-bot"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)] connector-dot-top"/>
+                                  <div className="w-px h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] connector-line"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)] connector-dot-bot"/>
                                 </div>
                               </div>
                             )}
-                            <div className="bg-white rounded-2xl border border-gray-200">
+                            <div className="bg-sff rounded-2xl border border-bd2">
                             {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
-                            <div className="flex items-center gap-1.5 px-3 py-2 bg-gray-50 border-b border-gray-100 rounded-t-2xl overflow-hidden">
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
                               <button
                                 onClick={() => { setActionSettingsPct(action.action_probability ?? 100); setActionSettingsModal({gIdx, aIdx}); }}
-                                className="p-1 text-gray-400 hover:text-blue-500 active:scale-90 transition-all flex-shrink-0">
+                                className="p-1 text-lbl hover:text-cta active:scale-90 transition-all flex-shrink-0">
                                 <Settings size={12}/>
                               </button>
-                              <span className="text-[11px] font-black text-gray-700 flex-1">Действие {aIdx + 1}</span>
+                              <span className="text-[11px] font-black text-tx flex-1">Действие {aIdx + 1}</span>
                               <div className="flex items-center gap-0">
                                 <button onClick={() => moveActionInGroup(gIdx, aIdx, -1)} disabled={aIdx === 0}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                                   <ChevronUp size={14}/>
                                 </button>
                                 <button onClick={() => moveActionInGroup(gIdx, aIdx, 1)} disabled={aIdx === group.actions.length - 1}
-                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-gray-400 hover:text-blue-500 hover:bg-blue-50 disabled:opacity-20 active:scale-90 transition-all">
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
                                   <ChevronDown size={14}/>
                                 </button>
                                 <button onClick={() => removeAction(gIdx, aIdx)}
-                                  className="p-1 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                  className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all">
                                   <Trash2 size={11}/>
                                 </button>
                               </div>
@@ -2414,7 +2402,7 @@ export default function App() {
 
                               {/* Тип действия — заголовок */}
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[12px] font-black text-gray-800">{actCfg.label}</span>
+                                <span className="text-[12px] font-black text-tx">{actCfg.label}</span>
                                 <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
                               </div>
 
@@ -2424,28 +2412,28 @@ export default function App() {
 
                                   {/* ── Сообщение * ── */}
                                   <div>
-                                    <p className="text-sm font-black text-gray-800 mb-2">
+                                    <p className="text-sm font-black text-tx mb-2">
                                       {action.type === 'dm' ? 'Текст сообщения' : 'Сообщение'} <span className="text-red-400">*</span>
                                     </p>
 
                                     {/* Навигация вариантов */}
                                     <div className="flex items-center gap-2 mb-2">
-                                      <div className="flex items-center border border-gray-200 rounded-lg overflow-hidden">
+                                      <div className="flex items-center border border-bd2 rounded-lg overflow-hidden">
                                         <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.max(0, curVarIdx - 1))}
                                           disabled={curVarIdx === 0}
-                                          className="px-2.5 py-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-30 text-sm font-bold transition-colors">‹</button>
-                                        <span className="text-xs font-black text-gray-700 px-2 border-x border-gray-200">{curVarIdx + 1} из {variants.length}</span>
+                                          className="px-2.5 py-1.5 text-txd hover:text-tx disabled:opacity-30 text-sm font-bold transition-colors">‹</button>
+                                        <span className="text-xs font-black text-tx px-2 border-x border-bd2">{curVarIdx + 1} из {variants.length}</span>
                                         <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.min(variants.length - 1, curVarIdx + 1))}
                                           disabled={curVarIdx === variants.length - 1}
-                                          className="px-2.5 py-1.5 text-gray-500 hover:text-gray-700 disabled:opacity-30 text-sm font-bold transition-colors">›</button>
+                                          className="px-2.5 py-1.5 text-txd hover:text-tx disabled:opacity-30 text-sm font-bold transition-colors">›</button>
                                       </div>
                                       <button onClick={addVariant}
-                                        className="flex items-center gap-1.5 px-3 py-1.5 border border-blue-200 text-blue-600 rounded-lg text-xs font-black hover:bg-blue-50 transition-all active:scale-95 ml-auto">
+                                        className="flex items-center gap-1.5 px-3 py-1.5 border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] text-cta rounded-lg text-xs font-black hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] transition-all active:scale-95 ml-auto">
                                         <PlusCircle size={11}/> Добавить вариант сообщения
                                       </button>
                                       {variants.length > 1 && (
                                         <button onClick={deleteVariant}
-                                          className="p-1.5 text-red-300 hover:text-red-500 active:scale-90 transition-all">
+                                          className="p-1.5 text-red-300 hover:text-danger active:scale-90 transition-all">
                                           <Trash2 size={14}/>
                                         </button>
                                       )}
@@ -2505,25 +2493,25 @@ export default function App() {
                                                   <button key={m.type}
                                                     onClick={() => m.active && !isUploading && pickFile(m.accept)}
                                                     className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
-                                                      ${m.active ? 'border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50' : 'border-dashed border-gray-200 text-gray-300 cursor-not-allowed'}`}>
+                                                      ${m.active ? 'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'border-dashed border-bd2 text-lbl cursor-not-allowed'}`}>
                                                     <span className="text-xl">{m.icon}</span>
                                                     <span>{m.label}</span>
-                                                    {!m.active && <span className="absolute top-1 right-1 text-[7px] font-black bg-amber-100 text-amber-500 px-1 py-0.5 rounded-full uppercase">Скоро</span>}
+                                                    {!m.active && <span className="absolute top-1 right-1 text-[7px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1 py-0.5 rounded-full uppercase">Скоро</span>}
                                                   </button>
                                                 ))}
                                                 {/* Расположение */}
                                                 <button
                                                   onClick={() => setActOpenDropdown(actOpenDropdown === mediaPosKey ? null : mediaPosKey)}
                                                   className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
-                                                    ${actOpenDropdown === mediaPosKey ? 'border-blue-400 bg-blue-50 text-blue-600' : 'border-gray-200 text-gray-600 hover:border-blue-300 hover:bg-blue-50'}
-                                                    ${mediaPos !== 'above' ? 'border-blue-300' : ''}`}>
+                                                    ${actOpenDropdown === mediaPosKey ? 'border-blue-400 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta' : 'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]'}
+                                                    ${mediaPos !== 'above' ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : ''}`}>
                                                   <span className="text-xl">📐</span>
                                                   <span>Расположение</span>
                                                   {mediaPos !== 'above' && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-400 rounded-full"/>}
                                                 </button>
                                               </div>
                                               {actOpenDropdown === mediaPosKey && (
-                                                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                                                <div className="border border-bd2 rounded-xl overflow-hidden">
                                                   {[
                                                     { v:'above', icon:'🖼', l:'Медиа над текстом',      desc:'Сначала медиа, текст идёт подписью снизу (одно сообщение)' },
                                                     { v:'below', icon:'📝', l:'Медиа под текстом',      desc:'Сначала текст, потом медиа отдельным сообщением' },
@@ -2531,27 +2519,27 @@ export default function App() {
                                                   ].map(o => (
                                                     <button key={o.v}
                                                       onClick={() => { updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v)); setActOpenDropdown(null); }}
-                                                      className={`w-full px-4 py-3 text-left border-b border-gray-50 last:border-0 transition-all flex items-start gap-3 ${mediaPos===o.v?'bg-blue-50':'hover:bg-gray-50'}`}>
+                                                      className={`w-full px-4 py-3 text-left border-b border-bd last:border-0 transition-all flex items-start gap-3 ${mediaPos===o.v?'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'hover:bg-sf2'}`}>
                                                       <span className="text-lg mt-0.5">{o.icon}</span>
                                                       <div>
-                                                        <p className={`text-sm font-bold ${mediaPos===o.v?'text-blue-600':'text-gray-700'}`}>{o.l}</p>
-                                                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">{o.desc}</p>
+                                                        <p className={`text-sm font-bold ${mediaPos===o.v?'text-cta':'text-tx'}`}>{o.l}</p>
+                                                        <p className="text-[10px] text-lbl font-medium mt-0.5">{o.desc}</p>
                                                       </div>
-                                                      {mediaPos===o.v && <span className="ml-auto text-blue-500 text-sm">✓</span>}
+                                                      {mediaPos===o.v && <span className="ml-auto text-cta text-sm">✓</span>}
                                                     </button>
                                                   ))}
                                                 </div>
                                               )}
                                               {isUploading && (
-                                                <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-blue-200 rounded-xl">
+                                                <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl">
                                                   <span className="animate-spin text-xl">⏳</span>
-                                                  <span className="text-sm text-blue-500 font-semibold">Загрузка...</span>
+                                                  <span className="text-sm text-cta font-semibold">Загрузка...</span>
                                                 </div>
                                               )}
                                             </>
                                           ) : (
                                             <>
-                                              <div className="w-full rounded-xl overflow-hidden border border-gray-200 bg-gray-50 relative group">
+                                              <div className="w-full rounded-xl overflow-hidden border border-bd2 bg-sf2 relative group">
                                                 {curVar.media_type === 'photo' ? (
                                                   <img src={curVar.media_url} alt="preview" className="w-full max-h-48 object-contain"/>
                                                 ) : curVar.media_type === 'video' ? (
@@ -2561,7 +2549,7 @@ export default function App() {
                                                 )}
                                                 <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
                                                   <button onClick={e=>{e.stopPropagation();pickFile('image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime');}}
-                                                    className="px-3 py-1.5 bg-white text-gray-800 rounded-lg text-xs font-bold shadow">Заменить</button>
+                                                    className="px-3 py-1.5 bg-sff text-tx rounded-lg text-xs font-bold shadow">Заменить</button>
                                                   <button onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_type:'none',media_url:'',media_server_path:''}:v));}}
                                                     className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
                                                 </div>
@@ -2578,7 +2566,7 @@ export default function App() {
                                                 ].map(o => (
                                                   <button key={o.v}
                                                     onClick={() => updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v))}
-                                                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all border-2 ${mediaPos===o.v?'border-blue-400 bg-blue-50 text-blue-600':'border-gray-200 text-gray-500 hover:border-blue-200'}`}>
+                                                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all border-2 ${mediaPos===o.v?'border-blue-400 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta':'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]'}`}>
                                                     {o.l}
                                                   </button>
                                                 ))}
@@ -2590,9 +2578,9 @@ export default function App() {
                                     })()}
 
                                     {/* Топики + вкладки + редактор */}
-                                    <div className="border border-gray-200 rounded-xl">
+                                    <div className="border border-bd2 rounded-xl">
                                       {/* Строка вкладок */}
-                                      <div className="flex items-center justify-between px-3 py-2 bg-gray-50 border-b border-gray-200 rounded-t-xl">
+                                      <div className="flex items-center justify-between px-3 py-2 bg-sf2 border-b border-bd2 rounded-t-xl">
                                         <div className="flex items-center gap-1.5">
                                           {/* Топик-пикер */}
                                           {(() => {
@@ -2613,33 +2601,33 @@ export default function App() {
                                             return (
                                               <div className="relative">
                                                 <button onClick={openTopicDrop}
-                                                  className={`flex items-center gap-1 text-xs font-black rounded-lg px-2 py-1 transition-all ${action.target_thread_id ? 'bg-blue-100 text-blue-600' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                                  className={`flex items-center gap-1 text-xs font-black rounded-lg px-2 py-1 transition-all ${action.target_thread_id ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
                                                   <span>📋</span>
                                                   <span className="max-w-[80px] truncate">{selectedTopic ? selectedTopic.name : 'Топик'}</span>
                                                   {action.target_thread_id && (
                                                     <span onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'target_thread_id',null);}}
-                                                      className="ml-0.5 text-blue-400 hover:text-red-500">×</span>
+                                                      className="ml-0.5 text-blue-400 hover:text-danger">×</span>
                                                   )}
                                                 </button>
                                                 {isOpen && (
-                                                  <div className="absolute top-full left-0 z-[600] bg-white border border-gray-200 rounded-xl shadow-xl mt-1 min-w-[200px] max-h-60 overflow-y-auto">
-                                                    <div className="px-3 py-2 border-b border-gray-100">
-                                                      <span className="text-[10px] font-black text-gray-400 uppercase">Ветки группы</span>
+                                                  <div className="absolute top-full left-0 z-[600] bg-sff border border-bd2 rounded-xl shadow-xl mt-1 min-w-[200px] max-h-60 overflow-y-auto">
+                                                    <div className="px-3 py-2 border-b border-bd">
+                                                      <span className="text-[10px] font-black text-lbl uppercase">Ветки группы</span>
                                                     </div>
                                                     {!topicsLoaded ? (
-                                                      <div className="px-4 py-3 text-xs text-gray-400">Загрузка...</div>
+                                                      <div className="px-4 py-3 text-xs text-lbl">Загрузка...</div>
                                                     ) : topics.length === 0 ? (
-                                                      <div className="px-4 py-3 text-xs text-gray-400">Ветки не найдены</div>
+                                                      <div className="px-4 py-3 text-xs text-lbl">Ветки не найдены</div>
                                                     ) : (
                                                       <>
                                                         <button onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',null);setActOpenDropdown(null);}}
-                                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 transition-all ${!action.target_thread_id?'text-blue-600 bg-blue-50':'text-gray-600 hover:bg-gray-50'}`}>
+                                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd transition-all ${!action.target_thread_id?'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'text-txd hover:bg-sf2'}`}>
                                                           Автоматически
                                                         </button>
                                                         {topics.map(t => (
                                                           <button key={t.thread_id}
                                                             onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',t.thread_id);setActOpenDropdown(null);}}
-                                                            className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${action.target_thread_id===t.thread_id?'text-blue-600 bg-blue-50':'text-gray-600 hover:bg-gray-50'}`}>
+                                                            className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${action.target_thread_id===t.thread_id?'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'text-txd hover:bg-sf2'}`}>
                                                             {t.is_main ? '🏠 ' : '📌 '}{t.name}
                                                           </button>
                                                         ))}
@@ -2658,7 +2646,7 @@ export default function App() {
                                             { v:'settings', l:'⚙ Настройки'},
                                           ].map(t => (
                                             <button key={t.v} onClick={() => updAction(gIdx, aIdx, 'msgTab', t.v)}
-                                              className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${msgTab===t.v ? 'bg-blue-500 text-white' : 'text-gray-500 hover:bg-gray-100'}`}>
+                                              className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${msgTab===t.v ? 'bg-blue-500 text-white' : 'text-txd hover:bg-sf2'}`}>
                                               {t.l}
                                             </button>
                                           ))}
@@ -2747,14 +2735,14 @@ export default function App() {
 
                                         return (
                                           <div>
-                                            <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-gray-100 flex-wrap">
+                                            <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-bd flex-wrap">
                                               {TOOLBAR.map(f => {
                                                 const isActive = f.cmd ? fmtState[f.cmd] : false;
                                                 return (
                                                   <button key={f.l}
                                                     title={f.tip}
                                                     onMouseDown={e => { e.preventDefault(); f.cmd ? execFmt(f.cmd) : f.custom(); }}
-                                                    className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                                    className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
                                                     {f.l}
                                                   </button>
                                                 );
@@ -2777,15 +2765,15 @@ export default function App() {
                                                     <button
                                                       title="Эмодзи"
                                                       onMouseDown={e => { e.preventDefault(); setActOpenDropdown(emojiOpen ? null : emojiKey); }}
-                                                      className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-blue-100 text-blue-600' : 'text-gray-600 hover:bg-gray-100'}`}>
+                                                      className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
                                                       😊
                                                     </button>
                                                     {emojiOpen && (
-                                                      <div className="absolute left-0 top-8 z-[700] bg-white border border-gray-200 rounded-xl shadow-xl p-1.5 gap-0.5" style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',width:'220px'}}>
+                                                      <div className="absolute left-0 top-8 z-[700] bg-sff border border-bd2 rounded-xl shadow-xl p-1.5 gap-0.5" style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',width:'220px'}}>
                                                         {EMOJIS.map(em => (
                                                           <button key={em}
                                                             onMouseDown={ev => { ev.preventDefault(); insertEmoji(em); }}
-                                                            className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-gray-100 transition-all active:scale-90">
+                                                            className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-sf2 transition-all active:scale-90">
                                                             {em}
                                                           </button>
                                                         ))}
@@ -2841,12 +2829,12 @@ export default function App() {
                                                 ];
 
                                                 const COLOR_MAP = {
-                                                  blue:   'bg-blue-50 text-blue-600 hover:bg-blue-100 border-blue-100',
-                                                  purple: 'bg-purple-50 text-purple-600 hover:bg-purple-100 border-purple-100',
-                                                  green:  'bg-green-50 text-green-700 hover:bg-green-100 border-green-100',
-                                                  amber:  'bg-amber-50 text-amber-700 hover:bg-amber-100 border-amber-100',
-                                                  red:    'bg-red-50 text-red-600 hover:bg-red-100 border-red-100',
-                                                  pink:   'bg-pink-50 text-pink-600 hover:bg-pink-100 border-pink-100',
+                                                  blue:   'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] border-[color-mix(in_oklab,var(--cta)_30%,transparent)]',
+                                                  purple: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple hover:bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] border-[color-mix(in_oklab,var(--purple)_30%,transparent)]',
+                                                  green:  'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',
+                                                  amber:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] border-[color-mix(in_oklab,var(--warn)_30%,transparent)]',
+                                                  red:    'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] border-[color-mix(in_oklab,var(--danger)_30%,transparent)]',
+                                                  pink:   'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink hover:bg-[color-mix(in_oklab,var(--pink)_16%,transparent)] border-[color-mix(in_oklab,var(--pink)_30%,transparent)]',
                                                 };
 
                                                 const openPh = () => {
@@ -2887,7 +2875,7 @@ export default function App() {
                                                   <div className="ml-auto">
                                                     <button
                                                       onMouseDown={e => { e.preventDefault(); e.stopPropagation(); openPh(); }}
-                                                      className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-blue-500 border-blue-200 hover:bg-blue-50'}`}>
+                                                      className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]'}`}>
                                                       %плейсхолдеры%
                                                     </button>
                                                   </div>
@@ -2896,7 +2884,7 @@ export default function App() {
                                               <div className="flex items-center gap-0.5 ml-1">
                                                 <button
                                                   onMouseDown={e => { e.preventDefault(); setShowEditorHelp(true); }}
-                                                  className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 font-black rounded hover:bg-blue-50 flex items-center justify-center transition-all">?</button>
+                                                  className="w-6 h-6 text-[10px] text-lbl hover:text-cta font-black rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center transition-all">?</button>
                                                 <button
                                                   onMouseDown={e => {
                                                     e.preventDefault();
@@ -2908,12 +2896,12 @@ export default function App() {
                                                     });
                                                   }}
                                                   title="Предпросмотр"
-                                                  className="w-6 h-6 text-[10px] text-gray-400 hover:text-blue-500 rounded hover:bg-blue-50 flex items-center justify-center transition-all">↗</button>
+                                                  className="w-6 h-6 text-[10px] text-lbl hover:text-cta rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center transition-all">↗</button>
                                               </div>
                                             </div>
                                             <div className="relative">
                                               {!curVar.text && (
-                                                <span className="absolute top-3 left-4 text-sm text-gray-300 italic pointer-events-none select-none">
+                                                <span className="absolute top-3 left-4 text-sm text-lbl italic pointer-events-none select-none">
                                                   Insert text here ...
                                                 </span>
                                               )}
@@ -2929,10 +2917,10 @@ export default function App() {
                                                   }
                                                 }}
                                                 onInput={e => updVar('text', e.currentTarget.innerHTML)}
-                                                className="w-full min-h-[120px] px-4 py-3 text-sm font-medium text-gray-700 outline-none bg-white"
+                                                className="w-full min-h-[120px] px-4 py-3 text-sm font-medium text-tx outline-none bg-sff"
                                                 style={{wordBreak:'break-word'}}
                                               />
-                                              <span className="absolute bottom-2 right-3 text-[10px] text-blue-500 font-black bg-white px-1">{textLen}/4096</span>
+                                              <span className="absolute bottom-2 right-3 text-[10px] text-cta font-black bg-sff px-1">{textLen}/4096</span>
                                             </div>
                                           </div>
                                         );
@@ -2945,7 +2933,7 @@ export default function App() {
                                           onChange={e => updVar('text', e.target.value)}
                                           placeholder="HTML код сообщения..."
                                           rows={6}
-                                          className="w-full px-4 py-3 font-mono text-sm text-gray-700 outline-none resize-none bg-white"/>
+                                          className="w-full px-4 py-3 font-mono text-sm text-tx outline-none resize-none bg-sff"/>
                                       )}
 
                                       {/* Настройки */}
@@ -2978,7 +2966,7 @@ export default function App() {
                                               <div key={s.key}>
                                                 <div className="flex items-center justify-between gap-2">
                                                   <div className="flex items-center gap-1 min-w-0">
-                                                    <span className="text-xs font-medium text-gray-700 leading-tight">{s.label}</span>
+                                                    <span className="text-xs font-medium text-tx leading-tight">{s.label}</span>
                                                     <button
                                                       onMouseDown={e => {
                                                         e.preventDefault();
@@ -2986,11 +2974,11 @@ export default function App() {
                                                         setSettingHintPos({x: r.right + 10, y: r.top - 8});
                                                         setSettingHint(settingHint === s.key ? null : s.key);
                                                       }}
-                                                      className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-all ${settingHint===s.key?'bg-blue-500 text-white':'bg-blue-100 text-blue-500 hover:bg-blue-200'}`}>?</button>
+                                                      className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-all ${settingHint===s.key?'bg-blue-500 text-white':'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta hover:bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]'}`}>?</button>
                                                   </div>
                                                   <button onClick={() => updSetting(s.key, !settings[s.key])}
-                                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                                    <span className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                                    <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
                                                   </button>
                                                 </div>
 
@@ -3001,16 +2989,16 @@ export default function App() {
                                                       type="number" min="0" max="9999"
                                                       value={settings[s.valKey] ?? 1}
                                                       onChange={e => updSetting(s.valKey, Math.max(0, parseInt(e.target.value)||0))}
-                                                      className="w-20 px-2 py-1.5 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 transition-all text-center"
+                                                      className="w-20 px-2 py-1.5 text-sm font-bold text-tx bg-sf2 border border-bd2 rounded-xl outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all text-center"
                                                     />
                                                     <div className="relative flex-1">
                                                       <select
                                                         value={settings[s.unitKey] ?? s.units[0]}
                                                         onChange={e => updSetting(s.unitKey, e.target.value)}
-                                                        className="w-full px-3 py-1.5 text-sm font-bold text-gray-700 bg-gray-50 border border-gray-200 rounded-xl outline-none focus:border-blue-300 appearance-none transition-all cursor-pointer">
+                                                        className="w-full px-3 py-1.5 text-sm font-bold text-tx bg-sf2 border border-bd2 rounded-xl outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] appearance-none transition-all cursor-pointer">
                                                         {s.units.map(u => <option key={u} value={u}>{u}</option>)}
                                                       </select>
-                                                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"/>
+                                                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-lbl pointer-events-none"/>
                                                     </div>
                                                   </div>
                                                 )}
@@ -3021,29 +3009,29 @@ export default function App() {
                                       })()}
 
                                       {/* Создать / Редактировать клавиатуру */}
-                                      <div className="border-t border-gray-100 rounded-b-xl overflow-hidden">
+                                      <div className="border-t border-bd rounded-b-xl overflow-hidden">
                                         {keyboard.length === 0 ? (
                                           <button
                                             onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
-                                            className="w-full py-3 text-sm font-bold text-gray-500 hover:bg-gray-50 flex items-center justify-center gap-2 transition-all active:scale-[0.99]">
+                                            className="w-full py-3 text-sm font-bold text-txd hover:bg-sf2 flex items-center justify-center gap-2 transition-all active:scale-[0.99]">
                                             ✏️ Создать клавиатуру
                                           </button>
                                         ) : (
                                           <div>
                                             <div className="p-2 space-y-1.5">
                                               {keyboard.map((btn, bi) => (
-                                                <div key={btn.id} className="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-lg border border-gray-100">
-                                                  <GripVertical size={13} className="text-gray-300 cursor-grab flex-shrink-0"/>
+                                                <div key={btn.id} className="flex items-center gap-2 px-3 py-2 bg-sf2 rounded-lg border border-bd">
+                                                  <GripVertical size={13} className="text-lbl cursor-grab flex-shrink-0"/>
                                                   <span className="text-base w-5 text-center">{btn.emoji || '○'}</span>
-                                                  <span className="text-xs font-bold text-gray-700 flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
+                                                  <span className="text-xs font-bold text-tx flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
                                                   <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_,i)=>i!==bi))}
-                                                    className="text-red-300 hover:text-red-500 text-lg leading-none">×</button>
+                                                    className="text-red-300 hover:text-danger text-lg leading-none">×</button>
                                                 </div>
                                               ))}
                                             </div>
                                             <button
                                               onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
-                                              className="w-full py-2.5 text-xs font-bold text-blue-500 hover:bg-blue-50 flex items-center justify-center gap-1.5 transition-all border-t border-gray-100">
+                                              className="w-full py-2.5 text-xs font-bold text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center gap-1.5 transition-all border-t border-bd">
                                               ✏️ Редактировать клавиатуру
                                             </button>
                                           </div>
@@ -3054,20 +3042,20 @@ export default function App() {
                                     {/* Отправить ответом — только для send_text */}
                                     {action.type === 'send_text' && (
                                       <div className="mt-3">
-                                        <p className="text-sm font-black text-gray-800 mb-1.5">
+                                        <p className="text-sm font-black text-tx mb-1.5">
                                           Отправить ответом <span className="text-red-400">*</span>
                                         </p>
                                         <div className="relative">
                                           <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
-                                            className="w-full flex items-center justify-between px-4 py-3 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 hover:border-gray-300 transition-all">
+                                            className="w-full flex items-center justify-between px-4 py-3 bg-sff border border-bd2 rounded-xl text-sm font-bold text-tx hover:border-gray-300 transition-all">
                                             <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Без реплая (обычное сообщение)'}</span>
-                                            <ChevronDown size={14} className={`text-gray-400 transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
+                                            <ChevronDown size={14} className={`text-lbl transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
                                           </button>
                                           {actOpenDropdown === replyDropKey && (
-                                            <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                               {[{v:'none',l:'Без реплая (обычное сообщение)'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
                                                 <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
-                                                  className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-gray-50 last:border-0 ${action.reply_target === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                  className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-bd last:border-0 ${action.reply_target === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                   {o.l}
                                                 </button>
                                               ))}
@@ -3125,24 +3113,24 @@ export default function App() {
                                     {/* На кого распространяется */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-black text-gray-800">
+                                        <p className="text-sm font-black text-tx">
                                           На кого распространяется действие <span className="text-red-400">*</span>
                                         </p>
                                         {muteTarget !== 'initiator' && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtGear ? null : muteTgtGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === muteTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                  <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <Ban size={11} className="text-lbl"/> Отключить настройку
                                                 </button>
                                               </div>
                                             )}
@@ -3151,15 +3139,15 @@ export default function App() {
                                       </div>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtKey ? null : muteTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === muteTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curTgt.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === muteTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {MUTE_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${muteTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3172,24 +3160,24 @@ export default function App() {
                                     <div>
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5">
-                                          <p className="text-sm font-black text-gray-800">
+                                          <p className="text-sm font-black text-tx">
                                             Кол-во времени <span className="text-red-400">*</span>
                                           </p>
                                           {muteTimeOn && (
                                             <div className="relative">
                                               <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTimeGear ? null : muteTimeGear)}
-                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                                 <Settings size={14}/>
                                               </button>
                                               {actOpenDropdown === muteTimeGear && (
-                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                   <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_value', 1); updAction(gIdx, aIdx, 'mute_time_unit', 'days'); setActOpenDropdown(null); }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                     <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                   </button>
                                                   <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_enabled', false); setActOpenDropdown(null); }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                    <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <Ban size={11} className="text-lbl"/> Отключить настройку
                                                   </button>
                                                 </div>
                                               )}
@@ -3198,12 +3186,12 @@ export default function App() {
                                         </div>
                                         {muteTimeOn ? (
                                           <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', false)}
-                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
                                             <Ban size={14}/>
                                           </button>
                                         ) : (
                                           <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', true)}
-                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
                                             Включить
                                           </button>
                                         )}
@@ -3213,18 +3201,18 @@ export default function App() {
                                           <input type="number" min="1"
                                             value={muteTimeVal}
                                             onChange={e => updAction(gIdx, aIdx, 'mute_time_value', Math.max(1, parseInt(e.target.value)||1))}
-                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === muteUnitKey ? null : muteUnitKey)}
-                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === muteUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                               <span className="flex-1">{curUnit.l}</span>
-                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteUnitKey ? 'rotate-180' : ''}`}/>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteUnitKey ? 'rotate-180' : ''}`}/>
                                             </button>
                                             {actOpenDropdown === muteUnitKey && (
-                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
                                                 {MUTE_UNITS.map(o => (
                                                   <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_time_unit', o.v); setActOpenDropdown(null); }}
-                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${muteTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
                                                     {o.l}
                                                   </button>
                                                 ))}
@@ -3237,18 +3225,18 @@ export default function App() {
 
                                     {/* Тип ограничения */}
                                     <div>
-                                      <p className="text-sm font-black text-gray-800 mb-1.5">Тип ограничения</p>
+                                      <p className="text-sm font-black text-tx mb-1.5">Тип ограничения</p>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTypeKey ? null : muteTypeKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === muteTypeKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteTypeKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curType.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === muteTypeKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteTypeKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === muteTypeKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {MUTE_TYPES.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_type', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${muteType === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${muteType === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3295,19 +3283,19 @@ export default function App() {
                                     {/* На кого распространяется */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-black text-gray-800">
+                                        <p className="text-sm font-black text-tx">
                                           На кого распространяется действие <span className="text-red-400">*</span>
                                         </p>
                                         {banTarget !== 'initiator' && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtGear ? null : banTgtGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === banTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'ban_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3317,15 +3305,15 @@ export default function App() {
                                       </div>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtKey ? null : banTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === banTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === banTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curTgt.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === banTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === banTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === banTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {BAN_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${banTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${banTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3338,18 +3326,18 @@ export default function App() {
                                     <div>
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5">
-                                          <p className="text-sm font-black text-gray-800">Временный бан</p>
+                                          <p className="text-sm font-black text-tx">Временный бан</p>
                                           {banTimeOn && (
                                             <div className="relative">
                                               <button onClick={() => setActOpenDropdown(actOpenDropdown === banTimeGear ? null : banTimeGear)}
-                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                                 <Settings size={14}/>
                                               </button>
                                               {actOpenDropdown === banTimeGear && (
-                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                   <button onClick={() => { updAction(gIdx, aIdx, 'ban_time_enabled', false); setActOpenDropdown(null); }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                    <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <Ban size={11} className="text-lbl"/> Отключить настройку
                                                   </button>
                                                 </div>
                                               )}
@@ -3358,12 +3346,12 @@ export default function App() {
                                         </div>
                                         {banTimeOn ? (
                                           <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', false)}
-                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
                                             <Ban size={14}/>
                                           </button>
                                         ) : (
                                           <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', true)}
-                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
                                             Включить
                                           </button>
                                         )}
@@ -3373,18 +3361,18 @@ export default function App() {
                                           <input type="number" min="1"
                                             value={banTimeVal}
                                             onChange={e => updAction(gIdx, aIdx, 'ban_time_value', Math.max(1, parseInt(e.target.value)||1))}
-                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === banUnitKey ? null : banUnitKey)}
-                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === banUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === banUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                               <span className="flex-1">{curUnit.l}</span>
-                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === banUnitKey ? 'rotate-180' : ''}`}/>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === banUnitKey ? 'rotate-180' : ''}`}/>
                                             </button>
                                             {actOpenDropdown === banUnitKey && (
-                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
                                                 {BAN_UNITS.map(o => (
                                                   <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_time_unit', o.v); setActOpenDropdown(null); }}
-                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${banTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${banTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
                                                     {o.l}
                                                   </button>
                                                 ))}
@@ -3394,24 +3382,24 @@ export default function App() {
                                         </div>
                                       )}
                                       {!banTimeOn && (
-                                        <p className="text-[11px] text-gray-400 mt-1">Без ограничения по времени (перманентный бан)</p>
+                                        <p className="text-[11px] text-lbl mt-1">Без ограничения по времени (перманентный бан)</p>
                                       )}
                                     </div>
 
                                     {/* Удалить сообщения за 24ч */}
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-sm font-medium text-gray-700">Удалить сообщения пользователя за 24ч</p>
+                                        <p className="text-sm font-medium text-tx">Удалить сообщения пользователя за 24ч</p>
                                         {banRevokeMsgs && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === banRevokeGear ? null : banRevokeGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === banRevokeGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'ban_revoke_messages', false); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3420,8 +3408,8 @@ export default function App() {
                                         )}
                                       </div>
                                       <button onClick={() => updAction(gIdx, aIdx, 'ban_revoke_messages', !banRevokeMsgs)}
-                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${banRevokeMsgs ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${banRevokeMsgs ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${banRevokeMsgs ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${banRevokeMsgs ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
                                       </button>
                                     </div>
 
@@ -3459,17 +3447,17 @@ export default function App() {
                                     {/* Отметить эмодзи сообщение */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-black text-gray-800">Отметить эмодзи сообщение</p>
+                                        <p className="text-sm font-black text-tx">Отметить эмодзи сообщение</p>
                                         {emojiTarget !== 'initiator' && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtGear ? null : emojiTgtGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === emojiTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'emoji_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3479,15 +3467,15 @@ export default function App() {
                                       </div>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtKey ? null : emojiTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === emojiTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === emojiTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curTgt.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === emojiTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === emojiTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === emojiTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {EMOJI_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'emoji_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${emojiTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${emojiTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3498,18 +3486,18 @@ export default function App() {
 
                                     {/* Эмодзи */}
                                     <div>
-                                      <p className="text-sm font-black text-gray-800 mb-1.5">Эмодзи</p>
+                                      <p className="text-sm font-black text-tx mb-1.5">Эмодзи</p>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiPickKey ? null : emojiPickKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-lg hover:border-blue-300 transition-all ${actOpenDropdown === emojiPickKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-lg hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === emojiPickKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{emojiReaction}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === emojiPickKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === emojiPickKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === emojiPickKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden max-h-52 overflow-y-auto">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-52 overflow-y-auto">
                                             {TG_EMOJIS.map(em => (
                                               <button key={em} onClick={() => { updAction(gIdx, aIdx, 'emoji', em); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2 text-xl text-left border-b border-gray-50 last:border-0 transition-all hover:bg-gray-50 ${emojiReaction === em ? 'bg-blue-50' : ''}`}>
+                                                className={`w-full px-4 py-2 text-xl text-left border-b border-bd last:border-0 transition-all hover:bg-sf2 ${emojiReaction === em ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : ''}`}>
                                                 {em}
                                               </button>
                                             ))}
@@ -3546,17 +3534,17 @@ export default function App() {
                                     {/* Отправлять уведомление */}
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-sm font-medium text-gray-700">Отправлять уведомление о предупреждении</p>
+                                        <p className="text-sm font-medium text-tx">Отправлять уведомление о предупреждении</p>
                                         {!warnNotify && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === warnNotifyGear ? null : warnNotifyGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === warnNotifyGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'warn_notify', true); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3565,32 +3553,32 @@ export default function App() {
                                         )}
                                       </div>
                                       <button onClick={() => updAction(gIdx, aIdx, 'warn_notify', !warnNotify)}
-                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${warnNotify ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${warnNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${warnNotify ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${warnNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
                                       </button>
                                     </div>
 
                                     {/* На кого */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-black text-gray-800">
+                                        <p className="text-sm font-black text-tx">
                                           На кого распространяется действие <span className="text-red-400">*</span>
                                         </p>
                                         {warnTarget !== 'initiator' && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtGear ? null : warnTgtGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === warnTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
-                                                  <Ban size={11} className="text-gray-400"/> Отключить настройку
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <Ban size={11} className="text-lbl"/> Отключить настройку
                                                 </button>
                                               </div>
                                             )}
@@ -3599,15 +3587,15 @@ export default function App() {
                                       </div>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtKey ? null : warnTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === warnTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === warnTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curTgt.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === warnTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === warnTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === warnTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {WARN_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'warn_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-gray-50 last:border-0 transition-all ${warnTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${warnTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3618,37 +3606,37 @@ export default function App() {
 
                                     {/* Кол-во */}
                                     <div className="flex items-center justify-between gap-3">
-                                      <p className="text-sm font-black text-gray-800">
+                                      <p className="text-sm font-black text-tx">
                                         Кол-во <span className="text-red-400">*</span>
                                       </p>
                                       <input type="number" min="1" max="999"
                                         value={warnCount}
                                         onChange={e => updAction(gIdx, aIdx, 'warn_count', Math.max(1, parseInt(e.target.value)||1))}
-                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                     </div>
 
                                     {/* Период варнов */}
                                     <div className="flex items-center justify-between gap-3">
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-sm font-black text-gray-800">Период варнов</p>
-                                        <span className="text-xs text-gray-400 font-normal">(дней, 0 = без сброса)</span>
+                                        <p className="text-sm font-black text-tx">Период варнов</p>
+                                        <span className="text-xs text-lbl font-normal">(дней, 0 = без сброса)</span>
                                       </div>
                                       <input type="number" min="0" max="365"
                                         value={action.warn_period ?? 0}
                                         onChange={e => updAction(gIdx, aIdx, 'warn_period', Math.max(0, parseInt(e.target.value)||0))}
-                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                     </div>
 
                                     {/* Длительность мута при достижении кол-ва */}
                                     <div className="flex items-center justify-between gap-3">
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-sm font-black text-gray-800">Длительность мута</p>
-                                        <span className="text-xs text-gray-400 font-normal">(минут, при эскалации)</span>
+                                        <p className="text-sm font-black text-tx">Длительность мута</p>
+                                        <span className="text-xs text-lbl font-normal">(минут, при эскалации)</span>
                                       </div>
                                       <input type="number" min="1" max="43200"
                                         value={Math.max(1, Math.floor((action.warn_mute_duration_seconds ?? 3600) / 60))}
                                         onChange={e => updAction(gIdx, aIdx, 'warn_mute_duration_seconds', Math.max(60, (parseInt(e.target.value)||1) * 60))}
-                                        className="w-20 px-3 py-2 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm text-center outline-none focus:border-blue-300 transition-all"/>
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                     </div>
 
                                   </div>
@@ -3685,21 +3673,21 @@ export default function App() {
                                     {/* На кого распространяется */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-black text-gray-800">
+                                        <p className="text-sm font-black text-tx">
                                           На кого распространяется действие <span className="text-red-400">*</span>
                                         </p>
                                         {isModified && (
                                           <div className="relative">
                                             <button
                                               onClick={() => setActOpenDropdown(actOpenDropdown === delGearKey ? null : delGearKey)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === delGearKey && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-lg shadow-xl z-[500] overflow-hidden whitespace-nowrap">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-lg shadow-xl z-[500] overflow-hidden whitespace-nowrap">
                                                 <button
                                                   onClick={() => { updAction(gIdx, aIdx, 'delete_target', 'initiator'); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3710,16 +3698,16 @@ export default function App() {
                                       <div className="relative">
                                         <button
                                           onClick={() => setActOpenDropdown(actOpenDropdown === delTgtKey ? null : delTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all ${actOpenDropdown === delTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === delTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                           <span>{curTarget.l}</span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === delTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === delTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {TARGET_OPTIONS.map(o => (
                                               <button key={o.v}
                                                 onClick={() => { updAction(gIdx, aIdx, 'delete_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${delTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3730,7 +3718,7 @@ export default function App() {
 
                                     {/* Задержка */}
                                     <div>
-                                      <p className="text-sm font-black text-gray-800 mb-1.5">
+                                      <p className="text-sm font-black text-tx mb-1.5">
                                         Задержка <span className="text-red-400">*</span>
                                       </p>
                                       <div className="flex gap-2">
@@ -3738,20 +3726,20 @@ export default function App() {
                                           type="number" min="0"
                                           value={delDelay}
                                           onChange={e => updAction(gIdx, aIdx, 'delete_delay', Math.max(0, parseInt(e.target.value)||0))}
-                                          className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                          className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                         <div className="relative">
                                           <button
                                             onClick={() => setActOpenDropdown(actOpenDropdown === delUnitKey ? null : delUnitKey)}
-                                            className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 hover:border-blue-300 transition-all min-w-[110px] ${actOpenDropdown === delUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                            className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all min-w-[110px] ${actOpenDropdown === delUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                             <span className="flex-1">{curUnit.l}</span>
-                                            <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === delUnitKey ? 'rotate-180' : ''}`}/>
+                                            <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === delUnitKey ? 'rotate-180' : ''}`}/>
                                           </button>
                                           {actOpenDropdown === delUnitKey && (
-                                            <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
+                                            <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
                                               {UNIT_OPTIONS.map(o => (
                                                 <button key={o.v}
                                                   onClick={() => { updAction(gIdx, aIdx, 'delete_delay_unit', o.v); setActOpenDropdown(null); }}
-                                                  className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${delDelayUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                  className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${delDelayUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
                                                   {o.l}
                                                 </button>
                                               ))}
@@ -3797,14 +3785,14 @@ export default function App() {
                                   <div className="space-y-4">
 
                                     {/* Автозакреп ответа бота (trigger-level) */}
-                                    <div className="flex items-center justify-between bg-emerald-50 -mx-1 px-3 py-2.5 rounded-xl border border-emerald-100">
+                                    <div className="flex items-center justify-between bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] -mx-1 px-3 py-2.5 rounded-xl border border-[color-mix(in_oklab,var(--ok)_30%,transparent)]">
                                       <div className="flex flex-col">
-                                        <p className="text-sm font-black text-emerald-700">Автозакреп ответа бота</p>
-                                        <p className="text-[10px] text-emerald-500 font-semibold">Закрепить сообщение-ответ бота после отправки</p>
+                                        <p className="text-sm font-black text-ok">Автозакреп ответа бота</p>
+                                        <p className="text-[10px] text-ok font-semibold">Закрепить сообщение-ответ бота после отправки</p>
                                       </div>
                                       <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
-                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
                                       </button>
                                     </div>
 
@@ -3812,17 +3800,17 @@ export default function App() {
                                     <div>
                                       <div className="flex items-center justify-between">
                                         <div className="flex items-center gap-1.5">
-                                          <p className="text-sm font-medium text-gray-700">Через какое время открепить</p>
+                                          <p className="text-sm font-medium text-tx">Через какое время открепить</p>
                                           {pinTimeEnabled && (
                                             <div className="relative">
                                               <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTimeGear ? null : pinTimeGear)}
-                                                className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                                 <Settings size={14}/>
                                               </button>
                                               {actOpenDropdown === pinTimeGear && (
-                                                <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                   <button onClick={() => { updAction(gIdx, aIdx, 'pin_time_enabled', false); updAction(gIdx, aIdx, 'pin_time_value', 10); updAction(gIdx, aIdx, 'pin_time_unit', 'seconds'); setActOpenDropdown(null); }}
-                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                     <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                   </button>
                                                 </div>
@@ -3832,12 +3820,12 @@ export default function App() {
                                         </div>
                                         {pinTimeEnabled ? (
                                           <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', false)}
-                                            className="p-1.5 border border-gray-200 rounded-lg text-gray-400 hover:text-red-500 hover:border-red-200 active:scale-90 transition-all">
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
                                             <Ban size={14}/>
                                           </button>
                                         ) : (
                                           <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', true)}
-                                            className="px-3 py-1.5 border border-gray-200 rounded-lg text-xs font-black text-gray-600 hover:border-blue-300 hover:text-blue-600 transition-all active:scale-95">
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
                                             Включить
                                           </button>
                                         )}
@@ -3847,18 +3835,18 @@ export default function App() {
                                           <input type="number" min="1"
                                             value={pinTimeValue}
                                             onChange={e => updAction(gIdx, aIdx, 'pin_time_value', Math.max(1, parseInt(e.target.value)||1))}
-                                            className="flex-1 px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === pinUnitKey ? null : pinUnitKey)}
-                                              className={`flex items-center gap-2 px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-700 min-w-[110px] hover:border-blue-300 transition-all ${actOpenDropdown === pinUnitKey ? 'border-blue-300' : 'border-gray-200'}`}>
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === pinUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
                                               <span className="flex-1">{curUnit.l}</span>
-                                              <ChevronDown size={13} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinUnitKey ? 'rotate-180' : ''}`}/>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === pinUnitKey ? 'rotate-180' : ''}`}/>
                                             </button>
                                             {actOpenDropdown === pinUnitKey && (
-                                              <div className="absolute top-full right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
                                                 {PIN_UNITS.map(o => (
                                                   <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_time_unit', o.v); setActOpenDropdown(null); }}
-                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-blue-600 bg-blue-50 font-black' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
                                                     {o.l}
                                                   </button>
                                                 ))}
@@ -3872,17 +3860,17 @@ export default function App() {
                                     {/* Уведомить участников чата */}
                                     <div className="flex items-center justify-between">
                                       <div className="flex items-center gap-1.5">
-                                        <p className="text-sm font-medium text-gray-700">Уведомить участников чата</p>
+                                        <p className="text-sm font-medium text-tx">Уведомить участников чата</p>
                                         {pinNotify && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === pinNotifyGear ? null : pinNotifyGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === pinNotifyGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'pin_notify', false); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3891,25 +3879,25 @@ export default function App() {
                                         )}
                                       </div>
                                       <button onClick={() => updAction(gIdx, aIdx, 'pin_notify', !pinNotify)}
-                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${pinNotify ? 'bg-blue-500' : 'bg-gray-200'}`}>
-                                        <span className={`absolute top-1 w-4 h-4 bg-white rounded-full shadow transition-all duration-200 ${pinNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${pinNotify ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${pinNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
                                       </button>
                                     </div>
 
                                     {/* Закрепить сообщение */}
                                     <div>
                                       <div className="flex items-center gap-1.5 mb-1.5">
-                                        <p className="text-sm font-medium text-gray-700">Закрепить сообщение</p>
+                                        <p className="text-sm font-medium text-tx">Закрепить сообщение</p>
                                         {pinTarget && (
                                           <div className="relative">
                                             <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtGear ? null : pinTgtGear)}
-                                              className="text-blue-400 hover:text-blue-600 active:scale-90 transition-all">
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
                                               <Settings size={14}/>
                                             </button>
                                             {actOpenDropdown === pinTgtGear && (
-                                              <div className="absolute left-0 top-6 bg-white border border-gray-100 rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
                                                 <button onClick={() => { updAction(gIdx, aIdx, 'pin_target', ''); setActOpenDropdown(null); }}
-                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-gray-700 hover:bg-gray-50 w-full">
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
                                                   <RotateCcw size={11} className="text-red-400"/> Отменить изменения
                                                 </button>
                                               </div>
@@ -3919,17 +3907,17 @@ export default function App() {
                                       </div>
                                       <div className="relative">
                                         <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtKey ? null : pinTgtKey)}
-                                          className={`w-full flex items-center justify-between px-4 py-3 bg-white border-2 rounded-xl text-sm font-bold text-gray-600 hover:border-blue-300 transition-all ${actOpenDropdown === pinTgtKey ? 'border-blue-300' : 'border-gray-200'}`}>
-                                          <span className={curTarget ? 'text-gray-800' : 'text-gray-400'}>
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === pinTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span className={curTarget ? 'text-tx' : 'text-lbl'}>
                                             {curTarget ? curTarget.l : '-'}
                                           </span>
-                                          <ChevronDown size={14} className={`text-gray-400 transition-transform flex-shrink-0 ${actOpenDropdown === pinTgtKey ? 'rotate-180' : ''}`}/>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === pinTgtKey ? 'rotate-180' : ''}`}/>
                                         </button>
                                         {actOpenDropdown === pinTgtKey && (
-                                          <div className="absolute top-full left-0 right-0 z-[500] bg-white border border-gray-100 rounded-xl shadow-xl mt-1 overflow-hidden">
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
                                             {PIN_TARGETS.map(o => (
                                               <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_target', o.v); setActOpenDropdown(null); }}
-                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-gray-50 last:border-0 transition-all ${pinTarget === o.v ? 'text-blue-600 bg-blue-50' : 'text-gray-700 hover:bg-gray-50'}`}>
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${pinTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
                                                 {o.l}
                                               </button>
                                             ))}
@@ -3952,7 +3940,7 @@ export default function App() {
                       {/* Добавить действие в группу — всегда видна (в т.ч. когда список пуст) */}
                       <button
                         onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
-                        className="w-full py-2.5 border-2 border-dashed border-blue-200 rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-blue-500 transition-all bg-blue-50/30 active:scale-[0.98]">
+                        className="w-full py-2.5 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-cta transition-all bg-blue-50/30 active:scale-[0.98]">
                         <PlusCircle size={12}/> Добавить действие
                       </button>
                     </div>
@@ -3962,7 +3950,7 @@ export default function App() {
                 {/* Добавить группу действий */}
                 <button
                   onClick={addActionGroup}
-                  className="w-full py-2.5 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-200 hover:text-blue-400 transition-all bg-white active:scale-[0.98]">
+                  className="w-full py-2.5 border-2 border-dashed border-bd2 rounded-2xl text-lbl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:text-blue-400 transition-all bg-sff active:scale-[0.98]">
                   <PlusCircle size={11}/> Добавить группу действий
                 </button>
               </div>{/* конец правой колонки */}
@@ -3975,29 +3963,29 @@ export default function App() {
                   {/* Backdrop */}
                   <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCondPickerModal(false)}/>
                   {/* Panel */}
-                  <div className="relative mt-auto bg-white rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                  <div className="relative mt-auto bg-sff rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
                     {/* Drag handle */}
                     <div className="flex justify-center pt-3 pb-1">
-                      <div className="w-10 h-1 bg-gray-200 rounded-full"/>
+                      <div className="w-10 h-1 bg-bd2 rounded-full"/>
                     </div>
                     {/* Header */}
-                    <div className="flex items-center justify-between px-6 py-3 border-b border-gray-100">
-                      <h3 className="font-black text-base text-gray-900">Выберите условие</h3>
-                      <button onClick={() => setShowCondPickerModal(false)} className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                    <div className="flex items-center justify-between px-6 py-3 border-b border-bd">
+                      <h3 className="font-black text-base text-tx">Выберите условие</h3>
+                      <button onClick={() => setShowCondPickerModal(false)} className="p-2 text-lbl hover:text-txd active:scale-90 transition-all">
                         <X size={18}/>
                       </button>
                     </div>
                     {/* Signal tabs */}
-                    <div className="flex border-b border-gray-100">
+                    <div className="flex border-b border-bd">
                       {[{v:'message',l:'Сообщение'},{v:'quoted',l:'Цитируемое'}].map(tab => (
                         <button key={tab.v} onClick={() => setCondPickerTab(tab.v)}
-                          className={`flex-1 py-3 text-[11px] font-black uppercase tracking-wide transition-all border-b-2 ${condPickerTab===tab.v ? 'text-blue-600 border-blue-500' : 'text-gray-400 border-transparent'}`}>
+                          className={`flex-1 py-3 text-[11px] font-black uppercase tracking-wide transition-all border-b-2 ${condPickerTab===tab.v ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
                           {tab.l}
                         </button>
                       ))}
                     </div>
                     {/* Info box */}
-                    <div className="mx-4 mt-3 px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-[11px] text-blue-700 font-medium leading-relaxed">
+                    <div className="mx-4 mt-3 px-4 py-3 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-2xl text-[11px] text-cta font-medium leading-relaxed">
                       {condPickerTab === 'message'
                         ? '📨 Триггер проверит входящее сообщение участника чата по выбранному условию.'
                         : '↩️ Триггер проверит сообщение, на которое ответил пользователь (цитируемое).'}
@@ -4005,20 +3993,20 @@ export default function App() {
                     {/* Search */}
                     <div className="px-4 mt-3">
                       <div className="relative">
-                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"/>
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lbl"/>
                         <input
                           type="text"
                           placeholder="Поиск условий..."
                           value={condPickerSearch}
                           onChange={e => setCondPickerSearch(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
+                          className="w-full pl-9 pr-4 py-2.5 bg-sf2 border border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                       </div>
                     </div>
                     {/* Conditions list */}
                     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
                       {/* Секция: Условия по тексту */}
                       <div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">
                           Условия по {condPickerTab === 'message' ? 'сообщению' : 'цитируемому сообщению'}
                         </p>
                         <div className="grid grid-cols-2 gap-2">
@@ -4026,12 +4014,12 @@ export default function App() {
                           {(condPickerSearch === '' || 'сообщение любое'.includes(condPickerSearch.toLowerCase())) && (
                             <button
                               onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
-                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                               <span className="text-xl">📩</span>
-                              <span className="text-[11px] font-black text-gray-800 leading-tight">
+                              <span className="text-[11px] font-black text-tx leading-tight">
                                 {condPickerTab === 'message' ? 'Сообщение' : 'Цитируемое'}
                               </span>
-                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Любое входящее сообщение</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Любое входящее сообщение</span>
                               {/* ⓘ tooltip */}
                               <button
                                 onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_any_${condPickerTab}` ? null : `picker_any_${condPickerTab}`); }}
@@ -4049,10 +4037,10 @@ export default function App() {
                           {(condPickerSearch === '' || 'слово ключевое keyword'.includes(condPickerSearch.toLowerCase())) && (
                             <button
                               onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
-                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                               <span className="text-xl">🔤</span>
-                              <span className="text-[11px] font-black text-gray-800 leading-tight">Слово в сообщении</span>
-                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Реагирует на ключевые слова</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Слово в сообщении</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Реагирует на ключевые слова</span>
                               <button
                                 onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_kw_${condPickerTab}` ? null : `picker_kw_${condPickerTab}`); }}
                                 className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
@@ -4069,10 +4057,10 @@ export default function App() {
                           {condPickerTab === 'message' && (condPickerSearch === '' || 'тип ответа reply'.includes(condPickerSearch.toLowerCase())) && (
                             <button
                               onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'reply_type')}
-                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                               <span className="text-xl">↩️</span>
-                              <span className="text-[11px] font-black text-gray-800 leading-tight">Тип ответа</span>
-                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Реплай, первое сообщ., коммент...</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Тип ответа</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Реплай, первое сообщ., коммент...</span>
                               <button
                                 onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_rt' ? null : 'picker_rt'); }}
                                 className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
@@ -4089,10 +4077,10 @@ export default function App() {
                           {condPickerTab === 'message' && (condPickerSearch === '' || 'тип сообщения формат медиа фото стикер'.includes(condPickerSearch.toLowerCase())) && (
                             <button
                               onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'msg_type')}
-                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                               <span className="text-xl">🗂</span>
-                              <span className="text-[11px] font-black text-gray-800 leading-tight">Тип сообщения</span>
-                              <span className="text-[9px] text-gray-400 font-medium leading-tight">Фото, видео, стикер, документ...</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Тип сообщения</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Фото, видео, стикер, документ...</span>
                               <span className="absolute top-1.5 left-1.5 text-[8px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full uppercase animate-pulse z-10">NEW</span>
                               <button
                                 onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_mt' ? null : 'picker_mt'); }}
@@ -4111,7 +4099,7 @@ export default function App() {
 
                       {/* Секция: Условия по параметрам */}
                       <div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">
                           Условия по параметрам сообщения
                         </p>
                         <div className="grid grid-cols-2 gap-2">
@@ -4122,11 +4110,11 @@ export default function App() {
                             { icon: '🕐', label: 'Время отправки', sub: 'В заданный промежуток' },
                           ].map(item => (
                             <div key={item.label}
-                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
                               <span className="text-xl">{item.icon}</span>
-                              <span className="text-[11px] font-black text-gray-500 leading-tight">{item.label}</span>
-                              <span className="text-[9px] text-gray-400 font-medium leading-tight">{item.sub}</span>
-                              <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                              <span className="text-[11px] font-black text-txd leading-tight">{item.label}</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">{item.sub}</span>
+                              <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
                               <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                             </div>
                           ))}
@@ -4145,22 +4133,22 @@ export default function App() {
                 return (
                   <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActGroupSettingsIdx(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-black text-sm text-gray-900">Настройки группы {actionGroups.length > 1 ? gIdx + 1 : ''}</h3>
-                        <button onClick={() => setActGroupSettingsIdx(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <h3 className="font-black text-sm text-tx">Настройки группы {actionGroups.length > 1 ? gIdx + 1 : ''}</h3>
+                        <button onClick={() => setActGroupSettingsIdx(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
                           <X size={16}/>
                         </button>
                       </div>
                       <div className="flex items-center gap-3 mb-4">
-                        <label className="text-sm font-bold text-gray-600 flex-1">Шанс выполнения</label>
-                        <div className="flex items-center gap-1.5 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
+                        <label className="text-sm font-bold text-txd flex-1">Шанс выполнения</label>
+                        <div className="flex items-center gap-1.5 bg-sf2 border border-bd2 rounded-xl px-3 py-2">
                           <input
                             type="number" min="1" max="100"
                             value={group.probability}
                             onChange={e => updActionGroup(gIdx, 'probability', Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
                             className="w-12 text-center font-black text-sm bg-transparent outline-none"/>
-                          <span className="text-xs font-black text-gray-400">%</span>
+                          <span className="text-xs font-black text-lbl">%</span>
                         </div>
                       </div>
                       <button onClick={() => setActGroupSettingsIdx(null)}
@@ -4180,20 +4168,20 @@ export default function App() {
                 return (
                   <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondGearModal(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between mb-4">
-                        <h3 className="font-black text-sm text-gray-900">Значения условия</h3>
-                        <button onClick={() => setCondGearModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <h3 className="font-black text-sm text-tx">Значения условия</h3>
+                        <button onClick={() => setCondGearModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
                           <X size={16}/>
                         </button>
                       </div>
                       <button
                         onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondGearModal(null); }}
-                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-red-500 hover:bg-red-50 rounded-2xl transition-all text-left">
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-2xl transition-all text-left">
                         <RotateCcw size={14}/> Отменить изменения
                       </button>
                       <button onClick={() => setCondGearModal(null)}
-                        className="w-full mt-2 px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                        className="w-full mt-2 px-4 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
                         Закрыть
                       </button>
                     </div>
@@ -4209,36 +4197,36 @@ export default function App() {
                 return (
                   <div className="fixed inset-0 z-[300] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondSettingsModal(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-black text-base text-gray-900">Дополнительные настройки условия</h3>
-                        <button onClick={() => setCondSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <h3 className="font-black text-base text-tx">Дополнительные настройки условия</h3>
+                        <button onClick={() => setCondSettingsModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
                           <X size={16}/>
                         </button>
                       </div>
                       <div className="space-y-2">
                         <div className="flex items-center gap-1.5">
-                          <p className="text-sm font-black text-gray-700">Ключ плейсхолдера</p>
+                          <p className="text-sm font-black text-tx">Ключ плейсхолдера</p>
                           <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
                         </div>
                         <p className="text-red-400 text-[10px] font-bold">*</p>
-                        <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
+                        <p className="text-[11px] text-txd font-medium leading-relaxed">
                           Укажите ключ, который станет плейсхолдером и будет выводить в тексте условие сработки триггера.<br/>
-                          <span className="text-gray-400">Пример: <span className="font-mono font-bold">words_list</span></span>
+                          <span className="text-lbl">Пример: <span className="font-mono font-bold">words_list</span></span>
                         </p>
-                        <p className="text-[11px] text-gray-500 font-medium leading-relaxed">
-                          Поместите этот ключ между <span className="font-mono font-bold text-purple-600">%%</span> и добавьте его в текст действия «Отправить сообщение в чат».<br/>
-                          <span className="text-gray-400">Пример: <span className="font-mono text-purple-600">%words_list%</span></span>
+                        <p className="text-[11px] text-txd font-medium leading-relaxed">
+                          Поместите этот ключ между <span className="font-mono font-bold text-purple">%%</span> и добавьте его в текст действия «Отправить сообщение в чат».<br/>
+                          <span className="text-lbl">Пример: <span className="font-mono text-purple">%words_list%</span></span>
                         </p>
                         <input type="text"
                           value={cond.placeholder_key || ''}
                           onChange={e => updCond(gIdx, cIdx, 'placeholder_key', e.target.value)}
                           placeholder="words_list"
-                          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl font-mono font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                          className="w-full px-4 py-3 bg-sf2 border-2 border-bd2 rounded-2xl font-mono font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                       </div>
                       <div className="flex gap-2 justify-end pt-1">
                         <button onClick={() => setCondSettingsModal(null)}
-                          className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                          className="px-5 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
                           Отмена
                         </button>
                         <button onClick={() => setCondSettingsModal(null)}
@@ -4255,31 +4243,31 @@ export default function App() {
               {showActPickerModal && (
                 <div className="fixed inset-0 z-[200] flex flex-col">
                   <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowActPickerModal(false)}/>
-                  <div className="relative mt-auto bg-white rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                  <div className="relative mt-auto bg-sff rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
                     <div className="flex justify-center pt-3 pb-1">
-                      <div className="w-10 h-1 bg-gray-200 rounded-full"/>
+                      <div className="w-10 h-1 bg-bd2 rounded-full"/>
                     </div>
-                    <div className="flex items-start justify-between px-6 py-3 border-b border-gray-100">
+                    <div className="flex items-start justify-between px-6 py-3 border-b border-bd">
                       <div>
-                        <h3 className="font-black text-base text-gray-900">Выберите действия</h3>
-                        <p className="text-[10px] text-gray-400 font-medium mt-0.5">Укажите реакцию бота на выполненное условие</p>
+                        <h3 className="font-black text-base text-tx">Выберите действия</h3>
+                        <p className="text-[10px] text-lbl font-medium mt-0.5">Укажите реакцию бота на выполненное условие</p>
                       </div>
-                      <button onClick={() => setShowActPickerModal(false)} className="p-2 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                      <button onClick={() => setShowActPickerModal(false)} className="p-2 text-lbl hover:text-txd active:scale-90 transition-all">
                         <X size={18}/>
                       </button>
                     </div>
                     <div className="px-4 mt-3">
                       <div className="relative">
-                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400"/>
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lbl"/>
                         <input type="text" placeholder="Поиск действий..." value={actPickerSearch}
                           onChange={e => setActPickerSearch(e.target.value)}
-                          className="w-full pl-9 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm font-bold outline-none focus:border-blue-300 transition-all"/>
+                          className="w-full pl-9 pr-4 py-2.5 bg-sf2 border border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                       </div>
                     </div>
                     <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5">
                       {/* Секция 1: Действия с сообщениями */}
                       <div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Действия с сообщениями</p>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Действия с сообщениями</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             { type:'send_text', icon:'📤', label:'Отправить сообщение в чат', sub:'Ответить сообщением', active:true  },
@@ -4290,18 +4278,18 @@ export default function App() {
                           ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
                             a.active ? (
                               <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
-                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
                                 <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </button>
                             ) : (
-                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
-                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
                                 <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </div>
                             )
@@ -4310,7 +4298,7 @@ export default function App() {
                       </div>
                       {/* Секция 2: Действия по пользователям */}
                       <div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Действия по пользователям</p>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Действия по пользователям</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             { type:'mute',   icon:'🔇', label:'Запретить писать', sub:'Мут на время',        active:true  },
@@ -4321,18 +4309,18 @@ export default function App() {
                           ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
                             a.active ? (
                               <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
-                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
                                 <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </button>
                             ) : (
-                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
-                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
                                 <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </div>
                             )
@@ -4341,7 +4329,7 @@ export default function App() {
                       </div>
                       {/* Секция 3: Прочее */}
                       <div>
-                        <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Прочее</p>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Прочее</p>
                         <div className="grid grid-cols-2 gap-2">
                           {[
                             { type:'warn',  icon:'⚠️', label:'Предупреждение',   sub:'Варн с эскалацией',    active:true  },
@@ -4351,18 +4339,18 @@ export default function App() {
                           ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
                             a.active ? (
                               <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
-                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-gray-100 rounded-2xl text-left hover:border-blue-200 hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-800 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
                                 <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </button>
                             ) : (
-                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-gray-50 border border-dashed border-gray-200 rounded-2xl opacity-50 cursor-not-allowed">
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
                                 <span className="text-xl">{a.icon}</span>
-                                <span className="text-[11px] font-black text-gray-500 leading-tight">{a.label}</span>
-                                <span className="text-[9px] text-gray-400 font-medium leading-tight">{a.sub}</span>
-                                <span className="absolute top-2 right-2 text-[8px] font-black bg-gray-200 text-gray-400 px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
                                 <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
                               </div>
                             )
@@ -4389,30 +4377,30 @@ export default function App() {
                   { emoji: '🌍' }, { emoji: '👋' }, { emoji: '🔥' }, { emoji: '💡' },
                 ];
                 return (
-                  <div className="fixed inset-0 z-[300] flex flex-col bg-white">
+                  <div className="fixed inset-0 z-[300] flex flex-col bg-sff">
 
                     {/* ── Шапка ── */}
-                    <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100 flex-shrink-0">
-                      <span className="text-[10px] font-black bg-blue-100 text-blue-600 px-2 py-0.5 rounded uppercase tracking-wide">Beta</span>
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-bd flex-shrink-0">
+                      <span className="text-[10px] font-black bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta px-2 py-0.5 rounded uppercase tracking-wide">Beta</span>
                       <button onClick={() => { setShowKeyboardModal(false); setKbButtonType(null); setKbNewButton({}); }}
-                        className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
                         <X size={20}/>
                       </button>
                     </div>
 
                     {/* ── Список добавленных кнопок ── */}
-                    <div className="px-5 py-3 border-b border-gray-100 flex-shrink-0">
+                    <div className="px-5 py-3 border-b border-bd flex-shrink-0">
                       {keyboard.length === 0 ? (
-                        <p className="text-sm font-bold text-gray-400 text-center py-1">Кнопки не выбраны</p>
+                        <p className="text-sm font-bold text-lbl text-center py-1">Кнопки не выбраны</p>
                       ) : (
                         <div className="space-y-1.5">
                           {keyboard.map((btn, bi) => (
-                            <div key={btn.id} className="flex items-center gap-2.5 px-3 py-2 bg-gray-50 rounded-xl border border-gray-100">
-                              <span className="text-gray-300 font-black text-lg select-none leading-none">+</span>
+                            <div key={btn.id} className="flex items-center gap-2.5 px-3 py-2 bg-sf2 rounded-xl border border-bd">
+                              <span className="text-lbl font-black text-lg select-none leading-none">+</span>
                               <span className="text-base w-5 text-center leading-none">{btn.emoji || '○'}</span>
-                              <span className="text-sm font-bold text-gray-500 flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
+                              <span className="text-sm font-bold text-txd flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
                               <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_,i)=>i!==bi))}
-                                className="text-red-300 hover:text-red-500 text-xl leading-none flex-shrink-0">×</button>
+                                className="text-red-300 hover:text-danger text-xl leading-none flex-shrink-0">×</button>
                             </div>
                           ))}
                         </div>
@@ -4425,22 +4413,22 @@ export default function App() {
 
                         /* Выбор типа кнопки */
                         <div className="px-5 py-5">
-                          <p className="text-sm font-black text-gray-800 mb-4">Выберите тип кнопки</p>
+                          <p className="text-sm font-black text-tx mb-4">Выберите тип кнопки</p>
                           <div className="grid grid-cols-3 gap-2">
                             <button
                               onClick={() => { setKbButtonType('link'); setKbNewButton({}); }}
-                              className="px-4 py-4 border border-gray-200 rounded-xl text-sm font-bold text-gray-700 text-left hover:border-blue-300 hover:bg-blue-50 transition-all active:scale-[0.97]">
+                              className="px-4 py-4 border border-bd2 rounded-xl text-sm font-bold text-tx text-left hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] transition-all active:scale-[0.97]">
                               🔗 Ссылка
                             </button>
-                            <div className="relative px-4 py-4 border border-dashed border-gray-200 rounded-xl text-sm font-bold text-gray-400 text-left cursor-not-allowed select-none">
+                            <div className="relative px-4 py-4 border border-dashed border-bd2 rounded-xl text-sm font-bold text-lbl text-left cursor-not-allowed select-none">
                               Вызов триггера
-                              <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-amber-100 text-amber-500 px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                              <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
                             </div>
                             {REACTION_PRESETS.map((r, ri) => (
-                              <div key={ri} className="relative flex items-center gap-2 px-4 py-4 border border-dashed border-gray-200 rounded-xl text-sm font-bold text-gray-400 text-left cursor-not-allowed select-none">
+                              <div key={ri} className="relative flex items-center gap-2 px-4 py-4 border border-dashed border-bd2 rounded-xl text-sm font-bold text-lbl text-left cursor-not-allowed select-none">
                                 <span className="text-lg">{r.emoji}</span>
                                 <span>Реакция</span>
-                                <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-amber-100 text-amber-500 px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                                <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
                               </div>
                             ))}
                           </div>
@@ -4453,15 +4441,15 @@ export default function App() {
                           {/* Назад + заголовок */}
                           <div className="flex items-center gap-2">
                             <button onClick={() => { setKbButtonType(null); setKbNewButton({}); }}
-                              className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all text-lg font-bold leading-none">←</button>
+                              className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all text-lg font-bold leading-none">←</button>
                             {kbButtonType === 'reaction' && <span className="text-xl">{kbReactionEmoji}</span>}
-                            <h3 className="text-base font-black text-gray-900">
+                            <h3 className="text-base font-black text-tx">
                               {kbButtonType === 'reaction' ? 'Реакция' : 'Ссылка'}
                             </h3>
                           </div>
 
                           {/* Info box */}
-                          <div className="px-4 py-3 bg-blue-50 border border-blue-100 rounded-2xl text-[12px] text-blue-700 font-medium leading-relaxed">
+                          <div className="px-4 py-3 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-2xl text-[12px] text-cta font-medium leading-relaxed">
                             {kbButtonType === 'reaction' && <>
                               Если вы отключили реакции на посты в канале, но мнение пользователей об определённой публикации или теме важно — помогут кнопки с реакциями. Можно вставить любые эмодзи вместо предложенных в поле "Текст кнопки".<br/><br/>
                               После того, как читатели нажмут на кнопку, рядом с эмодзи появится количество нажатий. Вот как это будет выглядеть с использованием текущего эмодзи: {kbReactionEmoji} - 3.
@@ -4473,35 +4461,35 @@ export default function App() {
 
                           {/* Текст кнопки */}
                           <div>
-                            <p className="text-sm font-black text-gray-700 mb-1.5">Текст кнопки <span className="text-red-400">*</span></p>
+                            <p className="text-sm font-black text-tx mb-1.5">Текст кнопки <span className="text-red-400">*</span></p>
                             <input type="text" placeholder="Текст кнопки"
                               value={kbNewButton.text || ''}
                               onChange={e => setKbNewButton(p => ({...p, text: e.target.value}))}
-                              className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                              className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                           </div>
 
                           {/* URL */}
                           {kbButtonType === 'link' && (
                             <div>
-                              <p className="text-sm font-black text-gray-700 mb-1.5">URL <span className="text-red-400">*</span></p>
+                              <p className="text-sm font-black text-tx mb-1.5">URL <span className="text-red-400">*</span></p>
                               <input type="url" placeholder="https://..."
                                 value={kbNewButton.url || ''}
                                 onChange={e => setKbNewButton(p => ({...p, url: e.target.value}))}
-                                className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all"/>
+                                className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
                             </div>
                           )}
 
                           {/* Реакция: сообщение + чекбоксы */}
                           {kbButtonType === 'reaction' && (<>
                             <div>
-                              <p className="text-sm font-black text-gray-700 mb-1.5">Сообщение пользователю</p>
+                              <p className="text-sm font-black text-tx mb-1.5">Сообщение пользователю</p>
                               <div className="relative">
                                 <textarea
                                   value={kbNewButton.user_msg || ''}
                                   onChange={e => setKbNewButton(p => ({...p, user_msg: e.target.value.slice(0,200)}))}
                                   rows={4}
-                                  className="w-full px-4 py-3 bg-white border-2 border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 transition-all resize-none"/>
-                                <span className="absolute bottom-2 right-3 text-[10px] text-gray-400 font-bold">
+                                  className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all resize-none"/>
+                                <span className="absolute bottom-2 right-3 text-[10px] text-lbl font-bold">
                                   {(kbNewButton.user_msg||'').length} / 200
                                 </span>
                               </div>
@@ -4512,8 +4500,8 @@ export default function App() {
                                   {kbNewButton.noMultiple && <Check size={12} className="text-white"/>}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-bold text-gray-700">Запрет на выбор нескольких вариантов</p>
-                                  <p className="text-[11px] text-gray-400 font-medium mt-0.5">* Активируйте данный параметр, чтобы запретить пользователю выбирать несколько вариантов реакции</p>
+                                  <p className="text-sm font-bold text-tx">Запрет на выбор нескольких вариантов</p>
+                                  <p className="text-[11px] text-lbl font-medium mt-0.5">* Активируйте данный параметр, чтобы запретить пользователю выбирать несколько вариантов реакции</p>
                                 </div>
                               </div>
                               <div className="flex items-start gap-3 cursor-pointer" onClick={() => setKbNewButton(p => ({...p, uniqueOnly: !p.uniqueOnly}))}>
@@ -4521,8 +4509,8 @@ export default function App() {
                                   {kbNewButton.uniqueOnly && <Check size={12} className="text-white"/>}
                                 </div>
                                 <div>
-                                  <p className="text-sm font-bold text-gray-700">Учитывать только уникальные нажатия</p>
-                                  <p className="text-[11px] text-gray-400 font-medium mt-0.5">* При активации данного параметра будет зачтено только первое нажатие на кнопку от уникального пользователя. Если параметр выключен, то учитываться в счётчике будут все нажатия от одного и того же человека</p>
+                                  <p className="text-sm font-bold text-tx">Учитывать только уникальные нажатия</p>
+                                  <p className="text-[11px] text-lbl font-medium mt-0.5">* При активации данного параметра будет зачтено только первое нажатие на кнопку от уникального пользователя. Если параметр выключен, то учитываться в счётчике будут все нажатия от одного и того же человека</p>
                                 </div>
                               </div>
                             </div>
@@ -4533,7 +4521,7 @@ export default function App() {
 
                     {/* ── Добавить кнопку ── */}
                     {kbButtonType !== null && (
-                      <div className="px-5 py-4 border-t border-gray-100 flex-shrink-0">
+                      <div className="px-5 py-4 border-t border-bd flex-shrink-0">
                         <button
                           onClick={() => {
                             if (!kbNewButton.text) return;
@@ -4564,27 +4552,27 @@ export default function App() {
                 return (
                   <div className="fixed inset-0 z-[99999] flex items-center justify-center px-4">
                     <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
-                    <div className="relative bg-white rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
                       <div className="flex items-center justify-between">
-                        <h3 className="font-black text-base text-gray-900">Дополнительные настройки действия</h3>
-                        <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-gray-400 hover:text-gray-600 active:scale-90 transition-all">
+                        <h3 className="font-black text-base text-tx">Дополнительные настройки действия</h3>
+                        <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
                           <X size={16}/>
                         </button>
                       </div>
                       <div>
                         <div className="flex items-center gap-1.5 mb-2">
-                          <p className="text-sm font-black text-gray-800">Шанс выполнения действия <span className="text-red-400">*</span></p>
+                          <p className="text-sm font-black text-tx">Шанс выполнения действия <span className="text-red-400">*</span></p>
                         </div>
                         <input
                           type="number" min="1" max="100"
                           value={actionSettingsPct}
                           onChange={e => setActionSettingsPct(Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
-                          className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-200 rounded-2xl font-black text-sm text-right outline-none focus:border-blue-300 transition-all"
+                          className="w-full px-4 py-3 bg-sf2 border-2 border-bd2 rounded-2xl font-black text-sm text-right outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"
                           style={{appearance:'textfield'}}/>
                       </div>
                       <div className="flex gap-2 justify-end pt-1">
                         <button onClick={() => setActionSettingsModal(null)}
-                          className="px-5 py-2.5 bg-gray-100 text-gray-700 rounded-xl font-black text-sm hover:bg-gray-200 active:scale-95 transition-all">
+                          className="px-5 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
                           Отмена
                         </button>
                         <button onClick={() => { updAction(gIdx, aIdx, 'action_probability', actionSettingsPct); setActionSettingsModal(null); }}
@@ -4599,15 +4587,15 @@ export default function App() {
 
               {/* ── ДЕЙСТВИЯ (старый блок — удалён, теперь в правой колонке) ── */}
               {false && <div className="mb-5 space-y-2">
-                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest block px-1">Действия</span>
+                <span className="text-[10px] font-black text-txd uppercase tracking-widest block px-1">Действия</span>
                 {[].map((action, idx) => {
                   const actCfg = ACTION_TYPES.find(a=>a.type===action.type)||ACTION_TYPES[0];
                   const ActIcon = actCfg.Icon;
                   return (
-                    <div key={action.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
-                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-gray-100">
-                        <div className="flex items-center gap-2"><ActIcon size={14} className="text-gray-600"/><span className="text-sm font-black text-gray-800">{actCfg.label}</span></div>
-                        <button onClick={() => removeAction(idx)} className="p-1.5 text-red-400 hover:text-red-600 active:scale-90 transition-all"><X size={13}/></button>
+                    <div key={action.id} className="bg-sff rounded-2xl border border-bd shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+                        <div className="flex items-center gap-2"><ActIcon size={14} className="text-txd"/><span className="text-sm font-black text-tx">{actCfg.label}</span></div>
+                        <button onClick={() => removeAction(idx)} className="p-1.5 text-red-400 hover:text-danger active:scale-90 transition-all"><X size={13}/></button>
                       </div>
                       <div className="px-4 py-3 space-y-3">
                         {(action.type==='send_text'||action.type==='dm') && (<>
@@ -4615,20 +4603,20 @@ export default function App() {
                             <div className="flex gap-1.5 flex-wrap">
                               {[{v:'none',l:'Обычный'},{v:'initiator',l:'→ Автор'},{v:'quoted',l:'→ Цитата'}].map(o => (
                                 <button key={o.v} onClick={() => updAction(idx,'reply_target',o.v)}
-                                  className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                                  className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
                                 </button>
                               ))}
                             </div>
                           )}
                           <textarea placeholder="Текст сообщения..."
                             value={action.reply_text} onChange={e => updAction(idx,'reply_text',e.target.value)} rows={3}
-                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-bold text-sm outline-none focus:border-blue-300 resize-none transition-all"/>
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] resize-none transition-all"/>
                           {action.type==='send_text' && (<>
                             <div>
                               <div className="flex items-center justify-between mb-1.5">
-                                <span className="text-[10px] font-black text-gray-400 uppercase">Медиафайл</span>
+                                <span className="text-[10px] font-black text-lbl uppercase">Медиафайл</span>
                                 <button onClick={() => { if (showMediaPicker) updAction(idx,'media_type','none'); setShowMediaPicker(v=>!v); }}
-                                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all ${action.media_type!=='none' ? 'bg-blue-600 text-white' : showMediaPicker ? 'bg-gray-200 text-gray-600' : 'bg-gray-100 text-gray-500'}`}>
+                                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all ${action.media_type!=='none' ? 'bg-blue-600 text-white' : showMediaPicker ? 'bg-bd2 text-txd' : 'bg-sf2 text-txd'}`}>
                                   {action.media_type==='none' ? <><ImageIcon size={11}/><span>{showMediaPicker?'Убрать':'+ Добавить'}</span></> :
                                    action.media_type==='photo' ? <><ImageIcon size={11}/><span>Фото</span><X size={9} className="ml-1 opacity-60"/></> :
                                    action.media_type==='video' ? <><Video size={11}/><span>Видео</span><X size={9} className="ml-1 opacity-60"/></> :
@@ -4639,7 +4627,7 @@ export default function App() {
                                 <div className="grid grid-cols-3 gap-2 pb-1">
                                   {[{v:'photo',l:'Фото',I:ImageIcon},{v:'video',l:'Видео',I:Video},{v:'animation',l:'GIF',I:Smile}].map(m => (
                                     <button key={m.v} onClick={() => { updAction(idx,'media_type',m.v); setShowMediaPicker(false); }}
-                                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${action.media_type===m.v ? 'bg-blue-600 border-blue-600 text-white' : 'bg-white border-gray-200 text-gray-500'}`}>
+                                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${action.media_type===m.v ? 'bg-blue-600 border-blue-600 text-white' : 'bg-sff border-bd2 text-txd'}`}>
                                       <m.I size={16}/>{m.l}
                                     </button>
                                   ))}
@@ -4647,18 +4635,18 @@ export default function App() {
                               </div>
                             </div>
                             <div>
-                              <span className="text-[10px] font-black text-gray-400 uppercase block mb-1.5">Удаление ответа бота</span>
+                              <span className="text-[10px] font-black text-lbl uppercase block mb-1.5">Удаление ответа бота</span>
                               <div className="flex gap-2">
                                 {[{v:'no',l:'Нет'},{v:'previous',l:'Пред.'},{v:'period',l:'Таймер'}].map(o => (
                                   <button key={o.v} onClick={() => updAction(idx,'bot_msg_delete',o.v)}
-                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
                                   </button>
                                 ))}
                               </div>
                               {action.bot_msg_delete==='period' && (
                                 <input type="number" placeholder="Секунд" value={action.bot_msg_delete_after}
                                   onChange={e => updAction(idx,'bot_msg_delete_after',parseInt(e.target.value))}
-                                  className="w-full mt-2 p-3 bg-white border border-gray-200 rounded-xl font-black text-center outline-none focus:border-blue-300"/>
+                                  className="w-full mt-2 p-3 bg-sff border border-bd2 rounded-xl font-black text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
                               )}
                             </div>
                           </>)}
@@ -4666,14 +4654,14 @@ export default function App() {
                         {(action.type==='mute'||action.type==='ban') && (
                           <input type="text" placeholder="Длительность: 30m / 2h / forever"
                             value={action.duration} onChange={e => updAction(idx,'duration',e.target.value)}
-                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm outline-none focus:border-blue-300"/>
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-black text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
                         )}
                         {action.type==='warn' && (
                           <div>
                             <div className="flex items-center gap-1.5 mb-2">
-                              <span className="text-[10px] font-black text-gray-400 uppercase">За какой период считать предупреждения</span>
+                              <span className="text-[10px] font-black text-lbl uppercase">За какой период считать предупреждения</span>
                               <div className="relative group">
-                                <span className="w-4 h-4 rounded-full bg-gray-200 text-gray-500 text-[9px] font-black flex items-center justify-center cursor-help">?</span>
+                                <span className="w-4 h-4 rounded-full bg-bd2 text-txd text-[9px] font-black flex items-center justify-center cursor-help">?</span>
                                 <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-56 bg-gray-900 text-white text-[10px] font-bold rounded-xl px-3 py-2 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50 leading-relaxed">
                                   Бот считает сколько раз этот пользователь уже получал предупреждение за последние N секунд. Когда набирается 3 — мут на час, 5 — мут на сутки. 0 = считать за всё время без сброса.
                                 </div>
@@ -4683,15 +4671,15 @@ export default function App() {
                               <input type="number" min="0" placeholder="0"
                                 value={editingTrigger.warn_period || 0}
                                 onChange={e => upd('warn_period', parseInt(e.target.value)||0)}
-                                className="w-28 p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-sm text-center outline-none focus:border-blue-300"/>
-                              <span className="text-[11px] font-bold text-gray-400">секунд (0 = за всё время)</span>
+                                className="w-28 p-3 bg-sf2 border border-bd2 rounded-xl font-black text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
+                              <span className="text-[11px] font-bold text-lbl">секунд (0 = за всё время)</span>
                             </div>
                           </div>
                         )}
                         {action.type==='emoji' && (
                           <input type="text" placeholder="👀 🔥 ❤️"
                             value={action.emoji} onChange={e => updAction(idx,'emoji',e.target.value)}
-                            className="w-full p-3 bg-gray-50 border border-gray-200 rounded-xl font-black text-2xl text-center outline-none focus:border-blue-300"/>
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-black text-2xl text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
                         )}
                       </div>
                     </div>
@@ -4700,16 +4688,16 @@ export default function App() {
               </div>}
 
               {/* ── Дополнительно ── */}
-              <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4 space-y-4">
-                <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest block">Дополнительно</span>
+              <div className="bg-sff rounded-2xl border border-bd shadow-sm p-4 space-y-4">
+                <span className="text-[10px] font-black text-lbl uppercase tracking-widest block">Дополнительно</span>
 
                 {/* Где срабатывает */}
                 <div>
-                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Где срабатывает</p>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">Где срабатывает</p>
                   <div className="flex gap-2">
                     {[{v:'all',l:'Везде'},{v:'chat',l:'Чат'},{v:'pv',l:'Личка'}].map(o => (
                       <button key={o.v} onClick={() => upd('where_fires',o.v)}
-                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
                       </button>
                     ))}
                   </div>
@@ -4717,11 +4705,11 @@ export default function App() {
 
                 {/* На кого реагирует (initiator) */}
                 <div>
-                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">На кого реагирует</p>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">На кого реагирует</p>
                   <div className="flex gap-2">
                     {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
                       <button key={o.v} onClick={() => upd('initiator',o.v)}
-                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
                       </button>
                     ))}
                   </div>
@@ -4729,11 +4717,11 @@ export default function App() {
 
                 {/* Действие применить к (target) */}
                 <div>
-                  <p className="text-[10px] font-bold text-gray-500 mb-2 uppercase">Действие применить к</p>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">Действие применить к</p>
                   <div className="flex gap-2 flex-wrap">
                     {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'specific',l:'Указанный'},{v:'nobody',l:'Никто'}].map(o => (
                       <button key={o.v} onClick={() => upd('target', o.v)}
-                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-gray-50 border border-gray-200 text-gray-500'}`}>{o.l}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
                       </button>
                     ))}
                   </div>
@@ -4744,9 +4732,9 @@ export default function App() {
                         value={editingTrigger.target_user || ''}
                         onChange={e => upd('target_user', e.target.value.trim())}
                         placeholder="user_id или @username"
-                        className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm font-bold text-gray-700 outline-none focus:border-blue-400 transition-all"
+                        className="w-full px-3 py-2 bg-sff border border-bd2 rounded-xl text-sm font-bold text-tx outline-none focus:border-blue-400 transition-all"
                       />
-                      <p className="text-[9px] text-gray-400 mt-1">Целевой пользователь для действий на «Указанного»</p>
+                      <p className="text-[9px] text-lbl mt-1">Целевой пользователь для действий на «Указанного»</p>
                     </div>
                   )}
                 </div>
@@ -4769,11 +4757,11 @@ export default function App() {
             onDragStart={() => active && handleDragStart(t.id)}
             onDragOver={e => { e.preventDefault(); }}
             onDrop={() => active && handleDrop(t.id)}
-            className={`flex items-center py-3 px-4 border-b border-gray-50 last:border-b-0 transition-opacity ${dragId === t.id ? 'opacity-40' : 'opacity-100'}`}
+            className={`flex items-center py-3 px-4 border-b border-bd last:border-b-0 transition-opacity ${dragId === t.id ? 'opacity-40' : 'opacity-100'}`}
           >
             {/* drag handle (только активные) */}
             {active ? (
-              <GripVertical size={16} className="text-gray-300 mr-2 flex-shrink-0 cursor-grab active:cursor-grabbing"/>
+              <GripVertical size={16} className="text-lbl mr-2 flex-shrink-0 cursor-grab active:cursor-grabbing"/>
             ) : (
               <div className="w-[20px] mr-2 flex-shrink-0"/>
             )}
@@ -4788,7 +4776,7 @@ export default function App() {
             {/* название */}
             <button
               onClick={() => openTriggerModal(t)}
-              className="flex-1 text-left text-sm font-bold text-blue-600 hover:text-blue-800 truncate"
+              className="flex-1 text-left text-sm font-bold text-cta hover:text-cta truncate"
             >
               {t.name}
             </button>
@@ -4799,7 +4787,7 @@ export default function App() {
               {!active && userCan('triggers.delete') && (
                 <button
                   onClick={() => deleteTrigger(t.id)}
-                  className="p-2 text-red-400 hover:text-red-600 active:scale-90 transition-all"
+                  className="p-2 text-red-400 hover:text-danger active:scale-90 transition-all"
                 >
                   <Trash2 size={16}/>
                 </button>
@@ -4809,7 +4797,7 @@ export default function App() {
                 <button
                   onClick={() => copyTrigger(t.id)}
                   disabled={copyingTrigger === t.id}
-                  className="p-2 text-blue-400 hover:text-blue-600 active:scale-90 transition-all disabled:opacity-40"
+                  className="p-2 text-blue-400 hover:text-cta active:scale-90 transition-all disabled:opacity-40"
                 >
                   {copyingTrigger === t.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
                 </button>
@@ -4820,7 +4808,7 @@ export default function App() {
                   onClick={() => toggleTrigger(t.id)}
                   disabled={togglingTrigger === t.id}
                   className={`p-0.5 rounded-full active:scale-90 transition-all disabled:opacity-40 ${
-                    active ? 'text-red-500 hover:text-red-700' : 'text-green-500 hover:text-green-700'
+                    active ? 'text-danger hover:text-danger' : 'text-ok hover:text-ok'
                   }`}
                 >
                   {togglingTrigger === t.id
@@ -4837,20 +4825,27 @@ export default function App() {
 
         return (
           <div className="space-y-4 pb-24">
+            {/* ── Статус-баннер модуля (V1.17.0h1c) ── */}
+            <ModuleStatusBanner
+              moduleId="triggers"
+              moduleName="Триггеры"
+              modulesApi={modulesApi}
+            />
+
             {/* ── Поиск ── */}
             <div className="relative">
-              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-300"/>
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-lbl"/>
               <input
                 value={triggerSearch}
                 onChange={e => setTriggerSearch(e.target.value)}
                 placeholder="Поиск по названию или ключевым словам..."
-                className="w-full bg-white border border-gray-100 rounded-2xl pl-10 pr-4 py-3.5 text-sm font-bold focus:outline-none focus:border-blue-300 shadow-sm"
+                className="w-full bg-sff border border-bd rounded-2xl pl-10 pr-4 py-3.5 text-sm font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] shadow-sm"
               />
             </div>
 
             {/* ── Панель действий ── */}
             <div className="flex items-center space-x-2">
-              <button className="flex items-center space-x-2 px-5 py-3 bg-white border border-gray-100 rounded-2xl font-black text-xs text-gray-500 shadow-sm active:scale-95 transition-all">
+              <button className="flex items-center space-x-2 px-5 py-3 bg-sff border border-bd rounded-2xl font-black text-xs text-txd shadow-sm active:scale-95 transition-all">
                 <Activity size={14}/><span>Статистика</span>
               </button>
               {userCan('triggers.create') && (
@@ -4866,26 +4861,26 @@ export default function App() {
                 <div className="relative">
                   <button
                     onClick={() => setShowTriggerMenu(v => !v)}
-                    className="p-3 bg-white border border-gray-100 rounded-2xl text-gray-400 shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
+                    className="p-3 bg-sff border border-bd rounded-2xl text-lbl shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
                   >···</button>
                   {showTriggerMenu && (
-                    <div className="absolute right-0 top-full mt-2 w-56 bg-white border border-gray-100 rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-sff border border-bd rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
                       {userCan('triggers.create') && (
-                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
-                          <Download size={14} className="text-gray-400"/> Импортировать триггеры
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3">
+                          <Download size={14} className="text-lbl"/> Импортировать триггеры
                         </button>
                       )}
                       {userCan('triggers.create') && (
-                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3">
-                          <Clock size={14} className="text-gray-400"/> Восстановить удалённый
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3">
+                          <Clock size={14} className="text-lbl"/> Восстановить удалённый
                         </button>
                       )}
                       {userCan('triggers.toggle') && (
                         <button
                           onClick={() => { triggers.forEach(t => t.is_enabled && toggleTrigger(t.id)); }}
-                          className="w-full text-left px-5 py-3.5 text-sm font-bold text-gray-700 hover:bg-gray-50 flex items-center gap-3"
+                          className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3"
                         >
-                          <Power size={14} className="text-gray-400"/> Отключить все триггеры
+                          <Power size={14} className="text-lbl"/> Отключить все триггеры
                         </button>
                       )}
                     </div>
@@ -4895,7 +4890,7 @@ export default function App() {
             </div>
 
             {triggersLoading && (
-              <div className="text-center py-8 text-gray-400 font-black text-sm">
+              <div className="text-center py-8 text-lbl font-black text-sm">
                 <Loader2 size={24} className="animate-spin mx-auto mb-2"/> Загрузка...
               </div>
             )}
@@ -4903,8 +4898,8 @@ export default function App() {
             {/* ── Активные ── */}
             {!triggersLoading && activeTriggers.length > 0 && (
               <div>
-                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Активные триггеры</p>
-                <div className="bg-white rounded-[2rem] border-l-4 border-l-green-500 border border-gray-100 shadow-sm overflow-hidden">
+                <p className="text-xs font-black text-lbl uppercase tracking-widest mb-2 px-1">Активные триггеры</p>
+                <div className="bg-sff rounded-[2rem] border-l-4 border-l-green-500 border border-bd shadow-sm overflow-hidden">
                   {activeTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={true}/>)}
                 </div>
               </div>
@@ -4913,15 +4908,15 @@ export default function App() {
             {/* ── Неактивные ── */}
             {!triggersLoading && inactiveTriggers.length > 0 && (
               <div>
-                <p className="text-xs font-black text-gray-400 uppercase tracking-widest mb-2 px-1">Не активные триггеры</p>
-                <div className="bg-white rounded-[2rem] border-l-4 border-l-red-400 border border-gray-100 shadow-sm overflow-hidden">
+                <p className="text-xs font-black text-lbl uppercase tracking-widest mb-2 px-1">Не активные триггеры</p>
+                <div className="bg-sff rounded-[2rem] border-l-4 border-l-red-400 border border-bd shadow-sm overflow-hidden">
                   {inactiveTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={false}/>)}
                 </div>
               </div>
             )}
 
             {!triggersLoading && triggers.length === 0 && (
-              <div className="text-center py-12 text-gray-300 font-black text-sm uppercase tracking-widest">
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
                 Триггеров пока нет
               </div>
             )}
@@ -4930,67 +4925,7 @@ export default function App() {
       }
 
       case 'updates':
-        return (
-          <div className="space-y-4 pb-24 animate-in fade-in duration-300">
-            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm flex items-center space-x-4">
-              <div className="w-14 h-14 bg-blue-600 rounded-[1.5rem] flex items-center justify-center shadow-lg">
-                <Megaphone size={26} className="text-white" />
-              </div>
-              <div>
-                <h2 className="font-black text-2xl text-gray-900 leading-none">Обновления</h2>
-                <p className="text-xs text-gray-400 font-bold mt-1">История улучшений панели и бота</p>
-              </div>
-            </div>
-
-            {UPDATES.map((upd) => (
-              <div key={upd.version} className="bg-white rounded-[2.5rem] p-6 border border-gray-100 shadow-sm space-y-4">
-                <div className="flex items-center justify-between">
-                  <span className="bg-blue-600 text-white text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full">{upd.version}</span>
-                  <span className="text-xs text-gray-300 font-mono">{upd.date}</span>
-                </div>
-                <h3 className="font-black text-lg text-gray-900">{upd.title}</h3>
-                <div className="space-y-2">
-                  {upd.items.map((item, i) => {
-                    const typeCfg = {
-                      new:     { icon: PartyPopper, bg: 'bg-green-50',  text: 'text-green-600',  border: 'border-green-100',  label: 'НОВОЕ'      },
-                      improve: { icon: Sparkles,    bg: 'bg-blue-50',   text: 'text-blue-600',   border: 'border-blue-100',   label: 'УЛУЧШЕНО'   },
-                      fix:     { icon: Wrench,      bg: 'bg-orange-50', text: 'text-orange-600', border: 'border-orange-100', label: 'ИСПРАВЛЕНО' },
-                    }[item.type] || { icon: Info, bg: 'bg-gray-50', text: 'text-gray-500', border: 'border-gray-100', label: '' };
-                    const tagCfg = {
-                      site:       { emoji: '🌐', label: 'Сайт',       color: 'bg-indigo-50 text-indigo-500' },
-                      statistics: { emoji: '📊', label: 'Статистика', color: 'bg-violet-50 text-violet-500' },
-                      journal:    { emoji: '📋', label: 'Журнал',     color: 'bg-sky-50 text-sky-500'       },
-                      triggers:   { emoji: '⚡', label: 'Триггеры',   color: 'bg-yellow-50 text-yellow-600' },
-                      bot:        { emoji: '🤖', label: 'Бот',        color: 'bg-gray-100 text-gray-500'    },
-                    }[item.tag] || null;
-                    const Icon = typeCfg.icon;
-                    return (
-                      <div key={i} className={`flex items-start space-x-3 p-3 rounded-2xl border ${typeCfg.bg} ${typeCfg.border}`}>
-                        <div className={`flex-shrink-0 flex items-center space-x-1 ${typeCfg.text}`}>
-                          <Icon size={14} />
-                          <span className="text-[9px] font-black uppercase tracking-widest">{typeCfg.label}</span>
-                        </div>
-                        <p className="text-xs text-gray-700 font-medium leading-relaxed flex-1">{item.text}</p>
-                        {tagCfg && (() => {
-                          const key = `${upd.version}-${i}`;
-                          return (
-                            <span
-                              onClick={() => triggerJiggle(key)}
-                              onAnimationEnd={() => setJigglingTag(null)}
-                              className={`flex-shrink-0 text-[9px] font-black px-2 py-1 rounded-full cursor-pointer select-none hover:scale-110 transition-transform ${tagCfg.color} ${jigglingTag === key ? 'tag-jiggle' : ''}`}
-                            >
-                              {tagCfg.emoji} {tagCfg.label}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        );
+        return <NewsTree updates={UPDATES} baseline={newsBaseline} />;
 
       case 'profile': {
         const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
@@ -5003,28 +4938,28 @@ export default function App() {
         };
         const role = profileData?.role || 'user';
         const roleStyles = {
-          owner:     { bg: 'bg-yellow-100', text: 'text-yellow-700', icon: Crown },
-          developer: { bg: 'bg-orange-100', text: 'text-orange-700', icon: ShieldCheck },
-          deputy:    { bg: 'bg-purple-100', text: 'text-purple-700', icon: ShieldCheck },
-          admin:     { bg: 'bg-green-100',  text: 'text-green-700',  icon: ShieldCheck },
-          user:      { bg: 'bg-gray-100',   text: 'text-gray-500',   icon: User },
+          owner:     { bg: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]', text: 'text-warn', icon: Crown },
+          developer: { bg: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]', text: 'text-warn', icon: ShieldCheck },
+          deputy:    { bg: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)]', text: 'text-purple', icon: ShieldCheck },
+          admin:     { bg: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]',  text: 'text-ok',  icon: ShieldCheck },
+          user:      { bg: 'bg-sf2',   text: 'text-txd',   icon: User },
         };
         const rs = roleStyles[role] || roleStyles.user;
         const RoleIcon = rs.icon;
         const placeholderVal = profileLoading
-          ? <Loader2 size={14} className="animate-spin text-gray-300"/>
-          : <span className="text-xs text-gray-300 font-black uppercase">—</span>;
+          ? <Loader2 size={14} className="animate-spin text-lbl"/>
+          : <span className="text-xs text-lbl font-black uppercase">—</span>;
         const ICON_MAP = {
           ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
           Settings, ShieldCheck, Ban, ShieldBan,
         };
         const ACTION_COLORS = {
-          view:   'bg-gray-100 text-gray-600',
-          create: 'bg-blue-100 text-blue-700',
-          edit:   'bg-amber-100 text-amber-700',
-          delete: 'bg-red-100 text-red-700',
-          toggle: 'bg-green-100 text-green-700',
-          export: 'bg-purple-100 text-purple-700',
+          view:   'bg-sf2 text-txd',
+          create: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
+          edit:   'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+          delete: 'bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',
+          toggle: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok',
+          export: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple',
         };
         const accesses = profileData?.accesses || [];
         const totalActions = accesses.reduce((sum, r) => sum + r.actions.length, 0);
@@ -5058,7 +4993,7 @@ export default function App() {
           <div className="pb-24 animate-in fade-in duration-500 space-y-4">
 
             {/* ─── HERO (компактный, горизонтальный) ─── */}
-            <div className="bg-white rounded-[2rem] p-5 border border-gray-100 shadow-sm
+            <div className="bg-sff rounded-[2rem] p-5 border border-bd shadow-sm
                             flex items-center gap-5">
               {authUser.photo_url
                 ? <img src={authUser.photo_url} alt="avatar"
@@ -5070,9 +5005,9 @@ export default function App() {
                   </div>
               }
               <div className="flex-1 min-w-0">
-                <h2 className="text-xl font-black text-gray-900 truncate">{authUser.first_name || 'Пользователь'}</h2>
+                <h2 className="text-xl font-black text-tx truncate">{authUser.first_name || 'Пользователь'}</h2>
                 {authUser.username && (
-                  <p className="text-xs font-bold text-gray-400 truncate">@{authUser.username}</p>
+                  <p className="text-xs font-bold text-lbl truncate">@{authUser.username}</p>
                 )}
                 <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
                                 ${rs.bg} ${rs.text} text-[10px] font-black uppercase tracking-wide`}>
@@ -5085,24 +5020,24 @@ export default function App() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
 
               {/* TELEGRAM */}
-              <div className="bg-white rounded-[2rem] p-5 border border-gray-100 space-y-2">
-                <h3 className="font-black text-gray-900 text-xs uppercase flex items-center mb-2">
-                  <User className="mr-2 text-blue-500" size={14}/> Telegram
+              <div className="bg-sff rounded-[2rem] p-5 border border-bd space-y-2">
+                <h3 className="font-black text-tx text-xs uppercase flex items-center mb-2">
+                  <User className="mr-2 text-cta" size={14}/> Telegram
                 </h3>
-                <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                <div className="flex items-center justify-between p-3 bg-sf2 rounded-xl">
                   <div className="flex items-center gap-2">
-                    <Hash size={14} className="text-gray-400"/>
-                    <span className="text-[11px] font-bold text-gray-400 uppercase">ID</span>
+                    <Hash size={14} className="text-lbl"/>
+                    <span className="text-[11px] font-bold text-lbl uppercase">ID</span>
                   </div>
-                  <span className="font-mono font-black text-sm text-gray-900">{authUser.id}</span>
+                  <span className="font-mono font-black text-sm text-tx">{authUser.id}</span>
                 </div>
                 {authUser.username && (
-                  <div className="flex items-center justify-between p-3 bg-gray-50 rounded-xl">
+                  <div className="flex items-center justify-between p-3 bg-sf2 rounded-xl">
                     <div className="flex items-center gap-2">
-                      <AtSign size={14} className="text-gray-400"/>
-                      <span className="text-[11px] font-bold text-gray-400 uppercase">Username</span>
+                      <AtSign size={14} className="text-lbl"/>
+                      <span className="text-[11px] font-bold text-lbl uppercase">Username</span>
                     </div>
-                    <span className="font-black text-sm text-gray-900">@{authUser.username}</span>
+                    <span className="font-black text-sm text-tx">@{authUser.username}</span>
                   </div>
                 )}
               </div>
@@ -5116,41 +5051,41 @@ export default function App() {
 
               {/* ВАШИ ДОСТУПЫ — collapsible, на полную ширину сетки */}
               {accesses.length > 0 && (
-                <div className="lg:col-span-2 bg-white rounded-[2rem] border border-gray-100 overflow-hidden">
+                <div className="lg:col-span-2 bg-sff rounded-[2rem] border border-bd overflow-hidden">
                   <button
                     onClick={() => setAccessesOpen(v => !v)}
-                    className="w-full flex items-center justify-between p-5 hover:bg-gray-50 transition-colors"
+                    className="w-full flex items-center justify-between p-5 hover:bg-sf2 transition-colors"
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center">
-                        <ShieldCheck size={16} className="text-indigo-600"/>
+                      <div className="w-9 h-9 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center">
+                        <ShieldCheck size={16} className="text-cta"/>
                       </div>
                       <div className="text-left">
-                        <h3 className="font-black text-gray-900 text-sm uppercase">Ваши доступы</h3>
-                        <p className="text-[11px] font-bold text-gray-400 mt-0.5">
+                        <h3 className="font-black text-tx text-sm uppercase">Ваши доступы</h3>
+                        <p className="text-[11px] font-bold text-lbl mt-0.5">
                           {accesses.length} разделов · {totalActions} действий
                         </p>
                       </div>
                     </div>
                     {accessesOpen
-                      ? <ChevronUp   size={18} className="text-gray-400"/>
-                      : <ChevronDown size={18} className="text-gray-400"/>}
+                      ? <ChevronUp   size={18} className="text-lbl"/>
+                      : <ChevronDown size={18} className="text-lbl"/>}
                   </button>
                   {accessesOpen && (
                     <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
                       {accesses.map((res) => {
                         const Icon = ICON_MAP[res.icon] || ShieldCheck;
                         return (
-                          <div key={res.key} className="p-3 bg-gray-50 rounded-xl">
+                          <div key={res.key} className="p-3 bg-sf2 rounded-xl">
                             <div className="flex items-center gap-2 mb-2">
-                              <Icon size={14} className="text-indigo-500 flex-shrink-0"/>
-                              <span className="font-black text-xs text-gray-900 uppercase tracking-wide truncate">{res.label}</span>
+                              <Icon size={14} className="text-cta flex-shrink-0"/>
+                              <span className="font-black text-xs text-tx uppercase tracking-wide truncate">{res.label}</span>
                             </div>
                             <div className="flex flex-wrap gap-1">
                               {res.actions.map((a) => (
                                 <span key={a.key}
                                       className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase
-                                                  tracking-wide ${ACTION_COLORS[a.key] || 'bg-gray-100 text-gray-600'}`}>
+                                                  tracking-wide ${ACTION_COLORS[a.key] || 'bg-sf2 text-txd'}`}>
                                   {a.label}
                                 </span>
                               ))}
@@ -5169,29 +5104,29 @@ export default function App() {
               <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4
                               bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
                    onClick={() => setShowConnectChat(false)}>
-                <div className="bg-white w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6
+                <div className="bg-sff w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6
                                 shadow-2xl animate-in slide-in-from-bottom duration-300"
                      onClick={(e) => e.stopPropagation()}>
                   <div className="flex items-start justify-between mb-5">
                     <div className="flex items-center gap-3">
-                      <div className="w-12 h-12 rounded-2xl bg-blue-100 flex items-center justify-center">
-                        <Plug size={22} className="text-blue-600"/>
+                      <div className="w-12 h-12 rounded-2xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center">
+                        <Plug size={22} className="text-cta"/>
                       </div>
                       <div>
-                        <h3 className="font-black text-gray-900 text-base">Подключение чата</h3>
-                        <p className="text-xs text-gray-500 font-medium">5 простых шагов</p>
+                        <h3 className="font-black text-tx text-base">Подключение чата</h3>
+                        <p className="text-xs text-txd font-medium">5 простых шагов</p>
                       </div>
                     </div>
                     <button onClick={() => setShowConnectChat(false)}
-                            className="p-2 rounded-xl hover:bg-gray-100 active:scale-90 transition-all">
-                      <X size={18} className="text-gray-400"/>
+                            className="p-2 rounded-xl hover:bg-sf2 active:scale-90 transition-all">
+                      <X size={18} className="text-lbl"/>
                     </button>
                   </div>
 
                   <ol className="space-y-3 mb-5">
                     {[
                       <>Откройте Telegram и найдите бота{' '}
-                        <span className="font-black text-blue-600">@{profileData?.bot_username || 'Pulse_On_bot'}</span></>,
+                        <span className="font-black text-cta">@{profileData?.bot_username || 'Pulse_On_bot'}</span></>,
                       <>Нажмите кнопку <span className="font-black">«Добавить в группу»</span></>,
                       <>Выберите свой чат из списка</>,
                       <>Назначьте бота <span className="font-black">администратором</span> с правами:
@@ -5199,11 +5134,11 @@ export default function App() {
                       <>Вернитесь сюда — чат появится в профиле автоматически</>,
                     ].map((text, i) => (
                       <li key={i} className="flex gap-3 items-start">
-                        <span className="flex-shrink-0 w-7 h-7 rounded-xl bg-blue-100 text-blue-700
+                        <span className="flex-shrink-0 w-7 h-7 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta
                                          font-black text-xs flex items-center justify-center">
                           {i + 1}
                         </span>
-                        <span className="text-sm text-gray-700 font-medium leading-relaxed pt-0.5">{text}</span>
+                        <span className="text-sm text-tx font-medium leading-relaxed pt-0.5">{text}</span>
                       </li>
                     ))}
                   </ol>
@@ -5221,12 +5156,12 @@ export default function App() {
             )}
 
             {/* ─── ДЕЙСТВИЯ ─── */}
-            <div className="bg-white rounded-[2.5rem] p-6 border border-gray-100">
+            <div className="bg-sff rounded-[2.5rem] p-6 border border-bd">
               <button
                 onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
                 className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
-                           bg-red-50 text-red-600 font-black text-sm uppercase tracking-wide
-                           hover:bg-red-100 active:scale-[0.98] transition-all">
+                           bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger font-black text-sm uppercase tracking-wide
+                           hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] active:scale-[0.98] transition-all">
                 <LogOut size={16}/> Выйти из аккаунта
               </button>
             </div>
@@ -5239,11 +5174,11 @@ export default function App() {
         if (!isOwner) {
           return (
             <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
-              <div className="w-20 h-20 rounded-3xl bg-red-50 flex items-center justify-center border border-red-100">
+              <div className="w-20 h-20 rounded-3xl bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] flex items-center justify-center border border-[color-mix(in_oklab,var(--danger)_30%,transparent)]">
                 <ShieldCheck size={36} className="text-red-400"/>
               </div>
-              <p className="font-black text-gray-900 text-lg">Доступно только владельцу</p>
-              <p className="text-sm text-gray-400 text-center max-w-xs">Этот раздел позволяет изменять права ролей. Только владелец чата имеет доступ.</p>
+              <p className="font-black text-tx text-lg">Доступно только владельцу</p>
+              <p className="text-sm text-lbl text-center max-w-xs">Этот раздел позволяет изменять права ролей. Только владелец чата имеет доступ.</p>
             </div>
           );
         }
@@ -5253,12 +5188,12 @@ export default function App() {
           Settings, ShieldCheck, Ban, ShieldBan, Coins,
         };
         const ACTION_BADGE_COLORS = {
-          view:   'bg-gray-100 text-gray-600',
-          create: 'bg-blue-100 text-blue-700',
-          edit:   'bg-amber-100 text-amber-700',
-          delete: 'bg-red-100 text-red-700',
-          toggle: 'bg-green-100 text-green-700',
-          export: 'bg-purple-100 text-purple-700',
+          view:   'bg-sf2 text-txd',
+          create: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
+          edit:   'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+          delete: 'bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',
+          toggle: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok',
+          export: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple',
         };
         const ACTION_DESCRIPTIONS = {
           view:   'просматривать раздел',
@@ -5330,14 +5265,14 @@ export default function App() {
             )}
 
             {/* Шапка */}
-            <div className="bg-white rounded-[2rem] border border-gray-100 shadow-sm p-5">
+            <div className="bg-sff rounded-[2rem] border border-bd shadow-sm p-5">
               <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-2xl bg-indigo-50 flex items-center justify-center border border-indigo-100 flex-shrink-0">
-                  <ShieldCheck size={18} className="text-indigo-500"/>
+                <div className="w-10 h-10 rounded-2xl bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] flex-shrink-0">
+                  <ShieldCheck size={18} className="text-cta"/>
                 </div>
                 <div className="flex-1 min-w-0">
-                  <p className="font-black text-gray-900 text-base leading-none">Права доступа</p>
-                  <p className="text-xs text-gray-400 font-medium mt-0.5">Роли: зам владельца и администратор</p>
+                  <p className="font-black text-tx text-base leading-none">Права доступа</p>
+                  <p className="text-xs text-lbl font-medium mt-0.5">Роли: зам владельца и администратор</p>
                 </div>
                 <button
                   onClick={savePermissions}
@@ -5345,7 +5280,7 @@ export default function App() {
                   className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${
                     permDirty && !permSaving
                       ? 'bg-blue-600 text-white shadow-md shadow-blue-100 hover:bg-blue-700'
-                      : 'bg-gray-100 text-gray-300 cursor-not-allowed'
+                      : 'bg-sf2 text-lbl cursor-not-allowed'
                   }`}
                 >
                   {permSaving ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>}
@@ -5371,11 +5306,11 @@ export default function App() {
                         className={`flex-1 py-3 px-4 rounded-2xl transition-all duration-200 text-left ${
                           permActiveRole === role.key
                             ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
-                            : 'bg-white text-gray-500 border border-gray-100 hover:border-blue-200'
+                            : 'bg-sff text-txd border border-bd hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]'
                         }`}
                       >
-                        <p className={`font-black text-sm ${permActiveRole === role.key ? 'text-white' : 'text-gray-900'}`}>{role.label}</p>
-                        <p className={`text-[10px] font-bold mt-0.5 uppercase tracking-wide ${permActiveRole === role.key ? 'text-blue-200' : 'text-gray-400'}`}>
+                        <p className={`font-black text-sm ${permActiveRole === role.key ? 'text-white' : 'text-tx'}`}>{role.label}</p>
+                        <p className={`text-[10px] font-bold mt-0.5 uppercase tracking-wide ${permActiveRole === role.key ? 'text-blue-200' : 'text-lbl'}`}>
                           {roleSet.size} из {totalPerms} разрешений
                         </p>
                       </button>
@@ -5392,29 +5327,29 @@ export default function App() {
                     const allEnabled = resPerms.length > 0 && enabledCount === resPerms.length;
                     const isExpanded = permSelectedRes === res.key;
                     return (
-                      <div key={res.key} className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
+                      <div key={res.key} className="bg-sff rounded-2xl border border-bd overflow-hidden">
                         {/* Заголовок — клик раскрывает/закрывает */}
                         <div
                           onClick={() => setPermSelectedRes(isExpanded ? null : res.key)}
-                          className={`flex items-center gap-3 p-4 cursor-pointer transition-all hover:bg-gray-50 ${isExpanded ? 'border-b border-gray-100' : ''}`}
+                          className={`flex items-center gap-3 p-4 cursor-pointer transition-all hover:bg-sf2 ${isExpanded ? 'border-b border-bd' : ''}`}
                         >
-                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border flex-shrink-0 transition-colors ${isExpanded ? 'bg-blue-50 border-blue-100' : 'bg-gray-50 border-gray-100'}`}>
-                            <ResIcon size={15} className={isExpanded ? 'text-blue-500' : 'text-gray-400'}/>
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border flex-shrink-0 transition-colors ${isExpanded ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border-[color-mix(in_oklab,var(--cta)_30%,transparent)]' : 'bg-sf2 border-bd'}`}>
+                            <ResIcon size={15} className={isExpanded ? 'text-cta' : 'text-lbl'}/>
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="font-black text-sm text-gray-900 leading-none">{res.label}</p>
-                            <p className="text-[10px] text-gray-400 font-medium mt-0.5">
+                            <p className="font-black text-sm text-tx leading-none">{res.label}</p>
+                            <p className="text-[10px] text-lbl font-medium mt-0.5">
                               {enabledCount === 0 ? 'Нет доступа' : `${enabledCount} из ${resPerms.length} действий`}
                             </p>
                           </div>
                           <div className="flex items-center gap-2 flex-shrink-0">
                             <button
                               onClick={e => { e.stopPropagation(); toggleAllForResource(res.key, !allEnabled); }}
-                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${allEnabled ? 'bg-red-50 text-red-500 hover:bg-red-100' : 'bg-green-50 text-green-600 hover:bg-green-100'}`}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${allEnabled ? 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)]' : 'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]'}`}
                             >
                               {allEnabled ? 'Выкл' : 'Вкл'}
                             </button>
-                            <ChevronDown size={14} className={`text-gray-400 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
+                            <ChevronDown size={14} className={`text-lbl transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
                           </div>
                         </div>
                         {/* Раскрытая панель: 2 колонки действий */}
@@ -5424,15 +5359,15 @@ export default function App() {
                               const perm = `${res.key}.${action.key}`;
                               const isOwnerLevel = (permCatalog?.owner_level || []).includes(perm);
                               const enabled = currentSet.has(perm);
-                              const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-gray-100 text-gray-600';
+                              const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-sf2 text-txd';
                               return (
                                 <label
                                   key={action.key}
                                   title={isOwnerLevel ? 'Доступно только владельцу' : ''}
                                   className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
                                     isOwnerLevel
-                                      ? 'bg-gray-50 border-gray-100 opacity-50 cursor-not-allowed'
-                                      : `cursor-pointer active:scale-95 ${enabled ? 'bg-blue-50 border-blue-200' : 'bg-gray-50 border-gray-100 hover:border-gray-200'}`
+                                      ? 'bg-sf2 border-bd opacity-50 cursor-not-allowed'
+                                      : `cursor-pointer active:scale-95 ${enabled ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border-[color-mix(in_oklab,var(--cta)_40%,transparent)]' : 'bg-sf2 border-bd hover:border-bd2'}`
                                   }`}
                                 >
                                   <input
@@ -5446,7 +5381,7 @@ export default function App() {
                                     <span className={`block text-[10px] font-black uppercase tracking-wide leading-none ${badgeCls.split(' ').slice(1).join(' ')}`}>
                                       {action.label}
                                     </span>
-                                    <span className="text-[9px] text-gray-400 font-medium mt-0.5 block leading-tight">
+                                    <span className="text-[9px] text-lbl font-medium mt-0.5 block leading-tight">
                                       {isOwnerLevel ? 'только владелец' : (ACTION_DESCRIPTIONS[action.key] || action.label)}
                                     </span>
                                   </div>
@@ -5468,7 +5403,7 @@ export default function App() {
       case 'economy':
         return (
           <EconomyErrorBoundary>
-            <EconomyPage token={localStorage.getItem('auth_token')} />
+            <EconomyPage token={localStorage.getItem('auth_token')} modulesApi={modulesApi} />
           </EconomyErrorBoundary>
         );
 
@@ -5493,60 +5428,81 @@ export default function App() {
   if (!authUser) return <LoginPage onLogin={setAuthUser}/>;
 
   return (
-    <div className="min-h-screen bg-[#F8FAFC] flex font-sans text-gray-900 selection:bg-blue-100 overflow-hidden">
-      <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-white border-r border-gray-100 flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
-        <div className="h-16 flex items-center justify-between px-5 border-b border-gray-100">
+    <div className="ds-canvas min-h-screen flex font-sans text-tx selection:bg-[color-mix(in_oklab,var(--cta)_25%,transparent)] overflow-hidden">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-sff border-r border-bd flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <div className="h-16 flex items-center justify-between px-5 border-b border-bd">
           <div className="flex items-center space-x-3">
             <img src="/logo.jpg" alt="Puls Chat" className="w-9 h-9 rounded-xl object-cover shadow-md"/>
             <div>
-              <span className="block font-black text-base text-gray-900 leading-none">Puls Chat</span>
-              <span className="text-[9px] font-bold text-blue-500 uppercase tracking-wider mt-0.5 block">Owner Console</span>
+              <span className="block font-black text-base text-tx leading-none">Puls Chat</span>
+              <span className="text-[9px] font-bold text-cta uppercase tracking-wider mt-0.5 block">Owner Console</span>
             </div>
           </div>
-          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-3 bg-white rounded-2xl text-gray-400 border border-gray-50 active:scale-90 transition-all"><X size={24} /></button>
+          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-3 bg-sf2 rounded-2xl text-txd border border-bd active:scale-90 transition-all"><X size={24} /></button>
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
-          {['top', 'main', 'modules', 'features'].map(group => (
+          {['top', 'modules', 'features'].map(group => {
+            const groupItems = navigation.filter(n =>
+              n.group === group
+              && (!n.ownerOnly || isOwner)
+              && (!n.resource || userCanAny(n.resource))
+              // Разделы модулей теперь всегда видны — тумблер влияет
+              // только на работу функции в боте (статус-баннер сверху страницы).
+            );
+            if (groupItems.length === 0) return null;
+            return (
             <div key={group} className="space-y-2">
               {group !== 'top' && (
-                <p className="px-5 text-[11px] font-black text-gray-300 uppercase tracking-[0.3em] mb-6">
-                  {group === 'main' ? 'Мониторинг' : group === 'modules' ? 'Модули' : 'Сервис'}
+                <p className="px-5 text-[11px] font-black text-lbl uppercase tracking-[0.3em] mb-6">
+                  {group === 'modules' ? 'Подключённые' : 'Сервис'}
                 </p>
               )}
-              {navigation.filter(n => n.group === group && (!n.ownerOnly || isOwner) && (!n.resource || userCanAny(n.resource))).map((item) => (
+              {groupItems.map((item) => (
                 <button
                   key={item.id}
                   onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
                   className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 ${
                     activeTab === item.id
-                    ? 'bg-gray-900 text-white shadow-md font-black'
-                    : 'text-gray-500 hover:bg-gray-50 active:bg-gray-100'
+                    ? 'bg-cta text-white shadow-md font-black'
+                    : 'text-txd hover:bg-ih active:bg-ia'
                   }`}
                 >
                   <item.icon
                     size={18}
                     onAnimationEnd={() => setJigglingNav(null)}
-                    className={`mr-3 ${activeTab === item.id ? 'text-blue-400' : 'text-gray-400'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
+                    className={`mr-3 ${activeTab === item.id ? 'text-white' : 'text-txd'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
                   />
                   <span className="text-sm flex-1">{item.name}</span>
                   {item.id === 'updates' && hasNewUpdate && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse shadow-md shadow-red-300" />
+                    <span className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse" />
                   )}
                 </button>
               ))}
             </div>
-          ))}
+            );
+          })}
         </nav>
       </aside>
 
-      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-[#F8FAFC]">
-        <header className="h-16 lg:h-16 bg-white border-b border-gray-100 flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
+      {hasNewUpdate && activeTab !== 'updates' && (
+        <UpdateToast
+          latest={UPDATES[0]}
+          onOpen={() => navigateTo('updates')}
+          onDismiss={() => {
+            localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+            setHasNewUpdate(false);
+          }}
+        />
+      )}
+
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-transparent">
+        <header className="h-16 lg:h-16 bg-sff border-b border-bd flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
           <div className="flex items-center">
-            <button className="lg:hidden p-4 bg-gray-50 rounded-[1.5rem] mr-5 border border-gray-100 shadow-sm" onClick={() => setIsSidebarOpen(true)}>
+            <button className="lg:hidden p-4 bg-sf2 rounded-[1.5rem] mr-5 border border-bd shadow-sm" onClick={() => setIsSidebarOpen(true)}>
               <Menu size={26} />
             </button>
-            <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tighter">
+            <h1 className="text-2xl sm:text-3xl font-black text-tx tracking-tighter">
               {navigation.find(n => n.id === activeTab)?.name}
             </h1>
           </div>
@@ -5558,11 +5514,11 @@ export default function App() {
             <div className="flex items-center gap-2">
               <button
                 onClick={() => navigateTo('profile')}
-                className="flex items-center gap-2 p-1 pr-2 rounded-2xl hover:bg-gray-50 transition-all active:scale-95 cursor-pointer"
+                className="flex items-center gap-2 p-1 pr-2 rounded-2xl hover:bg-ih transition-all active:scale-95 cursor-pointer"
                 title="Открыть профиль">
                 <div className="text-right hidden sm:block pl-2">
-                  <p className="text-sm font-black text-gray-900 leading-none">{authUser.first_name}</p>
-                  {authUser.username && <p className="text-[10px] font-bold text-gray-400 mt-0.5">@{authUser.username}</p>}
+                  <p className="text-sm font-black text-tx leading-none">{authUser.first_name}</p>
+                  {authUser.username && <p className="text-[10px] font-bold text-lbl mt-0.5">@{authUser.username}</p>}
                 </div>
                 {authUser.photo_url
                   ? <img src={authUser.photo_url} alt="avatar" className="w-10 h-10 rounded-2xl border-2 border-white shadow-lg object-cover"/>
@@ -5572,7 +5528,7 @@ export default function App() {
                 }
               </button>
               <button onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
-                className="p-2 rounded-xl text-gray-400 hover:text-red-500 hover:bg-red-50 transition-all active:scale-90"
+                className="p-2 rounded-xl text-txd hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] transition-all active:scale-90"
                 title="Выйти">
                 <Power size={16}/>
               </button>
@@ -5580,7 +5536,7 @@ export default function App() {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-gray-50/10 custom-scrollbar">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-transparent custom-scrollbar">
           <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' || activeTab === 'press_release' ? 'w-full' : 'max-w-3xl mx-auto'}>
             {renderContent()}
           </div>
@@ -5636,12 +5592,12 @@ export default function App() {
         ];
 
         const COLOR_BADGE = {
-          blue:   'bg-blue-50 text-blue-700 border border-blue-100 hover:bg-blue-100',
-          purple: 'bg-purple-50 text-purple-700 border border-purple-100 hover:bg-purple-100',
-          green:  'bg-green-50 text-green-700 border border-green-100 hover:bg-green-100',
-          amber:  'bg-amber-50 text-amber-700 border border-amber-100 hover:bg-amber-100',
-          red:    'bg-red-50 text-red-700 border border-red-100 hover:bg-red-100',
-          pink:   'bg-pink-50 text-pink-700 border border-pink-100 hover:bg-pink-100',
+          blue:   'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]',
+          purple: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple border border-[color-mix(in_oklab,var(--purple)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--purple)_16%,transparent)]',
+          green:  'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]',
+          amber:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]',
+          red:    'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)]',
+          pink:   'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--pink)_16%,transparent)]',
         };
 
         const insertPh = (key) => {
@@ -5663,17 +5619,17 @@ export default function App() {
         return (
           <div className="fixed inset-0 z-[300] flex items-center justify-end bg-black/20 backdrop-blur-sm animate-in fade-in duration-150"
             onClick={() => setPhDropdown(null)}>
-            <div className="relative bg-white h-full w-[380px] max-w-[95vw] shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+            <div className="relative bg-sff h-full w-[380px] max-w-[95vw] shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
               onClick={e => e.stopPropagation()}>
 
               {/* Шапка */}
-              <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 shrink-0">
+              <div className="flex items-center justify-between px-5 py-4 border-b border-bd shrink-0">
                 <div>
-                  <p className="font-black text-gray-900 text-base">Плейсхолдеры</p>
-                  <p className="text-[11px] text-gray-400 mt-0.5">Нажми — вставится в позицию курсора</p>
+                  <p className="font-black text-tx text-base">Плейсхолдеры</p>
+                  <p className="text-[11px] text-lbl mt-0.5">Нажми — вставится в позицию курсора</p>
                 </div>
                 <button onClick={() => setPhDropdown(null)}
-                  className="w-8 h-8 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all active:scale-90">
+                  className="w-8 h-8 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-txd transition-all active:scale-90">
                   <X size={16}/>
                 </button>
               </div>
@@ -5683,8 +5639,8 @@ export default function App() {
                 {PH_GROUPS_FULL.map(g => (
                   <div key={g.label}>
                     <div className="mb-2">
-                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider">{g.label}</p>
-                      <p className="text-[10px] text-gray-400">{g.desc}</p>
+                      <p className="text-[11px] font-black text-txd uppercase tracking-wider">{g.label}</p>
+                      <p className="text-[10px] text-lbl">{g.desc}</p>
                     </div>
                     <div className="space-y-1">
                       {g.items.map(it => (
@@ -5706,18 +5662,18 @@ export default function App() {
                 {customPlaceholders.length > 0 && (
                   <div>
                     <div className="mb-2">
-                      <p className="text-[11px] font-black text-gray-500 uppercase tracking-wider">Кастомные</p>
-                      <p className="text-[10px] text-gray-400">Созданы вручную через бота</p>
+                      <p className="text-[11px] font-black text-txd uppercase tracking-wider">Кастомные</p>
+                      <p className="text-[10px] text-lbl">Созданы вручную через бота</p>
                     </div>
                     <div className="space-y-1">
                       {customPlaceholders.map(ph => (
                         <button key={ph.name}
                           onClick={() => insertPh(ph.name)}
-                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left bg-gray-50 text-gray-700 border border-gray-100 hover:bg-gray-100">
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left bg-sf2 text-tx border border-bd hover:bg-sf2">
                           <div className="min-w-0">
                             <p className="text-xs font-black leading-tight">{ph.name}</p>
                             {ph.description && <p className="text-[10px] opacity-60 mt-0.5 leading-tight">{ph.description}</p>}
-                            {ph.value && <p className="text-[10px] text-blue-500 mt-0.5 leading-tight truncate max-w-[180px]">{ph.value}</p>}
+                            {ph.value && <p className="text-[10px] text-cta mt-0.5 leading-tight truncate max-w-[180px]">{ph.value}</p>}
                           </div>
                           <span className="ml-3 font-mono text-[10px] opacity-50 shrink-0">%{ph.name}%</span>
                         </button>
@@ -5726,9 +5682,9 @@ export default function App() {
                   </div>
                 )}
 
-                <div className="bg-gray-50 border border-gray-100 rounded-2xl p-3">
-                  <p className="text-[10px] font-black text-gray-500 mb-1">💡 Для цитируемого</p>
-                  <p className="text-[10px] text-gray-400 leading-relaxed">Замени <code className="bg-gray-200 px-1 rounded">act_</code> на <code className="bg-gray-200 px-1 rounded">rpl_</code> — получишь данные пользователя, на сообщение которого ответили.</p>
+                <div className="bg-sf2 border border-bd rounded-2xl p-3">
+                  <p className="text-[10px] font-black text-txd mb-1">💡 Для цитируемого</p>
+                  <p className="text-[10px] text-lbl leading-relaxed">Замени <code className="bg-bd2 px-1 rounded">act_</code> на <code className="bg-bd2 px-1 rounded">rpl_</code> — получишь данные пользователя, на сообщение которого ответили.</p>
                 </div>
               </div>
             </div>
@@ -5750,15 +5706,15 @@ export default function App() {
         const left = Math.min(settingHintPos.x, window.innerWidth - 300);
         const top  = Math.min(settingHintPos.y, window.innerHeight - 120);
         return (
-          <div className="fixed z-[400] w-72 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 animate-in fade-in zoom-in-95 duration-150"
+          <div className="fixed z-[400] w-72 bg-sff rounded-2xl shadow-2xl border border-bd p-4 animate-in fade-in zoom-in-95 duration-150"
             style={{left, top}}>
             <div className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Info size={14} className="text-blue-500"/>
+              <div className="w-7 h-7 rounded-full bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={14} className="text-cta"/>
               </div>
-              <p className="text-sm text-gray-700 leading-relaxed flex-1">{HINTS[settingHint]}</p>
+              <p className="text-sm text-tx leading-relaxed flex-1">{HINTS[settingHint]}</p>
               <button onClick={() => setSettingHint(null)}
-                className="w-5 h-5 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-400 flex-shrink-0 transition-all">
+                className="w-5 h-5 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-lbl flex-shrink-0 transition-all">
                 <X size={10}/>
               </button>
             </div>
@@ -5770,14 +5726,14 @@ export default function App() {
       {showEditorHelp && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
           onClick={() => setShowEditorHelp(false)}>
-          <div className="bg-white rounded-3xl shadow-2xl w-[420px] max-w-[95vw] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200"
+          <div className="bg-sff rounded-3xl shadow-2xl w-[420px] max-w-[95vw] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200"
             onClick={e => e.stopPropagation()}>
 
             {/* Шапка */}
-            <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
-              <p className="font-black text-gray-900 text-base">Подсказка по форматированию</p>
+            <div className="flex items-center justify-between px-5 py-4 border-b border-bd">
+              <p className="font-black text-tx text-base">Подсказка по форматированию</p>
               <button onClick={() => setShowEditorHelp(false)}
-                className="w-7 h-7 rounded-full bg-gray-100 hover:bg-gray-200 flex items-center justify-center text-gray-500 transition-all active:scale-90">
+                className="w-7 h-7 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-txd transition-all active:scale-90">
                 <X size={14}/>
               </button>
             </div>
@@ -5789,27 +5745,27 @@ export default function App() {
                 { btn:'I',  label:'Курсив',         tag:'<i>',           preview:<><i>Привет, как дела?</i></> },
                 { btn:'S',  label:'Зачеркнутый',    tag:'<s>',           preview:<><s>Привет, как дела?</s></> },
                 { btn:'U',  label:'Подчеркнутый',   tag:'<u>',           preview:<><u>Привет, как дела?</u></> },
-                { btn:'<>',  label:'Моноширинный (code)', tag:'<code>',  preview:<><code className="bg-gray-100 px-1 rounded text-sm">Привет, как дела?</code></> },
-                { btn:'»',  label:'Цитата (blockquote)', tag:'<blockquote>', preview:<div className="border-l-4 border-gray-300 pl-3 text-gray-500 italic text-sm">Привет, как дела?</div> },
-                { btn:'🔗', label:'Ссылка',         tag:'<a href="...">',preview:<><a className="text-blue-500 underline" href="#">Привет, как дела?</a></> },
-                { btn:'✒',  label:'Скрытый текст (spoiler)', tag:'<tg-spoiler>', preview:<span className="bg-gray-800 text-gray-800 rounded px-1 select-none text-sm">Привет, как дела?</span> },
+                { btn:'<>',  label:'Моноширинный (code)', tag:'<code>',  preview:<><code className="bg-sf2 px-1 rounded text-sm">Привет, как дела?</code></> },
+                { btn:'»',  label:'Цитата (blockquote)', tag:'<blockquote>', preview:<div className="border-l-4 border-gray-300 pl-3 text-txd italic text-sm">Привет, как дела?</div> },
+                { btn:'🔗', label:'Ссылка',         tag:'<a href="...">',preview:<><a className="text-cta underline" href="#">Привет, как дела?</a></> },
+                { btn:'✒',  label:'Скрытый текст (spoiler)', tag:'<tg-spoiler>', preview:<span className="bg-gray-800 text-tx rounded px-1 select-none text-sm">Привет, как дела?</span> },
                 { btn:'Tx', label:'Очистить форматирование', tag:'—',    preview:<>Привет, как дела?</> },
               ].map(row => (
                 <div key={row.btn}>
                   <div className="flex items-center gap-2 mb-2">
-                    <span className="w-6 h-6 bg-blue-100 text-blue-600 text-[11px] font-black rounded flex items-center justify-center flex-shrink-0">{row.btn}</span>
-                    <span className="text-sm font-black text-gray-800">{row.label}</span>
-                    <span className="ml-auto text-[10px] font-mono text-gray-400 bg-gray-50 px-2 py-0.5 rounded">{row.tag}</span>
+                    <span className="w-6 h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta text-[11px] font-black rounded flex items-center justify-center flex-shrink-0">{row.btn}</span>
+                    <span className="text-sm font-black text-tx">{row.label}</span>
+                    <span className="ml-auto text-[10px] font-mono text-lbl bg-sf2 px-2 py-0.5 rounded">{row.tag}</span>
                   </div>
-                  <div className="flex items-center gap-3 bg-gray-50 rounded-2xl px-4 py-3 border border-gray-100 min-h-[42px]">
-                    <span className="text-sm text-gray-700">{row.preview}</span>
+                  <div className="flex items-center gap-3 bg-sf2 rounded-2xl px-4 py-3 border border-bd min-h-[42px]">
+                    <span className="text-sm text-tx">{row.preview}</span>
                   </div>
                 </div>
               ))}
 
-              <div className="bg-amber-50 border border-amber-100 rounded-2xl px-4 py-3">
-                <p className="text-[11px] font-black text-amber-700 mb-1">💡 Совет</p>
-                <p className="text-[11px] text-amber-600 leading-relaxed">
+              <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] rounded-2xl px-4 py-3">
+                <p className="text-[11px] font-black text-warn mb-1">💡 Совет</p>
+                <p className="text-[11px] text-warn leading-relaxed">
                   Выдели текст, затем нажми кнопку — форматирование применится к выделенному фрагменту.
                   Для цитируемого пользователя в плейсхолдерах замени <b>act_</b> на <b>rpl_</b>.
                 </p>
@@ -5889,14 +5845,14 @@ export default function App() {
       {/* ── Модал: подтверждение выхода из редактора триггера ── */}
       {showLeaveConfirm && (
         <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="bg-white rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200">
+          <div className="bg-sff rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200">
             <div className="flex items-start gap-3">
-              <div className="w-10 h-10 rounded-full bg-amber-100 flex items-center justify-center flex-shrink-0 mt-0.5">
-                <Info size={20} className="text-amber-600"/>
+              <div className="w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={20} className="text-warn"/>
               </div>
               <div>
-                <p className="font-black text-gray-900 text-base leading-tight">Внимание</p>
-                <p className="text-sm text-gray-500 mt-1.5 leading-relaxed">
+                <p className="font-black text-tx text-base leading-tight">Внимание</p>
+                <p className="text-sm text-txd mt-1.5 leading-relaxed">
                   Вы уверены, что хотите покинуть раздел?<br/>
                   Несохранённые изменения триггера будут потеряны.
                 </p>
@@ -5910,7 +5866,7 @@ export default function App() {
                   if (leaveTarget) { _doNavigate(leaveTarget); }
                   setLeaveTarget(null);
                 }}
-                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-gray-600 bg-gray-100 hover:bg-gray-200 active:scale-95 transition-all">
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-txd bg-sf2 hover:bg-bd2 active:scale-95 transition-all">
                 Выйти
               </button>
               <button

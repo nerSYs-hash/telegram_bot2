@@ -66,8 +66,8 @@ function Section({ icon: Icon, title, children, right, dragHandle }) {
     <Card padding="md" className="space-y-3">
       <div className="flex items-center gap-2">
         {dragHandle}
-        {Icon && <Icon size={16} className="text-blue-500" />}
-        <h3 className="text-xs font-black uppercase tracking-widest text-gray-700">{title}</h3>
+        {Icon && <Icon size={16} className="text-cta" />}
+        <h3 className="text-xs font-black uppercase tracking-widest text-tx">{title}</h3>
         {right && <div className="ml-auto">{right}</div>}
       </div>
       {children}
@@ -91,7 +91,7 @@ function DraggableSection({ id, onDragStart, onDragOver, onDrop, isDraggingOver,
         onDragStart(e, id);
       }}
       onDragEnd={(e) => { e.preventDefault(); }}
-      className="cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500 select-none"
+      className="cursor-grab active:cursor-grabbing text-lbl hover:text-txd select-none"
       title="Перетащить за иконку"
     >
       <GripVertical size={14}/>
@@ -151,7 +151,7 @@ function TargetsPicker({ chats, value, onChange }) {
 
   if (!chats?.length) {
     return (
-      <div className="text-sm text-gray-400 italic py-3">
+      <div className="text-sm text-lbl italic py-3">
         Список чатов пуст. Бот должен быть добавлен хотя бы в один чат/канал.
       </div>
     );
@@ -162,8 +162,8 @@ function TargetsPicker({ chats, value, onChange }) {
       {chats.map(chat => {
         const chatIcon = chat.type === 'channel' ? '📢' : (chat.is_forum ? '🏛' : '👥');
         return (
-          <div key={chat.chat_id} className="border border-gray-100 rounded-xl overflow-hidden">
-            <label className="flex items-center gap-2 p-3 hover:bg-gray-50 cursor-pointer">
+          <div key={chat.chat_id} className="border border-bd rounded-xl overflow-hidden">
+            <label className="flex items-center gap-2 p-3 hover:bg-sf2 cursor-pointer">
               <input
                 type="checkbox"
                 checked={isSelected(chat.chat_id)}
@@ -172,13 +172,13 @@ function TargetsPicker({ chats, value, onChange }) {
               />
               <span className="text-base">{chatIcon}</span>
               <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-gray-800 truncate">{chat.title || `chat ${chat.chat_id}`}</div>
-                {chat.username && <div className="text-[10px] text-gray-400">@{chat.username}</div>}
+                <div className="text-sm font-bold text-tx truncate">{chat.title || `chat ${chat.chat_id}`}</div>
+                {chat.username && <div className="text-[10px] text-lbl">@{chat.username}</div>}
               </div>
             </label>
             {chat.is_forum && chat.topics?.length > 0 && (
-              <div className="border-t border-gray-100 bg-gray-50 px-3 py-2 space-y-1">
-                <div className="text-[9px] font-black uppercase tracking-widest text-gray-400">Топики</div>
+              <div className="border-t border-bd bg-sf2 px-3 py-2 space-y-1">
+                <div className="text-[9px] font-black uppercase tracking-widest text-lbl">Топики</div>
                 {chat.topics.map(t => (
                   <label key={t.id} className="flex items-center gap-2 cursor-pointer">
                     <input
@@ -187,17 +187,17 @@ function TargetsPicker({ chats, value, onChange }) {
                       onChange={() => toggleTarget(chat.chat_id, t.thread_id)}
                       className="w-3.5 h-3.5 accent-blue-500"
                     />
-                    <span className="text-xs text-gray-600">🧵 {t.name || `Топик #${t.thread_id}`}</span>
+                    <span className="text-xs text-txd">🧵 {t.name || `Топик #${t.thread_id}`}</span>
                     {t.source === 'manual' && (
-                      <span className="text-[8px] font-black uppercase text-purple-500">manual</span>
+                      <span className="text-[8px] font-black uppercase text-purple">manual</span>
                     )}
                   </label>
                 ))}
               </div>
             )}
             {chat.is_forum && (!chat.topics || chat.topics.length === 0) && (
-              <div className="border-t border-gray-100 bg-amber-50 px-3 py-2">
-                <div className="text-[10px] text-amber-700 leading-relaxed">
+              <div className="border-t border-bd bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-3 py-2">
+                <div className="text-[10px] text-warn leading-relaxed">
                   📋 Топики собираются автоматически при сообщениях. Можно добавить вручную.
                 </div>
               </div>
@@ -228,7 +228,7 @@ function KeyboardEditor({ keyboard, onChange }) {
   if (keyboard.length === 0) {
     return (
       <button onClick={addBtn}
-        className="w-full py-3 bg-gray-50 border-2 border-dashed border-gray-200 rounded-xl text-sm font-bold text-gray-400 hover:bg-gray-100 transition-all">
+        className="w-full py-3 bg-sf2 border-2 border-dashed border-bd2 rounded-xl text-sm font-bold text-lbl hover:bg-sf2 transition-all">
         <Plus size={14} className="inline mr-1" /> Добавить кнопку
       </button>
     );
@@ -239,7 +239,7 @@ function KeyboardEditor({ keyboard, onChange }) {
       {keyboard.map((row, ri) => (
         <div key={ri} className="flex flex-wrap gap-2 items-center">
           {row.map((btn, bi) => (
-            <div key={bi} className="flex-1 min-w-[200px] bg-gray-50 rounded-xl p-2 border border-gray-100 space-y-1.5">
+            <div key={bi} className="flex-1 min-w-[200px] bg-sf2 rounded-xl p-2 border border-bd space-y-1.5">
               <div className="flex items-center gap-1.5">
                 <StyledSelect
                   value={btn.type}
@@ -250,25 +250,25 @@ function KeyboardEditor({ keyboard, onChange }) {
                   ]}
                   size="sm"
                 />
-                <button onClick={() => remove(ri, bi)} className="ml-auto text-gray-300 hover:text-red-400">
+                <button onClick={() => remove(ri, bi)} className="ml-auto text-lbl hover:text-red-400">
                   <X size={12} />
                 </button>
               </div>
               <input value={btn.text} onChange={(e) => updBtn(ri, bi, { text: e.target.value })}
                 placeholder="📢 Текст кнопки"
-                className="w-full px-2 py-1.5 text-xs font-bold bg-white border border-gray-100 rounded-lg focus:outline-none focus:border-blue-200" />
+                className="w-full px-2 py-1.5 text-xs font-bold bg-sff border border-bd rounded-lg focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
               <input value={btn.value} onChange={(e) => updBtn(ri, bi, { value: e.target.value })}
                 placeholder={btn.type === 'url' ? 'https://...' : 'pulses_get'}
-                className="w-full px-2 py-1.5 text-xs bg-white border border-gray-100 rounded-lg focus:outline-none focus:border-blue-200" />
+                className="w-full px-2 py-1.5 text-xs bg-sff border border-bd rounded-lg focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
             </div>
           ))}
         </div>
       ))}
       <div className="flex gap-2">
-        <button onClick={addBtn} className="flex-1 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-bold hover:bg-blue-100">
+        <button onClick={addBtn} className="flex-1 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-xl text-xs font-bold hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]">
           <Plus size={12} className="inline mr-1" /> Кнопка в этот ряд
         </button>
-        <button onClick={newRow} className="flex-1 py-2 bg-gray-100 text-gray-600 rounded-xl text-xs font-bold hover:bg-gray-200">
+        <button onClick={newRow} className="flex-1 py-2 bg-sf2 text-txd rounded-xl text-xs font-bold hover:bg-bd2">
           + Новый ряд
         </button>
       </div>
@@ -453,9 +453,9 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
               value={draft.title || ''}
               onChange={(e) => upd({ title: e.target.value })}
               placeholder="Например: Анонс эфира 7 мая"
-              className="w-full px-4 py-3 bg-gray-50 border-2 border-gray-100 rounded-xl text-sm font-bold focus:outline-none focus:border-blue-200"
+              className="w-full px-4 py-3 bg-sf2 border-2 border-bd rounded-xl text-sm font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]"
             />
-            <p className="text-[10px] text-gray-400">Только для админки. В чате не отображается.</p>
+            <p className="text-[10px] text-lbl">Только для админки. В чате не отображается.</p>
           </Section>
         );
 
@@ -463,7 +463,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         return (
           <Section
             icon={ImageIcon} title="Медиа" dragHandle={handle}
-            right={<span className="text-[10px] font-black text-gray-400">{mediaList.length}/{MAX_MEDIA}</span>}
+            right={<span className="text-[10px] font-black text-lbl">{mediaList.length}/{MAX_MEDIA}</span>}
           >
             <MediaBlock
               value={draft.photo_file_id || ''}
@@ -497,7 +497,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
               minHeight={200}
             />
             {(isOverLimit || isOverCaption) && (
-              <div className="flex items-start gap-2 px-3 py-2 bg-amber-50 rounded-xl text-[11px] text-amber-700 mt-2">
+              <div className="flex items-start gap-2 px-3 py-2 bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] rounded-xl text-[11px] text-warn mt-2">
                 <AlertTriangle size={12} className="flex-shrink-0 mt-0.5"/>
                 <div>
                   {isOverLimit
@@ -557,7 +557,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                 <Toggle icon={EyeOff}  label="Без превью ссылок"            checked={settings.disable_preview}     onChange={(v) => updSettings({ disable_preview: v })} />
                 <Toggle icon={BellOff} label="Тихая отправка (без звука)"   checked={settings.disable_notify}      onChange={(v) => updSettings({ disable_notify: v })} />
                 <Toggle icon={Lock}    label="Защита контента (запрет копирования)" checked={settings.content_protection}  onChange={(v) => updSettings({ content_protection: v })} />
-                <div className="border-t border-gray-100 my-2" />
+                <div className="border-t border-bd my-2" />
                 <Toggle label="Жирная шапка"
                   hint="Первая строка текста выделяется жирным"
                   checked={!!draft.bold_header} onChange={(v) => upd({ bold_header: v ? 1 : 0 })} />
@@ -569,7 +569,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                   if (!sigList.length) return null;
                   return (
                     <div className="ml-12 flex items-center gap-2">
-                      <span className="text-xs font-bold text-gray-700">Шаблон:</span>
+                      <span className="text-xs font-bold text-tx">Шаблон:</span>
                       <StyledSelect
                         value={draft.signature || ''}
                         onChange={(v) => upd({ signature: v })}
@@ -585,7 +585,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                     </div>
                   );
                 })()}
-                <div className="border-t border-gray-100 my-2" />
+                <div className="border-t border-bd my-2" />
                 <Toggle label="Авто-удаление из Telegram"
                   checked={settings.delete_after_publish?.enabled}
                   onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, enabled: v }})} />
@@ -593,7 +593,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                   <div className="ml-12 flex items-center gap-2">
                     <input type="number" min="1" value={settings.delete_after_publish?.value || 1}
                       onChange={(e) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, value: parseInt(e.target.value, 10) || 1 }})}
-                      className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
+                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
                     <StyledSelect
                       value={settings.delete_after_publish?.unit || 'days'}
                       onChange={(v) => updSettings({ delete_after_publish: { ...settings.delete_after_publish, unit: v }})}
@@ -606,18 +606,18 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                     />
                   </div>
                 )}
-                <div className="border-t border-gray-100 my-2" />
+                <div className="border-t border-bd my-2" />
                 <Toggle label="Throttling (не спамить)"
                   hint="Лимит N релизов в час от одного автора"
                   checked={settings.throttle?.enabled}
                   onChange={(v) => updSettings({ throttle: { ...settings.throttle, enabled: v }})} />
                 {settings.throttle?.enabled && (
                   <div className="ml-12 flex items-center gap-2">
-                    <span className="text-xs font-bold text-gray-700">Не более</span>
+                    <span className="text-xs font-bold text-tx">Не более</span>
                     <input type="number" min="1" value={settings.throttle?.limit_per_hour || 5}
                       onChange={(e) => updSettings({ throttle: { ...settings.throttle, limit_per_hour: parseInt(e.target.value, 10) || 5 }})}
-                      className="w-16 px-2 py-1 bg-gray-50 border border-gray-100 rounded-lg text-xs font-bold focus:outline-none focus:border-blue-200" />
-                    <span className="text-xs font-bold text-gray-700">в час</span>
+                      className="w-16 px-2 py-1 bg-sf2 border border-bd rounded-lg text-xs font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
+                    <span className="text-xs font-bold text-tx">в час</span>
                   </div>
                 )}
               </div>
@@ -636,14 +636,14 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       {/* before-псевдоэлемент закрывает «прозрачную» полосу над sticky-карточкой:
           скролл-контейнер AdminDashboard имеет p-4..p-8 сверху, через который
           контент мог просвечивать из-за rounded-углов. */}
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-3 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
+      <div className="bg-sff rounded-2xl border border-bd shadow-sm p-3 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
         <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Закрыть" />
         <div className="flex-1 min-w-0 flex items-center gap-2">
-          <div className="text-sm font-black text-gray-800 truncate">
+          <div className="text-sm font-black text-tx truncate">
             {draft.title || 'Новый пресс-релиз'}
           </div>
-          {autosaveStatus === 'saving' && <span className="text-[10px] text-gray-400">сохранение…</span>}
-          {autosaveStatus === 'saved'   && <span className="text-[10px] text-emerald-500 flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
+          {autosaveStatus === 'saving' && <span className="text-[10px] text-lbl">сохранение…</span>}
+          {autosaveStatus === 'saved'   && <span className="text-[10px] text-ok flex items-center gap-1"><CheckCircle2 size={10}/> сохранено</span>}
         </div>
         <Button
           variant="secondary" size="sm" icon={Save}
@@ -676,7 +676,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         )}
         {draft.id && userCan('press_release.delete') && (
           <Button variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}
-            aria-label="Удалить" className="text-red-400 hover:text-red-600 hover:bg-red-50" />
+            aria-label="Удалить" className="text-red-400 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" />
         )}
       </div>
 
@@ -684,8 +684,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       {(draft.status === 'failed' || draft.status === 'cancelled') ? (
         <div className={`rounded-2xl border px-4 py-3 flex items-center gap-3 ${
           draft.status === 'failed'
-            ? 'bg-red-50 border-red-200 text-red-700'
-            : 'bg-amber-50 border-amber-200 text-amber-700'
+            ? 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border-[color-mix(in_oklab,var(--danger)_40%,transparent)] text-danger'
+            : 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border-[color-mix(in_oklab,var(--warn)_40%,transparent)] text-warn'
         }`}>
           <AlertTriangle size={18} className="flex-shrink-0" />
           <div className="flex-1 min-w-0">
@@ -700,7 +700,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           </div>
         </div>
       ) : (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-6 py-3">
+        <div className="bg-sff rounded-2xl border border-bd shadow-sm px-6 py-3">
           <Stepper
             steps={STATUS_STEPS}
             current={draft.status || 'draft'}
@@ -709,8 +709,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       )}
 
       {/* Подсказка о drag&drop + сброс */}
-      <div className="flex items-center justify-between bg-blue-50/60 border border-blue-100 rounded-xl px-3 py-2">
-        <span className="text-[10px] text-blue-700 font-bold">
+      <div className="flex items-center justify-between bg-blue-50/60 border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-xl px-3 py-2">
+        <span className="text-[10px] text-cta font-bold">
           🎯 Перетащите секции за иконку <GripVertical size={10} className="inline"/> чтобы расположить как удобно
         </span>
         <Button variant="link" size="sm" icon={RefreshCw} onClick={resetOrder}>
@@ -766,26 +766,26 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
 
   return (
     <div className="fixed inset-0 z-[200] bg-black/40 flex items-center justify-center p-4" onClick={onClose}>
-      <div className="bg-white rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
-        <div className="flex items-center justify-between p-4 border-b border-gray-100">
+      <div className="bg-sff rounded-3xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-hidden flex flex-col" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between p-4 border-b border-bd">
           <div className="flex items-center gap-2">
-            <Eye size={14} className="text-blue-500" />
-            <span className="text-xs font-black uppercase tracking-widest text-gray-700">Превью</span>
+            <Eye size={14} className="text-cta" />
+            <span className="text-xs font-black uppercase tracking-widest text-tx">Превью</span>
           </div>
-          <button onClick={onClose} className="p-1 text-gray-400 hover:text-gray-600">
+          <button onClick={onClose} className="p-1 text-lbl hover:text-txd">
             <X size={16}/>
           </button>
         </div>
-        <div className="flex-1 overflow-y-auto p-4 bg-gray-50">
-          <div className="bg-white rounded-2xl shadow-md p-3 space-y-2">
+        <div className="flex-1 overflow-y-auto p-4 bg-sf2">
+          <div className="bg-sff rounded-2xl shadow-md p-3 space-y-2">
             {pos === 'above' && mediaList.length > 0 && (
-              <div className="flex items-center justify-center bg-gray-100 rounded-xl py-6 text-xs text-gray-400 font-bold">
+              <div className="flex items-center justify-center bg-sf2 rounded-xl py-6 text-xs text-lbl font-bold">
                 🖼 {mediaList.length} медиа · выше текста
               </div>
             )}
-            <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: fullHtml || '<i class="text-gray-400">Пусто…</i>' }} />
+            <div className="text-sm leading-relaxed" dangerouslySetInnerHTML={{ __html: fullHtml || '<i class="text-lbl">Пусто…</i>' }} />
             {pos === 'below' && mediaList.length > 0 && (
-              <div className="flex items-center justify-center bg-gray-100 rounded-xl py-6 text-xs text-gray-400 font-bold">
+              <div className="flex items-center justify-center bg-sf2 rounded-xl py-6 text-xs text-lbl font-bold">
                 🖼 {mediaList.length} медиа · ниже текста
               </div>
             )}
@@ -794,7 +794,7 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
                 {(draft.inline_keyboard || []).map((row, ri) => (
                   <div key={ri} className="flex gap-1">
                     {row.map((b, bi) => (
-                      <button key={bi} className="flex-1 py-2 px-2 bg-blue-50 text-blue-700 rounded-lg text-xs font-bold border border-blue-100">
+                      <button key={bi} className="flex-1 py-2 px-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-lg text-xs font-bold border border-[color-mix(in_oklab,var(--cta)_30%,transparent)]">
                         {b.text || '(без текста)'}
                       </button>
                     ))}
@@ -803,7 +803,7 @@ function PreviewModal({ draft, settings, mediaList, branding, onClose }) {
               </div>
             )}
           </div>
-          <div className="mt-3 text-[10px] text-gray-400 leading-relaxed space-y-1">
+          <div className="mt-3 text-[10px] text-lbl leading-relaxed space-y-1">
             <div>📍 {(draft.targets || []).length} получателей</div>
             <div>📏 {(draft.text || '').replace(/<[^>]+>/g, '').length} симв.</div>
             {pos === 'reply' && <div>💬 Медиа отправится отдельным реплаем</div>}
@@ -824,39 +824,39 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
     : 'не задано';
 
   return (
-    <div className="rounded-xl border border-gray-100 overflow-hidden">
+    <div className="rounded-xl border border-bd overflow-hidden">
       <div className="grid grid-cols-2">
         <button
           onClick={() => setTab(tab === 'where' ? null : 'where')}
-          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-          <Megaphone size={14} className={tab === 'where' ? 'text-blue-600' : 'text-gray-400'} />
+          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          <Megaphone size={14} className={tab === 'where' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Куда</div>
-            <div className="text-sm font-black text-gray-800 truncate">
+            <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Куда</div>
+            <div className="text-sm font-black text-tx truncate">
               {targetsCnt === 0 ? <span className="text-red-400">не выбрано</span> : `${targetsCnt} получателей`}
             </div>
           </div>
         </button>
         <button
           onClick={() => setTab(tab === 'when' ? null : 'when')}
-          className={`flex items-center gap-2 p-3 border-l border-gray-100 transition-all ${tab === 'when' ? 'bg-blue-50' : 'hover:bg-gray-50'}`}>
-          <Calendar size={14} className={tab === 'when' ? 'text-blue-600' : 'text-gray-400'} />
+          className={`flex items-center gap-2 p-3 border-l border-bd transition-all ${tab === 'when' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          <Calendar size={14} className={tab === 'when' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
-            <div className="text-[10px] font-bold uppercase tracking-wider text-gray-500">Когда</div>
-            <div className="text-sm font-black text-gray-800 truncate">{dateLabel}</div>
+            <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Когда</div>
+            <div className="text-sm font-black text-tx truncate">{dateLabel}</div>
           </div>
         </button>
       </div>
       {tab === 'where' && (
-        <div className="border-t border-gray-100 p-3">
+        <div className="border-t border-bd p-3">
           <TargetsPicker chats={chats} value={targets} onChange={onTargetsChange} />
         </div>
       )}
       {tab === 'when' && (
-        <div className="border-t border-gray-100 p-3 space-y-2">
+        <div className="border-t border-bd p-3 space-y-2">
           <DateTimePicker value={publishAt} onChange={onPublishAtChange} />
           <div className="flex items-center gap-2 pt-1">
-            <label className="text-xs font-bold text-gray-700">Напомнить за:</label>
+            <label className="text-xs font-bold text-tx">Напомнить за:</label>
             <StyledSelect
               value={reminder}
               onChange={(v) => onReminderChange(parseInt(v, 10))}
@@ -876,13 +876,13 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
 
 function StatusBadge({ status }) {
   const map = {
-    draft:     ['bg-gray-100 text-gray-600',     'Черновик'],
-    scheduled: ['bg-blue-100 text-blue-700',     'Запланирован'],
-    published: ['bg-emerald-100 text-emerald-700','Опубликован'],
-    failed:    ['bg-red-100 text-red-700',       'Ошибка'],
-    cancelled: ['bg-amber-100 text-amber-700',   'Отменён'],
+    draft:     ['bg-sf2 text-txd',     'Черновик'],
+    scheduled: ['bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',     'Запланирован'],
+    published: ['bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok','Опубликован'],
+    failed:    ['bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',       'Ошибка'],
+    cancelled: ['bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',   'Отменён'],
   };
-  const [cls, label] = map[status] || ['bg-gray-100 text-gray-600', status];
+  const [cls, label] = map[status] || ['bg-sf2 text-txd', status];
   return <span className={`px-1.5 py-0.5 rounded ${cls} font-black uppercase`}>{label}</span>;
 }
 

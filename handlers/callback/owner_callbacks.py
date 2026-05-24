@@ -176,7 +176,7 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Статистика "Не в чате" ──
     elif data == "owner_stats_not_in_chat":
-        await show_statistics_not_in_chat(query, admin_id)
+        await show_statistics_not_in_chat(query, admin_id, context)
 
     # ── Восстановление веток ──
     elif data == "owner_recovery":

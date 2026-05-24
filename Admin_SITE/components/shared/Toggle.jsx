@@ -27,11 +27,11 @@ export default function Toggle({
       />
       <div
         className={`relative w-9 h-5 rounded-full transition-colors flex-shrink-0 mt-0.5 ${
-          checked ? 'bg-blue-500' : 'bg-gray-200'
+          checked ? 'bg-ok' : 'bg-bd2'
         }`}
       >
         <div
-          className={`absolute top-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform ${
+          className={`absolute top-0.5 w-4 h-4 rounded-full bg-sff shadow transition-transform ${
             checked ? 'translate-x-[18px]' : 'translate-x-0.5'
           }`}
         />
@@ -39,12 +39,12 @@ export default function Toggle({
       {(label || hint) && (
         <div className="flex-1 min-w-0">
           {label && (
-            <div className="text-sm font-bold text-gray-800 flex items-center gap-1.5">
-              {Icon && <Icon size={13} className="text-gray-500" />}
+            <div className="text-sm font-bold text-tx flex items-center gap-1.5">
+              {Icon && <Icon size={13} className="text-txd" />}
               {label}
             </div>
           )}
-          {hint && <div className="text-[10px] text-gray-400 mt-0.5">{hint}</div>}
+          {hint && <div className="text-[10px] text-lbl mt-0.5">{hint}</div>}
         </div>
       )}
     </label>

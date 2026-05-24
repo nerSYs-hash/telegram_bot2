@@ -2,6 +2,39 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── Выдвижной поиск Экономики (V1.17.0h2d): nudge-анимация ──
+   При hover handle-кнопка слегка «дёргается» наружу, подсказывая что её
+   можно потянуть/нажать. Уходит мышь — замирает. */
+@keyframes search-handle-nudge {
+  0%, 100% { transform: translateX(0); }
+  25%      { transform: translateX(4px); }
+  50%      { transform: translateX(-2px); }
+  75%      { transform: translateX(3px); }
+}
+.search-handle-nudge:hover {
+  animation: search-handle-nudge 700ms ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .search-handle-nudge:hover { animation: none; }
+}
+
+/* ── Шрифт всего проекта · Вариант B (20.05, выбор Ильи) ──
+   Onest для основного UI (современный геометрический, чёткий на мелких),
+   IBM Plex Mono для табличных чисел и кода. Тех-настройки шрифта
+   объявлены в :root ниже (--font-sans/--font-mono); тут применяем
+   их ко всему body и mono-классам — глобально, без .ds-canvas-обёртки. */
+html, body {
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1; /* tabular-nums везде по умолчанию */
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+code, pre, kbd, samp,
+.tabular-nums, [class*="font-mono"] {
+  font-family: var(--font-mono);
+}
+
 /* ── Aceternity-style вращающийся glow-бордер ── */
 @property --pulse-btn-angle {
   syntax: '<angle>';
@@ -11,32 +44,37 @@
 @keyframes pulse-btn-rotate {
   to { --pulse-btn-angle: 360deg; }
 }
+/* CANON v2 (18.05, реш. Ильи): мягкий glow-halo вместо mask-composite-обода.
+   Лечит «вечную болезнь» в корне — root cause: conic+mask-composite +
+   hardcoded radius хрупки (неравная толщина TL≠BR, отходит, прод-баг ПР).
+   Здесь: border-radius:inherit → ВСЕГДА по форме родителя (16/14/pill);
+   filter:blur → сабпиксель физически не виден; z-index:-1 → ореол позади. */
+.pulse-btn-glow { position: relative; isolation: isolate; }
 .pulse-btn-glow::before {
   content: '';
   position: absolute;
   inset: -2px;
-  /* radius = button-radius + |inset|; rounded-2xl=16px → 18px тут.
-     Без +2px внешний угол визуально «уже», чем у самой кнопки. */
-  border-radius: 18px;
-  padding: 2px;
+  border-radius: inherit;
   background: conic-gradient(
     from var(--pulse-btn-angle),
     var(--glow-from, #3b82f6),
     var(--glow-via,  #a855f7),
     var(--glow-to,   #3b82f6)
   );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
+  filter: blur(5px);
   opacity: 0;
-  transition: opacity 200ms ease;
+  z-index: -1;
   pointer-events: none;
+  transition: opacity 200ms ease;
 }
 .pulse-btn-glow:hover::before,
 .pulse-btn-glow:focus-visible::before {
-  opacity: 1;
+  opacity: .3;
   animation: pulse-btn-rotate 2.4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-btn-glow:hover::before,
+  .pulse-btn-glow:focus-visible::before { animation: none; }
 }
 
 /* ── Pop-анимация галочки success ── */
@@ -49,13 +87,28 @@
   animation: pulse-btn-pop 350ms cubic-bezier(.34, 1.56, .64, 1) forwards;
 }
 
-/* ── Subtle pulse для активного шага Stepper ── */
+/* ── Subtle pulse для активного шага Stepper — CANON v2 (18.05) ──
+   currentColor (=white у активного шага) давал резкий белый ореол
+   на тёмной теме. Эталон State Sheet — бренд-cta-тинт, тема-безопасно. */
 @keyframes pulse-step {
-  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 currentColor; }
-  50%      { transform: scale(1.08); box-shadow: 0 0 0 6px transparent; }
+  0%, 100% { transform: scale(1);    box-shadow: 0 0 0 0 color-mix(in oklab, var(--cta) 38%, transparent); }
+  50%      { transform: scale(1.06); box-shadow: 0 0 0 7px color-mix(in oklab, var(--cta) 0%, transparent); }
 }
 .pulse-step-current {
   animation: pulse-step 1.8s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-step-current { animation: none; }
+}
+
+/* ── Мотив «пульс» §6/§7 — сердцебиение лого-марки/лоадеров/live ── */
+@keyframes pulse-beat {
+  0%, 100% { transform: scale(1);    }
+  50%      { transform: scale(1.06); }
+}
+.pulse-beat { animation: pulse-beat 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .pulse-beat { animation: none; }
 }
 
 /* ── Aceternity-style вращающийся glow-бордер для карточек ── */
@@ -67,32 +120,34 @@
 @keyframes pulse-card-rotate {
   to { --pulse-card-angle: 360deg; }
 }
+/* CANON v2 — карточный glow-halo (та же первопричина/лечение, что у кнопок). */
+.pulse-card-glow { position: relative; isolation: isolate; }
 .pulse-card-glow::before {
   content: '';
   position: absolute;
-  inset: -2px;
-  /* radius = card-radius (rounded-2xl=16px) + |inset|=2px → 18px */
-  border-radius: 18px;
-  padding: 2px;
+  inset: -3px;
+  border-radius: inherit;
   background: conic-gradient(
     from var(--pulse-card-angle),
     var(--card-glow-from, #60a5fa),
     var(--card-glow-via,  #a855f7),
     var(--card-glow-to,   #60a5fa)
   );
-  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-          mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-  -webkit-mask-composite: xor;
-          mask-composite: exclude;
+  filter: blur(7px);
   opacity: 0;
-  transition: opacity 300ms ease;
+  z-index: -1;
   pointer-events: none;
+  transition: opacity 300ms ease;
 }
 .pulse-card-glow:hover::before,
 .pulse-card-glow:focus-within::before {
-  opacity: 1;
+  opacity: .28;
   /* Карточки больше → вращение медленнее, чтобы не было «дёрганого» ощущения. */
   animation: pulse-card-rotate 4s linear infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .pulse-card-glow:hover::before,
+  .pulse-card-glow:focus-within::before { animation: none; }
 }
 
 @keyframes tag-jiggle {
@@ -134,4 +189,153 @@
     var(--q-stripe-2, #fdba74) 8px,
     var(--q-stripe-2, #fdba74) 16px
   );
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   DESIGN-SYSTEM TOKEN-TREE  ·  DESIGN_BRIEF_Puls_Chat §2.5 / §10
+   Подложка: семантические переменные. ЕДИНСТВЕННАЯ тема — light.
+   Тёмная тема удалена из проекта 19.05 (решение владельца —
+   лишний источник боли, не окупается). Класс на <html> не нужен:
+   значения живут прямо в :root, токен НИКОГДА не undefined.
+   ═══════════════════════════════════════════════════════════════════ */
+:root {
+  /* brand glow §2.1 — алиасы поверх канона (--glow-* остаётся каноном) */
+  --g-from:#3b82f6; --g-via:#a855f7; --g-to:#3b82f6;
+  --cg-from:#60a5fa; --cg-via:#a855f7; --cg-to:#60a5fa;
+  /* visionOS-семантика §2.2 */
+  --ok:#32D74B; --warn:#FF9F0A; --yellow:#FFD60A; --danger:#FF453A;
+  --purple:#BF5AF2; --pink:#FF375F; --mint:#66D4CF; --neutral:#98989D;
+  /* геометрия §3 */
+  --r:16px; --rsm:12px; --rpill:9999px;
+  /* типографика §4 — Вариант B (Onest + IBM Plex Mono, выбор Ильи 20.05) */
+  --font-sans:'Onest',ui-sans-serif,system-ui,-apple-system,sans-serif;
+  --font-mono:'IBM Plex Mono',ui-monospace,'SF Mono',monospace;
+  /* моушн §6a */
+  --tm:150ms; --ts:220ms;
+  --e:cubic-bezier(.22,.61,.36,1); --esp:cubic-bezier(.34,1.56,.64,1);
+  /* холст §2.3 — единственная тема (light). v2 19.05: притушена —
+     без слепящего чистого #FFF, фон глубже, границы сильнее
+     (структура без глянца). */
+  --bg:#EDEFF3; --bg2:#E4E7EC; --sf:#FBFCFD; --sff:#FBFCFD;
+  --sf2:#F1F3F6; --bd:rgba(15,23,42,.10); --bd2:rgba(15,23,42,.16);
+  --tx:#111318; --txd:#4B5563; --lbl:#9CA3AF;
+  --ih:rgba(15,23,42,.04); --ia:rgba(10,132,255,.08);
+  --cta:#0066CC; --aur:.05;
+  --shd:0 1px 3px rgba(15,23,42,.06),0 8px 24px -8px rgba(15,23,42,.08);
+  --shc:0 1px 3px rgba(15,23,42,.06),0 4px 16px -8px rgba(15,23,42,.08);
+  color-scheme:light;
+}
+/* Аврора-холст §2.3/§2.4 — ТОЛЬКО внутри обёртки .ds-canvas (не глобально,
+   боевой body не трогаем). */
+.ds-canvas {
+  background: var(--bg); color: var(--tx);
+  font-family: var(--font-sans);
+  font-feature-settings: 'tnum' 1; /* tabular-nums §4 */
+  transition: background var(--ts) var(--e), color var(--ts) var(--e);
+}
+.ds-canvas::before {
+  content:''; position:fixed; pointer-events:none; z-index:0;
+  inset:-20vh -20vw auto auto; width:90vw; height:80vh;
+  background:
+    radial-gradient(55% 55% at 80% 20%, color-mix(in oklab,var(--g-via) 100%,transparent) 0,transparent 70%),
+    radial-gradient(65% 65% at 100% 0%, color-mix(in oklab,var(--g-from) 100%,transparent) 0,transparent 65%);
+  opacity:var(--aur); filter:blur(48px);
+  transition:opacity var(--ts) var(--e);
+}
+@media (prefers-reduced-motion: reduce) {
+  .ds-canvas, .ds-canvas::before { transition: none; }
+}
+
+/* ── Полоса прокрутки ПОЛНОСТЬЮ скрыта во всём кабинете (глобально).
+   Скролл колесом/тачем и кнопкой «наверх» работает — просто полосы нет. ── */
+* {
+  scrollbar-width: none;            /* Firefox */
+  -ms-overflow-style: none;         /* старый Edge/IE */
+}
+*::-webkit-scrollbar {
+  width: 0 !important;
+  height: 0 !important;
+  display: none !important;         /* WebKit/Chrome/новый Edge */
+}
+*::-webkit-scrollbar-button,
+*::-webkit-scrollbar-thumb,
+*::-webkit-scrollbar-track,
+*::-webkit-scrollbar-corner { display: none !important; }
+
+/* ═══════════════════════════════════════════════════════════════════
+   ДРЕВО РАЗВИТИЯ ПРОЕКТА · узлы-кружки на вертикальной ветке (21.05)
+   В покое пунктирное кольцо медленно вращается вокруг кружка; при
+   наведении пунктиры «сходятся» в сплошное кольцо (анимация
+   stroke-dasharray), вращение замирает, кружок подсвечивается светом
+   своего типа новости. --node-color задаётся инлайн на .roadmap-node
+   (зелёный=новое / синий=улучшено / оранжевый=исправлено).
+   ═══════════════════════════════════════════════════════════════════ */
+@keyframes roadmap-ring-spin { to { transform: rotate(360deg); } }
+
+.roadmap-svg { overflow: visible; transition: filter .26s var(--e); }
+.roadmap-ring {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: roadmap-ring-spin 9s linear infinite;
+}
+.roadmap-ring-circle {
+  stroke: var(--bd2);
+  transition: stroke-dasharray .42s var(--e), stroke .26s var(--e);
+}
+.roadmap-dot {
+  fill: var(--node-color, var(--neutral));
+  transition: r .2s var(--esp);
+}
+
+/* hover: пунктиры сходятся в сплошное кольцо, вращение замирает, свечение */
+.roadmap-node:hover .roadmap-ring { animation-play-state: paused; }
+.roadmap-node:hover .roadmap-ring-circle {
+  stroke-dasharray: 94.25 0.01;
+  stroke: var(--node-color, var(--neutral));
+}
+.roadmap-node:hover .roadmap-dot { r: 6.4; }
+.roadmap-node:hover .roadmap-svg {
+  filter: drop-shadow(0 0 4px var(--node-color))
+          drop-shadow(0 0 9px color-mix(in oklab, var(--node-color) 65%, transparent));
+}
+
+/* карточка месяца — мягкая подсветка границы на hover (без сдвига) */
+.roadmap-card {
+  transition: border-color .22s var(--e), box-shadow .22s var(--e);
+}
+.roadmap-node:hover .roadmap-card {
+  border-color: color-mix(in oklab, var(--node-color) 30%, var(--bd));
+  box-shadow: 0 10px 30px -16px color-mix(in oklab, var(--node-color) 45%, transparent);
+}
+
+/* общая вертикальная ветка — сверху бренд-акцент «сейчас», ниже нейтраль */
+.roadmap-branch {
+  border-radius: 2px;
+  background: linear-gradient(
+    to bottom,
+    var(--cta) 0,
+    color-mix(in oklab, var(--cta) 40%, var(--bd2)) 6%,
+    var(--bd2) 14%,
+    var(--bd2) 100%
+  );
+}
+
+/* ── Оповещение об обновлении: мягкий выезд снизу ── */
+@keyframes news-toast-in {
+  from { opacity: 0; transform: translateY(18px) scale(.96); }
+  to   { opacity: 1; transform: translateY(0)   scale(1);   }
+}
+@keyframes news-toast-out {
+  to { opacity: 0; transform: translateY(18px) scale(.96); }
+}
+.news-toast-in  { animation: news-toast-in  .34s var(--esp) both; }
+.news-toast-out { animation: news-toast-out .22s var(--e)   both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .roadmap-ring  { animation: none; }
+  .roadmap-card,
+  .roadmap-svg,
+  .roadmap-ring-circle,
+  .roadmap-dot   { transition: none; }
+  .news-toast-in, .news-toast-out { animation-duration: .01ms; }
 }

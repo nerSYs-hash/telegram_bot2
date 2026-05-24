@@ -4,6 +4,27 @@ import { X, Ban, FileText } from 'lucide-react';
 import EconomyCancelPointwiseModal from './EconomyCancelPointwiseModal';
 import EconomyCancelMassModal from './EconomyCancelMassModal';
 
+// DEV-fallback (V1.17.0h2c): на localhost без бэкенда показываем тестовый
+// журнал отмен для дизайн-QA. На проде ветка не активируется.
+const _DEV_PREVIEW = typeof window !== 'undefined'
+  && import.meta.env.DEV
+  && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+const _MOCK_CANCELLATIONS = [
+  { id: 1, cancellation_type: 'pointwise', mode: 'deduct', amount: 250,
+    actually_deducted: 250, target_user_id: 8814412, source_tx_id: 'tx_99214',
+    comment: 'Ошибочное начисление за спам-сообщения',
+    executed_at: '2026-05-21T10:05:00', executed_by: 1, executed_by_role: 'owner' },
+  { id: 2, cancellation_type: 'mass', mode: 'debt', amount: 4200,
+    source_filter: { category: 'mining', date_from: '2026-05-14', date_to: '2026-05-18' },
+    affected_users: 37, comment: 'Сбой майнинга — массовый откат начислений',
+    executed_at: '2026-05-19T18:40:00', executed_by: 1, executed_by_role: 'owner' },
+  { id: 3, cancellation_type: 'pointwise', mode: 'log_only', amount: 100,
+    actually_deducted: 0, target_user_id: 5520031, source_tx_id: 'tx_98800',
+    comment: 'Зафиксировано без списания — баланс уже потрачен',
+    executed_at: '2026-05-17T09:15:00', executed_by: 1, executed_by_role: 'owner' },
+];
+
 function fmtDate(s) {
   if (!s) return '';
   try {
@@ -22,9 +43,9 @@ function fmtAmount(v) {
 }
 
 const MODE_META = {
-  deduct:   { label: 'Списано',   cls: 'bg-red-50 text-red-700 border-red-200' },
-  debt:     { label: 'В долг',    cls: 'bg-orange-50 text-orange-700 border-orange-200' },
-  log_only: { label: 'Только лог', cls: 'bg-gray-100 text-gray-600 border-gray-200' },
+  deduct:   { label: 'Списано',   cls: 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border-[color-mix(in_oklab,var(--danger)_40%,transparent)]' },
+  debt:     { label: 'В долг',    cls: 'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border-[color-mix(in_oklab,var(--warn)_40%,transparent)]' },
+  log_only: { label: 'Только лог', cls: 'bg-sf2 text-txd border-bd2' },
 };
 
 const TYPE_META = {
@@ -32,7 +53,15 @@ const TYPE_META = {
   mass:      { icon: '📚', label: 'Массовая' },
 };
 
-export default function EconomyCancellationsPanel({ token, onClose, canCancel }) {
+/**
+ * Журнал отмен выплат + кнопки точечной/массовой отмены.
+ *
+ *  - embedded=true  — рендер inline внутри карточки «Отмены выплат»
+ *                     (без drawer-обёртки, портала и кнопки закрытия).
+ *  - embedded=false — боковая панель (legacy; из EconomyPage больше не
+ *                     вызывается — drawer оставлен для совместимости).
+ */
+export default function EconomyCancellationsPanel({ token, onClose, canCancel, embedded = false }) {
   const [items,    setItems]    = useState([]);
   const [loading,  setLoading]  = useState(true);
   const [err,      setErr]      = useState(null);
@@ -46,6 +75,12 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
   const load = useCallback((reset = false) => {
     setLoading(true);
     setErr(null);
+    if (!token && _DEV_PREVIEW) {
+      setItems(_MOCK_CANCELLATIONS);
+      setHasMore(false);
+      setLoading(false);
+      return;
+    }
     const offset = reset ? 0 : page * PER_PAGE;
     fetch(`/api/economy/cancellations?limit=${PER_PAGE}&offset=${offset}`, {
       headers: { Authorization: `Bearer ${token}` },
@@ -60,7 +95,16 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
         setHasMore(arr.length === PER_PAGE);
         setLoading(false);
       })
-      .catch(e => { setErr(e.message); setLoading(false); });
+      .catch(e => {
+        if (_DEV_PREVIEW) {
+          setItems(_MOCK_CANCELLATIONS);
+          setHasMore(false);
+          setLoading(false);
+          return;
+        }
+        setErr(e.message);
+        setLoading(false);
+      });
   }, [token, page]);
 
   useEffect(() => { load(page === 0); }, [page, load]);
@@ -70,136 +114,127 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
     load(true);
   };
 
-  return createPortal(
-    <>
-      <div onClick={onClose} className="fixed inset-0 bg-black/30 z-40" />
-      <div className="fixed top-0 right-0 h-full w-full md:w-[480px] bg-white shadow-2xl z-50 flex flex-col overflow-hidden">
+  // ── Кнопки действий ───────────────────────────────────────────────
+  const actions = canCancel ? (
+    <div className="grid grid-cols-2 gap-2">
+      <button
+        onClick={() => setPointOpen(true)}
+        className="flex items-center justify-center gap-2 py-2.5 bg-red-600 text-white rounded-2xl
+                   text-[11px] font-black uppercase tracking-widest active:scale-95 transition
+                   hover:bg-red-700">
+        <Ban size={14} /> Точечная
+      </button>
+      <button
+        onClick={() => setMassOpen(true)}
+        className="flex items-center justify-center gap-2 py-2.5 bg-orange-600 text-white rounded-2xl
+                   text-[11px] font-black uppercase tracking-widest active:scale-95 transition
+                   hover:bg-orange-700">
+        <FileText size={14} /> Массовая
+      </button>
+    </div>
+  ) : (
+    <div className="rounded-xl bg-sf2 border border-bd2 px-3 py-2 text-[11px] text-lbl font-bold">
+      Отмена выплат доступна только владельцу чата.
+    </div>
+  );
 
-        {/* Шапка */}
-        <div className="shrink-0 bg-white border-b border-gray-100 p-4 flex items-center justify-between">
-          <div>
-            <div className="text-[10px] font-black text-red-500 uppercase tracking-widest">Журнал отмен</div>
-            <h2 className="text-base font-black text-gray-900 leading-tight">Отмены выплат</h2>
-          </div>
-          <button onClick={onClose} className="p-2 hover:bg-gray-100 rounded-xl transition active:scale-90">
-            <X size={20} />
+  // ── Список записей журнала ────────────────────────────────────────
+  const list = (
+    <>
+      {loading && items.length === 0 && (
+        <div className="flex items-center justify-center py-12">
+          <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      )}
+
+      {err && !loading && (
+        <div className="text-center py-12">
+          <div className="text-3xl mb-3">⚠️</div>
+          <div className="text-sm font-black text-txd">Не удалось загрузить</div>
+          <div className="text-[11px] text-lbl mt-1">{err}</div>
+          <button
+            onClick={() => { setPage(0); load(true); }}
+            className="mt-4 px-4 py-2 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta rounded-xl text-xs font-black">
+            Повторить
           </button>
         </div>
+      )}
 
-        {/* Действия */}
-        {canCancel && (
-          <div className="shrink-0 grid grid-cols-2 gap-2 p-4 border-b border-gray-100 bg-gray-50">
-            <button
-              onClick={() => setPointOpen(true)}
-              className="flex items-center justify-center gap-2 py-3 bg-red-600 text-white rounded-2xl
-                         text-xs font-black uppercase tracking-widest active:scale-95 transition
-                         hover:bg-red-700">
-              <Ban size={14} /> Точечная
-            </button>
-            <button
-              onClick={() => setMassOpen(true)}
-              className="flex items-center justify-center gap-2 py-3 bg-orange-600 text-white rounded-2xl
-                         text-xs font-black uppercase tracking-widest active:scale-95 transition
-                         hover:bg-orange-700">
-              <FileText size={14} /> Массовая
-            </button>
-          </div>
-        )}
-
-        {/* Список */}
-        <div className="flex-1 overflow-y-auto p-4 space-y-3">
-          {loading && items.length === 0 && (
-            <div className="flex items-center justify-center py-12">
-              <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-            </div>
-          )}
-
-          {err && !loading && (
-            <div className="text-center py-12">
-              <div className="text-3xl mb-3">⚠️</div>
-              <div className="text-sm font-black text-gray-500">Не удалось загрузить</div>
-              <div className="text-[11px] text-gray-400 mt-1">{err}</div>
-              <button
-                onClick={() => { setPage(0); load(true); }}
-                className="mt-4 px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-xs font-black">
-                Повторить
-              </button>
-            </div>
-          )}
-
-          {!loading && !err && items.length === 0 && (
-            <div className="text-center py-12">
-              <div className="text-3xl mb-3">🗂</div>
-              <div className="text-sm font-black text-gray-500">Отмен пока не было</div>
-            </div>
-          )}
-
-          {items.map(it => {
-            const tMeta = TYPE_META[it.cancellation_type] || { icon: '•', label: it.cancellation_type };
-            const mMeta = MODE_META[it.mode] || { label: it.mode, cls: 'bg-gray-100 text-gray-600 border-gray-200' };
-            let filter = null;
-            if (it.source_filter) {
-              try { filter = typeof it.source_filter === 'string' ? JSON.parse(it.source_filter) : it.source_filter; }
-              catch { filter = null; }
-            }
-            return (
-              <div key={it.id} className="bg-white border border-gray-100 rounded-2xl p-4">
-                <div className="flex items-center justify-between mb-2">
-                  <div className="flex items-center gap-2">
-                    <span className="text-base">{tMeta.icon}</span>
-                    <span className="text-xs font-black text-gray-700">{tMeta.label}</span>
-                    <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${mMeta.cls}`}>
-                      {mMeta.label}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-gray-400 font-bold">{fmtDate(it.executed_at)}</span>
-                </div>
-
-                <div className="text-sm font-black text-gray-900">
-                  {fmtAmount(it.amount)} 💎
-                  {it.actually_deducted > 0 && it.actually_deducted !== it.amount && (
-                    <span className="text-[11px] text-gray-500 font-bold ml-2">
-                      (списано {fmtAmount(it.actually_deducted)})
-                    </span>
-                  )}
-                </div>
-
-                {it.cancellation_type === 'pointwise' && (
-                  <div className="text-[11px] text-gray-500 font-bold mt-1">
-                    user_id: {it.target_user_id} · tx_id: {it.source_tx_id}
-                  </div>
-                )}
-
-                {it.cancellation_type === 'mass' && (
-                  <div className="text-[11px] text-gray-500 font-bold mt-1">
-                    {filter?.category ? `раздел ${filter.category} · ` : ''}
-                    {filter?.date_from} → {filter?.date_to}
-                    {it.affected_users != null ? ` · затронуто ${it.affected_users}` : ''}
-                  </div>
-                )}
-
-                {it.comment && (
-                  <div className="text-xs text-gray-600 italic mt-2">💬 {it.comment}</div>
-                )}
-
-                <div className="text-[10px] text-gray-400 font-bold mt-1">
-                  by {it.executed_by_role || ''} {it.executed_by ? `#${it.executed_by}` : ''}
-                </div>
-              </div>
-            );
-          })}
-
-          {hasMore && !loading && (
-            <button
-              onClick={() => setPage(p => p + 1)}
-              className="w-full py-3 text-[11px] font-black text-blue-500 uppercase tracking-widest
-                         hover:bg-blue-50 rounded-2xl transition">
-              ↓ Загрузить ещё ↓
-            </button>
-          )}
+      {!loading && !err && items.length === 0 && (
+        <div className="text-center py-12">
+          <div className="text-3xl mb-3">🗂</div>
+          <div className="text-sm font-black text-txd">Отмен пока не было</div>
         </div>
-      </div>
+      )}
 
+      {items.map(it => {
+        const tMeta = TYPE_META[it.cancellation_type] || { icon: '•', label: it.cancellation_type };
+        const mMeta = MODE_META[it.mode] || { label: it.mode, cls: 'bg-sf2 text-txd border-bd2' };
+        let filter = null;
+        if (it.source_filter) {
+          try { filter = typeof it.source_filter === 'string' ? JSON.parse(it.source_filter) : it.source_filter; }
+          catch { filter = null; }
+        }
+        return (
+          <div key={it.id} className="bg-sff border border-bd rounded-2xl p-3.5">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                <span className="text-base">{tMeta.icon}</span>
+                <span className="text-xs font-black text-tx">{tMeta.label}</span>
+                <span className={`px-2 py-0.5 rounded-full text-[9px] font-black uppercase border ${mMeta.cls}`}>
+                  {mMeta.label}
+                </span>
+              </div>
+              <span className="text-[10px] text-lbl font-bold">{fmtDate(it.executed_at)}</span>
+            </div>
+
+            <div className="text-sm font-black text-tx">
+              {fmtAmount(it.amount)} 💎
+              {it.actually_deducted > 0 && it.actually_deducted !== it.amount && (
+                <span className="text-[11px] text-txd font-bold ml-2">
+                  (списано {fmtAmount(it.actually_deducted)})
+                </span>
+              )}
+            </div>
+
+            {it.cancellation_type === 'pointwise' && (
+              <div className="text-[11px] text-txd font-bold mt-1">
+                user_id: {it.target_user_id} · tx_id: {it.source_tx_id}
+              </div>
+            )}
+
+            {it.cancellation_type === 'mass' && (
+              <div className="text-[11px] text-txd font-bold mt-1">
+                {filter?.category ? `раздел ${filter.category} · ` : ''}
+                {filter?.date_from} → {filter?.date_to}
+                {it.affected_users != null ? ` · затронуто ${it.affected_users}` : ''}
+              </div>
+            )}
+
+            {it.comment && (
+              <div className="text-xs text-txd italic mt-2">💬 {it.comment}</div>
+            )}
+
+            <div className="text-[10px] text-lbl font-bold mt-1">
+              by {it.executed_by_role || ''} {it.executed_by ? `#${it.executed_by}` : ''}
+            </div>
+          </div>
+        );
+      })}
+
+      {hasMore && !loading && (
+        <button
+          onClick={() => setPage(p => p + 1)}
+          className="w-full py-3 text-[11px] font-black text-cta uppercase tracking-widest
+                     hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-2xl transition">
+          ↓ Загрузить ещё ↓
+        </button>
+      )}
+    </>
+  );
+
+  const modals = (
+    <>
       {pointOpen && (
         <EconomyCancelPointwiseModal
           token={token}
@@ -214,6 +249,44 @@ export default function EconomyCancellationsPanel({ token, onClose, canCancel })
           onDone={handleDone}
         />
       )}
+    </>
+  );
+
+  // ── EMBEDDED: внутри карточки «Отмены выплат» ──────────────────────
+  if (embedded) {
+    return (
+      <div className="space-y-3">
+        {actions}
+        <div className="space-y-2.5">{list}</div>
+        {modals}
+      </div>
+    );
+  }
+
+  // ── DRAWER: боковая панель (legacy, из EconomyPage не вызывается) ───
+  return createPortal(
+    <>
+      <div onClick={onClose} className="fixed inset-0 bg-black/30 z-40" />
+      <div className="fixed top-0 right-0 h-full w-full md:w-[480px] bg-sff shadow-2xl z-50 flex flex-col overflow-hidden">
+
+        {/* Шапка */}
+        <div className="shrink-0 bg-sff border-b border-bd p-4 flex items-center justify-between">
+          <div>
+            <div className="text-[10px] font-black text-danger uppercase tracking-widest">Журнал отмен</div>
+            <h2 className="text-base font-black text-tx leading-tight">Отмены выплат</h2>
+          </div>
+          <button onClick={onClose} className="p-2 hover:bg-sf2 rounded-xl transition active:scale-90">
+            <X size={20} />
+          </button>
+        </div>
+
+        {/* Действия */}
+        <div className="shrink-0 p-4 border-b border-bd bg-sf2">{actions}</div>
+
+        {/* Список */}
+        <div className="flex-1 overflow-y-auto p-4 space-y-3">{list}</div>
+      </div>
+      {modals}
     </>,
     document.body
   );

@@ -1,3 +1,8 @@
+"""
+Модерация заявок на вступление и админ-действия над участниками:
+одобрение/отклонение анкет, мут, бан, чёрный список, восстановление досье.
+"""
+
 import html
 import asyncio
 from datetime import datetime
@@ -652,7 +657,7 @@ async def handle_owner_panel_button(update: Update, context: ContextTypes.DEFAUL
     """Обработчик текстовых кнопок панели владельца в треде заявок"""
     user_id = update.effective_user.id
 
-    if not await _is_owner_or_deputy(user_id):
+    if not await _is_owner_or_deputy(user_id, context):
         return
 
     # Удаляем сообщение с текстом кнопки
@@ -931,20 +936,28 @@ async def _show_app_card(query, context, app, reg_data):
             )
 
 
-async def _is_owner_or_deputy(user_id: int) -> bool:
+async def _is_owner_or_deputy(user_id: int, context=None) -> bool:
     """
     Проверка: владелец или зам владельца (доступ к Панели Владельца).
 
-    Логика (V1.12.10f):
-    1) Owner (по config.OWNER_ID) — всегда True
-    2) Динамические права: has_permission(role, "admins.view") — главный признак
-       доступа к Панели Владельца (по умолчанию у deputy есть)
-    3) Фолбэк на старую is_deputy() — если permissions.py вернул False
-       (защита: дефолты не сидились / БД повреждена)
+    Порядок проверок:
+    0) OWNER_ID (config) — безусловный первый шаг, всегда True до любой ветки.
+    I) Подпроект I: при context!=None — per-WS owner через bot_core.ws_role.is_ws_owner
+       (флаг I_WS_RBAC может быть ON или OFF — логика внутри is_ws_owner).
+    2) Динамические права: has_permission(role, "admins.view")
+    3) Фолбэк на старую is_deputy()
     """
     from config import OWNER_ID
     if user_id == OWNER_ID:
         return True
+
+    if context is not None:
+        try:
+            from bot_core.ws_role import is_ws_owner
+            if is_ws_owner(context, user_id):
+                return True
+        except Exception:
+            pass
 
     try:
         from bot_permissions import user_has
@@ -972,7 +985,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_id = query.from_user.id
 
     # Только владелец или зам
-    if not await _is_owner_or_deputy(user_id):
+    if not await _is_owner_or_deputy(user_id, context):
         await query.answer("⛔ Только для владельца.", show_alert=True)
         return
 
@@ -1124,7 +1137,7 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if not awaiting:
         return False  # не наш ввод
 
-    if not await _is_owner_or_deputy(update.effective_user.id):
+    if not await _is_owner_or_deputy(update.effective_user.id, context):
         return False
 
     text = update.message.text.strip()

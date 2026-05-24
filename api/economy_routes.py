@@ -45,6 +45,9 @@ class MassCancelBody(BaseModel):
     mode: str = "log_only"
     comment: str
 
+class TopicsBody(BaseModel):
+    topics: list = []   # список thread_id; пусто = весь чат
+
 
 # ── Helpers (будут инжектированы из api.py при include_router) ────────────────
 
@@ -159,6 +162,22 @@ async def toggle_setting(
         "at":         datetime.utcnow().isoformat(),
     })
     return result
+
+
+@router.patch("/settings/{key}/topics")
+async def update_setting_topics(
+    key: str,
+    body: TopicsBody,
+    authorization: str = Header(default=None),
+):
+    """Топики, в которых работает параметр (penalty / combo / sprint).
+    Пустой список = весь чат. История не пишется — это не изменение значения."""
+    _payload, _uid, role = _auth(authorization)
+    from permissions import has_permission
+    if not has_permission(role, "economy.edit"):
+        raise HTTPException(403, detail="Нет прав на редактирование экономики")
+    from database.db_economy import set_econ_topics
+    return set_econ_topics(_db, _DEFAULT_WS_ID, key, body.topics)
 
 
 @router.patch("/categories/{key}/toggle")

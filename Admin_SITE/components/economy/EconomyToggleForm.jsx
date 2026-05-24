@@ -1,3 +1,6 @@
+// EconomyToggleForm — inline-форма подтверждения вкл/выкл параметра
+// экономики (с обязательной причиной-комментарием в журнал).
+
 import { useState } from 'react';
 import { AlertCircle, AlertTriangle } from 'lucide-react';
 
@@ -25,9 +28,9 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
     <div className="p-4 space-y-3">
       {/* Предупреждение для мастер-свича */}
       {isMaster && currentEnabled && (
-        <div className="bg-orange-50 border border-orange-200 rounded-xl p-3 flex gap-2.5">
-          <AlertTriangle size={16} className="text-orange-500 shrink-0 mt-0.5" />
-          <div className="text-xs text-orange-800">
+        <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-xl p-3 flex gap-2.5">
+          <AlertTriangle size={16} className="text-warn shrink-0 mt-0.5" />
+          <div className="text-xs text-warn">
             <span className="font-black">Внимание!</span> Все {rowCount} параметров раздела перестанут начислять.
           </div>
         </div>
@@ -35,7 +38,7 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
 
       <div className="grid grid-cols-1 md:grid-cols-[1fr_auto] gap-3 items-start">
         <div>
-          <label className="text-[10px] font-black text-amber-700 uppercase tracking-widest mb-1.5 block flex items-center gap-1.5">
+          <label className="text-[10px] font-black text-warn uppercase tracking-widest mb-1.5 block flex items-center gap-1.5">
             <AlertCircle size={11} /> Причина — {action.toLowerCase()} «{label}»
           </label>
           <textarea
@@ -45,10 +48,10 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
             autoFocus
             rows={2}
             maxLength={500}
-            className="w-full px-3 py-2 rounded-xl border-2 border-amber-100 focus:border-amber-400
-                       focus:outline-none text-sm bg-white resize-none"
+            className="w-full px-3 py-2 rounded-xl border-2 border-[color-mix(in_oklab,var(--warn)_30%,transparent)] focus:border-amber-400
+                       focus:outline-none text-sm bg-sff resize-none"
           />
-          <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-orange-500' : 'text-amber-500'}`}>
+          <div className={`text-[10px] mt-0.5 text-right ${comment.length > 450 ? 'text-warn' : 'text-warn'}`}>
             {comment.length}/500
           </div>
         </div>
@@ -58,7 +61,7 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
             onClick={handleSave}
             disabled={!canSave}
             className={`px-4 py-2.5 rounded-xl font-black text-[11px] uppercase active:scale-95 transition whitespace-nowrap
-              disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed
+              disabled:bg-bd2 disabled:text-lbl disabled:cursor-not-allowed
               ${currentEnabled
                 ? 'bg-red-500 text-white hover:bg-red-600'
                 : 'bg-green-500 text-white hover:bg-green-600'}`}>
@@ -66,15 +69,15 @@ export default function EconomyToggleForm({ label, currentEnabled, rowCount, isM
           </button>
           <button
             onClick={onCancel}
-            className="px-4 py-2.5 bg-white border border-gray-200 text-gray-600 rounded-xl
-                       font-black text-[11px] uppercase hover:bg-gray-50 active:scale-95 transition">
+            className="px-4 py-2.5 bg-sff border border-bd2 text-txd rounded-xl
+                       font-black text-[11px] uppercase hover:bg-sf2 active:scale-95 transition">
             Отмена
           </button>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 rounded-xl p-2.5 text-xs text-red-700 font-bold">
+        <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-xl p-2.5 text-xs text-danger font-bold">
           {error}
         </div>
       )}

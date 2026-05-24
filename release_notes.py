@@ -1,3 +1,5 @@
+"""Генератор записей релиз-нотов для CHANGELOG.md (вспомогательный инструмент)."""
+
 import os
 import platform
 import subprocess

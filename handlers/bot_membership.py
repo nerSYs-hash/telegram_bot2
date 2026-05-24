@@ -17,13 +17,21 @@ from telegram.ext import ContextTypes
 
 from database.db_workspaces import (
     create_workspace, add_bot_chat, get_workspaces_for_user,
-    remove_bot_chat,
+    remove_bot_chat, soft_remove_bot_chat, get_disconnected_bot_chat,
 )
 from bot_core.workspace_context import invalidate_cache
+from bot_core.login_button import login_keyboard, login_url_enabled
+from bot_core.connect_flow import connect_flow_v2_enabled
 
 logger = logging.getLogger(__name__)
 
 SITE_URL = os.getenv('SITE_URL', 'https://puls-chat.ru')
+
+
+def _login_kb():
+    """Срез D (V1.17.0g): LoginUrl-кнопка если флаг LOGIN_URL_BUTTON ON,
+    иначе None. None ≡ нет reply_markup → флаг OFF = байт-в-байт."""
+    return login_keyboard() if login_url_enabled() else None
 
 
 async def on_bot_added_to_chat(update, context, db):
@@ -47,17 +55,60 @@ async def on_bot_added_to_chat(update, context, db):
     chat_id = chat.id
     chat_title = chat.title or f"Чат {chat_id}"
 
-    # G1: bot kicked/left → отвязать чат от ws (workspace остаётся).
+    # V1.17.0h14-fix: канал — НЕ workspace. Журнал-канал настраивается
+    # отдельно (Панель Владельца → Журнал). Онбординг сообществ к каналам
+    # не применяется (нет from_user/интерактива) — пропускаем тихо.
+    if getattr(chat, 'type', None) == 'channel':
+        return
+
+    # G1 / V1.17.0h C1: bot kicked/left → отвязать чат от ws (workspace остаётся).
     if new.status in ('left', 'kicked'):
         existing_ws = db.get_workspace_by_chat(chat_id)
         if existing_ws is not None:
-            remove_bot_chat(db.conn, chat_id)
+            if connect_flow_v2_enabled():
+                soft_remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; soft-removed (ws={existing_ws})")
+            else:
+                remove_bot_chat(db.conn, chat_id)
+                logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
             invalidate_cache(chat_id)
-            logger.info(f"Bot left chat={chat_id}; removed from bot_chats (ws={existing_ws})")
         return
 
     if new.status not in ('member', 'administrator'):
         return
+
+    # V1.17.0h12-fix: анти-двойное-срабатывание. Telegram шлёт отдельный
+    # MY_CHAT_MEMBER на «добавлен участником» и ещё один на «повышен до
+    # админа». Онбординг запускаем ТОЛЬКО при реальном входе бота
+    # (old: left/kicked/None). Повышение/смена прав (old уже member/admin)
+    # — не повод снова онбордить (иначе дубль-сообщения и гонка).
+    old = update.my_chat_member.old_chat_member
+    if old is not None and getattr(old, 'status', None) in ('member', 'administrator'):
+        return
+
+    # V1.17.0h C3: повторное добавление soft-removed чата → восстановить роль.
+    if connect_flow_v2_enabled():
+        disc = get_disconnected_bot_chat(db.conn, chat_id)
+        if disc is not None:
+            db.conn.execute(
+                "UPDATE bot_chats SET removed_at=NULL, added_by_user_id=?, "
+                "title=?, chat_type=? WHERE chat_id=?",
+                (from_user.id, chat_title, chat.type, chat_id))
+            db.conn.commit()
+            invalidate_cache(chat_id)
+            role_txt = disc['role'] or 'без роли'
+            logger.info(f"Reconnect chat={chat_id} restored ws={disc['workspace_id']} role={disc['role']}")
+            try:
+                await context.bot.send_message(
+                    chat_id,
+                    f"♻️ С возвращением! Чат переподключён к Puls_bot, "
+                    f"роль «{role_txt}» восстановлена.\n"
+                    f"Управление — на сайте: {SITE_URL}",
+                    reply_markup=_login_kb(),
+                )
+            except Exception as e:
+                logger.warning(f"send_message (reconnect) failed: {e}")
+            return
 
     # 3+4. Already bound?
     existing_ws = db.get_workspace_by_chat(chat_id)
@@ -68,8 +119,9 @@ async def on_bot_added_to_chat(update, context, db):
             try:
                 await context.bot.send_message(
                     chat_id,
-                    "ℹ️ Этот чат уже подключён к твоему сообществу на Pulse SaaS.\n"
-                    f"Управление — на сайте: {SITE_URL}"
+                    "ℹ️ Этот чат уже подключён к твоему сообществу в Puls_bot.\n"
+                    f"Управление — на сайте: {SITE_URL}",
+                    reply_markup=_login_kb(),
                 )
             except Exception as e:
                 logger.warning(f"send_message (already own) failed: {e}")
@@ -77,7 +129,7 @@ async def on_bot_added_to_chat(update, context, db):
             try:
                 await context.bot.send_message(
                     chat_id,
-                    "❌ Этот чат уже привязан к другому сообществу на Pulse SaaS."
+                    "❌ Этот чат уже привязан к другому сообществу в Puls_bot."
                 )
             except Exception as e:
                 logger.warning(f"send_message (already bound elsewhere) failed: {e}")
@@ -94,7 +146,8 @@ async def on_bot_added_to_chat(update, context, db):
             await context.bot.send_message(
                 chat_id,
                 "❌ Тот, кто меня добавил, не зарегистрирован на сайте.\n"
-                f"Зайди сюда: {SITE_URL}/login и попробуй снова."
+                f"Зайди сюда: {SITE_URL}/login и попробуй снова.",
+                reply_markup=_login_kb(),
             )
         except Exception as e:
             logger.warning(f"send_message (unregistered) failed: {e}")
@@ -111,19 +164,30 @@ async def on_bot_added_to_chat(update, context, db):
     if owned_wss:
         buttons = []
         for w in owned_wss:
-            buttons.append([InlineKeyboardButton(
-                f"📂 К «{w['name']}»",
-                callback_data=f"connect_chat:{w['id']}:{from_user.id}",
-            )])
+            if connect_flow_v2_enabled():
+                # V1.17.0h C4: сразу выбор роли при привязке к существующему ws.
+                for rcode, rlabel in (('main', 'Главный'), ('admin', 'Админ'), ('journal', 'Журнал')):
+                    buttons.append([InlineKeyboardButton(
+                        f"📂 «{w['name']}» — {rlabel}",
+                        callback_data=f"connect_chat:{w['id']}:{from_user.id}:{rcode}",
+                    )])
+            else:
+                buttons.append([InlineKeyboardButton(
+                    f"📂 В сообщество «{w['name']}»",
+                    callback_data=f"connect_chat:{w['id']}:{from_user.id}",
+                )])
         buttons.append([InlineKeyboardButton(
-            "🆕 Создать новое сообщество",
+            "🆕 Новое отдельное сообщество",
             callback_data=f"connect_chat:new:{from_user.id}",
         )])
         try:
             await context.bot.send_message(
                 chat_id,
-                f"👋 Привет! Я бот Pulse SaaS.\n\n"
-                f"Куда подключить этот чат («{chat_title}»)?",
+                f"👋 Я бот Puls_bot. Чат «{chat_title}» можно:\n\n"
+                f"📂 добавить в готовое сообщество — будет жить по его "
+                f"настройкам, экономике и участникам;\n"
+                f"🆕 сделать отдельным сообществом — свои настройки с нуля.\n\n"
+                f"Куда подключить?",
                 reply_markup=InlineKeyboardMarkup(buttons),
             )
         except Exception as e:
@@ -142,8 +206,9 @@ async def on_bot_added_to_chat(update, context, db):
     try:
         await context.bot.send_message(
             chat_id,
-            f"✅ Сообщество «{chat_title}» подключено к Pulse SaaS.\n"
-            f"Управление — на сайте: {SITE_URL}"
+            f"✅ Сообщество «{chat_title}» подключено к Puls_bot.\n"
+            f"Управление — на сайте: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception as e:
         logger.warning(f"send_message (success) failed: {e}")
@@ -151,7 +216,8 @@ async def on_bot_added_to_chat(update, context, db):
         await context.bot.send_message(
             from_user.id,
             f"✅ Чат «{chat_title}» добавлен в твой кабинет.\n"
-            f"Зайди на сайт чтобы настроить: {SITE_URL}"
+            f"Зайди на сайт чтобы настроить: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception as e:
         logger.warning(f"DM to owner failed: {e}")
@@ -167,13 +233,17 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
     await q.answer()
 
     parts = q.data.split(':')
-    if len(parts) != 3 or parts[0] != 'connect_chat':
+    if len(parts) < 3 or parts[0] != 'connect_chat':
         return
     target = parts[1]
     try:
         from_user_id = int(parts[2])
     except ValueError:
         return
+    # V1.17.0h C4: опциональный 4-й сегмент role (только при флаге ON).
+    chosen_role = parts[3] if (len(parts) >= 4 and connect_flow_v2_enabled()) else None
+    if chosen_role is not None and chosen_role not in ('main', 'admin', 'journal'):
+        chosen_role = None
 
     if q.from_user.id != from_user_id:
         await q.answer("Только тот, кто добавил бота, может выбрать.",
@@ -201,7 +271,8 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
         try:
             await q.edit_message_text(
                 f"✅ Создано новое сообщество «{chat_title}».\n"
-                f"Настройка — на сайте: {SITE_URL}"
+                f"Настройка — на сайте: {SITE_URL}",
+                reply_markup=_login_kb(),
             )
         except Exception:
             pass
@@ -225,13 +296,14 @@ async def on_connect_chat_callback(update, context: ContextTypes.DEFAULT_TYPE, d
         return
 
     add_bot_chat(db.conn, chat_id, ws_id, added_by=from_user_id,
-                 title=chat_title, chat_type=chat.type, role=None)
+                 title=chat_title, chat_type=chat.type, role=chosen_role)
     invalidate_cache(chat_id)
-    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} owner={from_user_id}")
+    logger.info(f"Bound chat={chat_id} to existing ws={ws_id} role={chosen_role} owner={from_user_id}")
     try:
         await q.edit_message_text(
             f"✅ Чат «{chat_title}» подключён к сообществу «{ws['name']}».\n"
-            f"Назначь ему роль (Главный/Админ/Журнал) на сайте: {SITE_URL}"
+            f"Назначь ему роль (Главный/Админ/Журнал) на сайте: {SITE_URL}",
+            reply_markup=_login_kb(),
         )
     except Exception:
         pass

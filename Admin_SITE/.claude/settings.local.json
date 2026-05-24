@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Users/Илья/Desktop/Обновление БОТА/Не выгружено//**)",
+      "Bash(powershell -Command \"Get-ChildItem 'C:\\\\Users\\\\Илья\\\\Desktop\\\\Обновление БОТА\\\\Не выгружено\\\\' | Select-Object Name,Length\")",
+      "PowerShell(Get-ChildItem -Force | Where-Object { $_.Name -notmatch 'node_modules' } | Select-Object Mode,Name | Format-Table -AutoSize)",
+      "PowerShell(git rm *)",
+      "PowerShell(npm run *)",
+      "PowerShell(Remove-Item *)",
+      "PowerShell(Push-Location 'C:\\\\bot_2\\\\telegram_bot2\\\\Admin_SITE'; npx vite build 2>&1 | Select-String -Pattern 'error|Error|built in|modules transformed' | Select-Object -Last 6; \"EXIT=$LASTEXITCODE\"; Pop-Location)"
+    ]
+  }
+}

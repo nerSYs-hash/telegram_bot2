@@ -1,3 +1,5 @@
+"""Утилита-помощник разрешения git-конфликтов (вспомогательный скрипт)."""
+
 import re
 
 def resolve_conflicts(path, prefer='head'):

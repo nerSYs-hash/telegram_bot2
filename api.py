@@ -1,5 +1,11 @@
+"""
+FastAPI-приложение Puls Chat — основной HTTP/WS API сайта.
+Аутентификация (Telegram), endpoints для чатов/админов/статистики/
+триггеров/пресс-релизов/титулов; подключает economy_router и WS-канал.
+"""
+
 from fastapi import FastAPI, HTTPException, Query, UploadFile, File, Header, Request, WebSocket, WebSocketDisconnect
-from fastapi.responses import StreamingResponse, FileResponse
+from fastapi.responses import StreamingResponse, FileResponse, HTMLResponse
 import io
 import re
 import httpx
@@ -105,6 +111,15 @@ try:
 except Exception as e:
     logger.warning(f"⚠️ Ошибка подключения workspaces router: {e}")
 
+# Modules (V1.17.0h0 — module toggles)
+try:
+    from api.modules_routes import router as modules_router, _setup as _modules_setup
+    _modules_setup(db, lambda auth: _require_auth(auth))
+    app.include_router(modules_router)
+    logger.info("✅ modules: роутер подключён")
+except Exception as e:
+    logger.warning(f"⚠️ Ошибка подключения modules router: {e}")
+
 try:
     # Явно указываем поиск в текущей папке для stats_calculators
     if os.path.exists(os.path.join(current_dir, "stats_calculators.py")):
@@ -167,6 +182,24 @@ async def auth_telegram(request: Request):
         "is_owner":   is_developer,
     })
     return {"token": token, "is_admin": is_developer, "is_owner": is_developer}
+
+
+@app.get("/api/auth/tg-callback")
+async def auth_tg_callback(request: Request):
+    """Срез D (V1.17.0g): GET-двойник /api/auth/telegram для inline LoginUrl.
+
+    Telegram при тапе LoginUrl-кнопки в боте делает GET с подписью сюда.
+    Логика — в чистом, оттестированном bot_core.web_auth.build_callback
+    (НЕ трогает прод-горячие _verify_tg_hash/_make_jwt / POST-виджет).
+    """
+    from bot_core.web_auth import build_callback
+    status, body = build_callback(
+        dict(request.query_params),
+        _BOT_TOKEN, _JWT_SECRET,
+        developer_id=int(os.getenv('DEVELOPER_ID', 0) or 0),
+        bot_username=_BOT_USERNAME,
+    )
+    return HTMLResponse(content=body, status_code=status)
 
 
 @app.get("/api/auth/me")
@@ -654,6 +687,230 @@ def _compute_stats(period: str) -> dict:
         "healthIndex":  health,
         "indices":      indices,
     }
+
+
+# ── Гранулярности ленты-графиков Статистики ──────────────────────────────────
+# Каждый виджет сам выбирает масштаб: день/неделя/месяц/квартал/год.
+_GRAN_WINDOWS = {'day': 30, 'week': 16, 'month': 12, 'quarter': 8, 'year': 6}
+_GRAN_UNIT = {'day': 'день', 'week': 'неделя', 'month': 'месяц',
+              'quarter': 'квартал', 'year': 'год'}
+_GRAN_LABELS = {'day': 'По дням', 'week': 'По неделям', 'month': 'По месяцам',
+                'quarter': 'По кварталам', 'year': 'По годам'}
+
+
+def _bucket_key(gran: str, iso: str) -> str:
+    """ISO-дата 'YYYY-MM-DD' → ключ бакета выбранной гранулярности."""
+    if gran == 'day':
+        return iso
+    if gran == 'month':
+        return iso[:7]
+    if gran == 'year':
+        return iso[:4]
+    y, m, d = (int(x) for x in iso.split('-'))
+    if gran == 'quarter':
+        return f"{y}-Q{(m - 1) // 3 + 1}"
+    iy, iw, _ = datetime(y, m, d).isocalendar()   # ISO-неделя
+    return f"{iy}-W{iw:02d}"
+
+
+def _bucket_label(gran: str, d) -> str:
+    """Подпись точки оси X по первой дате бакета d (date)."""
+    if gran == 'day':
+        return d.strftime('%d.%m')
+    if gran == 'week':
+        return (d - timedelta(days=d.weekday())).strftime('%d.%m')
+    if gran == 'month':
+        return RU_MONTHS.get(d.month, d.strftime('%Y-%m'))
+    if gran == 'quarter':
+        return f"Q{(d.month - 1) // 3 + 1} {d.year % 100:02d}"
+    return str(d.year)
+
+
+def _granularity_spine(gran: str):
+    """→ (start_date, end_date, bucket_fn, spine[(key,label)]) без дыр."""
+    if gran not in _GRAN_WINDOWS:
+        gran = 'day'
+    today = _today_msk()
+    n = _GRAN_WINDOWS[gran]
+    if gran == 'day':
+        start = today - timedelta(days=n - 1)
+    elif gran == 'week':
+        start = today - timedelta(weeks=n - 1)
+        start = start - timedelta(days=start.weekday())
+    elif gran == 'month':
+        start = (today.replace(day=1) - timedelta(days=31 * (n - 1))).replace(day=1)
+    elif gran == 'quarter':
+        start = (today.replace(day=1) - timedelta(days=92 * (n - 1))).replace(day=1)
+    else:  # year
+        start = today.replace(month=1, day=1)
+        try:
+            start = start.replace(year=start.year - (n - 1))
+        except ValueError:
+            pass
+    spine, seen = [], set()
+    cur = start
+    while cur <= today:
+        k = _bucket_key(gran, cur.isoformat())
+        if k not in seen:
+            seen.add(k)
+            spine.append((k, _bucket_label(gran, cur)))
+        cur += timedelta(days=1)
+    return start, today, (lambda iso: _bucket_key(gran, iso)), spine
+
+
+def _compute_series(granularity: str = 'day') -> dict:
+    """Лента графиков Статистики на РЕАЛЬНЫХ данных.
+
+    granularity: day/week/month/quarter/year (см. _granularity_spine).
+    Виджеты (docs/STATS_SPEC_Puls_Chat.md): 1 users, 2 messages,
+    3 engagement, 6 newcomers(part), 7 firstMessage, 10 activeSummary,
+    11 kpi. Виджеты 4/5/8/9 требуют почасовых/edited/links — этап 2.
+    """
+    gran = granularity if granularity in _GRAN_WINDOWS else 'day'
+    start_date, end_date, bucket, spine = _granularity_spine(gran)
+    s_iso, e_iso = start_date.isoformat(), end_date.isoformat()
+    today = _today_msk()
+    ws_id = getattr(db, '_DEFAULT_WS_ID', 1) if db else 1
+
+    if not db:
+        return {"granularity": gran, "granularityLabel": _GRAN_LABELS[gran],
+                "users": [], "messages": [], "engagement": [], "newcomers": [],
+                "firstMessage": {"firstDay": 0, "afterFirstDay": 0},
+                "activeSummary": {"newcomers": 0, "regular": 0, "active": 0},
+                "kpi": {}}
+
+    # ── joined / left по дням ──
+    db.cursor.execute(
+        "SELECT date(joined_at) d, COUNT(*) c FROM users "
+        "WHERE date(joined_at) BETWEEN ? AND ? AND is_admin=0 AND is_owner=0 "
+        "GROUP BY d", (s_iso, e_iso))
+    joined_by = {}
+    for r in db.cursor.fetchall():
+        joined_by[bucket(r['d'])] = joined_by.get(bucket(r['d']), 0) + int(r['c'])
+
+    db.cursor.execute(
+        "SELECT date(timestamp) d, COUNT(*) c FROM transactions "
+        "WHERE workspace_id=? AND transaction_type='return_on_leave' "
+        "AND date(timestamp) BETWEEN ? AND ? GROUP BY d", (ws_id, s_iso, e_iso))
+    left_by = {}
+    for r in db.cursor.fetchall():
+        left_by[bucket(r['d'])] = left_by.get(bucket(r['d']), 0) + int(r['c'])
+
+    # ── сообщения / писавшие по дням ──
+    db.cursor.execute(
+        "SELECT date, COALESCE(SUM(total_messages),0) m, COUNT(DISTINCT user_id) w "
+        "FROM user_stats WHERE date BETWEEN ? AND ? GROUP BY date", (s_iso, e_iso))
+    msg_by, wr_by = {}, {}
+    for r in db.cursor.fetchall():
+        k = bucket(r['date'])
+        msg_by[k] = msg_by.get(k, 0) + int(r['m'])
+        wr_by[k] = wr_by.get(k, 0) + int(r['w'])
+
+    # базовый размер сообщества до окна (для линии «Всего»)
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM users WHERE date(joined_at) < ? "
+        "AND is_admin=0 AND is_owner=0", (s_iso,))
+    base = int((db.cursor.fetchone() or {'c': 0})['c'])
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM transactions WHERE workspace_id=? "
+        "AND transaction_type='return_on_leave' AND date(timestamp) < ?", (ws_id, s_iso))
+    base -= int((db.cursor.fetchone() or {'c': 0})['c'])
+    base = max(base, 0)
+
+    db.cursor.execute(
+        "SELECT COUNT(*) c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0")
+    total_users = int((db.cursor.fetchone() or {'c': 0})['c']) or 1
+
+    users, messages, engagement, newcomers = [], [], [], []
+    running = base
+    for key, label in spine:
+        j = joined_by.get(key, 0)
+        lf = left_by.get(key, 0)
+        running = max(running + j - lf, 0)
+        m = msg_by.get(key, 0)
+        w = wr_by.get(key, 0)
+        users.append({"day": label, "joined": j, "left": lf, "total": running})
+        messages.append({"day": label, "messages": m, "writers": w})
+        engagement.append({"day": label, "pct": round(w / total_users * 100, 1)})
+        newcomers.append({"day": label, "total": j})
+
+    # ── w7: первое сообщение в 1-й день / позже ──
+    db.cursor.execute('''
+        SELECT
+          COALESCE(SUM(CASE WHEN fm.fd = date(u.joined_at) THEN 1 ELSE 0 END),0) f1,
+          COALESCE(SUM(CASE WHEN fm.fd  > date(u.joined_at) THEN 1 ELSE 0 END),0) f2
+        FROM users u
+        JOIN (SELECT user_id, MIN(date) fd FROM user_stats
+              WHERE total_messages>0 GROUP BY user_id) fm ON fm.user_id=u.user_id
+        WHERE u.is_admin=0 AND u.is_owner=0 AND u.joined_at IS NOT NULL''')
+    fr = db.cursor.fetchone() or {'f1': 0, 'f2': 0}
+    first_message = {"firstDay": int(fr['f1']), "afterFirstDay": int(fr['f2'])}
+
+    # ── w10: сводная по активным за окно ──
+    d14 = (today - timedelta(days=14)).isoformat()
+    d30 = (today - timedelta(days=30)).isoformat()
+    db.cursor.execute('''
+        SELECT
+          COALESCE(SUM(CASE WHEN date(u.joined_at) >= ? THEN 1 ELSE 0 END),0) nw,
+          COALESCE(SUM(CASE WHEN date(u.joined_at) <= ? THEN 1 ELSE 0 END),0) rg,
+          COALESCE(SUM(CASE WHEN u.joined_at IS NULL
+                       OR (date(u.joined_at) > ? AND date(u.joined_at) < ?)
+                       THEN 1 ELSE 0 END),0) ac
+        FROM users u
+        WHERE u.is_admin=0 AND u.is_owner=0 AND u.user_id IN (
+          SELECT DISTINCT user_id FROM user_stats
+          WHERE date BETWEEN ? AND ? AND total_messages>0)
+    ''', (d14, d30, d30, d14, s_iso, e_iso))
+    ar = db.cursor.fetchone() or {'nw': 0, 'rg': 0, 'ac': 0}
+    active_summary = {"newcomers": int(ar['nw']), "regular": int(ar['rg']),
+                      "active": int(ar['ac'])}
+
+    # ── w11: mini-KPI за окно ──
+    tot_msg = sum(p["messages"] for p in messages)
+    n_pts = max(len(spine), 1)
+    db.cursor.execute(
+        "SELECT COUNT(DISTINCT user_id) c FROM user_stats "
+        "WHERE date BETWEEN ? AND ? AND total_messages>0", (s_iso, e_iso))
+    active_total = int((db.cursor.fetchone() or {'c': 0})['c'])
+    avg_writers = round(sum(p["writers"] for p in messages) / n_pts, 1)
+    kpi = {
+        "totalMsg": tot_msg,
+        "avgMsgPerPoint": round(tot_msg / n_pts, 1),
+        "activeTotal": active_total,
+        "avgActivePerPoint": avg_writers,
+        "points": n_pts,
+        "unit": _GRAN_UNIT[gran],
+    }
+
+    return {
+        "granularity": gran,
+        "granularityLabel": _GRAN_LABELS[gran],
+        "users": users,
+        "messages": messages,
+        "engagement": engagement,
+        "newcomers": newcomers,
+        "firstMessage": first_message,
+        "activeSummary": active_summary,
+        "kpi": kpi,
+        # пробелы (этап 2, см. STATS_SPEC): почасовые heatmap'ы,
+        # edited/links, атрибуция новых, «удалён ботом», онлайн.
+        "gaps": ["hourly", "edited", "links", "removed_by_mod", "online",
+                 "newcomer_attribution"],
+    }
+
+
+@app.get("/api/stats/series")
+async def get_stats_series(granularity: str = Query('day')):
+    """Лента графиков Статистики на реальных данных.
+
+    granularity: day / week / month / quarter / year.
+    Виджеты с почасовыми/edited/links — этап 2 (поле gaps).
+    """
+    try:
+        return _compute_series(granularity)
+    except Exception as e:
+        logger.error(f"Error in /api/stats/series: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/api/stats")
@@ -1905,7 +2162,7 @@ async def get_staff():
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         rows = conn.execute(
             "SELECT user_id, username, first_name, is_owner, is_admin "
             "FROM users WHERE is_admin = 1 OR is_owner = 1 "
@@ -1932,7 +2189,7 @@ async def add_staff(req: StaffAddRequest):
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         uid_str = req.user_id.strip().lstrip('@')
         # Пробуем найти по числовому ID или по username
         if uid_str.isdigit():
@@ -1965,7 +2222,7 @@ async def remove_staff(user_id: int):
     if not db:
         raise HTTPException(status_code=503, detail="DB unavailable")
     try:
-        conn = db.get_connection()
+        conn = db.conn
         row = conn.execute(
             "SELECT is_owner FROM users WHERE user_id = ?", (user_id,)
         ).fetchone()

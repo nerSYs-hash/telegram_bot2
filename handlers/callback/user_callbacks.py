@@ -55,9 +55,9 @@ async def dispatch_user(handler, query, data, user, context) -> bool:
         from handlers.commands.system_commands import _show_faq_menu
         await _show_faq_menu(query.message)
     elif data == "faq_commands":
-        from handlers.commands.system_commands import FAQ_COMMANDS_USER, FAQ_COMMANDS_ADMIN
+        from handlers.commands.system_commands import faq_commands_user_text, FAQ_COMMANDS_ADMIN
         from telegram import InlineKeyboardButton, InlineKeyboardMarkup
-        text = FAQ_COMMANDS_USER
+        text = faq_commands_user_text()
         if user.id == admin_id:
             text += FAQ_COMMANDS_ADMIN
         await query.edit_message_text(text, parse_mode='HTML',

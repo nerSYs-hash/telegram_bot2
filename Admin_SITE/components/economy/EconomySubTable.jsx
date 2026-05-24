@@ -1,3 +1,6 @@
+// EconomySubTable — под-таблица параметров одной подкатегории
+// Экономики (legacy табличный вид).
+
 import { PlusCircle } from 'lucide-react';
 import EconomyRow from './EconomyRow';
 
@@ -14,7 +17,7 @@ export default function EconomySubTable({ subcategory, rows, onOpenHistory, onRo
 
   return (
     <div className="bg-gray-50/50 rounded-2xl p-4">
-      <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest mb-3 px-1">
+      <h3 className="text-[10px] font-black text-txd uppercase tracking-widest mb-3 px-1">
         {label}
       </h3>
 
@@ -34,8 +37,8 @@ export default function EconomySubTable({ subcategory, rows, onOpenHistory, onRo
 
       <button
         disabled
-        className="mt-3 w-full py-2.5 border-2 border-dashed border-gray-200 rounded-xl
-                   text-gray-300 font-black text-[10px] uppercase
+        className="mt-3 w-full py-2.5 border-2 border-dashed border-bd2 rounded-xl
+                   text-lbl font-black text-[10px] uppercase
                    flex items-center justify-center gap-1.5 cursor-not-allowed">
         <PlusCircle size={12} /> Добавить параметр
       </button>

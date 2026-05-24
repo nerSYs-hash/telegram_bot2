@@ -11,6 +11,11 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
   const isNew = row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 86_400_000;
   const isExpanded = editing || toggling;
 
+  // defib-множитель: «(xN = +M%)» считаем динамически по текущему значению
+  const descText = (row.key === 'defib.buff_multiplier' && row.description)
+    ? `${row.description} (x${Number(row.value)} = +${Math.round((Number(row.value) - 1) * 100)}%)`
+    : row.description;
+
   const handleSave = async (newValue, comment) => {
     const res = await fetch(`/api/economy/settings/${row.key}`, {
       method: 'PATCH',
@@ -38,34 +43,34 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
   };
 
   return (
-    <div className={`bg-white rounded-xl border transition overflow-hidden ${
-      isRecent ? 'border-amber-200 bg-amber-50/30' : isExpanded ? 'border-blue-200 shadow-sm' : 'border-gray-100 hover:border-gray-200'
+    <div className={`bg-sff rounded-xl border transition overflow-hidden ${
+      isRecent ? 'border-[color-mix(in_oklab,var(--warn)_40%,transparent)] bg-amber-50/30' : isExpanded ? 'border-[color-mix(in_oklab,var(--cta)_40%,transparent)] shadow-sm' : 'border-bd hover:border-bd2'
     }`}>
       <div className="flex items-center gap-3 p-3">
 
         {/* Название */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-sm font-bold text-gray-900 truncate">{row.label}</span>
+            <span className="text-sm font-bold text-tx truncate">{row.label}</span>
             {isNew && (
-              <span className="bg-orange-50 text-orange-600 border border-orange-200 rounded-full px-2 py-0.5 text-[8px] font-black uppercase">
+              <span className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-full px-2 py-0.5 text-[8px] font-black uppercase">
                 Новое
               </span>
             )}
             {isRecent && (
-              <span className="bg-amber-50 text-amber-700 border border-amber-200 rounded-full px-2 py-0.5 text-[8px] font-black uppercase animate-pulse">
+              <span className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-full px-2 py-0.5 text-[8px] font-black uppercase animate-pulse">
                 Изменено
               </span>
             )}
           </div>
-          {row.description && (
-            <div className="text-[10px] text-gray-400 mt-0.5 truncate">{row.description}</div>
+          {descText && (
+            <div className="text-[10px] text-lbl mt-0.5 truncate">{descText}</div>
           )}
         </div>
 
         {/* Значение — фиксированная ширина */}
-        <div className="w-24 text-right text-base font-black text-gray-900 flex-shrink-0 whitespace-nowrap tabular-nums">
-          {row.value} <span className="text-[10px] text-gray-500 font-normal">{row.unit}</span>
+        <div className="w-24 text-right text-base font-black text-tx flex-shrink-0 whitespace-nowrap tabular-nums">
+          {row.value} <span className="text-[10px] text-txd font-normal">{row.unit}</span>
         </div>
 
         {/* Тумблер — фиксированная ширина */}
@@ -75,9 +80,9 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
             disabled={!canEdit}
             title={canEdit ? (row.is_enabled ? 'Выключить' : 'Включить') : 'Нет прав'}
             className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
-              row.is_enabled ? 'bg-green-500' : 'bg-gray-200'
+              row.is_enabled ? 'bg-green-500' : 'bg-bd2'
             } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
-            <span className={`inline-block w-4 h-4 bg-white rounded-full shadow transform transition-transform duration-200 ${
+            <span className={`inline-block w-4 h-4 bg-sff rounded-full shadow transform transition-transform duration-200 ${
               row.is_enabled ? 'translate-x-6' : 'translate-x-1'
             }`} />
           </button>
@@ -87,7 +92,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
         <div className="w-12 flex justify-center flex-shrink-0">
           <button
             onClick={() => onOpenHistory(row.key, row.label)}
-            className="flex items-center justify-center gap-1 px-2 py-2 text-gray-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition active:scale-90 min-w-[34px]">
+            className="flex items-center justify-center gap-1 px-2 py-2 text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-lg transition active:scale-90 min-w-[34px]">
             <BarChart3 size={15} />
             {row.history_count > 0 && (
               <span className="text-[9px] font-black tabular-nums">{row.history_count}</span>
@@ -102,8 +107,8 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
             disabled={!canEdit}
             title={canEdit ? 'Изменить значение' : 'Нет прав'}
             className={`p-2 rounded-lg transition ${
-              editing ? 'text-blue-600 bg-blue-50' :
-              canEdit ? 'text-gray-400 hover:text-blue-500 hover:bg-blue-50 active:scale-90'
+              editing ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' :
+              canEdit ? 'text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] active:scale-90'
                       : 'text-gray-200 cursor-not-allowed'
             }`}>
             <Edit size={15} />
@@ -113,7 +118,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
 
       {/* Inline expand: редактирование */}
       {editing && (
-        <div className="border-t border-blue-100 bg-blue-50/30 animate-in slide-in-from-top-2 duration-200">
+        <div className="border-t border-[color-mix(in_oklab,var(--cta)_30%,transparent)] bg-blue-50/30 animate-in slide-in-from-top-2 duration-200">
           <EconomyEditForm
             row={row}
             onCancel={() => setEditing(false)}
@@ -124,7 +129,7 @@ export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChan
 
       {/* Inline expand: тумблер с комментарием */}
       {toggling && (
-        <div className="border-t border-amber-100 bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+        <div className="border-t border-[color-mix(in_oklab,var(--warn)_30%,transparent)] bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
           <EconomyToggleForm
             label={row.label}
             currentEnabled={row.is_enabled}

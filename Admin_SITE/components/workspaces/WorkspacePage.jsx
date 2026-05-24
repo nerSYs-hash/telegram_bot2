@@ -1,4 +1,7 @@
 // WorkspacePage (V1.17.0c, F) — детали сообщества + роли чатов + deep-link подключения
+// V1.17.0i (P4 C6): отключённые чаты (removed_at не пуст) показываются приглушённо,
+// с плашкой «🔴 Бот не в чате — добавьте обратно, роль восстановится»; кнопка
+// «Отключить» (LogOut) для уже soft-removed не отображается.
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Edit2, Save, X, MessageCircle, Users, UserPlus, Trash2,
@@ -11,15 +14,15 @@ import {
 
 const ROLE_LABEL = { owner: '👑 Владелец', admin: '🛡 Админ', moderator: '🔧 Модератор' };
 const ROLE_COLOR = {
-  owner:     'bg-amber-100 text-amber-700',
-  admin:     'bg-blue-100 text-blue-700',
-  moderator: 'bg-gray-100 text-gray-700',
+  owner:     'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+  admin:     'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
+  moderator: 'bg-sf2 text-tx',
 };
 
 const CHAT_ROLES = [
-  { value: 'main',    label: 'Главный', icon: Crown,    color: 'bg-amber-100 text-amber-700 border-amber-200' },
-  { value: 'admin',   label: 'Админ',   icon: Shield,   color: 'bg-blue-100 text-blue-700 border-blue-200' },
-  { value: 'journal', label: 'Журнал',  icon: BookOpen, color: 'bg-purple-100 text-purple-700 border-purple-200' },
+  { value: 'main',    label: 'Главный', icon: Crown,    color: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn border-[color-mix(in_oklab,var(--warn)_40%,transparent)]' },
+  { value: 'admin',   label: 'Админ',   icon: Shield,   color: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)]' },
+  { value: 'journal', label: 'Журнал',  icon: BookOpen, color: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple border-[color-mix(in_oklab,var(--purple)_40%,transparent)]' },
 ];
 const CHAT_ROLE_META = Object.fromEntries(CHAT_ROLES.map(r => [r.value, r]));
 
@@ -120,54 +123,60 @@ export default function WorkspacePage({
     } catch (e) { setErr('Не удалось скопировать ссылку'); }
   };
 
-  if (!details) return <div className="p-5 text-gray-400 text-sm">Загрузка…</div>;
+  if (!details) return <div className="p-5 text-lbl text-sm">Загрузка…</div>;
 
   const ws = details.workspace;
   const isOwner = details.members.find(m => m.user_id === currentUserId)?.role === 'owner';
+  // V1.17.0i (C6): шапка показывает «N активных · M всего» если есть отключённые
+  const totalChats = details.chats.length;
+  const activeChats = details.chats.filter(c => !c.removed_at).length;
+  const chatsTitle = activeChats === totalChats
+    ? `Чаты (${totalChats})`
+    : `Чаты (${activeChats} активных · ${totalChats})`;
 
   return (
     <div className="space-y-4">
       <button onClick={onBack}
-              className="flex items-center gap-2 text-blue-600 font-black text-xs uppercase tracking-wide hover:bg-blue-50 rounded-xl px-3 py-2">
+              className="flex items-center gap-2 text-cta font-black text-xs uppercase tracking-wide hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-xl px-3 py-2">
         <ArrowLeft size={14}/> Назад
       </button>
 
-      {err && <div className="bg-red-50 text-red-700 rounded-2xl p-3 text-xs font-medium">{err}</div>}
+      {err && <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger rounded-2xl p-3 text-xs font-medium">{err}</div>}
 
       {/* General */}
-      <div className="bg-white rounded-[2rem] p-5 border border-gray-100">
-        <h3 className="font-black text-gray-900 text-xs uppercase mb-3">Общее</h3>
+      <div className="bg-sff rounded-[2rem] p-5 border border-bd">
+        <h3 className="font-black text-tx text-xs uppercase mb-3">Общее</h3>
         {editing ? (
           <div className="flex items-center gap-2">
             <input value={newName} onChange={e => setNewName(e.target.value)}
-                   className="flex-1 px-3 py-2 border border-gray-200 rounded-xl text-sm font-medium"/>
+                   className="flex-1 px-3 py-2 border border-bd2 rounded-xl text-sm font-medium"/>
             <button onClick={handleSave} disabled={saving}
                     className="p-2 rounded-xl bg-blue-600 text-white disabled:opacity-50">
               <Save size={14}/>
             </button>
             <button onClick={() => { setEditing(false); setNewName(ws.name); }}
-                    className="p-2 rounded-xl bg-gray-100 text-gray-700"><X size={14}/></button>
+                    className="p-2 rounded-xl bg-sf2 text-tx"><X size={14}/></button>
           </div>
         ) : (
           <div className="flex items-center justify-between">
-            <h2 className="text-xl font-black text-gray-900">{ws.name}</h2>
+            <h2 className="text-xl font-black text-tx">{ws.name}</h2>
             {isOwner && (
-              <button onClick={() => setEditing(true)} className="p-2 rounded-xl hover:bg-gray-100">
-                <Edit2 size={14} className="text-gray-400"/>
+              <button onClick={() => setEditing(true)} className="p-2 rounded-xl hover:bg-sf2">
+                <Edit2 size={14} className="text-lbl"/>
               </button>
             )}
           </div>
         )}
-        <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-gray-400">
+        <div className="mt-2 text-[10px] uppercase tracking-widest font-bold text-lbl">
           Тариф: {ws.plan}{ws.is_pulse_themed ? ' · Pulse-themed' : ''}
         </div>
       </div>
 
       {/* Chats */}
-      <div className="bg-white rounded-[2rem] p-5 border border-gray-100">
+      <div className="bg-sff rounded-[2rem] p-5 border border-bd">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-black text-gray-900 text-xs uppercase flex items-center">
-            <MessageCircle className="mr-2 text-emerald-500" size={14}/> Чаты ({details.chats.length})
+          <h3 className="font-black text-tx text-xs uppercase flex items-center">
+            <MessageCircle className="mr-2 text-ok" size={14}/> {chatsTitle}
           </h3>
           {isOwner && connectLink && (
             <div className="flex items-center gap-2">
@@ -177,15 +186,15 @@ export default function WorkspacePage({
                 <Plus size={12}/> Подключить чат
               </a>
               <button onClick={handleCopyLink} title="Скопировать ссылку"
-                      className="p-2 rounded-xl bg-gray-100 hover:bg-gray-200 text-gray-700">
-                {linkCopied ? <Check size={14} className="text-emerald-600"/> : <Copy size={14}/>}
+                      className="p-2 rounded-xl bg-sf2 hover:bg-bd2 text-tx">
+                {linkCopied ? <Check size={14} className="text-ok"/> : <Copy size={14}/>}
               </button>
             </div>
           )}
         </div>
 
         {details.chats.length === 0 && (
-          <div className="text-xs text-gray-400 font-medium">
+          <div className="text-xs text-lbl font-medium">
             Нет подключённых чатов. Нажми «Подключить чат» и добавь бота в нужный чат.
           </div>
         )}
@@ -193,16 +202,32 @@ export default function WorkspacePage({
         <div className="space-y-2">
           {details.chats.map(c => {
             const meta = c.role ? CHAT_ROLE_META[c.role] : null;
+            const isRemoved = !!c.removed_at;  // V1.17.0i (C6): soft-removed чат
             return (
-              <div key={c.chat_id} className="p-3 bg-gray-50 rounded-2xl">
+              <div
+                key={c.chat_id}
+                className={`p-3 rounded-2xl transition-opacity ${
+                  isRemoved
+                    ? 'bg-sf2 opacity-70 border-l-4 border-[color-mix(in_oklab,var(--danger)_60%,transparent)]'
+                    : 'bg-sf2'
+                }`}>
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="min-w-0 flex-1">
-                    <div className="font-black text-sm text-gray-900 truncate">
+                    <div className="font-black text-sm text-tx truncate">
                       {c.title || `Чат ${c.chat_id}`}
                     </div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-gray-400 mt-0.5">
+                    <div className="text-[10px] uppercase tracking-widest font-bold text-lbl mt-0.5">
                       {c.chat_type || '—'} · добавлен {c.added_at?.slice(0, 10) || '—'}
                     </div>
+                    {isRemoved && (
+                      <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md
+                                      text-[10px] font-black uppercase tracking-wide
+                                      bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger
+                                      border border-[color-mix(in_oklab,var(--danger)_36%,transparent)]"
+                           title="Pulse Bot был удалён из чата. Добавьте его обратно — роль и настройки восстановятся.">
+                        🔴 Бот не в чате — добавьте обратно, роль восстановится
+                      </div>
+                    )}
                   </div>
                   {meta && (
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg
@@ -210,12 +235,12 @@ export default function WorkspacePage({
                       <meta.icon size={11}/> {meta.label}
                     </span>
                   )}
-                  {isOwner && (
+                  {isOwner && !isRemoved && (
                     <button
                       disabled={savingRole === c.chat_id}
                       onClick={() => handleDisconnectChat(c.chat_id, c.title || `Чат ${c.chat_id}`)}
                       title="Отключить чат — бот покинет его"
-                      className="p-2 rounded-xl hover:bg-red-50 text-red-500 disabled:opacity-50">
+                      className="p-2 rounded-xl hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger disabled:opacity-50">
                       <LogOut size={14}/>
                     </button>
                   )}
@@ -234,7 +259,7 @@ export default function WorkspacePage({
                                             disabled:opacity-50
                                             ${active
                                               ? r.color
-                                              : 'bg-white text-gray-500 border-gray-200 hover:bg-gray-100'}`}>
+                                              : 'bg-sff text-txd border-bd2 hover:bg-sf2'}`}>
                           <r.icon size={11}/> {r.label}
                         </button>
                       );
@@ -243,8 +268,8 @@ export default function WorkspacePage({
                       <button disabled={savingRole === c.chat_id}
                               onClick={() => handleSetChatRole(c.chat_id, null)}
                               className="flex items-center gap-1 px-2.5 py-1 rounded-lg text-[10px]
-                                         font-black uppercase tracking-wide border bg-white text-gray-400
-                                         border-gray-200 hover:bg-red-50 hover:text-red-600 disabled:opacity-50">
+                                         font-black uppercase tracking-wide border bg-sff text-lbl
+                                         border-bd2 hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] hover:text-danger disabled:opacity-50">
                         <X size={11}/> Снять
                       </button>
                     )}
@@ -257,10 +282,10 @@ export default function WorkspacePage({
       </div>
 
       {/* Members */}
-      <div className="bg-white rounded-[2rem] p-5 border border-gray-100">
+      <div className="bg-sff rounded-[2rem] p-5 border border-bd">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="font-black text-gray-900 text-xs uppercase flex items-center">
-            <Users className="mr-2 text-violet-500" size={14}/> Помощники ({details.members.length})
+          <h3 className="font-black text-tx text-xs uppercase flex items-center">
+            <Users className="mr-2 text-purple" size={14}/> Помощники ({details.members.length})
           </h3>
           {isOwner && (
             <button onClick={onInviteClick}
@@ -272,13 +297,13 @@ export default function WorkspacePage({
         </div>
         <div className="space-y-2">
           {details.members.map(m => (
-            <div key={m.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-2xl">
+            <div key={m.user_id} className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 rounded-xl bg-gray-200 flex items-center justify-center text-xs font-black text-gray-500">
+                <div className="w-8 h-8 rounded-xl bg-bd2 flex items-center justify-center text-xs font-black text-txd">
                   {String(m.user_id).slice(-2)}
                 </div>
                 <div>
-                  <div className="font-black text-sm text-gray-900">ID {m.user_id}</div>
+                  <div className="font-black text-sm text-tx">ID {m.user_id}</div>
                   <span className={`px-2 py-0.5 rounded-md text-[10px] font-black uppercase tracking-wide ${ROLE_COLOR[m.role]}`}>
                     {ROLE_LABEL[m.role]}
                   </span>
@@ -286,7 +311,7 @@ export default function WorkspacePage({
               </div>
               {isOwner && m.role !== 'owner' && (
                 <button onClick={() => handleRemove(m.user_id)}
-                        className="p-2 rounded-xl hover:bg-red-50 text-red-500">
+                        className="p-2 rounded-xl hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger">
                   <Trash2 size={14}/>
                 </button>
               )}
@@ -297,11 +322,11 @@ export default function WorkspacePage({
 
       {/* Danger zone — удаление сообщества (только не-Pulse, только owner) */}
       {isOwner && !ws.is_pulse_themed && (
-        <div className="bg-red-50 border-2 border-dashed border-red-200 rounded-[2rem] p-5">
-          <h3 className="font-black text-red-800 text-xs uppercase mb-2 flex items-center">
-            <AlertTriangle className="mr-2 text-red-500" size={14}/> Опасная зона
+        <div className="bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] border-2 border-dashed border-[color-mix(in_oklab,var(--danger)_40%,transparent)] rounded-[2rem] p-5">
+          <h3 className="font-black text-danger text-xs uppercase mb-2 flex items-center">
+            <AlertTriangle className="mr-2 text-danger" size={14}/> Опасная зона
           </h3>
-          <p className="text-xs text-red-700 font-medium mb-3">
+          <p className="text-xs text-danger font-medium mb-3">
             Удаление сообщества необратимо. Бот покинет все привязанные чаты, помощники потеряют доступ.
           </p>
           <button onClick={handleDeleteWorkspace}
@@ -312,7 +337,7 @@ export default function WorkspacePage({
         </div>
       )}
       {isOwner && ws.is_pulse_themed && (
-        <div className="bg-gray-50 border border-dashed border-gray-200 rounded-2xl p-3 text-[11px] text-gray-500 font-medium">
+        <div className="bg-sf2 border border-dashed border-bd2 rounded-2xl p-3 text-[11px] text-txd font-medium">
           Это Pulse-сообщество — удалить через сайт нельзя.
         </div>
       )}

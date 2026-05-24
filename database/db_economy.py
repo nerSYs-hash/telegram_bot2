@@ -29,6 +29,7 @@ CREATE TABLE IF NOT EXISTS economy_settings (
     is_enabled     INTEGER NOT NULL DEFAULT 1,
     is_hidden      INTEGER NOT NULL DEFAULT 0,
     sort_order     INTEGER NOT NULL DEFAULT 0,
+    topic_scope    TEXT,
     created_at     TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at     TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -91,13 +92,13 @@ SEED_ECONOMY_SETTINGS = [
     ('shipper.resonance_multiplier',    'mining', 'shipper', 'Множитель резонанса',        'Бонус к майнингу после матча шиппера',          '2.0',  'float', 'x',  1,    10,     50),
     ('shipper.resonance_duration_hours','mining', 'shipper', 'Длительность буста',         'Часов действия резонанса',                      '24',   'int',   'ч',  1,    168,    51),
 
-    ('defib.buff_multiplier',            'mining', 'defib',   'Множитель дефибриллятора',   'Бонус к майнингу при дефибрилляторе (x3 = +200%)','3.0', 'float', 'x',  1,    10,     60),
+    ('defib.buff_multiplier',            'mining', 'defib',   'Множитель дефибриллятора',   'Бонус к майнингу при дефибрилляторе','3.0', 'float', 'x',  1,    10,     60),
     ('defib.buff_duration_min',         'mining', 'defib',   'Длительность буста (мин)',   'Минут действия дефибриллятора',                 '10',   'int',   'мин',1,   120,    61),
     ('defib.silence_min_minutes',       'mining', 'defib',   'Мин. тишина для активации',  'Чат должен молчать минимум N минут',            '5',    'int',   'мин',1,   60,     62),
     ('defib.silence_max_minutes',       'mining', 'defib',   'Макс. тишина (рандом до)',   'Верхняя граница рандомного порога тишины',      '15',   'int',   'мин',1,   120,    63),
 
     # ── Базовая ставка (мультипликатор для коэффициентов) ─────────────────
-    ('mining.global_rate',              'mining', 'base',    'Базовая ставка',             'Единый множитель: итог = Σ коэф × ставку',      '0.002','float', 'x',  0.0001, 1.0, 9),
+    ('mining.global_rate',              'mining', 'base',    'Базовая ставка',             'Единый множитель: итог = Σ коэф × базовую ставку',      '0.002','float', 'x',  0.0001, 1.0, 9),
 
     # ── Базовые коэффициенты контента ─────────────────────────────────────
     ('base.text_message',              'mining', 'base_coeff', 'Текстовое сообщение',      'Коэфф за обычный текст',                        '1',    'int',   'x',  0, 1000, 20),
@@ -117,17 +118,17 @@ SEED_ECONOMY_SETTINGS = [
     # ── Штрафы ────────────────────────────────────────────────────────────
     ('penalty.copypaste',              'mining', 'penalty',    'Копипаст',                 'Штраф за дублирование своего же текста за 1ч',  '-50',  'int',   'x', -10000, 0, 40),
     ('penalty.wrong_door',             'mining', 'penalty',    'Не та дверь',              'Штраф за контент не по теме ветки',             '-50',  'int',   'x', -10000, 0, 41),
-    ('penalty.toxic',                  'mining', 'penalty',    'Токсик',                   'Штраф за токсичное сообщение (AI-модератор)',   '-100', 'int',   'x', -10000, 0, 42),
+    ('penalty.toxic',                  'mining', 'penalty',    'Токсик',                   'Штраф за токсичное сообщение',   '-100', 'int',   'x', -10000, 0, 42),
 
     # ── Комбо-квесты (1 раз в 24 ч, instant при отправке) ─────────────────
-    ('combo.writer',       'mining', 'combo', 'Писатель',      'Текст > 50 символов → коэфф × ставку',            '20',  'int', 'x', 0, 10000, 70),
-    ('combo.illustrator',  'mining', 'combo', 'Иллюстратор',   'Текст > 50 символов + фото → коэфф × ставку',    '40',  'int', 'x', 0, 10000, 71),
-    ('combo.reviewer',     'mining', 'combo', 'Рецензент',     'Видео + текст > 100 слов → коэфф × ставку',      '40',  'int', 'x', 0, 10000, 72),
-    ('combo.dj',           'mining', 'combo', 'DJ',            'Ссылка на плейлист → коэфф × ставку',             '30',  'int', 'x', 0, 10000, 73),
-    ('combo.sharp_tongue', 'mining', 'combo', 'Острослов',     '> 2 ответов на пост (за сутки) → коэфф × ставку', '6',   'int', 'x', 0, 10000, 74),
-    ('combo.viral_post',   'mining', 'combo', 'Вирусный пост', '> 2 реакций на пост → коэфф × ставку',            '3',   'int', 'x', 0, 10000, 75),
-    ('combo.hit_post',     'mining', 'combo', 'Хит',           '4+ реакций на пост → коэфф × ставку',             '10',  'int', 'x', 0, 10000, 76),
-    ('combo.legend_post',  'mining', 'combo', 'Легенда',       '6+ реакций на пост → коэфф × ставку',             '20',  'int', 'x', 0, 10000, 77),
+    ('combo.writer',       'mining', 'combo', 'Писатель',      'Текст > 50 символов → коэфф × базовую ставку',            '20',  'int', 'x', 0, 10000, 70),
+    ('combo.illustrator',  'mining', 'combo', 'Иллюстратор',   'Текст > 50 символов + фото → коэфф × базовую ставку',    '40',  'int', 'x', 0, 10000, 71),
+    ('combo.reviewer',     'mining', 'combo', 'Рецензент',     'Видео + текст > 100 слов → коэфф × базовую ставку',      '40',  'int', 'x', 0, 10000, 72),
+    ('combo.dj',           'mining', 'combo', 'DJ',            'Ссылка на плейлист → коэфф × базовую ставку',             '30',  'int', 'x', 0, 10000, 73),
+    ('combo.sharp_tongue', 'mining', 'combo', 'Острослов',     '> 2 ответов на пост (за сутки) → коэфф × базовую ставку', '6',   'int', 'x', 0, 10000, 74),
+    ('combo.viral_post',   'mining', 'combo', 'Вирусный пост', '> 2 реакций на пост → коэфф × базовую ставку',            '3',   'int', 'x', 0, 10000, 75),
+    ('combo.hit_post',     'mining', 'combo', 'Хит',           '4+ реакций на пост → коэфф × базовую ставку',             '10',  'int', 'x', 0, 10000, 76),
+    ('combo.legend_post',  'mining', 'combo', 'Легенда',       '6+ реакций на пост → коэфф × базовую ставку',             '20',  'int', 'x', 0, 10000, 77),
 
     # ── Спринты (накопительные квесты за временное окно) ──────────────────
     ('sprint.chat_core',    'mining', 'sprint', '💬 Основа чата',    'цель 10 сообщ. / окно 12ч / любая тема',          '50',  'int', 'x', 0, 100000, 80),
@@ -325,6 +326,10 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
         rows = db.cursor.fetchall()
         result = []
         for r in rows:
+            try:
+                _ts_raw = r['topic_scope']
+            except (IndexError, KeyError):
+                _ts_raw = None
             result.append({
                 "key":          r['key'],
                 "category":     r['category'],
@@ -343,6 +348,7 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
                 "last_change":  r['last_change'],
                 "created_at":   r['created_at'],
                 "updated_at":   r['updated_at'],
+                "topic_scope":  json.loads(_ts_raw) if _ts_raw else [],
             })
         return result
     except Exception as e:
@@ -351,6 +357,67 @@ def get_econ_settings(db, workspace_id: int, category: str = None, subcategory: 
 
 
 # ── WRITE ─────────────────────────────────────────────────────────────────────
+
+def set_econ_topics(db, workspace_id: int, key: str, thread_ids: list) -> dict:
+    """Сохраняет топики, в которых работает параметр. [] / None = весь чат."""
+    ids = []
+    for t in (thread_ids or []):
+        try:
+            ids.append(int(t))
+        except (TypeError, ValueError):
+            continue
+    scope = json.dumps(ids) if ids else None
+    db.cursor.execute(
+        "UPDATE economy_settings SET topic_scope = ?, updated_at = datetime('now') "
+        "WHERE workspace_id = ? AND key = ?",
+        (scope, workspace_id, key),
+    )
+    db.conn.commit()
+    return {"key": key, "topic_scope": ids}
+
+
+def get_econ_topic_scope(db, workspace_id: int, key: str) -> list:
+    """Список thread_id, в которых работает параметр. Пусто = весь чат."""
+    try:
+        db.cursor.execute(
+            "SELECT topic_scope FROM economy_settings WHERE workspace_id = ? AND key = ?",
+            (workspace_id, key),
+        )
+        row = db.cursor.fetchone()
+        if not row:
+            return []
+        raw = row[0]
+        return json.loads(raw) if raw else []
+    except Exception as e:
+        logger.error(f"get_econ_topic_scope error: {e}")
+        return []
+
+
+def get_econ_topic_scopes(db, workspace_id: int, category: str = None) -> dict:
+    """{key: [thread_id, ...]} для параметров с заданным topic_scope.
+    Параметры без topic_scope (= весь чат) в результат НЕ попадают —
+    пустой результат означает, что ограничений по топикам нет вообще."""
+    try:
+        sql = ("SELECT key, topic_scope FROM economy_settings "
+               "WHERE workspace_id = ? AND topic_scope IS NOT NULL AND topic_scope != ''")
+        params = [workspace_id]
+        if category:
+            sql += " AND category = ?"
+            params.append(category)
+        db.cursor.execute(sql, params)
+        result = {}
+        for r in db.cursor.fetchall():
+            try:
+                ids = json.loads(r['topic_scope'])
+            except Exception:
+                ids = None
+            if ids:
+                result[r['key']] = ids
+        return result
+    except Exception as e:
+        logger.error(f"get_econ_topic_scopes error: {e}")
+        return {}
+
 
 def set_econ(db, workspace_id: int, key: str, value, comment: str, changed_by: int, changed_by_role: str) -> dict:
     """Обновляет значение настройки + пишет историю. Атомарно."""

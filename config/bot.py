@@ -469,12 +469,20 @@ class TelegramBot:
         # Message handler
         self.application.add_handler(
             MessageHandler(
-                filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | 
+                filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE |
                 filters.AUDIO | filters.ANIMATION | filters.Document.ALL,
                 self.message_handler.handle_message
             )
         )
-        
+
+        # Edited-message handler — учёт «отредактированных» для статистики
+        self.application.add_handler(
+            MessageHandler(
+                filters.UpdateType.EDITED_MESSAGE,
+                self.message_handler.handle_edited_message
+            )
+        )
+
         # Callback handler
         self.application.add_handler(CallbackQueryHandler(self.callback_handler.handle_callback))
         
