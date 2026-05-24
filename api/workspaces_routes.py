@@ -6,8 +6,10 @@ from typing import Optional
 from urllib import request as _urlreq
 from urllib.error import URLError, HTTPError
 from fastapi import APIRouter, Header, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
+from bot_core.workspace_icons import workspace_icons_enabled
 from database.db_workspaces import (
     get_workspaces_for_user, get_workspace_details,
     add_member, remove_member, update_workspace_name,
@@ -78,6 +80,29 @@ async def workspace_details(ws_id: int, authorization: str = Header(default=None
     if not details:
         raise HTTPException(status_code=404, detail="Сообщество не найдено")
     return details
+
+
+@router.get("/{ws_id}/icon.jpg")
+async def workspace_icon(ws_id: int, authorization: str = Header(default=None)):
+    """V1.17.0j: возвращает кешированную иконку main-чата (auth + flag).
+
+    404 при: флаг WORKSPACE_ICONS=OFF, отсутствии пути в БД, отсутствии файла
+    на диске или непривилегированном/нечленящемся пользователе.
+    """
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'moderator')
+    if not workspace_icons_enabled():
+        raise HTTPException(status_code=404, detail="icons disabled")
+    row = _db.conn.execute(
+        "SELECT icon_local_path FROM workspaces WHERE id=?", (ws_id,)
+    ).fetchone()
+    if not row or not row[0] or not os.path.exists(row[0]):
+        raise HTTPException(status_code=404, detail="no icon cached")
+    return FileResponse(
+        row[0], media_type='image/jpeg',
+        headers={'Cache-Control': 'private, max-age=300'},
+    )
 
 
 @router.post("/{ws_id}/members")
