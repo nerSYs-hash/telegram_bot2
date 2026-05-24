@@ -1,4 +1,7 @@
 // WorkspacePage (V1.17.0c, F) — детали сообщества + роли чатов + deep-link подключения
+// V1.17.0i (P4 C6): отключённые чаты (removed_at не пуст) показываются приглушённо,
+// с плашкой «🔴 Бот не в чате — добавьте обратно, роль восстановится»; кнопка
+// «Отключить» (LogOut) для уже soft-removed не отображается.
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Edit2, Save, X, MessageCircle, Users, UserPlus, Trash2,
@@ -124,6 +127,12 @@ export default function WorkspacePage({
 
   const ws = details.workspace;
   const isOwner = details.members.find(m => m.user_id === currentUserId)?.role === 'owner';
+  // V1.17.0i (C6): шапка показывает «N активных · M всего» если есть отключённые
+  const totalChats = details.chats.length;
+  const activeChats = details.chats.filter(c => !c.removed_at).length;
+  const chatsTitle = activeChats === totalChats
+    ? `Чаты (${totalChats})`
+    : `Чаты (${activeChats} активных · ${totalChats})`;
 
   return (
     <div className="space-y-4">
@@ -167,7 +176,7 @@ export default function WorkspacePage({
       <div className="bg-sff rounded-[2rem] p-5 border border-bd">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-black text-tx text-xs uppercase flex items-center">
-            <MessageCircle className="mr-2 text-ok" size={14}/> Чаты ({details.chats.length})
+            <MessageCircle className="mr-2 text-ok" size={14}/> {chatsTitle}
           </h3>
           {isOwner && connectLink && (
             <div className="flex items-center gap-2">
@@ -193,8 +202,15 @@ export default function WorkspacePage({
         <div className="space-y-2">
           {details.chats.map(c => {
             const meta = c.role ? CHAT_ROLE_META[c.role] : null;
+            const isRemoved = !!c.removed_at;  // V1.17.0i (C6): soft-removed чат
             return (
-              <div key={c.chat_id} className="p-3 bg-sf2 rounded-2xl">
+              <div
+                key={c.chat_id}
+                className={`p-3 rounded-2xl transition-opacity ${
+                  isRemoved
+                    ? 'bg-sf2 opacity-70 border-l-4 border-[color-mix(in_oklab,var(--danger)_60%,transparent)]'
+                    : 'bg-sf2'
+                }`}>
                 <div className="flex items-center justify-between gap-3 mb-2">
                   <div className="min-w-0 flex-1">
                     <div className="font-black text-sm text-tx truncate">
@@ -203,6 +219,15 @@ export default function WorkspacePage({
                     <div className="text-[10px] uppercase tracking-widest font-bold text-lbl mt-0.5">
                       {c.chat_type || '—'} · добавлен {c.added_at?.slice(0, 10) || '—'}
                     </div>
+                    {isRemoved && (
+                      <div className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md
+                                      text-[10px] font-black uppercase tracking-wide
+                                      bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger
+                                      border border-[color-mix(in_oklab,var(--danger)_36%,transparent)]"
+                           title="Pulse Bot был удалён из чата. Добавьте его обратно — роль и настройки восстановятся.">
+                        🔴 Бот не в чате — добавьте обратно, роль восстановится
+                      </div>
+                    )}
                   </div>
                   {meta && (
                     <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded-lg
@@ -210,7 +235,7 @@ export default function WorkspacePage({
                       <meta.icon size={11}/> {meta.label}
                     </span>
                   )}
-                  {isOwner && (
+                  {isOwner && !isRemoved && (
                     <button
                       disabled={savingRole === c.chat_id}
                       onClick={() => handleDisconnectChat(c.chat_id, c.title || `Чат ${c.chat_id}`)}
