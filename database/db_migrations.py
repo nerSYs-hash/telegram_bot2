@@ -320,3 +320,45 @@ def add_removed_at_to_bot_chats(db):
     except Exception as e:
         logging.error(f"add_removed_at_to_bot_chats error: {e}")
         db.conn.rollback()
+
+
+def add_icon_columns_to_workspaces(db):
+    """V1.17.0j: добавить колонки иконок в workspaces (idempotent).
+
+    Колонки:
+      - icon_file_id    TEXT       — small_file_id chat photo из TG; меняется
+                                     при смене фото чата владельцем.
+      - icon_cached_at  TIMESTAMP  — когда последний раз пытались обновить.
+      - icon_source     TEXT       — 'tg' (auto) или 'upload' (фаза 2);
+                                     дефолт 'tg', чтобы существующие строки
+                                     не требовали backfill.
+      - icon_local_path TEXT       — путь к кешированному jpeg или NULL.
+
+    Аддитивно и безвредно при флаге OFF — поля просто не читаются.
+    PRAGMA-проверка как у `add_removed_at_to_bot_chats`.
+    """
+    try:
+        db.cursor.execute("PRAGMA table_info(workspaces)")
+        cols = [row[1] for row in db.cursor.fetchall()]
+        if not cols:
+            logging.info("workspaces table absent, skip icon migration")
+            return
+        adds = [
+            ('icon_file_id',    'TEXT'),
+            ('icon_cached_at',  'TIMESTAMP'),
+            ('icon_source',     "TEXT DEFAULT 'tg'"),
+            ('icon_local_path', 'TEXT'),
+        ]
+        added = []
+        for col, decl in adds:
+            if col not in cols:
+                db.cursor.execute(f"ALTER TABLE workspaces ADD COLUMN {col} {decl}")
+                added.append(col)
+        if added:
+            db.conn.commit()
+            logging.info(f"✅ workspaces icon columns added: {added}")
+        else:
+            logging.info("workspaces icon columns already present")
+    except Exception as e:
+        logging.error(f"add_icon_columns_to_workspaces error: {e}")
+        db.conn.rollback()

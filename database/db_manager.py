@@ -115,6 +115,7 @@ from database.db_migrations import (
     migrate_monthly_gifts_tables as _migrate_monthly_gifts_tables,
     create_stat_events_log as _create_stat_events_log,
     add_removed_at_to_bot_chats as _add_removed_at_to_bot_chats,
+    add_icon_columns_to_workspaces as _add_icon_columns_to_workspaces,
 )
 from database.db_stats import (
     register_stat_event as _register_stat_event,
@@ -598,6 +599,7 @@ class Database:
         _migrate_monthly_gifts_tables(self)
         _create_stat_events_log(self)
         _add_removed_at_to_bot_chats(self)
+        _add_icon_columns_to_workspaces(self)
 
         # Migration: add is_left column to users
         try:
