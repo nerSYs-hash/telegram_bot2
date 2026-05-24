@@ -3,6 +3,7 @@ import sqlite3
 from typing import Optional, List
 from dataclasses import dataclass
 from bot_core.connect_flow import connect_flow_v2_enabled
+from bot_core.workspace_icons import workspace_icons_enabled
 
 
 @dataclass
@@ -131,32 +132,51 @@ def get_workspaces_for_user(conn: sqlite3.Connection, user_id: int) -> list:
         if has_removed
         else "(SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id)"
     )
+    # V1.17.0j: icon_local_path в JOIN-выдаче если миграция применена,
+    # иначе SELECT NULL для совместимости.
+    has_icons = _workspaces_has_icon_columns(conn)
+    icon_path_expr = "w.icon_local_path" if has_icons else "NULL"
     rows = conn.execute(f'''
         SELECT
             w.id, w.name, w.owner_user_id, w.is_pulse_themed, w.plan,
             m.role,
             (SELECT COUNT(*) FROM workspace_members WHERE workspace_id=w.id) AS members_count,
             (SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id) AS chats_count,
-            {active_expr} AS active_chats_count
+            {active_expr} AS active_chats_count,
+            {icon_path_expr} AS icon_local_path
         FROM workspaces w
         JOIN workspace_members m ON m.workspace_id = w.id
         WHERE m.user_id = ?
         ORDER BY w.is_pulse_themed DESC, w.created_at ASC, w.id ASC
     ''', (user_id,)).fetchall()
     keys = ('id', 'name', 'owner_user_id', 'is_pulse_themed', 'plan',
-            'role', 'members_count', 'chats_count', 'active_chats_count')
+            'role', 'members_count', 'chats_count', 'active_chats_count',
+            '_icon_local_path')
+    icons_on = workspace_icons_enabled() and has_icons
     result = []
     for r in rows:
         d = dict(zip(keys, r))
         d['is_primary'] = bool(d['is_pulse_themed'])
+        d['icon_url'] = (
+            f"/api/workspaces/{d['id']}/icon.jpg"
+            if icons_on and d.get('_icon_local_path') else None
+        )
+        d.pop('_icon_local_path', None)
         result.append(d)
     return result
 
 
 def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Optional[dict]:
-    """Workspace + список членов + список чатов."""
+    """Workspace + список членов + список чатов.
+
+    V1.17.0j: добавляет `icon_url` в `workspace` если миграция применена,
+    флаг ON и в БД есть `icon_local_path` (файл закеширован).
+    """
+    has_icons = _workspaces_has_icon_columns(conn)
+    icon_path_col = ", icon_local_path" if has_icons else ", NULL AS icon_local_path"
     ws_row = conn.execute(
-        'SELECT id, name, owner_user_id, is_pulse_themed, plan, created_at '
+        f'SELECT id, name, owner_user_id, is_pulse_themed, plan, created_at'
+        f'{icon_path_col} '
         'FROM workspaces WHERE id=?', (workspace_id,)
     ).fetchone()
     if not ws_row:
@@ -190,11 +210,17 @@ def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Option
               added_at DESC
         ''', (workspace_id,)).fetchall()
 
+    icons_on = workspace_icons_enabled() and has_icons
+    icon_url = (
+        f"/api/workspaces/{ws_row[0]}/icon.jpg"
+        if icons_on and ws_row[6] else None
+    )
     return {
         'workspace': {
             'id': ws_row[0], 'name': ws_row[1], 'owner_user_id': ws_row[2],
             'is_pulse_themed': bool(ws_row[3]), 'plan': ws_row[4],
             'created_at': ws_row[5],
+            'icon_url': icon_url,
         },
         'members': [{'user_id': m[0], 'role': m[1], 'joined_at': m[2]} for m in members],
         'chats': [{'chat_id': c[0], 'title': c[1], 'chat_type': c[2],
@@ -258,6 +284,12 @@ def remove_bot_chat(conn: sqlite3.Connection, chat_id: int) -> None:
     """Удаляет запись чата из bot_chats. Workspace и members не трогает."""
     conn.execute('DELETE FROM bot_chats WHERE chat_id=?', (chat_id,))
     conn.commit()
+
+
+def _workspaces_has_icon_columns(conn: sqlite3.Connection) -> bool:
+    """V1.17.0j: True если миграция icon-колонок применена (PRAGMA-проверка)."""
+    cols = [r[1] for r in conn.execute("PRAGMA table_info(workspaces)").fetchall()]
+    return 'icon_local_path' in cols
 
 
 def _bot_chats_has_removed_at(conn: sqlite3.Connection) -> bool:

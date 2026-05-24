@@ -2,8 +2,12 @@
 // V1.17.0d (Подпроект #3): выбор активного сообщества в топбаре.
 // V1.17.0i (P4 C8): ярлык «⭐ главное / №N доп.» в опциях и title — порядок
 // «главное сверху» уже обеспечен API (`is_pulse_themed DESC`).
+// V1.17.0j: <img> поверх монограммы при наличии ws.icon_url (auto-аватар
+// main-чата из Telegram); 404 / load fail → useAuthImage.failed=true,
+// рендерим прежнюю монограмму.
 import React, { useEffect, useState } from 'react';
 import { fetchWorkspaces, getActiveWs, setActiveWs } from '../shared/api';
+import { useAuthImage } from '../shared/useAuthImage';
 
 export default function WorkspaceSwitcher({ token, onSwitch }) {
   const [list, setList] = useState([]);
@@ -46,6 +50,8 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
   const cur = list.find((w) => w.id === active) || list[0];
   const tile = TILES[Math.abs(Number(cur?.id) || 0) % TILES.length];
   const mono = (cur?.name || '?').trim().charAt(0).toUpperCase();
+  // V1.17.0j: пытаемся подгрузить аватар; при 404/error падаем на монограмму.
+  const { src: iconSrc, failed: iconFailed } = useAuthImage(cur?.icon_url, token);
 
   // V1.17.0i C8: префикс для опции — ⭐ у главного, «№N доп.» у прочих.
   // Нумерация считается синхронно с WorkspaceList: первое доп. = №2.
@@ -60,10 +66,19 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
       title={`Активное сообщество: ${cur?.name || ''}${cur?.is_primary ? ' · главное' : ' · доп.'}`}
     >
       <span
-        className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 ${tile}`}
+        className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 relative overflow-hidden ${tile}`}
         aria-hidden="true"
       >
-        {mono}
+        {iconSrc && !iconFailed ? (
+          <img
+            src={iconSrc}
+            alt=""
+            className="absolute inset-0 w-full h-full object-cover"
+            draggable={false}
+          />
+        ) : (
+          mono
+        )}
       </span>
       <select
         value={active ?? ''}

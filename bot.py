@@ -170,6 +170,29 @@ class TelegramBot:
         # Шиппер: стартовая постановка в очередь job_queue
         await bootstrap_shipper(application, self.db, self.target_chat_id)
 
+        # V1.17.0j: ежедневный прогрев кеша иконок workspace (только при флаге).
+        try:
+            from bot_core.workspace_icons import workspace_icons_enabled
+            if workspace_icons_enabled():
+                from services.workspace_icon import prewarm_all_workspaces
+
+                async def _icons_prewarm_job(ctx):
+                    try:
+                        n = await prewarm_all_workspaces(ctx.bot, self.db.conn)
+                        logger.info(f"workspace icons prewarm: refreshed={n}")
+                    except Exception as e:
+                        logger.warning(f"icons prewarm job: {e}")
+
+                # первый прогон через 60с после старта (чтобы не блокировать
+                # init), далее каждые 24 часа.
+                application.job_queue.run_repeating(
+                    _icons_prewarm_job, interval=86400, first=60,
+                    name='workspace_icons_prewarm',
+                )
+                logger.info("workspace icons prewarm job scheduled (24h)")
+        except Exception as e:
+            logger.warning(f"failed to schedule icons prewarm: {e}")
+
         logger.info("Handlers initialized")
 
         # Setup handlers after initialization

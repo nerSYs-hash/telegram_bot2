@@ -380,6 +380,73 @@ def test_list_workspaces_primary_first_via_api():
     assert r.json()['workspaces'][1]['is_primary'] is False
 
 
+# ── V1.17.0j (icons phase 1): icon_url в JSON ──
+
+def _add_icon_columns(conn):
+    """Дёшево добить icon-колонки к схеме фикстуры (без миграции бота)."""
+    conn.execute("ALTER TABLE workspaces ADD COLUMN icon_file_id TEXT")
+    conn.execute("ALTER TABLE workspaces ADD COLUMN icon_cached_at TIMESTAMP")
+    conn.execute("ALTER TABLE workspaces ADD COLUMN icon_source TEXT DEFAULT 'tg'")
+    conn.execute("ALTER TABLE workspaces ADD COLUMN icon_local_path TEXT")
+    conn.commit()
+
+
+def test_list_workspaces_icon_url_null_when_no_path(client, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ICONS", "1")
+    from api import workspaces_routes
+    _add_icon_columns(workspaces_routes._db.conn)
+    r = client.get('/api/workspaces', headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    sample = r.json()['workspaces'][0]
+    assert sample.get('icon_url') is None
+
+
+def test_list_workspaces_icon_url_when_cached(client, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ICONS", "1")
+    from api import workspaces_routes
+    _add_icon_columns(workspaces_routes._db.conn)
+    workspaces_routes._db.conn.execute(
+        "UPDATE workspaces SET icon_local_path='/tmp/x.jpg' WHERE id=1"
+    )
+    workspaces_routes._db.conn.commit()
+    r = client.get('/api/workspaces', headers={'Authorization': 'Bearer fake-42'})
+    sample = r.json()['workspaces'][0]
+    assert sample.get('icon_url') == '/api/workspaces/1/icon.jpg'
+
+
+def test_list_workspaces_icon_url_off_when_flag_off(client, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ICONS", "0")
+    from api import workspaces_routes
+    _add_icon_columns(workspaces_routes._db.conn)
+    workspaces_routes._db.conn.execute(
+        "UPDATE workspaces SET icon_local_path='/tmp/x.jpg' WHERE id=1"
+    )
+    workspaces_routes._db.conn.commit()
+    r = client.get('/api/workspaces', headers={'Authorization': 'Bearer fake-42'})
+    sample = r.json()['workspaces'][0]
+    assert sample.get('icon_url') is None
+
+
+def test_workspace_details_icon_url_when_cached(client, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ICONS", "1")
+    from api import workspaces_routes
+    _add_icon_columns(workspaces_routes._db.conn)
+    workspaces_routes._db.conn.execute(
+        "UPDATE workspaces SET icon_local_path='/tmp/x.jpg' WHERE id=1"
+    )
+    workspaces_routes._db.conn.commit()
+    r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'})
+    assert r.json()['workspace'].get('icon_url') == '/api/workspaces/1/icon.jpg'
+
+
+def test_workspace_details_icon_url_null_when_no_path(client, monkeypatch):
+    monkeypatch.setenv("WORKSPACE_ICONS", "1")
+    from api import workspaces_routes
+    _add_icon_columns(workspaces_routes._db.conn)
+    r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'})
+    assert r.json()['workspace'].get('icon_url') is None
+
+
 def test_workspace_details_removed_chat_active_first_via_api():
     """C6: через API soft-removed чат идёт после активного + removed_at не None."""
     from database.db_workspaces import soft_remove_bot_chat
