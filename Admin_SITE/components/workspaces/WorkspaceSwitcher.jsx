@@ -27,18 +27,11 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
       .catch(() => {});
   }, [token]);
 
-  if (list.length <= 1) return null;
-
-  const change = (e) => {
-    const id = parseInt(e.target.value, 10);
-    setActiveWs(id);
-    setActive(id);
-    if (onSwitch) onSwitch(id);
-  };
-
-  // Иконка сообщества: поля аватара в API нет → детерминированная
-  // цветная плитка-монограмма (паттерн как в WorkspaceList), цвет по id —
-  // чтобы сообщество узнавалось по иконке, а не только по названию.
+  // V1.17.0j10 HOTFIX: вычисления и хук useAuthImage ОБЯЗАНЫ идти до любого
+  // условного return — иначе при первом рендере (list=[]) хук не вызывается,
+  // а после fetch — вызывается, и React падает с «Rendered more hooks than
+  // during the previous render» → белый экран всего приложения (Switcher
+  // живёт в топбаре). Хук безопасно отрабатывает с пустыми url/token.
   const TILES = [
     'bg-[color-mix(in_oklab,var(--cta)_18%,transparent)] text-cta',
     'bg-[color-mix(in_oklab,var(--purple)_18%,transparent)] text-purple',
@@ -52,6 +45,15 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
   const mono = (cur?.name || '?').trim().charAt(0).toUpperCase();
   // V1.17.0j: пытаемся подгрузить аватар; при 404/error падаем на монограмму.
   const { src: iconSrc, failed: iconFailed } = useAuthImage(cur?.icon_url, token);
+
+  if (list.length <= 1) return null;
+
+  const change = (e) => {
+    const id = parseInt(e.target.value, 10);
+    setActiveWs(id);
+    setActive(id);
+    if (onSwitch) onSwitch(id);
+  };
 
   // V1.17.0i C8: префикс для опции — ⭐ у главного, «№N доп.» у прочих.
   // Нумерация считается синхронно с WorkspaceList: первое доп. = №2.
