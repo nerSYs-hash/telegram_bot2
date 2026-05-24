@@ -329,9 +329,15 @@ def list_chat_ids_for_workspace(conn: sqlite3.Connection, workspace_id: int) -> 
 
 # V1.17.0h: единый список tenant-таблиц с колонкой workspace_id.
 # Реюз: C9 (delete cascade) и scripts/consolidate_workspaces.py (safety).
+# V1.17.0k2: добавлены combo_claims/sprint_claims — закрыта дыра, через
+# которую при удалении ws их строки осиротевали (артефакт connect-flow
+# при ws5/ws6 → ws1). Полный список таблиц с workspace_id см.
+# database/migrations/multi_tenancy.py:TENANTED_TABLES; здесь — те, что
+# обязаны участвовать в safety-проверке консолидации и каскадной чистке.
 TENANT_TABLES = (
     'economy_settings', 'economy_section_toggles', 'branding_settings',
     'user_stats', 'user_stats_hourly', 'chat_stats', 'topics', 'triggers',
+    'combo_claims', 'sprint_claims',
 )
 
 
