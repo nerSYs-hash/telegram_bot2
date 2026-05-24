@@ -42,6 +42,24 @@ def resolve_ws_role(
     return _MEMBER_ROLE_MAP.get(row[0], "user")
 
 
+def current_ws_id() -> int:
+    """Активный workspace_id текущего HTTP-запроса.
+
+    Канонический способ узнать ws_id внутри роутеров (economy/titles/
+    press_release/будущие модули — метрики, кузница, гримуар и т.п.).
+    Значение ставит `ws_context_middleware` из заголовка `X-Workspace-Id`
+    после валидации членства; cross-tenant запрос отбит 403 на middleware.
+
+    Если поменяется транспорт (header → JWT-claim, JWT → session-cookie),
+    меняется ОДНО место — реализация ContextVar в middleware. Роутеры
+    остаются неизменными.
+
+    NB: для WebSocket-эндпоинтов middleware НЕ срабатывает — там ws_id
+    приходит query-параметром, см. economy_ws.EconomyWSManager.connect.
+    """
+    return WS_ID_CTX.get()
+
+
 def default_workspace_for_user(
     conn: sqlite3.Connection,
     user_id: int,

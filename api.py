@@ -370,36 +370,11 @@ async def ws_context_middleware(request: _Req, call_next):
 
 
 # ──── Multi-tenancy: workspace_id resolver ────────────────────────────
-# V1.17.0a19. Сейчас сайт работает только с Pulse Москва (workspace_id=1).
-# Frontend пока не присылает X-Workspace-Id — fallback на 1.
-# После подпроекта #3 (web auth + workspace switcher) workspace_id
-# будет извлекаться из JWT-токена напрямую, а не из header'а.
-
-_DEFAULT_WS_ID = 1
-
-
-async def get_workspace_id(
-    x_workspace_id: int | None = Header(default=None, alias='X-Workspace-Id'),
-) -> int:
-    """FastAPI dependency: извлекает workspace_id из заголовка X-Workspace-Id.
-
-    Использование в endpoint-ах:
-        @app.get("/api/something")
-        async def something(workspace_id: int = Depends(get_workspace_id)):
-            ...
-
-    Fallback на _DEFAULT_WS_ID=1 если header не передан.
-    """
-    return x_workspace_id if x_workspace_id is not None else _DEFAULT_WS_ID
-
-
-def resolve_workspace_id_from_header(x_workspace_id) -> int:
-    """Sync-вариант резолвера для не-async helper-функций.
-
-    Используется в роутерах economy/titles/press_release через _setup-инжекцию.
-    Принимает значение из Header (Optional[int]) и возвращает int с fallback.
-    """
-    return x_workspace_id if x_workspace_id is not None else _DEFAULT_WS_ID
+# V1.17.0k1: устаревший _DEFAULT_WS_ID и помощники get_workspace_id /
+# resolve_workspace_id_from_header удалены — все роутеры теперь читают
+# активный workspace из ContextVar через api.workspace_rbac.current_ws_id().
+# Единый источник правды; смена транспорта (header → JWT-claim) — одна
+# правка в ws_context_middleware, роутеры не трогать.
 
 
 def _resolve_user_role(user_id: int) -> str:
@@ -770,7 +745,8 @@ def _compute_series(granularity: str = 'day') -> dict:
     start_date, end_date, bucket, spine = _granularity_spine(gran)
     s_iso, e_iso = start_date.isoformat(), end_date.isoformat()
     today = _today_msk()
-    ws_id = getattr(db, '_DEFAULT_WS_ID', 1) if db else 1
+    # Multi-tenant: WS_ID_CTX выставлен middleware из заголовка X-Workspace-Id.
+    ws_id = WS_ID_CTX.get() if db else 1
 
     if not db:
         return {"granularity": gran, "granularityLabel": _GRAN_LABELS[gran],
@@ -2243,7 +2219,20 @@ async def remove_staff(user_id: int):
 # ── Economy WebSocket ──────────────────────────────────────────────────────────
 
 @app.websocket("/api/ws/economy")
-async def ws_economy(websocket: WebSocket, token: str = Query(...)):
+async def ws_economy(
+    websocket: WebSocket,
+    token: str = Query(...),
+    ws: int | None = Query(default=None),
+):
+    """Multi-tenant Economy WebSocket.
+
+    Клиент шлёт `?token=<jwt>&ws=<workspace_id>`. Если `ws` не передан —
+    резолвим личный workspace юзера (`default_workspace_for_user`), как
+    в HTTP-middleware. Подключение принимаем только если юзер — член ws
+    с ролью != "user" (тот же фильтр, что отбивает HTTP cross-tenant 403).
+    Менеджер сохраняет mapping socket→ws_id и рассылает события только
+    подписчикам того же workspace.
+    """
     try:
         payload = _decode_jwt(token)
     except Exception:
@@ -2251,7 +2240,21 @@ async def ws_economy(websocket: WebSocket, token: str = Query(...)):
         return
 
     user_id = int(payload.get("user_id", 0))
-    role = _resolve_user_role(user_id)
+
+    # workspace_id из query или личный по умолчанию
+    if ws is None:
+        ws_id = default_workspace_for_user(db.conn, user_id) if db else 1
+    else:
+        ws_id = int(ws)
+
+    # Per-workspace роль (тот же резолвер, что в HTTP middleware)
+    dev_id = int(os.getenv("DEVELOPER_ID", 0))
+    role = resolve_ws_role(db.conn, user_id, ws_id, developer_id=dev_id) if db else "user"
+    if role == "user":
+        # Не член workspace — закрываем как cross-tenant
+        await websocket.close(code=4003)
+        return
+
     from permissions import has_permission
     if not has_permission(role, "economy.view"):
         await websocket.close(code=4003)
@@ -2261,7 +2264,7 @@ async def ws_economy(websocket: WebSocket, token: str = Query(...)):
         await websocket.close(code=4503)
         return
 
-    await _economy_ws_manager.connect(websocket)
+    await _economy_ws_manager.connect(websocket, ws_id)
     try:
         while True:
             try:
@@ -2273,15 +2276,25 @@ async def ws_economy(websocket: WebSocket, token: str = Query(...)):
 
 
 async def _metrics_broadcaster():
-    """Раз в 30 сек рассылает live-метрики всем подключённым клиентам."""
+    """Раз в 30 сек рассылает live-метрики per-workspace.
+
+    Считаем метрики только для тех ws, у которых есть активные подписчики
+    (active_workspace_ids), чтобы не молотить впустую для пустых тенантов.
+    """
     import asyncio
     while True:
         await asyncio.sleep(30)
         try:
             if _economy_ws_manager and db:
                 from database.db_economy import get_economy_metrics
-                metrics = get_economy_metrics(db, 1)  # TODO(multi-tenancy): workspace_id placeholder
-                await _economy_ws_manager.broadcast({"event": "metrics_update", **metrics})
+                for ws_id in _economy_ws_manager.active_workspace_ids():
+                    try:
+                        metrics = get_economy_metrics(db, ws_id)
+                        await _economy_ws_manager.broadcast(
+                            ws_id, {"event": "metrics_update", **metrics}
+                        )
+                    except Exception as e:
+                        logger.error(f"_metrics_broadcaster ws={ws_id}: {e}")
         except Exception as e:
             logger.error(f"_metrics_broadcaster error: {e}")
 
