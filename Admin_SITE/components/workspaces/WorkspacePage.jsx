@@ -126,13 +126,20 @@ export default function WorkspacePage({
     } catch (e) { setErr('Не удалось скопировать ссылку'); }
   };
 
+  // V1.17.0j10 HOTFIX: хук useAuthImage ОБЯЗАН идти до раннего return
+  // (`if (!details) return ...`). Иначе при первом рендере (details=null)
+  // хук не вызывается, а после загрузки — вызывается → React падает с
+  // «Rendered more hooks than during the previous render» → белый экран
+  // страницы управления сообществом. Хук безопасно отрабатывает с
+  // undefined url (guard внутри useAuthImage). Псевдо-комментарий
+  // eslint-disable не работал — в проекте ESLint вообще не подключён.
+  // V1.17.0j: аватар workspace (auto из TG); 404/fail → fallback Hash-icon
+  const { src: avatarSrc, failed: avatarFailed } = useAuthImage(details?.workspace?.icon_url, token);
+
   if (!details) return <div className="p-5 text-lbl text-sm">Загрузка…</div>;
 
   const ws = details.workspace;
   const isOwner = details.members.find(m => m.user_id === currentUserId)?.role === 'owner';
-  // V1.17.0j: аватар workspace (auto из TG); 404/fail → fallback Hash-icon
-  // eslint-disable-next-line react-hooks/rules-of-hooks
-  const { src: avatarSrc, failed: avatarFailed } = useAuthImage(ws.icon_url, token);
   // V1.17.0i (C6): шапка показывает «N активных · M всего» если есть отключённые
   const totalChats = details.chats.length;
   const activeChats = details.chats.filter(c => !c.removed_at).length;
