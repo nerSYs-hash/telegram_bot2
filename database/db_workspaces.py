@@ -114,21 +114,43 @@ def get_member_role(
 # ── V1.17.0b3: helpers для UI и onboarding flow ──
 
 def get_workspaces_for_user(conn: sqlite3.Connection, user_id: int) -> list:
-    """Все workspaces где user — member. Включает role и счётчики."""
-    rows = conn.execute('''
+    """Все workspaces где user — member. Включает role и счётчики.
+
+    V1.17.0i (C8): сортировка `is_pulse_themed DESC, created_at ASC` —
+    главное сообщество первым, далее по дате создания (стабильно для
+    UI-нумерации «доп. №N»). Поле `is_primary` дублирует `is_pulse_themed`
+    как явный UX-флаг.
+    V1.17.0i (C6): `active_chats_count` — bot_chats без `removed_at`.
+    Старое `chats_count` сохранено как «всего» для обратной совместимости;
+    разница = soft-removed чаты. На схеме без колонки `removed_at` (старые
+    БД до миграции h-семейства) active_chats_count == chats_count.
+    """
+    has_removed = _bot_chats_has_removed_at(conn)
+    active_expr = (
+        "(SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id AND removed_at IS NULL)"
+        if has_removed
+        else "(SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id)"
+    )
+    rows = conn.execute(f'''
         SELECT
             w.id, w.name, w.owner_user_id, w.is_pulse_themed, w.plan,
             m.role,
             (SELECT COUNT(*) FROM workspace_members WHERE workspace_id=w.id) AS members_count,
-            (SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id) AS chats_count
+            (SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id) AS chats_count,
+            {active_expr} AS active_chats_count
         FROM workspaces w
         JOIN workspace_members m ON m.workspace_id = w.id
         WHERE m.user_id = ?
-        ORDER BY w.created_at DESC
+        ORDER BY w.is_pulse_themed DESC, w.created_at ASC, w.id ASC
     ''', (user_id,)).fetchall()
     keys = ('id', 'name', 'owner_user_id', 'is_pulse_themed', 'plan',
-            'role', 'members_count', 'chats_count')
-    return [dict(zip(keys, r)) for r in rows]
+            'role', 'members_count', 'chats_count', 'active_chats_count')
+    result = []
+    for r in rows:
+        d = dict(zip(keys, r))
+        d['is_primary'] = bool(d['is_pulse_themed'])
+        result.append(d)
+    return result
 
 
 def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Optional[dict]:
@@ -147,13 +169,26 @@ def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Option
                  joined_at
     ''', (workspace_id,)).fetchall()
 
-    chats = conn.execute('''
-        SELECT chat_id, title, chat_type, added_by_user_id, added_at, role
-        FROM bot_chats WHERE workspace_id=?
-        ORDER BY
-          CASE role WHEN 'main' THEN 0 WHEN 'admin' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END,
-          added_at DESC
-    ''', (workspace_id,)).fetchall()
+    # V1.17.0i (C6): отдаём removed_at каждому чату; активные сверху, отключённые внизу.
+    # На старой схеме без колонки — SELECT NULL и стабильный порядок по role/дате.
+    has_removed = _bot_chats_has_removed_at(conn)
+    if has_removed:
+        chats = conn.execute('''
+            SELECT chat_id, title, chat_type, added_by_user_id, added_at, role, removed_at
+            FROM bot_chats WHERE workspace_id=?
+            ORDER BY
+              CASE WHEN removed_at IS NULL THEN 0 ELSE 1 END,
+              CASE role WHEN 'main' THEN 0 WHEN 'admin' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END,
+              added_at DESC
+        ''', (workspace_id,)).fetchall()
+    else:
+        chats = conn.execute('''
+            SELECT chat_id, title, chat_type, added_by_user_id, added_at, role, NULL AS removed_at
+            FROM bot_chats WHERE workspace_id=?
+            ORDER BY
+              CASE role WHEN 'main' THEN 0 WHEN 'admin' THEN 1 WHEN 'journal' THEN 2 ELSE 3 END,
+              added_at DESC
+        ''', (workspace_id,)).fetchall()
 
     return {
         'workspace': {
@@ -163,7 +198,8 @@ def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Option
         },
         'members': [{'user_id': m[0], 'role': m[1], 'joined_at': m[2]} for m in members],
         'chats': [{'chat_id': c[0], 'title': c[1], 'chat_type': c[2],
-                   'added_by': c[3], 'added_at': c[4], 'role': c[5]} for c in chats],
+                   'added_by': c[3], 'added_at': c[4], 'role': c[5],
+                   'removed_at': c[6]} for c in chats],
     }
 
 
