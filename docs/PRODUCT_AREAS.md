@@ -214,7 +214,8 @@
 | Слайдер графика TG-стиль | ⏳ из бэклога Вити | `docs/ROADMAP.md §3b` |
 | Excel-экспорт красивый | ⏳ из бэклога Вити | `docs/ROADMAP.md §3b` |
 | Журнал — все хештеги | ⏳ из бэклога Вити | `docs/ROADMAP.md §3b` |
-| 💡 **Виджет №12 «Реакции»** (sub-route `/stats/reactions`) — sentiment-эмодзи, выданные/полученные, drill-down. По образцу ChatKeeper. Pre-req: `reactions_log` таблица + handler | ⏳ idea, очередь не определена | [[idea_reactions_analytics]] |
+| 💡 **Виджет №12 «Реакции»** (sub-route `/stats/reactions`) — sentiment-эмодзи, выданные/полученные, drill-down. По образцу ChatKeeper. Pre-req: `reactions_log` таблица + handler + [[idea_reactions_emoji_curation|каталог эмодзи]] | ⏳ idea, очередь не определена | [[idea_reactions_analytics]] |
+| 💡 **Каталог эмодзи** (3 категории × per-WS override) — общий справочник для Stats/Mining/Triggers. Кандидат на «Система → Эмодзи» | ⏳ idea, фундамент для реакций | [[idea_reactions_emoji_curation]] |
 
 ## Зависит от — / Питает —
 Зависит: A. Делит общий слой данных с C Профиль (`user_stats`, `behavior_events`, `reactions_log`).
@@ -229,8 +230,11 @@
 | Что | Статус | Память/Spec |
 |---|---|---|
 | Триггеры (слово → ответ) | ✅ `triggers_handlers.py` + UI | — |
-| Триггеры пробелы: `media_pos`, `fire_limit`, cooldown, target_user, share/reaction кнопки, file_id кеш | ⏳ ROADMAP §3a | `docs/ROADMAP.md §3a` |
-| Триггеры аудит сайт↔бот (все ли TG-кнопки есть на сайте) | ⏳ | [[task_triggers_audit]] |
+| 🔥 **Триггеры — комплексный редизайн (4 фазы)** | 🔥 ближайшая очередь | [[triggers_redesign_priority_2026_05_25]] |
+| ├─ Фаза 1: аудит TG vs Сайт + дизайн-ревизия (`docs/TRIGGERS_AUDIT_2026-05.md`) | 🔥 next | поглощает [[task_triggers_audit]] |
+| ├─ Фаза 2: вынос из AdminDashboard.jsx в `components/triggers/` + применение DS | 🔥 | [[admin_site_structure]] |
+| ├─ Фаза 3: функц.пробелы (`media_pos`, `fire_limit`, cooldown, target_user, share/reaction, file_id кеш) | ⏳ из ROADMAP §3a | `docs/ROADMAP.md §3a` |
+| └─ Фаза 4: энфорс модуля Триггеры через `module_toggles` (план 7.1 — эталон) | ⏳ | [[plan_module_toggles_7_0]] |
 | Журнал | ✅ модульный + категории | — |
 | Журнал — все хештеги | ⏳ | [[economy_backlog_2026_05_22]] |
 | 💡 **Журнал v2: 6 категорий × ~25 событий по образцу ChatKeeper** (sub-toggles на категориях, аудит изменений сайта→бот, trigger_fired, bot_removed, return_user, face_check_failed). Очередь не определена. | ⏳ idea, спека внутри памяти | [[idea_journal_chatkeeper_expansion]] |
@@ -330,6 +334,7 @@
 | UX «строительная лента» для Кузницы (hover) | 💡 идея 24.05 | `docs/SPEC_kuznitsa.md §2` |
 | Дизайн-референсы Ильи (UI Kit + 35 концепт-картинок) | ✅ контракт | [[design_refs_site_2026_05_17]] |
 | Preview сайта до прода (как смотреть до выката) | ⏳ TODO | [[todo_site_preview_before_prod]] |
+| ⚠️ **NEW-плашка / огонёк (ГЛОБАЛЬНО) на каждое видимое нововведение, 2 дня от выката** — сквозной механизм, не точечно. Связан с Новостями. | ⏳ idea, обязательно | [[idea_new_feature_badge_2days]] |
 
 ## Зависит от — / Питает —
 Параллельно всем направлениям. Питает всё что имеет UI.
