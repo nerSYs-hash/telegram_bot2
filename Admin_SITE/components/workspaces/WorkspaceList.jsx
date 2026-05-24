@@ -2,9 +2,68 @@
 // V1.17.0i (P4 C6+C8): ярлык «⭐ Главное / №N доп.» + красный бейдж
 // «🔴 Бот не в чате», когда активных чатов 0 (но раньше был хотя бы один —
 // бот удалён, не пустое сообщество без подключений).
+// V1.17.0j: <img> с аватаром main-чата TG внутри тайла (плитка-монограмма
+// остаётся как fallback). Вынесли строку в sub-компонент WorkspaceRow,
+// чтобы корректно использовать hook useAuthImage по одному вызову на ws.
 import React from 'react';
 import { Users, MessageCircle, ChevronRight, Plus, Plug } from 'lucide-react';
 import { useWorkspaces } from './useWorkspaces';
+import { useAuthImage } from '../shared/useAuthImage';
+
+
+function WorkspaceRow({ ws, token, tagIdx, isPrimary, chatsLabel, allRemoved, onSelect }) {
+  const { src: iconSrc, failed: iconFailed } = useAuthImage(ws.icon_url, token);
+  return (
+    <button
+      onClick={() => onSelect?.(ws.id)}
+      className="w-full flex items-center justify-between p-3 bg-sf2 rounded-2xl
+                 hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] border border-transparent
+                 transition-all">
+      <div className="flex items-center gap-3 min-w-0 flex-1">
+        <div className="w-9 h-9 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]
+                        flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+          {iconSrc && !iconFailed ? (
+            <img src={iconSrc} alt=""
+                 className="absolute inset-0 w-full h-full object-cover" draggable={false}/>
+          ) : (
+            <MessageCircle size={16} className="text-cta"/>
+          )}
+        </div>
+        <div className="text-left min-w-0 flex-1">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="font-black text-sm text-tx truncate">{ws.name}</span>
+            {isPrimary ? (
+              <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide
+                               bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn
+                               border border-[color-mix(in_oklab,var(--warn)_36%,transparent)] flex-shrink-0">
+                ⭐ Главное
+              </span>
+            ) : (
+              <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide
+                               bg-sff text-txd border border-bd2 flex-shrink-0">
+                №{tagIdx} доп.
+              </span>
+            )}
+          </div>
+          <div className="text-[10px] uppercase tracking-widest font-bold text-lbl mt-0.5">
+            {ws.role} · {ws.members_count} участн. · {chatsLabel}
+          </div>
+          {allRemoved && (
+            <div
+              title="Pulse Bot был удалён из подключённого чата. Добавьте его обратно — роль и настройки сохранены."
+              className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md
+                         text-[10px] font-black uppercase tracking-wide
+                         bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger
+                         border border-[color-mix(in_oklab,var(--danger)_36%,transparent)]">
+              🔴 Бот не в чате
+            </div>
+          )}
+        </div>
+      </div>
+      <ChevronRight size={16} className="text-lbl flex-shrink-0"/>
+    </button>
+  );
+}
 
 export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick }) {
   const { workspaces, loading, error } = useWorkspaces(token);
@@ -48,60 +107,21 @@ export default function WorkspaceList({ token, onSelectWorkspace, onConnectClick
         {(() => {
           let extraIdx = 1; // первый ++ даст №2 (главное вне нумерации)
           return workspaces.map(ws => {
-            // C6: active_chats_count — новое поле; на старом API → fallback на chats_count
             const total = ws.chats_count ?? 0;
             const active = ws.active_chats_count ?? total;
             const allRemoved = total > 0 && active === 0;
             const chatsLabel = active === total
               ? `${total} чат.`
               : `${active}/${total} чат.`;
-            // C8: ярлык primary/доп. — primary вне нумерации
             const isPrimary = !!ws.is_primary;
             const tagIdx = isPrimary ? null : ++extraIdx;
             return (
-              <button
-                key={ws.id}
-                onClick={() => onSelectWorkspace?.(ws.id)}
-                className="w-full flex items-center justify-between p-3 bg-sf2 rounded-2xl
-                           hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] border border-transparent
-                           transition-all">
-                <div className="flex items-center gap-3 min-w-0 flex-1">
-                  <div className="w-9 h-9 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center flex-shrink-0">
-                    <MessageCircle size={16} className="text-cta"/>
-                  </div>
-                  <div className="text-left min-w-0 flex-1">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <span className="font-black text-sm text-tx truncate">{ws.name}</span>
-                      {isPrimary ? (
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide
-                                         bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn
-                                         border border-[color-mix(in_oklab,var(--warn)_36%,transparent)] flex-shrink-0">
-                          ⭐ Главное
-                        </span>
-                      ) : (
-                        <span className="px-2 py-0.5 rounded-md text-[9px] font-black uppercase tracking-wide
-                                         bg-sff text-txd border border-bd2 flex-shrink-0">
-                          №{tagIdx} доп.
-                        </span>
-                      )}
-                    </div>
-                    <div className="text-[10px] uppercase tracking-widest font-bold text-lbl mt-0.5">
-                      {ws.role} · {ws.members_count} участн. · {chatsLabel}
-                    </div>
-                    {allRemoved && (
-                      <div
-                        title="Pulse Bot был удалён из подключённого чата. Добавьте его обратно — роль и настройки сохранены."
-                        className="mt-1 inline-flex items-center gap-1 px-2 py-0.5 rounded-md
-                                   text-[10px] font-black uppercase tracking-wide
-                                   bg-[color-mix(in_oklab,var(--danger)_14%,transparent)] text-danger
-                                   border border-[color-mix(in_oklab,var(--danger)_36%,transparent)]">
-                        🔴 Бот не в чате
-                      </div>
-                    )}
-                  </div>
-                </div>
-                <ChevronRight size={16} className="text-lbl flex-shrink-0"/>
-              </button>
+              <WorkspaceRow
+                key={ws.id} ws={ws} token={token}
+                isPrimary={isPrimary} tagIdx={tagIdx}
+                chatsLabel={chatsLabel} allRemoved={allRemoved}
+                onSelect={onSelectWorkspace}
+              />
             );
           });
         })()}

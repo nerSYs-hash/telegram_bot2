@@ -2,15 +2,18 @@
 // V1.17.0i (P4 C6): отключённые чаты (removed_at не пуст) показываются приглушённо,
 // с плашкой «🔴 Бот не в чате — добавьте обратно, роль восстановится»; кнопка
 // «Отключить» (LogOut) для уже soft-removed не отображается.
+// V1.17.0j: аватар workspace в шапке «Общее» (auto из main-чата TG); при
+// 404 / load fail — fallback на иконку Hash (тематически нейтральная).
 import React, { useEffect, useState } from 'react';
 import {
   ArrowLeft, Edit2, Save, X, MessageCircle, Users, UserPlus, Trash2,
-  Plus, Copy, Check, Crown, Shield, BookOpen, LogOut, AlertTriangle,
+  Plus, Copy, Check, Crown, Shield, BookOpen, LogOut, AlertTriangle, Hash,
 } from 'lucide-react';
 import {
   fetchWorkspaceDetails, renameWorkspace, removeMember, updateChatRole,
   disconnectChat, deleteWorkspace,
 } from '../shared/api';
+import { useAuthImage } from '../shared/useAuthImage';
 
 const ROLE_LABEL = { owner: '👑 Владелец', admin: '🛡 Админ', moderator: '🔧 Модератор' };
 const ROLE_COLOR = {
@@ -127,6 +130,9 @@ export default function WorkspacePage({
 
   const ws = details.workspace;
   const isOwner = details.members.find(m => m.user_id === currentUserId)?.role === 'owner';
+  // V1.17.0j: аватар workspace (auto из TG); 404/fail → fallback Hash-icon
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  const { src: avatarSrc, failed: avatarFailed } = useAuthImage(ws.icon_url, token);
   // V1.17.0i (C6): шапка показывает «N активных · M всего» если есть отключённые
   const totalChats = details.chats.length;
   const activeChats = details.chats.filter(c => !c.removed_at).length;
@@ -158,10 +164,22 @@ export default function WorkspacePage({
                     className="p-2 rounded-xl bg-sf2 text-tx"><X size={14}/></button>
           </div>
         ) : (
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-black text-tx">{ws.name}</h2>
+          <div className="flex items-center justify-between gap-3">
+            <div className="flex items-center gap-3 min-w-0">
+              {/* V1.17.0j: аватар workspace */}
+              <div className="w-12 h-12 rounded-2xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]
+                              flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                {avatarSrc && !avatarFailed ? (
+                  <img src={avatarSrc} alt=""
+                       className="absolute inset-0 w-full h-full object-cover" draggable={false}/>
+                ) : (
+                  <Hash size={20} className="text-cta"/>
+                )}
+              </div>
+              <h2 className="text-xl font-black text-tx truncate">{ws.name}</h2>
+            </div>
             {isOwner && (
-              <button onClick={() => setEditing(true)} className="p-2 rounded-xl hover:bg-sf2">
+              <button onClick={() => setEditing(true)} className="p-2 rounded-xl hover:bg-sf2 flex-shrink-0">
                 <Edit2 size={14} className="text-lbl"/>
               </button>
             )}
