@@ -114,3 +114,36 @@ async def refresh_workspace_icon(bot, conn, ws_id: int) -> Optional[str]:
         # Ошибка TG (403/network/...) — не трогаем БД, чтобы повторить.
         logger.warning(f"refresh_workspace_icon ws={ws_id} chat={chat_id}: {e}")
         return None
+
+
+async def prewarm_all_workspaces(bot, conn, ttl_s: int = _DEFAULT_TTL_S) -> int:
+    """V1.17.0j7: ежедневный прогрев кеша иконок.
+
+    Обходит все workspaces; для тех у кого `should_refresh` истинно — зовёт
+    `refresh_workspace_icon`. Ошибка одного ws не ломает обход остальных
+    (каждый refresh уже сам ловит исключения).
+
+    Возвращает число ws у которых refresh завершился успешно (= скачали
+    файл ИЛИ зафиксировали «фото нет/чатов нет», т.е. cached_at обновился).
+    """
+    rows = conn.execute(
+        "SELECT id, icon_cached_at FROM workspaces"
+    ).fetchall()
+    refreshed = 0
+    for ws_id, cached_at in rows:
+        if not should_refresh({'icon_cached_at': cached_at}, ttl_s=ttl_s):
+            continue
+        try:
+            # success = БД обновлена (даже при «фото нет»); неуспех = TG-ошибка.
+            cached_before = conn.execute(
+                "SELECT icon_cached_at FROM workspaces WHERE id=?", (ws_id,)
+            ).fetchone()[0]
+            await refresh_workspace_icon(bot, conn, ws_id)
+            cached_after = conn.execute(
+                "SELECT icon_cached_at FROM workspaces WHERE id=?", (ws_id,)
+            ).fetchone()[0]
+            if cached_after != cached_before:
+                refreshed += 1
+        except Exception as e:
+            logger.warning(f"prewarm_all_workspaces ws={ws_id}: {e}")
+    return refreshed

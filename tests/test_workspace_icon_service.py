@@ -159,6 +159,63 @@ async def test_refresh_downloads_and_saves(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_prewarm_iterates_only_stale(tmp_path, monkeypatch):
+    """prewarm_all_workspaces: вызывает refresh только для устаревших ws."""
+    from services.workspace_icon import prewarm_all_workspaces
+    monkeypatch.setenv("WORKSPACE_ICONS_CACHE_DIR", str(tmp_path))
+    c = _conn()
+    # 3 ws: 1 свежий, 2 устаревший (старая дата), 3 без cached_at
+    c.execute("INSERT INTO workspaces (id, name, icon_cached_at) VALUES (2, 'W2', ?)",
+              ((datetime.utcnow() - timedelta(days=30)).isoformat(),))
+    c.execute("INSERT INTO workspaces (id, name) VALUES (3, 'W3')")
+    # ws=1 уже есть из _conn(), сделаем его свежим
+    c.execute("UPDATE workspaces SET icon_cached_at=? WHERE id=1",
+              ((datetime.utcnow() - timedelta(hours=1)).isoformat(),))
+    # все имеют main-чат
+    c.execute("INSERT INTO bot_chats VALUES (-1, 1, 'main', NULL, '2025-01-01')")
+    c.execute("INSERT INTO bot_chats VALUES (-2, 2, 'main', NULL, '2025-01-01')")
+    c.execute("INSERT INTO bot_chats VALUES (-3, 3, 'main', NULL, '2025-01-01')")
+    c.commit()
+
+    bot = MagicMock()
+    chat = MagicMock(); chat.photo = None
+    bot.get_chat = AsyncMock(return_value=chat)
+
+    refreshed = await prewarm_all_workspaces(bot, c, ttl_s=86400)
+    # обновили 2 (устаревший) и 3 (NULL), пропустили 1 (свежий)
+    assert refreshed == 2
+    assert bot.get_chat.await_count == 2
+
+
+@pytest.mark.asyncio
+async def test_prewarm_continues_on_per_ws_error(tmp_path, monkeypatch):
+    """Ошибка одного ws не ломает обход остальных."""
+    from services.workspace_icon import prewarm_all_workspaces
+    monkeypatch.setenv("WORKSPACE_ICONS_CACHE_DIR", str(tmp_path))
+    c = _conn()
+    c.execute("INSERT INTO workspaces (id, name) VALUES (2, 'W2')")
+    c.execute("INSERT INTO bot_chats VALUES (-1, 1, 'main', NULL, '2025-01-01')")
+    c.execute("INSERT INTO bot_chats VALUES (-2, 2, 'main', NULL, '2025-01-01')")
+    c.commit()
+
+    call_count = {'n': 0}
+
+    async def _get_chat(cid):
+        call_count['n'] += 1
+        if cid == -1:
+            raise RuntimeError("TG flaky")
+        chat = MagicMock(); chat.photo = None
+        return chat
+
+    bot = MagicMock()
+    bot.get_chat = AsyncMock(side_effect=_get_chat)
+    refreshed = await prewarm_all_workspaces(bot, c)
+    # ws=1 упал, ws=2 норм → один успешный refresh
+    assert refreshed == 1
+    assert call_count['n'] == 2
+
+
+@pytest.mark.asyncio
 async def test_refresh_tg_error_does_not_crash_and_keeps_prev(tmp_path, monkeypatch):
     monkeypatch.setenv("WORKSPACE_ICONS_CACHE_DIR", str(tmp_path))
     c = _conn()
