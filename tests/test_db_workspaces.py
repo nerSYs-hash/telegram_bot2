@@ -235,3 +235,107 @@ def test_delete_pulse_themed_workspace_raises(conn):
     ws_id = create_workspace(conn, 'Pulse', owner_user_id=1, is_pulse_themed=True)
     with pytest.raises(ValueError):
         delete_workspace(conn, ws_id)
+
+
+# ── V1.17.0i (P4 C6+C8): is_primary, active_chats_count, removed_at в чатах ──
+
+def _conn_with_removed_at():
+    """Свежий conn со схемой workspaces + bot_chats c колонкой removed_at."""
+    c = sqlite3.connect(':memory:')
+    up_create_workspaces_tables(c)
+    c.execute('''CREATE TABLE bot_chats (
+        chat_id INTEGER PRIMARY KEY,
+        workspace_id INTEGER NOT NULL DEFAULT 1,
+        added_by_user_id INTEGER,
+        title TEXT,
+        chat_type TEXT,
+        role TEXT CHECK (role IS NULL OR role IN ('main','admin','journal')),
+        added_at TEXT,
+        removed_at TIMESTAMP
+    )''')
+    return c
+
+
+def test_workspaces_for_user_has_is_primary_and_active_count():
+    """C8: главное (is_pulse_themed=1) первым; C6: active_chats_count без removed."""
+    from database.db_workspaces import (
+        get_workspaces_for_user, add_bot_chat, soft_remove_bot_chat,
+    )
+    conn = _conn_with_removed_at()
+    # Вторичный создаём ПЕРВЫМ — но в выдаче главное должно опередить
+    secondary = create_workspace(conn, "Вторичный", owner_user_id=42,
+                                 is_pulse_themed=False, plan='free')
+    primary = create_workspace(conn, "Главный Pulse", owner_user_id=42,
+                               is_pulse_themed=True, plan='free')
+    # 2 активных в primary, 1 активный + 1 soft-removed в secondary
+    add_bot_chat(conn, -101, primary, added_by=42,
+                 title="A", chat_type="supergroup", role='main')
+    add_bot_chat(conn, -102, primary, added_by=42,
+                 title="B", chat_type="supergroup", role='admin')
+    add_bot_chat(conn, -201, secondary, added_by=42,
+                 title="C", chat_type="supergroup", role='main')
+    add_bot_chat(conn, -202, secondary, added_by=42,
+                 title="D", chat_type="supergroup", role='admin')
+    soft_remove_bot_chat(conn, -202)
+
+    rows = get_workspaces_for_user(conn, 42)
+    assert [r['id'] for r in rows] == [primary, secondary], "primary должен идти сверху"
+    assert rows[0]['is_primary'] is True
+    assert rows[1]['is_primary'] is False
+    assert rows[0]['chats_count'] == 2 and rows[0]['active_chats_count'] == 2
+    assert rows[1]['chats_count'] == 2 and rows[1]['active_chats_count'] == 1
+
+
+def test_workspaces_for_user_secondary_order_by_created_at_asc():
+    """C8: среди не-primary порядок стабильный — по created_at ASC."""
+    from database.db_workspaces import get_workspaces_for_user
+    conn = _conn_with_removed_at()
+    a = create_workspace(conn, "WS-A", owner_user_id=42, is_pulse_themed=False)
+    b = create_workspace(conn, "WS-B", owner_user_id=42, is_pulse_themed=False)
+    c = create_workspace(conn, "WS-C", owner_user_id=42, is_pulse_themed=False)
+    rows = get_workspaces_for_user(conn, 42)
+    assert [r['id'] for r in rows] == [a, b, c], "должно сохраниться по дате создания"
+
+
+def test_workspaces_for_user_works_without_removed_at_column(conn):
+    """Backward-compat: на старой схеме (фикстура `conn` без removed_at) — active=total."""
+    from database.db_workspaces import get_workspaces_for_user, add_bot_chat
+    ws_id = create_workspace(conn, 'WS', owner_user_id=42)
+    add_bot_chat(conn, -1, ws_id, added_by=42, title='A', chat_type='group')
+    rows = get_workspaces_for_user(conn, 42)
+    assert rows[0]['chats_count'] == 1
+    assert rows[0]['active_chats_count'] == 1
+    assert rows[0]['is_primary'] is False
+
+
+def test_workspace_details_chats_expose_removed_at_active_first():
+    """C6: каждый чат отдаёт removed_at; активные сверху, отключённые внизу."""
+    from database.db_workspaces import (
+        get_workspace_details, add_bot_chat, soft_remove_bot_chat,
+    )
+    conn = _conn_with_removed_at()
+    ws = create_workspace(conn, "W", owner_user_id=42, is_pulse_themed=False)
+    add_bot_chat(conn, -1, ws, added_by=42, title="A",
+                 chat_type="supergroup", role='main')
+    add_bot_chat(conn, -2, ws, added_by=42, title="B",
+                 chat_type="supergroup", role='admin')
+    soft_remove_bot_chat(conn, -1)  # main → отключён
+
+    d = get_workspace_details(conn, ws)
+    assert all('removed_at' in c for c in d['chats'])
+    ids = [c['chat_id'] for c in d['chats']]
+    assert ids.index(-2) < ids.index(-1), "активный должен быть раньше soft-removed"
+    removed = next(c for c in d['chats'] if c['chat_id'] == -1)
+    active = next(c for c in d['chats'] if c['chat_id'] == -2)
+    assert removed['removed_at'] is not None
+    assert active['removed_at'] is None
+
+
+def test_workspace_details_chats_removed_at_null_on_old_schema(conn):
+    """Backward-compat: на старой схеме removed_at в каждом чате = None."""
+    from database.db_workspaces import get_workspace_details, add_bot_chat
+    ws_id = create_workspace(conn, 'WS', owner_user_id=1)
+    add_bot_chat(conn, -1, ws_id, added_by=1,
+                 title='A', chat_type='group', role='main')
+    d = get_workspace_details(conn, ws_id)
+    assert d['chats'][0]['removed_at'] is None

@@ -1,5 +1,7 @@
 // Admin_SITE/components/workspaces/WorkspaceSwitcher.jsx
 // V1.17.0d (Подпроект #3): выбор активного сообщества в топбаре.
+// V1.17.0i (P4 C8): ярлык «⭐ главное / №N доп.» в опциях и title — порядок
+// «главное сверху» уже обеспечен API (`is_pulse_themed DESC`).
 import React, { useEffect, useState } from 'react';
 import { fetchWorkspaces, getActiveWs, setActiveWs } from '../shared/api';
 
@@ -45,10 +47,17 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
   const tile = TILES[Math.abs(Number(cur?.id) || 0) % TILES.length];
   const mono = (cur?.name || '?').trim().charAt(0).toUpperCase();
 
+  // V1.17.0i C8: префикс для опции — ⭐ у главного, «№N доп.» у прочих.
+  // Нумерация считается синхронно с WorkspaceList: первое доп. = №2.
+  const renderLabel = (w, extraIdx) => {
+    if (w.is_primary) return `⭐ ${w.name} · ${w.role}`;
+    return `№${extraIdx} доп. · ${w.name} · ${w.role}`;
+  };
+
   return (
     <div
       className="flex items-center gap-2 rounded-2xl border-2 border-bd2 bg-sff pl-1.5 pr-2 py-1"
-      title={`Активное сообщество: ${cur?.name || ''}`}
+      title={`Активное сообщество: ${cur?.name || ''}${cur?.is_primary ? ' · главное' : ' · доп.'}`}
     >
       <span
         className={`w-7 h-7 rounded-xl flex items-center justify-center text-xs font-black flex-shrink-0 ${tile}`}
@@ -59,14 +68,17 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
       <select
         value={active ?? ''}
         onChange={change}
-        className="text-sm font-bold bg-transparent outline-none cursor-pointer pr-1 max-w-[180px]"
+        className="text-sm font-bold bg-transparent outline-none cursor-pointer pr-1 max-w-[200px]"
         aria-label="Активное сообщество"
       >
-        {list.map((w) => (
-          <option key={w.id} value={w.id}>
-            {w.name} · {w.role}
-          </option>
-        ))}
+        {(() => {
+          let extraIdx = 1; // первый ++ даст №2
+          return list.map((w) => (
+            <option key={w.id} value={w.id}>
+              {renderLabel(w, w.is_primary ? null : ++extraIdx)}
+            </option>
+          ));
+        })()}
       </select>
     </div>
   );

@@ -301,3 +301,131 @@ def test_delete_pulse_themed_forbidden(client, monkeypatch):
                       headers={'Authorization': 'Bearer fake-42'})
     assert r.status_code == 403
 
+
+# ── V1.17.0i (P4): API отдаёт is_primary, active_chats_count, removed_at ──
+
+def test_list_workspaces_exposes_new_keys(client):
+    """Sanity: новые ключи присутствуют в JSON-ответе списка сообществ."""
+    r = client.get('/api/workspaces', headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    ws_list = r.json()['workspaces']
+    assert ws_list, "ожидаем хотя бы один workspace"
+    sample = ws_list[0]
+    for k in ('is_primary', 'active_chats_count', 'chats_count'):
+        assert k in sample, f"ключ {k} обязан быть в API-ответе"
+
+
+def test_workspace_details_chats_expose_removed_at_key(client):
+    """Sanity: ключ removed_at присутствует у каждого чата (None на старой схеме)."""
+    r = client.get('/api/workspaces/1', headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    for c in r.json()['chats']:
+        assert 'removed_at' in c
+
+
+def test_list_workspaces_primary_first_via_api():
+    """C8: главное сообщество отдаётся первым через API даже если создано позже."""
+    # Свежий клиент с двумя ws — secondary создан раньше, primary помечен флагом
+    db_conn = sqlite3.connect(':memory:', check_same_thread=False)
+    up_create_workspaces_tables(db_conn)
+    db_conn.execute('''CREATE TABLE bot_chats (
+        chat_id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL,
+        added_by_user_id INTEGER, title TEXT, chat_type TEXT,
+        role TEXT, added_at TEXT, removed_at TIMESTAMP
+    )''')
+    db_conn.execute('''CREATE TABLE users (
+        user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT
+    )''')
+    db_conn.execute("INSERT INTO users VALUES (42, 'i', 'Илья')")
+    secondary = create_workspace(db_conn, 'Доп', owner_user_id=42, is_pulse_themed=False)
+    primary = create_workspace(db_conn, 'Главный', owner_user_id=42, is_pulse_themed=True)
+    add_bot_chat(db_conn, -2, secondary, 42, 'B', 'group')
+    add_bot_chat(db_conn, -1, primary, 42, 'A', 'group')
+    db_conn.commit()
+
+    from api.workspaces_routes import router, _setup
+
+    class _DB:
+        def __init__(self, c):
+            self.conn = c
+            self.cursor = c.cursor()
+
+        def get_workspace_by_chat(self, chat_id):
+            from database.db_workspaces import get_workspace_by_chat
+            return get_workspace_by_chat(self.conn, chat_id)
+
+        def get_site_user(self, user_id):
+            row = self.conn.execute(
+                "SELECT user_id, username, first_name FROM users WHERE user_id=?",
+                (user_id,)
+            ).fetchone()
+            return {'user_id': row[0], 'username': row[1], 'first_name': row[2]} if row else None
+
+    def fake_require_auth(authorization):
+        if not authorization:
+            raise HTTPException(status_code=401, detail="No auth")
+        token = authorization.replace('Bearer ', '')
+        return {'user_id': int(token[5:])}
+
+    _setup(_DB(db_conn), fake_require_auth)
+    app = FastAPI()
+    app.include_router(router)
+    c = TestClient(app)
+
+    r = c.get('/api/workspaces', headers={'Authorization': 'Bearer fake-42'})
+    assert r.status_code == 200
+    ids = [w['id'] for w in r.json()['workspaces']]
+    assert ids == [primary, secondary], f"primary={primary} должен быть первым, получили {ids}"
+    assert r.json()['workspaces'][0]['is_primary'] is True
+    assert r.json()['workspaces'][1]['is_primary'] is False
+
+
+def test_workspace_details_removed_chat_active_first_via_api():
+    """C6: через API soft-removed чат идёт после активного + removed_at не None."""
+    from database.db_workspaces import soft_remove_bot_chat
+    db_conn = sqlite3.connect(':memory:', check_same_thread=False)
+    up_create_workspaces_tables(db_conn)
+    db_conn.execute('''CREATE TABLE bot_chats (
+        chat_id INTEGER PRIMARY KEY, workspace_id INTEGER NOT NULL,
+        added_by_user_id INTEGER, title TEXT, chat_type TEXT,
+        role TEXT, added_at TEXT, removed_at TIMESTAMP
+    )''')
+    db_conn.execute('CREATE TABLE users (user_id INTEGER PRIMARY KEY, username TEXT, first_name TEXT)')
+    db_conn.execute("INSERT INTO users VALUES (42,'i','И')")
+    ws = create_workspace(db_conn, 'X', owner_user_id=42)
+    add_bot_chat(db_conn, -1, ws, 42, 'Removed', 'group', role='main')
+    add_bot_chat(db_conn, -2, ws, 42, 'Active',  'group', role='admin')
+    soft_remove_bot_chat(db_conn, -1)
+    db_conn.commit()
+
+    from api.workspaces_routes import router, _setup
+
+    class _DB:
+        def __init__(self, c):
+            self.conn = c; self.cursor = c.cursor()
+
+        def get_workspace_by_chat(self, chat_id):
+            from database.db_workspaces import get_workspace_by_chat
+            return get_workspace_by_chat(self.conn, chat_id)
+
+        def get_site_user(self, user_id):
+            row = self.conn.execute(
+                "SELECT user_id, username, first_name FROM users WHERE user_id=?", (user_id,)
+            ).fetchone()
+            return {'user_id': row[0], 'username': row[1], 'first_name': row[2]} if row else None
+
+    def fake_require_auth(authorization):
+        return {'user_id': int(authorization.replace('Bearer ', '')[5:])}
+
+    _setup(_DB(db_conn), fake_require_auth)
+    app = FastAPI(); app.include_router(router)
+    c = TestClient(app)
+
+    data = c.get(f'/api/workspaces/{ws}', headers={'Authorization': 'Bearer fake-42'}).json()
+    titles = [ch['title'] for ch in data['chats']]
+    assert titles == ['Active', 'Removed'], f"активный должен быть первым, {titles}"
+    removed = next(ch for ch in data['chats'] if ch['title'] == 'Removed')
+    active = next(ch for ch in data['chats'] if ch['title'] == 'Active')
+    assert removed['removed_at'] is not None
+    assert active['removed_at'] is None
+
