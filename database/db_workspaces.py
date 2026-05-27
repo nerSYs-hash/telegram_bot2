@@ -188,6 +188,55 @@ def get_workspaces_for_user(conn: sqlite3.Connection, user_id: int) -> list:
     return result
 
 
+def list_all_workspaces_for_developer(conn: sqlite3.Connection, user_id: int) -> list:
+    """Все ws для роли developer (Илья) — даже там, где он не member.
+
+    Возвращает тот же формат, что и `get_workspaces_for_user`, но:
+    - role = реальная роль из workspace_members, либо 'developer' если не member;
+    - is_observer = True для ws без membership (read-only режим, write → 403).
+
+    Используется только в роуте list_workspaces для DEVELOPER_ID. Остальные
+    юзеры получают строгий per-membership список.
+    """
+    has_removed = _bot_chats_has_removed_at(conn)
+    active_expr = (
+        "(SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id AND removed_at IS NULL)"
+        if has_removed
+        else "(SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id)"
+    )
+    has_icons = _workspaces_has_icon_columns(conn)
+    icon_path_expr = "w.icon_local_path" if has_icons else "NULL"
+    rows = conn.execute(f'''
+        SELECT
+            w.id, w.name, w.owner_user_id, w.is_pulse_themed, w.plan,
+            m.role AS member_role,
+            (SELECT COUNT(*) FROM workspace_members WHERE workspace_id=w.id) AS members_count,
+            (SELECT COUNT(*) FROM bot_chats WHERE workspace_id=w.id) AS chats_count,
+            {active_expr} AS active_chats_count,
+            {icon_path_expr} AS icon_local_path
+        FROM workspaces w
+        LEFT JOIN workspace_members m ON m.workspace_id = w.id AND m.user_id = ?
+        ORDER BY w.is_pulse_themed DESC, w.created_at ASC, w.id ASC
+    ''', (user_id,)).fetchall()
+    keys = ('id', 'name', 'owner_user_id', 'is_pulse_themed', 'plan',
+            'member_role', 'members_count', 'chats_count', 'active_chats_count',
+            '_icon_local_path')
+    icons_on = workspace_icons_enabled() and has_icons
+    result = []
+    for r in rows:
+        d = dict(zip(keys, r))
+        d['is_primary'] = bool(d['is_pulse_themed'])
+        d['is_observer'] = d['member_role'] is None
+        d['role'] = d.pop('member_role') or 'developer'
+        d['icon_url'] = (
+            f"/api/workspaces/{d['id']}/icon.jpg"
+            if icons_on and d.get('_icon_local_path') else None
+        )
+        d.pop('_icon_local_path', None)
+        result.append(d)
+    return result
+
+
 def get_workspace_details(conn: sqlite3.Connection, workspace_id: int) -> Optional[dict]:
     """Workspace + список членов + список чатов.
 

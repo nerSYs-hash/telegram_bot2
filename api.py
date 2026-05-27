@@ -364,6 +364,21 @@ async def ws_context_middleware(request: _Req, call_next):
                     status_code=403,
                     content={"detail": "Нет доступа к этому сообществу"},
                 )
+            # Strict read-only для developer'а в чужих ws (где не member).
+            # Илья смотрит чужие сообщества как наблюдатель: GET — OK,
+            # POST/PUT/PATCH/DELETE → 403, чтобы случайно не изменить.
+            # В своих ws (где он реально owner/admin) — пишет как обычно.
+            if role == "developer" and request.method not in ("GET", "HEAD", "OPTIONS"):
+                is_member = bool(db and db.conn.execute(
+                    "SELECT 1 FROM workspace_members "
+                    "WHERE workspace_id=? AND user_id=? LIMIT 1",
+                    (ws_id, user_id),
+                ).fetchone())
+                if not is_member:
+                    return _JSONResp(
+                        status_code=403,
+                        content={"detail": "Только просмотр: вы не участник этого сообщества"},
+                    )
             WS_ID_CTX.set(ws_id)
             WS_ROLE_CTX.set(role)
     return await call_next(request)

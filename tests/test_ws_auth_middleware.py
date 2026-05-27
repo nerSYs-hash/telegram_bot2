@@ -152,3 +152,39 @@ def test_second_owner_explicit_foreign_ws_still_403(client):
     h = {"Authorization": f"Bearer {_tok(api_mod, 99)}", "X-Workspace-Id": "1"}
     r = c.get("/api/admin/profile/me", headers=h)
     assert r.status_code == 403
+
+
+# ── Strict read-only для developer'а в чужих ws ──
+
+def test_developer_get_in_foreign_ws_ok(client):
+    """Developer (Илья, id=555) видит GET чужого ws — read-only режим."""
+    c, api_mod = client
+    h = {"Authorization": f"Bearer {_tok(api_mod, 555)}", "X-Workspace-Id": "2"}
+    r = c.get("/api/admin/profile/me", headers=h)
+    assert r.status_code == 200
+    assert r.json()["role_raw"] == "developer"
+
+def test_developer_write_in_foreign_ws_forbidden(client):
+    """Developer НЕ может писать в чужом ws (не member) — POST/PUT/DELETE → 403."""
+    c, api_mod = client
+    h = {"Authorization": f"Bearer {_tok(api_mod, 555)}", "X-Workspace-Id": "2",
+         "Content-Type": "application/json"}
+    r = c.put("/api/admin/permissions/roles/admin", headers=h,
+              json={"permissions": ["triggers.view"]})
+    assert r.status_code == 403
+    assert "Только просмотр" in r.json().get("detail", "")
+
+def test_developer_write_in_own_ws_allowed(client, monkeypatch):
+    """Developer = member ws1 → POST/PUT в ws1 проходит (он там реальный участник)."""
+    c, api_mod = client
+    # Делаем Илью членом ws=1
+    api_mod.db.conn.execute(
+        "INSERT INTO workspace_members(workspace_id, user_id, role) VALUES(1, 555, 'owner')"
+    )
+    api_mod.db.conn.commit()
+    h = {"Authorization": f"Bearer {_tok(api_mod, 555)}", "X-Workspace-Id": "1",
+         "Content-Type": "application/json"}
+    r = c.put("/api/admin/permissions/roles/admin", headers=h,
+              json={"permissions": ["triggers.view"]})
+    # 200 OK или ошибка валидации, но точно не 403 «Только просмотр»
+    assert r.status_code != 403 or "Только просмотр" not in r.json().get("detail", "")

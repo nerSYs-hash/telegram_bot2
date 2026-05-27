@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from bot_core.workspace_icons import workspace_icons_enabled
 from database.db_workspaces import (
     get_workspaces_for_user, get_workspace_details,
+    list_all_workspaces_for_developer,
     add_member, remove_member, update_workspace_name,
     update_bot_chat_role,
     remove_bot_chat, delete_workspace, list_chat_ids_for_workspace,
@@ -67,7 +68,13 @@ def _check_role(workspace_id: int, user_id: int, required_role: str = 'moderator
 async def list_workspaces(authorization: str = Header(default=None)):
     payload = _auth(authorization)
     user_id = int(payload['user_id'])
-    rows = get_workspaces_for_user(_db.conn, user_id)
+    # Developer (Илья) видит ВСЕ ws, включая те, где он не member —
+    # с пометкой is_observer=True (read-only). Остальные — только свои.
+    dev_id = int(os.getenv('DEVELOPER_ID', 0) or 0)
+    if dev_id and user_id == dev_id:
+        rows = list_all_workspaces_for_developer(_db.conn, user_id)
+    else:
+        rows = get_workspaces_for_user(_db.conn, user_id)
     return {"workspaces": rows}
 
 
