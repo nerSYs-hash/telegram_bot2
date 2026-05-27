@@ -21,6 +21,21 @@
     {"id": "press_release", "name": "Пресс-релизы",   "section": "content",    "description": "Публикация постов в чат."},
     {"id": "triggers",      "name": "Триггеры",       "section": "content",    "description": "Авто-реакции на слова/фразы."},
     {"id": "horoscope",     "name": "Гороскоп",       "section": "content",    "description": "Авто-гороскоп для участников."},
-    {"id": "journal",       "name": "Журнал",         "section": "journal",    "description": "Лог событий чата (15 суб-журналов)."}
+    {"id": "journal",       "name": "Журнал",         "section": "journal",    "description": "Лог событий чата (15 суб-журналов)."},
+    {"id": "journal:trigger",   "name": "Журнал · Триггеры",       "section": "journal", "parent": "journal", "description": "События срабатывания триггеров."},
+    {"id": "journal:mute",      "name": "Журнал · Муты",           "section": "journal", "parent": "journal", "description": "Выдачи мута участникам."},
+    {"id": "journal:unmute",    "name": "Журнал · Размуты",        "section": "journal", "parent": "journal", "description": "Снятие мута с участников."},
+    {"id": "journal:ban",       "name": "Журнал · Баны",           "section": "journal", "parent": "journal", "description": "Баны участников."},
+    {"id": "journal:unban",     "name": "Журнал · Разбаны",        "section": "journal", "parent": "journal", "description": "Снятие бана."},
+    {"id": "journal:kick",      "name": "Журнал · Исключения",     "section": "journal", "parent": "journal", "description": "Удаления (кик) из чата."},
+    {"id": "journal:warn",      "name": "Журнал · Предупреждения", "section": "journal", "parent": "journal", "description": "Выдачи варнов."},
+    {"id": "journal:join",      "name": "Журнал · Вход",           "section": "journal", "parent": "journal", "description": "Входы и регистрация новичков."},
+    {"id": "journal:leave",     "name": "Журнал · Выход",          "section": "journal", "parent": "journal", "description": "Выходы участников из чата."},
+    {"id": "journal:blacklist", "name": "Журнал · Блокировки",     "section": "journal", "parent": "journal", "description": "Чёрный список / блокировки."},
+    {"id": "journal:admin",     "name": "Журнал · Админ-действия", "section": "journal", "parent": "journal", "description": "Действия администраторов."},
+    {"id": "journal:survey",    "name": "Журнал · Опросы",         "section": "journal", "parent": "journal", "description": "Создание и итоги опросов."},
+    {"id": "journal:profile",   "name": "Журнал · Профиль",        "section": "journal", "parent": "journal", "description": "Изменения профиля."},
+    {"id": "journal:activity",  "name": "Журнал · Активность",     "section": "journal", "parent": "journal", "description": "События активности."},
+    {"id": "journal:photo",     "name": "Журнал · Смена фото",     "section": "journal", "parent": "journal", "description": "Смена аватара."}
   ]
 }
