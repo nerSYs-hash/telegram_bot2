@@ -64,8 +64,35 @@ def ensure_journal_tables(db) -> None:
 #  ХЕЛПЕРЫ
 # ═══════════════════════════════════════════════════════════════
 
-def _get_journal_channel(db) -> Optional[int]:
-    """Получает ID канала-журнала из settings."""
+def _get_journal_channel(db, chat_id: Optional[int] = None) -> Optional[int]:
+    """ID канала-журнала.
+
+    M3 (V1.17.0k11): per-ws резолв. Если передан `chat_id` события —
+    резолвим workspace через bot_chats и берём канал с role='journal'
+    для этого ws. Если у ws нет своего журнала:
+      - ws=1 (Pulse) → fallback на legacy settings.journal_channel_id
+      - не-Pulse ws → None (silent skip, чтобы не спамить чужой Pulse-журнал)
+
+    Если chat_id не передан — старый legacy путь (для Pulse-only вызовов
+    вроде log_trigger / log_admin_action).
+    """
+    if chat_id is not None:
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from bot_core.ws_resolver import resolve_role_chat
+            ws_id = resolve_workspace_for_chat(db.conn, chat_id)
+        except Exception:
+            ws_id = None
+        if ws_id is not None:
+            try:
+                journal = resolve_role_chat(db.conn, ws_id, 'journal')
+            except Exception:
+                journal = None
+            if journal is not None:
+                return journal
+            if ws_id != 1:
+                # Не-Pulse ws без своего журнала — молчим (не спамим Pulse)
+                return None
     val = db.get_setting('journal_channel_id')
     if val:
         try:
@@ -186,6 +213,7 @@ async def log_event(
     hashtag: str = None,
     channel_num: int = 1,
     markup: Optional[InlineKeyboardMarkup] = None,
+    chat_id: Optional[int] = None,
 ) -> None:
     """
     Отправляет запись в канал-журнал.
@@ -197,19 +225,22 @@ async def log_event(
         text: HTML-текст сообщения
         user_id: ID пользователя (для кнопки ЛС)
         hashtag: хештег, например #Вход
-        channel_num: номер канала журнала (1, 2 или 3)
+        channel_num: номер канала журнала (1, 2 или 3) — для каналов 2/3
+            работает только Pulse multi-channel (legacy)
+        chat_id: M3 — chat_id события, по которому резолвится ws и
+            журнальный канал. None → старый Pulse-only путь.
     """
     thread_id = None
     if channel_num == 2:
         channel_id, thread_id = _get_journal_channel_2(db)
         if not channel_id:
-            channel_id = _get_journal_channel(db)
+            channel_id = _get_journal_channel(db, chat_id=chat_id)
     elif channel_num == 3:
         channel_id, thread_id = _get_journal_channel_3(db)
         if not channel_id:
-            channel_id = _get_journal_channel(db)
+            channel_id = _get_journal_channel(db, chat_id=chat_id)
     else:
-        channel_id = _get_journal_channel(db)
+        channel_id = _get_journal_channel(db, chat_id=chat_id)
 
     if not channel_id:
         return
@@ -359,6 +390,7 @@ async def log_join(
         user_id=user_id,
         channel_num=3,
         markup=action_markup,
+        chat_id=(chat.id if chat else None),
     )
 
 
@@ -403,6 +435,7 @@ async def log_leave(
         bot, db, 'leave', text,
         user_id=user_id,
         channel_num=3,
+        chat_id=(chat.id if chat else None),
     )
 
 
@@ -453,7 +486,7 @@ async def log_kick(
     text = "\n".join(lines)
 
     # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
-    await log_event(bot, db, 'kick', text, user_id=None, channel_num=3)
+    await log_event(bot, db, 'kick', text, user_id=None, channel_num=3, chat_id=chat_id)
 
 
 async def log_ban(
@@ -528,7 +561,7 @@ async def log_ban(
         [InlineKeyboardButton("🔇 Заглушить навсегда", callback_data=f"jmute_{target_id}")],
     ])
 
-    await log_event(bot, db, 'ban', text, user_id=target_id, channel_num=3, markup=action_markup)
+    await log_event(bot, db, 'ban', text, user_id=target_id, channel_num=3, markup=action_markup, chat_id=(chat.id if chat else None))
 
 
 async def log_mute(
@@ -609,7 +642,7 @@ async def log_mute(
         ],
     ])
 
-    await log_event(bot, db, 'mute', text, user_id=target_id, channel_num=3, markup=action_markup)
+    await log_event(bot, db, 'mute', text, user_id=target_id, channel_num=3, markup=action_markup, chat_id=(chat.id if chat else None))
 
 
 async def log_unmute(
@@ -654,7 +687,7 @@ async def log_unmute(
     lines.append(f"🕐 {_fmt_time_msk(unmuted_at)}")
     text = "\n".join(lines)
 
-    await log_event(bot, db, 'unmute', text, user_id=target_id, channel_num=3)
+    await log_event(bot, db, 'unmute', text, user_id=target_id, channel_num=3, chat_id=(chat.id if chat else None))
 
 
 async def log_unban(
@@ -700,7 +733,7 @@ async def log_unban(
     lines.append(f"🕐 {_fmt_time_msk(unbanned_at)}")
     text = "\n".join(lines)
 
-    await log_event(bot, db, 'unban', text, user_id=target_id, channel_num=3)
+    await log_event(bot, db, 'unban', text, user_id=target_id, channel_num=3, chat_id=(chat.id if chat else None))
 
 
 _TRIGGER_ACTION_LABELS = {
@@ -784,7 +817,8 @@ async def log_trigger(bot, db, user_id: int, trigger_name: str, action: str,
 
     await log_event(
         bot, db, 'trigger', "\n".join(lines),
-        user_id=user_id, channel_num=3
+        user_id=user_id, channel_num=3,
+        chat_id=(chat.id if chat else (trigger_message.chat.id if trigger_message and trigger_message.chat else None)),
     )
 
 
@@ -833,7 +867,7 @@ async def log_blacklist(
         ],
     ]) if added else None
 
-    await log_event(bot, db, 'blacklist', text, user_id=target_id, channel_num=3, markup=action_markup)
+    await log_event(bot, db, 'blacklist', text, user_id=target_id, channel_num=3, markup=action_markup, chat_id=(chat.id if chat else None))
 
 
 async def log_admin_action(bot, db, admin_id: int, action_text: str) -> None:
@@ -892,7 +926,8 @@ async def log_exit_survey(bot, db, user_id: int, reason: str = '', survey_row=No
 
     await log_event(
         bot, db, 'exit_survey', text,
-        user_id=user_id, channel_num=3
+        user_id=user_id, channel_num=3,
+        chat_id=(chat.id if chat else None),
     )
 
 
@@ -957,7 +992,7 @@ async def log_profile_change(
     text = "\n".join(lines)
 
     # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
-    await log_event(bot, db, 'profile', text, user_id=None, channel_num=3)
+    await log_event(bot, db, 'profile', text, user_id=None, channel_num=3, chat_id=(chat.id if chat else None))
 
 
 async def log_activity(
@@ -991,7 +1026,7 @@ async def log_activity(
     text = "\n".join(lines)
 
     # ─ Блок Ж: кнопка «Написать в ЛС» ─
-    await log_event(bot, db, 'inactivity', text, user_id=user_id, channel_num=3)
+    await log_event(bot, db, 'inactivity', text, user_id=user_id, channel_num=3, chat_id=chat_id)
 
 
 async def log_photo(
@@ -1032,7 +1067,7 @@ async def log_photo(
     text = "\n".join(lines)
 
     # Без кнопок (user_id=None чтобы не добавлялась авто-кнопка ЛС)
-    await log_event(bot, db, 'photo', text, user_id=None, channel_num=3)
+    await log_event(bot, db, 'photo', text, user_id=None, channel_num=3, chat_id=(chat.id if chat else None))
 
 
 # ═══════════════════════════════════════════════════════════════
