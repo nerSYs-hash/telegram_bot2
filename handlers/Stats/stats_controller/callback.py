@@ -18,8 +18,18 @@ from utils.helpers import (
     calculate_days_in_chat, round_decimal,
     export_users_stats_to_excel,
 )
+from bot_core.workspace_context import resolve_workspace_for_chat
 
 _d = Decimal
+
+
+def _ws(db, chat_id: int) -> int:
+    """workspace_id чата → fallback ws=1 (Pulse) для legacy чатов вне bot_chats."""
+    try:
+        ws = resolve_workspace_for_chat(db.conn, chat_id)
+    except Exception:
+        ws = None
+    return ws if ws is not None else 1
 
 
 async def handle_stats_callback(query, data, user, context, db, admin_id, target_chat_id):
@@ -31,6 +41,8 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     parts      = data.split('_')
     period     = parts[1]
     stats_type = parts[2] if len(parts) > 2 else 'chat'
+
+    ws_id = _ws(db, target_chat_id)
 
     now = get_moscow_time()
     if period == 'yesterday':
@@ -79,10 +91,13 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
                 COALESCE(SUM(us.pulses_mined), 0)       as pulses_mined,
                 COUNT(DISTINCT CASE WHEN us.total_messages > 0 THEN us.date END) as active_days
             FROM users u
-            LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
+            LEFT JOIN user_stats us
+                   ON u.user_id = us.user_id
+                  AND us.date >= ? AND us.date <= ?
+                  AND us.workspace_id = ?
             WHERE u.is_admin = 0 AND u.is_owner = 0
             GROUP BY u.user_id ORDER BY pulses_mined DESC, total_messages DESC
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
 
         period_days = max(1, (end_date - start_date).days + 1)
         users_data = []
@@ -208,15 +223,15 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     db.cursor.execute('''
         SELECT COALESCE(SUM(total_messages), 0) as count
         FROM user_stats
-        WHERE date >= ? AND date <= ?
-    ''', (date_from, date_to))
+        WHERE date >= ? AND date <= ? AND workspace_id = ?
+    ''', (date_from, date_to, ws_id))
     total_messages = int(db.cursor.fetchone()['count'])
 
     prev_msgs = _prev_val('''
         SELECT COALESCE(SUM(total_messages), 0) as count
         FROM user_stats
-        WHERE date >= ? AND date <= ?
-    ''', (prev_start, prev_end))
+        WHERE date >= ? AND date <= ? AND workspace_id = ?
+    ''', (prev_start, prev_end, ws_id))
 
     formatted_total = "{:,}".format(int(total_messages)).replace(',', ' ')
     stats_message += f"💬 Сообщений: {formatted_total}{_delta_str(total_messages, prev_msgs)}\n"
@@ -225,15 +240,15 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     db.cursor.execute('''
         SELECT COUNT(DISTINCT user_id) as count
         FROM user_stats
-        WHERE date >= ? AND date <= ? AND total_messages > 0
-    ''', (date_from, date_to))
+        WHERE date >= ? AND date <= ? AND total_messages > 0 AND workspace_id = ?
+    ''', (date_from, date_to, ws_id))
     active_users = int(db.cursor.fetchone()['count'])
 
     prev_active = _prev_val('''
         SELECT COUNT(DISTINCT user_id) as count
         FROM user_stats
-        WHERE date >= ? AND date <= ? AND total_messages > 0
-    ''', (prev_start, prev_end))
+        WHERE date >= ? AND date <= ? AND total_messages > 0 AND workspace_id = ?
+    ''', (prev_start, prev_end, ws_id))
 
     stats_message += f"👥 Активных: {active_users}{_delta_str(active_users, prev_active)}\n"
 
@@ -248,19 +263,19 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     # Пульсов заработано — все виды наград
     # 1. Считаем чистую добычу (Майнинг) из user_stats
     db.cursor.execute('''
-        SELECT COALESCE(SUM(pulses_mined), 0) as total 
-        FROM user_stats 
-        WHERE date >= ? AND date <= ?
-    ''', (date_from, date_to))
+        SELECT COALESCE(SUM(pulses_mined), 0) as total
+        FROM user_stats
+        WHERE date >= ? AND date <= ? AND workspace_id = ?
+    ''', (date_from, date_to, ws_id))
     net_mined = Decimal(str(db.cursor.fetchone()['total']))
-    
-    
+
+
     # 1. Сначала берем "грязный" майнинг из статистики
     db.cursor.execute('''
-        SELECT COALESCE(SUM(pulses_mined), 0) as total 
-        FROM user_stats 
-        WHERE date >= ? AND date <= ?
-    ''', (date_from, date_to))
+        SELECT COALESCE(SUM(pulses_mined), 0) as total
+        FROM user_stats
+        WHERE date >= ? AND date <= ? AND workspace_id = ?
+    ''', (date_from, date_to, ws_id))
     raw_mined = Decimal(str(db.cursor.fetchone()['total']))
 
     # 2. Берем ШТРАФЫ и ОБЩИЙ заработок из транзакций
@@ -346,20 +361,20 @@ async def handle_stats_callback(query, data, user, context, db, admin_id, target
     stats_message += "📈 ДЕТАЛЬНЫЕ ПАРАМЕТРЫ:\n"
 
     params_queries = [
-        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('СДС — ср. длина сообщ.', 'SELECT CAST(SUM(total_chars) AS REAL) / NULLIF(SUM(total_messages), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', True),
-        ('Медиа',                   'SELECT COALESCE(SUM(media_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',        False),
-        ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',    False),
-        ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
-        ('Ответов всего',           'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',       False),
-        ('Отвечали (уник.)',        'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND total_messages > 0',     False),
-        ('Получили ответ (уник.)',  'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_received > 0', False),
-        ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ?',  False),
-        ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ?', False),
+        ('ОКС — символов',         'SELECT COALESCE(SUM(total_chars), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?',       False),
+        ('СДС — ср. длина сообщ.', 'SELECT CAST(SUM(total_chars) AS REAL) / NULLIF(SUM(total_messages), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?', True),
+        ('Медиа',                   'SELECT COALESCE(SUM(media_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?',        False),
+        ('Реакции ↗',               'SELECT COALESCE(SUM(reactions_given), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?',    False),
+        ('Реакции ↙',               'SELECT COALESCE(SUM(reactions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?', False),
+        ('Ответов всего',           'SELECT COALESCE(SUM(replies_sent), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?',       False),
+        ('Отвечали (уник.)',        'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND total_messages > 0 AND workspace_id = ?',     False),
+        ('Получили ответ (уник.)',  'SELECT COUNT(DISTINCT user_id) as v FROM user_stats WHERE date >= ? AND date <= ? AND replies_received > 0 AND workspace_id = ?', False),
+        ('Упоминания @',            'SELECT COALESCE(SUM(mentions_received), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?',  False),
+        ('Др. ветки',               'SELECT COALESCE(SUM(other_threads_posts), 0) as v FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?', False),
     ]
 
     for label, sql, is_avg in params_queries:
-        db.cursor.execute(sql, (date_from, date_to))
+        db.cursor.execute(sql, (date_from, date_to, ws_id))
         row = db.cursor.fetchone()
         raw_val = row['v'] if row['v'] is not None else 0
         

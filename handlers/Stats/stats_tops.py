@@ -84,16 +84,28 @@ async def show_top(query, db, target_chat_id, context=None):
         try:
             admin_ids = await _get_excluded_ids(context, target_chat_id)
         except: pass
+    from bot_core.workspace_context import resolve_workspace_for_chat
+    try:
+        ws_id = resolve_workspace_for_chat(db.conn, target_chat_id)
+    except Exception:
+        ws_id = None
+    if ws_id is None:
+        ws_id = 1
     db.cursor.execute('''
         SELECT u.user_id, u.username, u.first_name, u.balance,
                COALESCE(us_today.pulses_mined, 0) as pulses_today,
                COALESCE(SUM(us_all.pulses_mined), 0) as pulses_total
         FROM users u
-        LEFT JOIN user_stats us_today ON u.user_id = us_today.user_id AND us_today.date = ?
-        LEFT JOIN user_stats us_all   ON u.user_id = us_all.user_id
+        LEFT JOIN user_stats us_today
+               ON u.user_id = us_today.user_id
+              AND us_today.date = ?
+              AND us_today.workspace_id = ?
+        LEFT JOIN user_stats us_all
+               ON u.user_id = us_all.user_id
+              AND us_all.workspace_id = ?
         WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         GROUP BY u.user_id ORDER BY pulses_today DESC, pulses_total DESC, u.balance DESC LIMIT 20
-    ''', (today,))
+    ''', (today, ws_id, ws_id))
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, admin_ids, db, limit=5)
     message = "🏆 ТОП-5 БОГАЧЕЙ ЗА СЕГОДНЯ\n\n"
@@ -154,12 +166,23 @@ async def show_top5_rich(query, user, db, context=None):
         except Exception:
             pass
 
+    from bot_core.workspace_context import resolve_workspace_for_chat
+    try:
+        ws_id = resolve_workspace_for_chat(db.conn, target_chat_id)
+    except Exception:
+        ws_id = None
+    if ws_id is None:
+        ws_id = 1
     db.cursor.execute('''
         SELECT u.user_id, u.username, u.first_name, u.balance, COALESCE(us_today.pulses_mined, 0) as pulses_today
-        FROM users u LEFT JOIN user_stats us_today ON u.user_id = us_today.user_id AND us_today.date = ?
+        FROM users u
+        LEFT JOIN user_stats us_today
+               ON u.user_id = us_today.user_id
+              AND us_today.date = ?
+              AND us_today.workspace_id = ?
         WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         ORDER BY u.balance DESC LIMIT 20
-    ''', (today,))
+    ''', (today, ws_id))
 
     all_users = db.cursor.fetchall()
     top_users = await _filter_active_users(context, target_chat_id, all_users, excluded_ids, db, limit=5)

@@ -225,6 +225,14 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
     await query.edit_message_text("⏳ Генерирую расширенный аналитический отчёт...")
 
     try:
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        try:
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id)
+        except Exception:
+            ws_id = None
+        if ws_id is None:
+            ws_id = 1  # fallback Pulse для legacy чатов вне bot_chats
+
         now = get_moscow_time()
         if period == 'yesterday':
             yesterday = (now - timedelta(days=1))
@@ -280,8 +288,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                 COALESCE(SUM(us.mentions_received), 0) as total_mentions
             FROM user_stats us
             LEFT JOIN users u ON us.user_id = u.user_id
-            WHERE us.date >= ? AND us.date <= ?
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+            WHERE us.date >= ? AND us.date <= ? AND us.workspace_id = ?
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
         raw = db.cursor.fetchone()
 
         # 2. Детальные данные из user_stats (для индексов) - оставляем как было, но через LEFT JOIN
@@ -293,8 +301,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                 COALESCE(SUM(replies_sent), 0)       as kopyap,
                 COALESCE(SUM(mentions_received), 0)  as kupp,
                 COALESCE(SUM(other_threads_posts), 0) as pivdvp
-            FROM user_stats WHERE date >= ? AND date <= ?
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+            FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
         det = db.cursor.fetchone()
 
         # 3. Структура отчёта
@@ -394,13 +402,16 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                    ({ACTIVITY_INDEX_SQL}) as activity_index,
                    COALESCE(SUM(us.pulses_mined), 0) as earned
             FROM users u
-            LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
+            LEFT JOIN user_stats us
+                   ON u.user_id = us.user_id
+                  AND us.date >= ? AND us.date <= ?
+                  AND us.workspace_id = ?
             WHERE (u.is_admin=0 AND u.is_owner=0)
             GROUP BY u.user_id
             HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0
                    OR SUM(us.reactions_received) > 0 OR SUM(us.replies_sent) > 0
             ORDER BY activity_index DESC LIMIT 10
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
         for i, r_msg in enumerate(db.cursor.fetchall()):
             stats_data['top_messages'].append({
                 'rank': i + 1,
@@ -414,11 +425,14 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
             SELECT u.username, u.first_name,
                    COALESCE(SUM(us.pulses_mined), 0) as earned
             FROM users u
-            LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
+            LEFT JOIN user_stats us
+                   ON u.user_id = us.user_id
+                  AND us.date >= ? AND us.date <= ?
+                  AND us.workspace_id = ?
             WHERE (u.is_admin=0 AND u.is_owner=0)
             GROUP BY u.user_id HAVING earned > 0
             ORDER BY earned DESC LIMIT 10
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
         for i, r_earn in enumerate(db.cursor.fetchall()):
             stats_data['top_earners'].append({
                 'rank': i + 1,
@@ -440,10 +454,14 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                    COALESCE(SUM(us.media_sent), 0)        as media_s,
                    COALESCE(SUM(us.other_threads_posts), 0) as threads,
                    COALESCE(SUM(us.pulses_mined), 0)      as earned
-            FROM users u LEFT JOIN user_stats us ON u.user_id = us.user_id AND us.date >= ? AND us.date <= ?
+            FROM users u
+            LEFT JOIN user_stats us
+                   ON u.user_id = us.user_id
+                  AND us.date >= ? AND us.date <= ?
+                  AND us.workspace_id = ?
             WHERE (u.is_admin=0 AND u.is_owner=0)
             GROUP BY u.user_id HAVING msgs > 0 ORDER BY earned DESC
-        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d')))
+        ''', (start_date.strftime('%Y-%m-%d'), end_date.strftime('%Y-%m-%d'), ws_id))
 
         CHARS_NORM = Decimal('100')
         for r_user in db.cursor.fetchall():
@@ -507,8 +525,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
 
                 db.cursor.execute('''
                     SELECT COUNT(DISTINCT user_id) as active_users
-                    FROM user_stats WHERE date = ? AND total_messages > 0
-                ''', (day.strftime('%Y-%m-%d'),))
+                    FROM user_stats WHERE date = ? AND total_messages > 0 AND workspace_id = ?
+                ''', (day.strftime('%Y-%m-%d'), ws_id))
                 row = db.cursor.fetchone()
                 active_users = row['active_users'] if row else 0
 
@@ -548,8 +566,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                         COALESCE(SUM(replies_received), 0)   as replies_received,
                         COALESCE(SUM(mentions_received), 0)  as mentions,
                         COALESCE(SUM(other_threads_posts), 0) as other_threads
-                    FROM user_stats WHERE date = ?
-                ''', (day.strftime('%Y-%m-%d'),))
+                    FROM user_stats WHERE date = ? AND workspace_id = ?
+                ''', (day.strftime('%Y-%m-%d'), ws_id))
                 us = db.cursor.fetchone()
 
                 return {
@@ -594,8 +612,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
 
                 db.cursor.execute('''
                     SELECT COUNT(DISTINCT user_id) as active_users
-                    FROM user_stats WHERE date >= ? AND date <= ? AND total_messages > 0
-                ''', (first_day.strftime('%Y-%m-%d'), last_day.strftime('%Y-%m-%d')))
+                    FROM user_stats WHERE date >= ? AND date <= ? AND total_messages > 0 AND workspace_id = ?
+                ''', (first_day.strftime('%Y-%m-%d'), last_day.strftime('%Y-%m-%d'), ws_id))
                 row = db.cursor.fetchone()
                 active_users = row['active_users'] if row else 0
 
@@ -634,8 +652,8 @@ async def generate_export_file(query, data, user, context, db, admin_id, target_
                         COALESCE(SUM(replies_received), 0)   as replies_received,
                         COALESCE(SUM(mentions_received), 0)  as mentions,
                         COALESCE(SUM(other_threads_posts), 0) as other_threads
-                    FROM user_stats WHERE date >= ? AND date <= ?
-                ''', (first_day.strftime('%Y-%m-%d'), last_day.strftime('%Y-%m-%d')))
+                    FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?
+                ''', (first_day.strftime('%Y-%m-%d'), last_day.strftime('%Y-%m-%d'), ws_id))
                 us = db.cursor.fetchone()
 
                 return {
