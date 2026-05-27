@@ -15,6 +15,16 @@ db передаётся явно.
 import os
 import logging
 from utils.helpers import format_number, get_today_date_msk, get_moscow_time
+from bot_core.workspace_context import resolve_workspace_for_chat
+
+
+def _ws(db, chat_id: int) -> int:
+    """workspace_id чата → fallback ws=1 (Pulse) для legacy чатов вне bot_chats."""
+    try:
+        ws = resolve_workspace_for_chat(db.conn, chat_id)
+    except Exception:
+        ws = None
+    return ws if ws is not None else 1
 
 
 async def show_top_rich(message, context, db):
@@ -79,23 +89,24 @@ async def show_top_activists(message, context, db):
     """
     try:
         today = get_today_date_msk()
+        ws_id = _ws(db, message.chat.id)
 
         # ── Единая формула АктП из exchange_rate.py (без деления на участников) ──
         db.cursor.execute(f'''
-            SELECT 
-                u.username, 
+            SELECT
+                u.username,
                 u.first_name,
                 ({ACTIVITY_INDEX_SQL}) as activity_index
             FROM user_stats us
             JOIN users u ON us.user_id = u.user_id
-            WHERE us.date = ?
+            WHERE us.date = ? AND us.workspace_id = ?
               AND u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
             GROUP BY us.user_id
             HAVING SUM(us.total_messages) > 0 OR SUM(us.reactions_given) > 0
                    OR SUM(us.reactions_received) > 0 OR SUM(us.replies_sent) > 0
             ORDER BY activity_index DESC
             LIMIT 5
-        ''', (today,))
+        ''', (today, ws_id))
 
         top_users = db.cursor.fetchall()
 
@@ -145,20 +156,26 @@ from utils.helpers import format_number, get_moscow_time, get_today_date_msk
 async def top_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
     """Handle /top command — ежедневный топ-5 по добытым пульсам"""
     today = get_today_date_msk()
+    ws_id = _ws(db, update.effective_chat.id)
 
     # Top 5 users by pulses mined TODAY with total pulses mined
     db.cursor.execute('''
-        SELECT u.user_id, u.username, u.first_name, u.balance, 
+        SELECT u.user_id, u.username, u.first_name, u.balance,
                COALESCE(us_today.pulses_mined, 0) as pulses_today,
                COALESCE(SUM(us_all.pulses_mined), 0) as pulses_total
         FROM users u
-        LEFT JOIN user_stats us_today ON u.user_id = us_today.user_id AND us_today.date = ?
-        LEFT JOIN user_stats us_all ON u.user_id = us_all.user_id
+        LEFT JOIN user_stats us_today
+               ON u.user_id = us_today.user_id
+              AND us_today.date = ?
+              AND us_today.workspace_id = ?
+        LEFT JOIN user_stats us_all
+               ON u.user_id = us_all.user_id
+              AND us_all.workspace_id = ?
         WHERE u.is_admin = 0 AND u.is_owner = 0 AND u.is_left = 0
         GROUP BY u.user_id
         ORDER BY pulses_today DESC, pulses_total DESC, u.balance DESC
         LIMIT 5
-    ''', (today,))
+    ''', (today, ws_id, ws_id))
 
     top_users = db.cursor.fetchall()
 
