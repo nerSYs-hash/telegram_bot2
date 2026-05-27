@@ -917,7 +917,14 @@ export default function App() {
 
   const fetchStats = useCallback((period) => {
     setStatsLoading(true);
-    fetch(`/api/stats?period=${period}`)
+    // V1.17.0k14: без Authorization + X-Workspace-Id бэк ставит default
+    // ws=1 (Pulse) → Switcher не работает для шапки-плиток.
+    const token = localStorage.getItem('jwt') || '';
+    const wsId = localStorage.getItem('active_ws_id');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (wsId) headers['X-Workspace-Id'] = String(wsId);
+    fetch(`/api/stats?period=${period}`, { headers })
       .then(r => r.json())
       .then(data => { setLiveStats(data); setStatsLoading(false); })
       .catch(() => setStatsLoading(false));

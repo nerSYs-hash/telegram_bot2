@@ -555,7 +555,14 @@ export default function StatsPage() {
   const ensure = useCallback((gran) => {
     if (requested.current.has(gran)) return;
     requested.current.add(gran);
-    fetch(`/api/stats/series?granularity=${gran}`)
+    // V1.17.0k14: Authorization + X-Workspace-Id — иначе бэк берёт
+    // дефолт ws=1 (Pulse) и Switcher не работает для статистики.
+    const token = localStorage.getItem('jwt') || '';
+    const wsId = localStorage.getItem('active_ws_id');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (wsId) headers['X-Workspace-Id'] = String(wsId);
+    fetch(`/api/stats/series?granularity=${gran}`, { headers })
       .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
       .then((d) => setCache((c) => ({ ...c, [gran]: d })))
       .catch(() => {
