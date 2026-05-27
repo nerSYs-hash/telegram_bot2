@@ -890,8 +890,9 @@ class Database:
     def get_left_users_count(self, start_date, end_date):
         return _get_left_users_count(self, self._DEFAULT_WS_ID, start_date, end_date)
 
-    def get_user_dynamics_stats(self, start_date, end_date):
-        return _get_user_dynamics_stats(self, self._DEFAULT_WS_ID, start_date, end_date)
+    def get_user_dynamics_stats(self, start_date, end_date, workspace_id=None):
+        ws = workspace_id if workspace_id is not None else self._DEFAULT_WS_ID
+        return _get_user_dynamics_stats(self, ws, start_date, end_date)
 
     # ── Exchange Rate ──
     def set_exchange_rate(self, rate, changed_by=None, is_manual=False,

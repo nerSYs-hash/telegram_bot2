@@ -251,14 +251,15 @@ async def admin_profile_me(authorization: str = Header(default=None)):
     role_meta = _get_user_role_meta(user_id)
 
     # Сообщения и последняя активность из bot_database.db.user_stats
+    # (per-ws: профиль показывает данные активного workspace)
     total_messages = 0
     last_msg_date  = None
     if db:
         try:
             db.cursor.execute(
                 "SELECT COALESCE(SUM(total_messages), 0) AS total, MAX(date) AS last_date "
-                "FROM user_stats WHERE user_id = ?",
-                (user_id,)
+                "FROM user_stats WHERE user_id = ? AND workspace_id = ?",
+                (user_id, current_ws_id())
             )
             r = db.cursor.fetchone()
             if r:
@@ -324,6 +325,7 @@ from starlette.requests import Request as _Req
 from starlette.responses import JSONResponse as _JSONResp
 from api.workspace_rbac import (
     resolve_ws_role, default_workspace_for_user, WS_ID_CTX, WS_ROLE_CTX,
+    current_ws_id,
 )
 
 _WS_SKIP_PREFIXES = ("/api/auth", "/api/workspaces")
@@ -516,14 +518,16 @@ def _clean_journal_html(text: str) -> str:
 
 
 def _build_daily_history(start_date, end_date):
+    ws_id = current_ws_id()
     history = []
     cur = start_date
     while cur <= end_date:
         msgs = 0
         if db:
             db.cursor.execute(
-                "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date=?",
-                (cur.isoformat(),)
+                "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats "
+                "WHERE date=? AND workspace_id=?",
+                (cur.isoformat(), ws_id)
             )
             r = db.cursor.fetchone()
             msgs = int(r['s']) if r else 0
@@ -535,11 +539,12 @@ def _build_daily_history(start_date, end_date):
 def _build_monthly_history(start_date, end_date):
     if not db:
         return []
+    ws_id = current_ws_id()
     db.cursor.execute('''
         SELECT strftime('%Y-%m', date) as mon, COALESCE(SUM(total_messages),0) as val
-        FROM user_stats WHERE date >= ? AND date <= ?
+        FROM user_stats WHERE date >= ? AND date <= ? AND workspace_id = ?
         GROUP BY mon ORDER BY mon
-    ''', (start_date.isoformat(), end_date.isoformat()))
+    ''', (start_date.isoformat(), end_date.isoformat(), ws_id))
     history = []
     for r in db.cursor.fetchall():
         r = dict(r)
@@ -550,6 +555,7 @@ def _build_monthly_history(start_date, end_date):
 
 def _compute_stats(period: str) -> dict:
     today = _today_msk()
+    ws_id = current_ws_id()
 
     if period == 'yesterday':
         start_date = end_date = today - timedelta(days=1)
@@ -583,8 +589,8 @@ def _compute_stats(period: str) -> dict:
     if db:
         db.cursor.execute(
             "SELECT COUNT(DISTINCT user_id) as c FROM user_stats "
-            "WHERE date >= ? AND date <= ? AND total_messages > 0",
-            (start_date.isoformat(), end_date.isoformat())
+            "WHERE date >= ? AND date <= ? AND total_messages > 0 AND workspace_id = ?",
+            (start_date.isoformat(), end_date.isoformat(), ws_id)
         )
         r = db.cursor.fetchone()
         active = int(r['c']) if r else 0
@@ -597,18 +603,20 @@ def _compute_stats(period: str) -> dict:
         r = db.cursor.fetchone(); total_users = r['c'] if r else 0
 
         db.cursor.execute(
-            "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats WHERE date>=? AND date<=?",
-            (start_date.isoformat(), end_date.isoformat())
+            "SELECT COALESCE(SUM(total_messages),0) as s FROM user_stats "
+            "WHERE date>=? AND date<=? AND workspace_id=?",
+            (start_date.isoformat(), end_date.isoformat(), ws_id)
         )
         r = db.cursor.fetchone(); messages = int(r['s']) if r else 0
 
         db.cursor.execute(
-            "SELECT COALESCE(SUM(pulses_mined),0) as s FROM user_stats WHERE date>=? AND date<=?",
-            (start_date.isoformat(), end_date.isoformat())
+            "SELECT COALESCE(SUM(pulses_mined),0) as s FROM user_stats "
+            "WHERE date>=? AND date<=? AND workspace_id=?",
+            (start_date.isoformat(), end_date.isoformat(), ws_id)
         )
         r = db.cursor.fetchone(); pulses = float(r['s']) if r else 0.0
 
-    dynamics = db.get_user_dynamics_stats(start_date.isoformat(), end_date.isoformat()) if db else {}
+    dynamics = db.get_user_dynamics_stats(start_date.isoformat(), end_date.isoformat(), workspace_id=ws_id) if db else {}
 
     # ── Субиндексы здоровья чата ──
     indices = {"oksp": 0.0, "sdsp": 0.0, "cho": 0.0, "media": 0.0, "korp": 0.0, "kopyup": 0.0}
@@ -619,8 +627,8 @@ def _compute_stats(period: str) -> dict:
                 "SELECT COALESCE(SUM(replies_sent),0) as rpl, "
                 "COALESCE(SUM(reactions_given),0) as rea, "
                 "COALESCE(SUM(media_sent),0) as med "
-                "FROM user_stats WHERE date>=? AND date<=?",
-                (start_date.isoformat(), end_date.isoformat())
+                "FROM user_stats WHERE date>=? AND date<=? AND workspace_id=?",
+                (start_date.isoformat(), end_date.isoformat(), ws_id)
             )
             sr = db.cursor.fetchone()
             replies   = int(sr['rpl'])  if sr else 0
@@ -775,7 +783,8 @@ def _compute_series(granularity: str = 'day') -> dict:
     # ── сообщения / писавшие по дням ──
     db.cursor.execute(
         "SELECT date, COALESCE(SUM(total_messages),0) m, COUNT(DISTINCT user_id) w "
-        "FROM user_stats WHERE date BETWEEN ? AND ? GROUP BY date", (s_iso, e_iso))
+        "FROM user_stats WHERE date BETWEEN ? AND ? AND workspace_id=? GROUP BY date",
+        (s_iso, e_iso, ws_id))
     msg_by, wr_by = {}, {}
     for r in db.cursor.fetchall():
         k = bucket(r['date'])
@@ -817,8 +826,8 @@ def _compute_series(granularity: str = 'day') -> dict:
           COALESCE(SUM(CASE WHEN fm.fd  > date(u.joined_at) THEN 1 ELSE 0 END),0) f2
         FROM users u
         JOIN (SELECT user_id, MIN(date) fd FROM user_stats
-              WHERE total_messages>0 GROUP BY user_id) fm ON fm.user_id=u.user_id
-        WHERE u.is_admin=0 AND u.is_owner=0 AND u.joined_at IS NOT NULL''')
+              WHERE total_messages>0 AND workspace_id=? GROUP BY user_id) fm ON fm.user_id=u.user_id
+        WHERE u.is_admin=0 AND u.is_owner=0 AND u.joined_at IS NOT NULL''', (ws_id,))
     fr = db.cursor.fetchone() or {'f1': 0, 'f2': 0}
     first_message = {"firstDay": int(fr['f1']), "afterFirstDay": int(fr['f2'])}
 
@@ -835,8 +844,8 @@ def _compute_series(granularity: str = 'day') -> dict:
         FROM users u
         WHERE u.is_admin=0 AND u.is_owner=0 AND u.user_id IN (
           SELECT DISTINCT user_id FROM user_stats
-          WHERE date BETWEEN ? AND ? AND total_messages>0)
-    ''', (d14, d30, d30, d14, s_iso, e_iso))
+          WHERE date BETWEEN ? AND ? AND total_messages>0 AND workspace_id=?)
+    ''', (d14, d30, d30, d14, s_iso, e_iso, ws_id))
     ar = db.cursor.fetchone() or {'nw': 0, 'rg': 0, 'ac': 0}
     active_summary = {"newcomers": int(ar['nw']), "regular": int(ar['rg']),
                       "active": int(ar['ac'])}
@@ -846,7 +855,8 @@ def _compute_series(granularity: str = 'day') -> dict:
     n_pts = max(len(spine), 1)
     db.cursor.execute(
         "SELECT COUNT(DISTINCT user_id) c FROM user_stats "
-        "WHERE date BETWEEN ? AND ? AND total_messages>0", (s_iso, e_iso))
+        "WHERE date BETWEEN ? AND ? AND total_messages>0 AND workspace_id=?",
+        (s_iso, e_iso, ws_id))
     active_total = int((db.cursor.fetchone() or {'c': 0})['c'])
     avg_writers = round(sum(p["writers"] for p in messages) / n_pts, 1)
     kpi = {
