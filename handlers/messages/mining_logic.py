@@ -731,13 +731,13 @@ def _save_sprint_claims(db, user_id: int, sprints: list[str], reward: float, now
         logger.debug(f"Save sprint claims: {e}")
 
 
-def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, dict, dict]:
+def _query_user_sprint_metrics(db, user_id: int, today_str: str, workspace_id: int = 1) -> tuple[dict, dict, dict]:
     """
     Агрегированные метрики пользователя за 1ч / 12ч / 24ч.
 
     Берёт базовые счётчики из user_stats + гранулярные медиа-типы
     из messages (там message_type хранит тип контента).
-    
+
     Для 1ч и 12ч — считает из messages с фильтром по created_at.
     Для 24ч — берёт суточный агрегат из user_stats + messages за день.
     """
@@ -753,8 +753,8 @@ def _query_user_sprint_metrics(db, user_id: int, today_str: str) -> tuple[dict, 
                 COALESCE(SUM(reactions_received), 0) AS reactions_received,
                 COALESCE(SUM(media_sent), 0)         AS media_sent
             FROM user_stats
-            WHERE user_id = ? AND date = ?
-        ''', (user_id, today_str))
+            WHERE user_id = ? AND date = ? AND workspace_id = ?
+        ''', (user_id, today_str, workspace_id))
         stats_row = db.cursor.fetchone()
 
         base_24h = {
@@ -1029,6 +1029,16 @@ def process_mining_reward(
         chat_id    = message.chat.id
         today_str  = str(today)
 
+        # V1.17.0k8 (M1): workspace_id чата — резолв через bot_chats,
+        # fallback ws=1 (Pulse) для legacy чатов вне bot_chats.
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        try:
+            _ws_id = resolve_workspace_for_chat(db.conn, chat_id)
+        except Exception:
+            _ws_id = None
+        if _ws_id is None:
+            _ws_id = 1
+
         # ══════════════════════════════════════════════════════════════════
         #  ЧТЕНИЕ НАСТРОЕК ЭКОНОМИКИ ИЗ БД
         # ⚡️ Читаем настройки ровно в ту миллисекунду, когда пришло сообщение!
@@ -1099,7 +1109,7 @@ def process_mining_reward(
 
         # ── module_toggles guard: модуль «Спринты» OFF → блок пропускается ──
         if db.is_econ_section_enabled('sprints'):
-            m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str)
+            m1, m12, m24 = _query_user_sprint_metrics(db, user_id, today_str, _ws_id)
             sprint_coeff, new_sprints = check_completed_sprints(
                 metrics_1h=m1, metrics_12h=m12, metrics_24h=m24,
                 current_thread_id=thread_id, already_claimed=claimed_sprints,
@@ -1293,19 +1303,21 @@ def process_mining_reward(
                 f'Штраф: {reason}'
             )
 
-        # V1.17.0a16: user_stats / chat_stats — тенантизированы.
-        _ws_id = db._DEFAULT_WS_ID
+        # V1.17.0k8 (M1): user_stats / chat_stats — composite PK
+        # (workspace_id, user_id, date) / (workspace_id, date).
+        # ON CONFLICT target должен совпадать с PK, иначе SQLite падает
+        # с "does not match any PRIMARY KEY or UNIQUE constraint".
         db.cursor.execute('''
             INSERT INTO user_stats (workspace_id, user_id, date, pulses_mined)
             VALUES (?, ?, ?, ?)
-            ON CONFLICT(user_id, date) DO UPDATE SET
+            ON CONFLICT(workspace_id, user_id, date) DO UPDATE SET
                 pulses_mined = pulses_mined + excluded.pulses_mined
         ''', (_ws_id, user_id, today_str, total_reward))
 
         db.cursor.execute('''
             INSERT INTO chat_stats (workspace_id, date, total_pulses_mined)
             VALUES (?, ?, ?)
-            ON CONFLICT(date) DO UPDATE SET
+            ON CONFLICT(workspace_id, date) DO UPDATE SET
                 total_pulses_mined = total_pulses_mined + excluded.total_pulses_mined
         ''', (_ws_id, today_str, total_reward))
 

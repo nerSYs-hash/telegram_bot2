@@ -748,10 +748,17 @@ async def handle_reaction(update, context, db, target_chat_id):
                 now = get_moscow_time()
                 claimed_combos = _get_claimed_combos(db, author_id, now)
 
+                from bot_core.workspace_context import resolve_workspace_for_chat
+                try:
+                    _ws_id = resolve_workspace_for_chat(db.conn, reaction_update.chat.id)
+                except Exception:
+                    _ws_id = None
+                if _ws_id is None:
+                    _ws_id = 1
                 db.cursor.execute('''
                     SELECT COALESCE(reactions_received, 0) AS rr, COALESCE(replies_received, 0) AS rep
-                    FROM user_stats WHERE user_id = ? AND date = ?
-                ''', (author_id, today))
+                    FROM user_stats WHERE user_id = ? AND date = ? AND workspace_id = ?
+                ''', (author_id, today, _ws_id))
                 stats_row = db.cursor.fetchone()
 
                 _econ_rate = db.get_econ('mining.global_rate', None)
