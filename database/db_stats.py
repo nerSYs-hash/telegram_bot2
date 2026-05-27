@@ -51,8 +51,9 @@ def update_user_activity(db, workspace_id, user_id, date, event_id: str = None, 
     Если передан и уже есть в stat_events_log (для этого workspace) — вызов
     игнорируется (дедупликация).
 
-    TODO(multi-tenancy-pk): UNIQUE(user_id, date) в user_stats — composite
-    (workspace_id, user_id, date) перед onboarding 2-го workspace.
+    V1.17.0k8 (M1): ON CONFLICT target = composite PK
+    (workspace_id, user_id, date). До 27.05 был хардкод (user_id, date),
+    что после composite_pk_fix (13.05) валило INSERT в except.
     """
     if not kwargs:
         return
@@ -76,13 +77,13 @@ def update_user_activity(db, workspace_id, user_id, date, event_id: str = None, 
     columns = ['workspace_id', 'user_id', 'date'] + list(data.keys())
     placeholders = ', '.join(['?'] * len(columns))
 
-    # Магия ON CONFLICT: если запись (user_id + date) уже есть, прибавляем
+    # ON CONFLICT по composite PK (workspace_id, user_id, date)
     update_stmt = ", ".join([f"{col} = {col} + excluded.{col}" for col in data.keys()])
 
     sql = f'''
         INSERT INTO user_stats ({", ".join(columns)})
         VALUES ({placeholders})
-        ON CONFLICT(user_id, date) DO UPDATE SET
+        ON CONFLICT(workspace_id, user_id, date) DO UPDATE SET
         {update_stmt}
     '''
 

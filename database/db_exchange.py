@@ -323,11 +323,10 @@ def get_all_top_appearances(db, workspace_id, days=30):
 def update_user_activity_hourly(db, workspace_id, user_id, date, hour, **kwargs):
     """Атомарное обновление почасовой статистики (защита от race condition).
 
-    workspace_id вторым аргументом, далее user_id/date/hour. UNIQUE-индекс
-    остался на (user_id, date, hour) — если два workspace разделят user в
-    один час, придётся переделать на (workspace_id, user_id, date, hour).
-    TODO(multi-tenancy-pk): обновить UNIQUE до composite перед onboarding
-    2-го workspace. См. multi_tenancy_pk_debt.md.
+    V1.17.0k8 (M1): ON CONFLICT target = composite PK
+    (workspace_id, user_id, date, hour). До 27.05 был хардкод
+    (user_id, date, hour), что после composite_pk_fix (13.05) валило
+    INSERT в except — 0 записей в user_stats_hourly.
     """
     # Список разрешенных полей
     allowed = [
@@ -351,7 +350,7 @@ def update_user_activity_hourly(db, workspace_id, user_id, date, hour, **kwargs)
     sql = f'''
         INSERT INTO user_stats_hourly ({", ".join(columns)})
         VALUES ({placeholders})
-        ON CONFLICT(user_id, date, hour) DO UPDATE SET
+        ON CONFLICT(workspace_id, user_id, date, hour) DO UPDATE SET
         {update_stmt}
     '''
 
