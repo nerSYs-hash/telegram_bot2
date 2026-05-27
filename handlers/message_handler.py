@@ -395,6 +395,16 @@ class MessageHandler:
 
        # === ОБНОВЛЕНИЕ СТАТИСТИКИ ПОЛЬЗОВАТЕЛЯ ===
         if not should_ignore:
+            # V1.17.0k12 (M1 хвост): ws_id чата → стата пишется в правильный
+            # workspace, не дефолтный Pulse (_DEFAULT_WS_ID=1).
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            try:
+                _ws_id = resolve_workspace_for_chat(self.db.conn, message.chat.id)
+            except Exception:
+                _ws_id = None
+            if _ws_id is None:
+                _ws_id = 1  # Pulse fallback для legacy чатов вне bot_chats
+
             _reply_to_real_user = (
                 is_reply and not is_self_reply
                 and message.reply_to_message.from_user
@@ -417,17 +427,17 @@ class MessageHandler:
 
             # Записываем статистику отправителю (event_id = одно сообщение = один счёт)
             msg_eid = f"msg_{user.id}_{message.message_id}"
-            self.db.update_user_activity(user.id, today, event_id=msg_eid, **stats_update)
+            self.db.update_user_activity(user.id, today, event_id=msg_eid, workspace_id=_ws_id, **stats_update)
 
             # --- ЛОГИКА ОТВЕТОВ (ВНУТРИ IF NOT SHOULD_IGNORE) ---
             if _reply_to_real_user:
                 replied_to_user = message.reply_to_message.from_user
                 reply_recv_eid = f"reply_recv_{replied_to_user.id}_{message.message_id}"
-                self.db.update_user_activity(replied_to_user.id, today, event_id=reply_recv_eid, replies_received=1)
+                self.db.update_user_activity(replied_to_user.id, today, event_id=reply_recv_eid, workspace_id=_ws_id, replies_received=1)
                 try:
                     from utils.helpers import get_moscow_time
                     now_msk = get_moscow_time()
-                    self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, replies_received=1)
+                    self.db.update_user_activity_hourly(replied_to_user.id, today, now_msk.hour, workspace_id=_ws_id, replies_received=1)
                 except Exception: pass
 
             # --- ЛОГИКА УПОМИНАНИЙ: начисляем mentions_received КАЖДОМУ упомянутому ---
@@ -437,23 +447,24 @@ class MessageHandler:
                     self.db.update_user_activity(
                         mentioned_id, today,
                         event_id=mention_eid,
+                        workspace_id=_ws_id,
                         mentions_received=1,
                     )
                     try:
                         from utils.helpers import get_moscow_time
                         now_msk = get_moscow_time()
                         self.db.update_user_activity_hourly(
-                            mentioned_id, today, now_msk.hour, mentions_received=1
+                            mentioned_id, today, now_msk.hour, workspace_id=_ws_id, mentions_received=1
                         )
                     except Exception: pass
                 except Exception as _ue:
                     logging.warning(f"mentions_received update error for {mentioned_id}: {_ue}")
-            
+
             # Почасовая статистика для отправителя
             try:
                 from utils.helpers import get_moscow_time
                 now_msk = get_moscow_time()
-                self.db.update_user_activity_hourly(user.id, today, now_msk.hour, **stats_update)
+                self.db.update_user_activity_hourly(user.id, today, now_msk.hour, workspace_id=_ws_id, **stats_update)
             except Exception as e:
                 logging.debug(f"Hourly stats error: {e}")
 
@@ -782,8 +793,15 @@ class MessageHandler:
                 return
             today = get_today_date_msk()
             eid = f"edited_{msg.from_user.id}_{msg.message_id}"
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            try:
+                _ws_id = resolve_workspace_for_chat(self.db.conn, msg.chat.id)
+            except Exception:
+                _ws_id = None
+            if _ws_id is None:
+                _ws_id = 1
             self.db.update_user_activity(
-                msg.from_user.id, today, event_id=eid, edited_count=1
+                msg.from_user.id, today, event_id=eid, workspace_id=_ws_id, edited_count=1
             )
         except Exception as e:
             logging.error(f"handle_edited_message: {e}")

@@ -687,13 +687,22 @@ async def handle_reaction(update, context, db, target_chat_id):
 
     logging.info(f"👍 Reaction ADDED: user {user.id}")
 
+    # V1.17.0k12 (M1 хвост): ws чата реакции — стата пишется в правильный ws.
+    from bot_core.workspace_context import resolve_workspace_for_chat
+    try:
+        _ws_id = resolve_workspace_for_chat(db.conn, reaction_update.chat.id)
+    except Exception:
+        _ws_id = None
+    if _ws_id is None:
+        _ws_id = 1
+
     # 1. ОБНОВЛЯЕМ СТАТИСТИКУ ТОМУ, КТО ПОСТАВИЛ (Giver)
     react_given_eid = f"react_given_{user.id}_{message_id}_{today}"
-    db.update_user_activity(user.id, today, event_id=react_given_eid, reactions_given=actual_increment)
+    db.update_user_activity(user.id, today, event_id=react_given_eid, workspace_id=_ws_id, reactions_given=actual_increment)
     try:
         from utils.helpers import get_moscow_time
         now_msk = get_moscow_time()
-        db.update_user_activity_hourly(user.id, today, now_msk.hour, reactions_given=actual_increment)
+        db.update_user_activity_hourly(user.id, today, now_msk.hour, workspace_id=_ws_id, reactions_given=actual_increment)
     except Exception: pass
 
     # 2. ИЩЕМ АВТОРА СООБЩЕНИЯ И ОБНОВЛЯЕМ ЕМУ
@@ -711,9 +720,9 @@ async def handle_reaction(update, context, db, target_chat_id):
             # Себе лайки не считаем в статистику полученных
             if message_author_id != user.id:
                 react_recv_eid = f"react_recv_{message_author_id}_{message_id}_{today}"
-                db.update_user_activity(message_author_id, today, event_id=react_recv_eid, reactions_received=actual_increment)
+                db.update_user_activity(message_author_id, today, event_id=react_recv_eid, workspace_id=_ws_id, reactions_received=actual_increment)
                 try:
-                    db.update_user_activity_hourly(message_author_id, today, now_msk.hour, reactions_received=actual_increment)
+                    db.update_user_activity_hourly(message_author_id, today, now_msk.hour, workspace_id=_ws_id, reactions_received=actual_increment)
                 except Exception: pass
                 logging.info(f"👍 User {message_author_id} received reaction from {user.id}")
         

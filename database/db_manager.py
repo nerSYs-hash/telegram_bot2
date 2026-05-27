@@ -862,8 +862,14 @@ class Database:
         return _update_bank_balance(self, amount, operation)
 
     # ── Stats ──
-    def update_user_activity(self, user_id, date, event_id: str = None, **kwargs):
-        _update_user_activity(self, self._DEFAULT_WS_ID, user_id, date, event_id=event_id, **kwargs)
+    def update_user_activity(self, user_id, date, event_id: str = None,
+                             workspace_id=None, **kwargs):
+        """V1.17.0k12 (M1 хвост): принимает workspace_id явно.
+        None → _DEFAULT_WS_ID (Pulse) — для обратной совместимости со
+        старыми вызовами без ws. Callers из multi-tenant контекста
+        ДОЛЖНЫ передавать workspace_id (иначе всё пишется в Pulse)."""
+        ws = workspace_id if workspace_id is not None else self._DEFAULT_WS_ID
+        _update_user_activity(self, ws, user_id, date, event_id=event_id, **kwargs)
 
     def cleanup_stat_events_log(self, older_than_days: int = 3):
         _cleanup_stat_events_log(self, older_than_days)
@@ -930,8 +936,13 @@ class Database:
         return _get_all_top_appearances(self, self._DEFAULT_WS_ID, days)
 
     # ── Hourly Stats & % Activity ──
-    def update_user_activity_hourly(self, user_id, date, hour, **kwargs):
-        _update_user_activity_hourly(self, self._DEFAULT_WS_ID, user_id, date, hour, **kwargs)
+    def update_user_activity_hourly(self, user_id, date, hour,
+                                    workspace_id=None, **kwargs):
+        """V1.17.0k12 (M1 хвост): принимает workspace_id явно.
+        None → _DEFAULT_WS_ID (Pulse). Callers из multi-tenant контекста
+        ДОЛЖНЫ передавать workspace_id."""
+        ws = workspace_id if workspace_id is not None else self._DEFAULT_WS_ID
+        _update_user_activity_hourly(self, ws, user_id, date, hour, **kwargs)
 
     def save_top5_percent(self, entries, window_start, window_end):
         _save_top5_percent(self, self._DEFAULT_WS_ID, entries, window_start, window_end)
