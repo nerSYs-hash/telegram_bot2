@@ -46,7 +46,9 @@ def _ws(workspace_id):
 
 
 def test_flag_off_returns_target_chat(monkeypatch, mh):
-    monkeypatch.delenv('H_RUNTIME_WS', raising=False)
+    """Kill-switch H_RUNTIME_WS=0: явный откат на single-tenant target.
+    С M2 дефолт ON — для теста OFF-пути ставим явно."""
+    monkeypatch.setenv('H_RUNTIME_WS', '0')
     # даже с ws_ctx другого ws — флаг OFF → старый target
     assert mh._gate_target_chat(_ctx(_ws(2))) == -100
 

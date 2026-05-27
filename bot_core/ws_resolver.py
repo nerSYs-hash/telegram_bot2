@@ -8,6 +8,7 @@ import sqlite3
 from typing import Optional
 
 _TRUTHY = {'1', 'true', 'yes', 'on'}
+_FALSY = {'0', 'false', 'no', 'off'}
 
 _role_chat_cache: dict[tuple[int, str], Optional[int]] = {}
 _thread_cache: dict[tuple[int, str], Optional[int]] = {}
@@ -55,10 +56,19 @@ def invalidate_resolver_cache() -> None:
 
 
 def runtime_ws_enabled() -> bool:
-    """H3 feature-flag. Дефолт OFF → поведение прод-бота байт-в-байт
-    прежнее (single-tenant Pulse). Включается env H_RUNTIME_WS=1
-    только на стейдже/с Ильёй."""
-    return os.getenv('H_RUNTIME_WS', '').strip().lower() in _TRUTHY
+    """H3 feature-flag. **С M2 (V1.17.0k10): дефолт ON** — multi-tenant
+    gate работает по умолчанию, без явной H_RUNTIME_WS=1.
+
+    Флаг остаётся как kill-switch: `H_RUNTIME_WS=0/false/no/off`
+    явно вернёт single-tenant Pulse-fallback (только для аварийного
+    отката). Любое другое значение / отсутствие env → ON.
+
+    После M8 (e2e + снятие блокера) можно удалить вовсе.
+    """
+    raw = os.getenv('H_RUNTIME_WS', '').strip().lower()
+    if raw in _FALSY:
+        return False
+    return True
 
 
 def resolve_user_primary_workspace(

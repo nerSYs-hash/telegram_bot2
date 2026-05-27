@@ -88,9 +88,10 @@ def handler():
 
 @pytest.mark.asyncio
 async def test_flag_off_dm_skips_byte_identical(conn, handler, monkeypatch):
-    """Флаг OFF: даже если юзер — owner Pulse, в ЛС ws_ctx=None →
-    silent skip как было до e6 (регресс невозможен)."""
-    monkeypatch.delenv('H_RUNTIME_WS', raising=False)
+    """Флаг OFF kill-switch (H_RUNTIME_WS=0): даже если юзер — owner Pulse,
+    в ЛС ws_ctx=None → silent skip как было до e6.
+    С M2 дефолт ON — для теста OFF-пути ставим явно."""
+    monkeypatch.setenv('H_RUNTIME_WS', '0')
     q, c = _FakeQuery(500), _FakeContext(_FakeDB(conn))
     assert await handler(q, c) is None
 

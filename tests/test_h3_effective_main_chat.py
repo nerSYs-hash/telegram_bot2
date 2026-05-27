@@ -161,10 +161,12 @@ def test_gate_chat_context_without_attrs(conn, monkeypatch):
 
 
 # ── runtime_ws_enabled ───────────────────────────────────────────
+# С M2 (V1.17.0k10) дефолт ON: multi-tenant gate работает без явной env.
+# Флаг остался как kill-switch: H_RUNTIME_WS=0/false/no/off → принудительно OFF.
 
-def test_flag_default_off(monkeypatch):
+def test_flag_default_on(monkeypatch):
     monkeypatch.delenv('H_RUNTIME_WS', raising=False)
-    assert runtime_ws_enabled() is False
+    assert runtime_ws_enabled() is True
 
 
 @pytest.mark.parametrize('val', ['1', 'true', 'TRUE', 'yes', 'on', ' On '])
@@ -173,7 +175,14 @@ def test_flag_truthy_values(monkeypatch, val):
     assert runtime_ws_enabled() is True
 
 
-@pytest.mark.parametrize('val', ['0', '', 'false', 'no', 'off', 'garbage'])
-def test_flag_falsy_values(monkeypatch, val):
+@pytest.mark.parametrize('val', ['0', 'false', 'FALSE', 'no', 'off', ' Off '])
+def test_flag_killswitch_falsy_values(monkeypatch, val):
     monkeypatch.setenv('H_RUNTIME_WS', val)
     assert runtime_ws_enabled() is False
+
+
+@pytest.mark.parametrize('val', ['', 'garbage', 'maybe'])
+def test_flag_unknown_values_default_on(monkeypatch, val):
+    """Пустое или мусорное значение трактуется как «не указано» → ON."""
+    monkeypatch.setenv('H_RUNTIME_WS', val)
+    assert runtime_ws_enabled() is True
