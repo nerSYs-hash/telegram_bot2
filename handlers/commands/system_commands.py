@@ -58,7 +58,114 @@ def get_main_reply_keyboard(db, user_id=None, main_admin_id=None, context=None):
         [balance_or_profile, KeyboardButton("📊 Курс")],
         [special_btn, KeyboardButton("📋 Меню")],
     ]
+
+    # V1.17.0P2: кнопка «🎟 Моя ссылка» — отдельной строкой ВНИЗУ, только
+    # если модуль Рефералы подключён в этом ws (module_toggles.referral=ON).
+    try:
+        if db.is_feature_enabled('referral'):
+            keyboard.append([KeyboardButton("🎟 Моя ссылка")])
+    except Exception:
+        pass  # legacy fallback — не ломаем клавиатуру если что-то пошло не так
+
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True, is_persistent=True)
+
+
+# ═══════════════════════════════════════════════════════════
+# /myref ИЛИ КНОПКА «🎟 Моя ссылка» (V1.17.0P2)
+# ═══════════════════════════════════════════════════════════
+
+async def send_my_referral_link(update: Update, context: ContextTypes.DEFAULT_TYPE, db, target_chat_id):
+    """Отдаёт юзеру его персональную реф-ссылку.
+
+    Если модуль «Регистрация» ВКЛ — используется существующая система через
+    deep-link на бота (`?start=<token>`). Юзер новичок проходит анкету,
+    referred_by пишется в finish_registration.
+
+    Если модуль «Регистрация» ВЫКЛ — генерируется TG invite-link
+    `create_chat_invite_link(chat_id=main, name='ref_<uid>')` ведущая
+    ПРЯМО в чат. Бот при вступлении через events_logic ловит и пишет
+    referred_by (V1.17.0P1).
+
+    Так на любом ws (Pulse-themed или нет) реф-система работает.
+    """
+    user = update.effective_user
+    message = update.message
+    if not user or not message:
+        return
+
+    uid = user.id
+    reg_enabled = False
+    try:
+        reg_enabled = db.is_feature_enabled('registration')
+    except Exception:
+        pass
+
+    link = None
+    mode = None
+
+    if reg_enabled:
+        # Сценарий А: deep-link через анкету (legacy)
+        try:
+            bot_username = getattr(context.bot, 'username', None) or os.getenv('BOT_USERNAME', 'Puls_ON_bot')
+            from utils.helpers.referral_utils import generate_referral_link
+            link = generate_referral_link(bot_username, uid, db=db)
+            mode = 'deep_link'
+        except Exception as e:
+            logging.error(f"send_my_referral_link generate_referral_link error: {e}")
+
+    if not link:
+        # Сценарий Б: TG invite-link на чат (без анкеты)
+        try:
+            from bot_core.ws_resolver import resolve_user_primary_workspace, resolve_role_chat
+            ws_id = None
+            try:
+                ws_id = resolve_user_primary_workspace(db.conn, uid)
+            except Exception:
+                pass
+            chat_id = resolve_role_chat(db.conn, ws_id, 'main') if ws_id else None
+            if not chat_id:
+                chat_id = target_chat_id
+            invite = await context.bot.create_chat_invite_link(
+                chat_id=chat_id,
+                name=f"ref_{uid}",
+                creates_join_request=False,
+            )
+            link = invite.invite_link
+            mode = 'tg_invite'
+        except Exception as e:
+            logging.error(f"send_my_referral_link create_chat_invite_link error: {e}")
+
+    if not link:
+        await message.reply_text(
+            "🎟 Реф-ссылку не удалось сгенерировать.\n\n"
+            "Проверь у владельца — подключён ли модуль «Рефералы»."
+        )
+        return
+
+    # Текст награды берём из economy_settings (редактируется Ильей с сайта).
+    try:
+        reward = int(db.get_econ('referral.qualified_reward',
+                                 int(os.getenv('REFERRAL_REWARD', 500))) or 500)
+    except Exception:
+        reward = 500
+
+    if mode == 'tg_invite':
+        body = (
+            f"🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
+            f"<code>{link}</code>\n\n"
+            f"Перешли её другу — он зайдёт прямо в чат.\n"
+            f"Когда друг освоится (24ч + 5 сообщ. или 3 реакции), тебе капнет "
+            f"<b>{reward} 💎</b>."
+        )
+    else:
+        body = (
+            f"🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
+            f"<code>{link}</code>\n\n"
+            f"Перешли её другу — он пройдёт анкету и попадёт в чат.\n"
+            f"После того как друг освоится — тебе капнет <b>{reward} 💎</b>."
+        )
+
+    await message.reply_text(body, parse_mode='HTML', disable_web_page_preview=True)
 
 
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, target_chat_id):

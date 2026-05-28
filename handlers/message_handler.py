@@ -74,12 +74,14 @@ REPLY_BTN_NOT_IN_CHAT = "📊 Не в чате"
 REPLY_BTN_ECONOMY = "💰 Экономика"
 REPLY_BTN_SYSTEM = "⚙️ Система"
 REPLY_BTN_BACKUP = "💾 Скачать БД"
+REPLY_BTN_MYREF = "🎟 Моя ссылка"  # V1.17.0P2: персональная реф-ссылка
 REPLY_BUTTONS = {REPLY_BTN_BALANCE, REPLY_BTN_PROFILE, REPLY_BTN_COURSE, REPLY_BTN_TOP5, REPLY_BTN_MENU,
                  REPLY_BTN_ACTIVITIES, REPLY_BTN_BANK, REPLY_BTN_DETAIL, REPLY_BTN_FAQ,
                  REPLY_BTN_OWNER_PANEL, REPLY_BTN_SHIPPER, REPLY_BTN_NEW_APPS,
                  REPLY_BTN_ADMINS, REPLY_BTN_BLACKLIST, REPLY_BTN_CHECK_USER,
                  REPLY_BTN_TRIGGERS, REPLY_BTN_JOURNAL, REPLY_BTN_STATS,
-                 REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM, REPLY_BTN_BACKUP}
+                 REPLY_BTN_NOT_IN_CHAT, REPLY_BTN_ECONOMY, REPLY_BTN_SYSTEM, REPLY_BTN_BACKUP,
+                 REPLY_BTN_MYREF}
 
 
 class MessageHandler:
@@ -752,6 +754,11 @@ class MessageHandler:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
                 return
+            elif btn == REPLY_BTN_MYREF:
+                # V1.17.0P2: персональная реф-ссылка для конкурсов
+                from handlers.commands.system_commands import send_my_referral_link
+                await send_my_referral_link(update, context, self.db, self.target_chat_id)
+                return
 
         # === ОБРАБОТКА ТРИГГЕРНЫХ КОМАНД ===
         # Триггеры работают ТОЛЬКО в ГЛАВНОМ ЧАТЕ (thread_id is None).
@@ -1038,6 +1045,11 @@ class MessageHandler:
             elif btn == REPLY_BTN_MENU:
                 from handlers.commands.system_commands import menu_command
                 await menu_command(update, context, self.db, self.main_admin_id)
+                return
+            elif btn == REPLY_BTN_MYREF:
+                # V1.17.0P2: персональная реф-ссылка
+                from handlers.commands.system_commands import send_my_referral_link
+                await send_my_referral_link(update, context, self.db, self.target_chat_id)
                 return
 
         # ═══ ПЛЕЙСХОЛДЕРЫ FSM ═══

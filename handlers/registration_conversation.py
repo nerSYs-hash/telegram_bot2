@@ -188,18 +188,50 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await _delete_user_msg(update.message)
 
     # Проверка: регистрация включена?
+    # V1.17.0P3: owner-exempt — главный админ/developer и owner ws=1 ВСЕГДА
+    # могут /start (это их способ обновить меню бота / получить клавиатуру).
     main_db = context.bot_data.get('db')
     if main_db and not main_db.is_feature_enabled('registration'):
-        await context.bot.send_message(
-            chat_id=user_id,
-            text=(
-                "🚫 <b>Регистрация временно закрыта.</b>\n\n"
-                "Набор новых участников приостановлен администрацией чата.\n"
-                "Следи за обновлениями!"
-            ),
-            parse_mode="HTML"
-        )
-        return ConversationHandler.END
+        # Кто всегда имеет доступ к /start:
+        # 1. OWNER_ID (main_admin_id из .env) — глобальный владелец.
+        # 2. DEVELOPER_ID — разработчик god-mode.
+        # 3. owner текущего ws через workspace_members (если резолвится).
+        is_exempt = False
+        try:
+            from config import OWNER_ID as _OWN
+            if user_id == _OWN:
+                is_exempt = True
+        except Exception:
+            pass
+        if not is_exempt:
+            try:
+                from config import DEVELOPER_ID as _DEV
+                if _DEV and user_id == _DEV:
+                    is_exempt = True
+            except Exception:
+                pass
+        if not is_exempt:
+            try:
+                from bot_core.ws_role import is_ws_owner
+                if is_ws_owner(context, user_id):
+                    is_exempt = True
+            except Exception:
+                pass
+
+        if not is_exempt:
+            await context.bot.send_message(
+                chat_id=user_id,
+                text=(
+                    "🚫 <b>Регистрация временно закрыта.</b>\n\n"
+                    "Набор новых участников приостановлен администрацией чата.\n"
+                    "Следи за обновлениями!"
+                ),
+                parse_mode="HTML"
+            )
+            return ConversationHandler.END
+        # Owner-exempt — пропускаем гейт. Дальше идёт обычная логика анкеты,
+        # но владельцу она не помешает (он уже зарегистрирован, ConvHandler
+        # просто покажет ему START_FORM этап с кнопкой).
 
     # Проверка чёрного списка
     if await is_blacklisted(user_id):
