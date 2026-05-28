@@ -87,7 +87,7 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Персонал ──
     elif data == "owner_staff":
-        await show_staff_menu(query, db, admin_id)
+        await show_staff_menu(query, db, admin_id, context=context)
     elif data == "owner_staff_add":
         await staff_add_start(query, context, db, admin_id)
     elif data == "owner_staff_remove":
@@ -95,13 +95,13 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Экономика ──
     elif data == "owner_economy":
-        await show_economy_menu(query, db, admin_id)
+        await show_economy_menu(query, db, admin_id, context=context)
     elif data == "owner_emit":
         await emit_start(query, context, db, admin_id)
     elif data == "owner_wipe":
-        await wipe_confirm_step1(query, db, admin_id)
+        await wipe_confirm_step1(query, db, admin_id, context=context)
     elif data == "owner_wipe_confirm":
-        await wipe_execute(query, db, admin_id)
+        await wipe_execute(query, db, admin_id, context=context)
 
     # ── Шиппер ──
     elif data == "owner_shipper_menu":
@@ -135,7 +135,7 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Модерация ──
     elif data == "owner_moderation":
-        await show_moderation_menu(query, db, admin_id)
+        await show_moderation_menu(query, db, admin_id, context=context)
     elif data == "owner_bl_add":
         await bl_add_start(query, context, db, admin_id)
     elif data == "owner_bl_remove":
@@ -148,9 +148,9 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Система ──
     elif data == "owner_system":
-        await show_system_menu(query, db, admin_id)
+        await show_system_menu(query, db, admin_id, context=context)
     elif data == "owner_maintenance_toggle":
-        await toggle_maintenance(query, db, admin_id)
+        await toggle_maintenance(query, db, admin_id, context=context)
 
     # ── Плейсхолдеры ──
     elif data.startswith("ph_"):
@@ -172,9 +172,9 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Восстановление веток ──
     elif data == "owner_recovery":
-        await show_recovery_menu(query, db, admin_id)
+        await show_recovery_menu(query, db, admin_id, context=context)
     elif data == "owner_recovery_other_confirm":
-        await recovery_other_confirm(query, db, admin_id)
+        await recovery_other_confirm(query, db, admin_id, context=context)
     elif data.startswith("owner_recovery_other_execute"):
         bbs_thread_id = handler.bbs_thread_id
         post_id = None
@@ -196,15 +196,15 @@ async def dispatch_owner(handler, query, data, user, context) -> bool:
 
     # ── Восстановление веток ──
     elif data == "owner_recovery_menu":
-        await show_recovery_menu(query, db, admin_id)
+        await show_recovery_menu(query, db, admin_id, context=context)
     elif data == "owner_restore_bbs":
-        await restore_bbs_confirm(query, db, admin_id)
+        await restore_bbs_confirm(query, db, admin_id, context=context)
     elif data == "owner_restore_bbs_confirm":
         await restore_bbs_execute(query, context, db, admin_id)
     elif data == "owner_restore_last_bbs":
         await restore_last_bbs_execute(query, context, db, admin_id)
     elif data == "owner_restore_news":
-        await restore_news_confirm(query, db, admin_id)
+        await restore_news_confirm(query, db, admin_id, context=context)
     elif data == "owner_restore_news_confirm":
         await restore_news_execute(query, context, db, admin_id)
     elif data == "owner_compensate_bbs":

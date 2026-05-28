@@ -14,6 +14,8 @@ import aiosqlite
 from contextlib import asynccontextmanager
 import logging
 
+logger = logging.getLogger(__name__)
+
 # Импортируем константы
 from constants import UserStatus, ApplicationStatus, UserRole
 from config import OWNER_ID
@@ -628,37 +630,53 @@ async def get_referral_code(user_id: int) -> Optional[str]:
 
 # ==================== APPLICATION OPERATIONS ====================
 
-async def create_application(user_id: int) -> int:
-    """Создание новой заявки"""
+async def create_application(user_id: int, workspace_id: Optional[int] = None) -> int:
+    """Создание новой заявки.
+
+    V1.17.0O2 [Этап B B2]: workspace_id опциональный для multi-tenant. None → ws=1
+    (legacy backward-compat). Из multi-ws callsite (registration_conversation)
+    передаётся ws_id резолвленный по chat_id.
+    """
+    ws = workspace_id if workspace_id is not None else 1
     async with db_pool.get_connection() as db:
         cursor = await db.execute(
-            "INSERT INTO applications (user_id, status) VALUES (?, ?)",
-            (user_id, ApplicationStatus.NEW)
+            "INSERT INTO applications (user_id, status, workspace_id) VALUES (?, ?, ?)",
+            (user_id, ApplicationStatus.NEW, ws)
         )
         await db.commit()
         return cursor.lastrowid
 
-async def get_new_applications(exclude_locked: bool = True) -> List[dict]:
-    """Получение новых заявок - возвращает список словарей"""
+async def get_new_applications(exclude_locked: bool = True,
+                               workspace_id: Optional[int] = None) -> List[dict]:
+    """Получение новых заявок - возвращает список словарей.
+
+    V1.17.0O2: workspace_id фильтрует заявки активного ws. None → все ws
+    (legacy single-tenant поведение). Для multi-ws — передавать ws_id.
+    """
     # Сначала чистим просроченные блокировки (IN_WORK → NEW)
     await cleanup_expired_locks()
 
     async with db_pool.get_connection() as db:
         now = datetime.now().isoformat()
+        ws_clause = " AND workspace_id = ?" if workspace_id is not None else ""
 
         if exclude_locked:
-            query = """
+            query = f"""
                 SELECT * FROM applications
                 WHERE status IN (?, ?)
                 AND (locked_until IS NULL OR locked_until < ?)
+                {ws_clause}
                 ORDER BY status ASC, created_at ASC
             """
-            params = (ApplicationStatus.NEW, ApplicationStatus.SKIPPED, now)
+            params = [ApplicationStatus.NEW, ApplicationStatus.SKIPPED, now]
         else:
-            query = "SELECT * FROM applications WHERE status IN (?, ?) ORDER BY status ASC, created_at ASC"
-            params = (ApplicationStatus.NEW, ApplicationStatus.SKIPPED)
-        
-        async with db.execute(query, params) as cursor:
+            query = f"SELECT * FROM applications WHERE status IN (?, ?){ws_clause} ORDER BY status ASC, created_at ASC"
+            params = [ApplicationStatus.NEW, ApplicationStatus.SKIPPED]
+
+        if workspace_id is not None:
+            params.append(workspace_id)
+
+        async with db.execute(query, tuple(params)) as cursor:
             rows = await cursor.fetchall()
             return rows_to_dict_list(rows)
 
@@ -796,10 +814,20 @@ async def reject_application(app_id: int, admin_id: int, reason: str):
         
         await db.commit()
 
-async def get_application(app_id: int) -> Optional[dict]:
-    """Получение заявки по ID - возвращает словарь"""
+async def get_application(app_id: int, workspace_id: Optional[int] = None) -> Optional[dict]:
+    """Получение заявки по ID - возвращает словарь.
+
+    V1.17.0O2 [Этап B B2]: workspace_id опциональный фильтр. None → как было
+    (нет проверки ws). При передаче — гарантирует что заявка принадлежит ws.
+    """
     async with db_pool.get_connection() as db:
-        async with db.execute("SELECT * FROM applications WHERE id = ?", (app_id,)) as cursor:
+        if workspace_id is not None:
+            query = "SELECT * FROM applications WHERE id = ? AND workspace_id = ?"
+            params = (app_id, workspace_id)
+        else:
+            query = "SELECT * FROM applications WHERE id = ?"
+            params = (app_id,)
+        async with db.execute(query, params) as cursor:
             row = await cursor.fetchone()
             return row_to_dict(row)
 
@@ -861,12 +889,16 @@ async def is_admin(tg_id: int) -> bool:
             result = await cursor.fetchone()
             return result is not None
 
-async def add_admin(tg_id: int, added_by: int):
-    """Добавление администратора"""
+async def add_admin(tg_id: int, added_by: int, workspace_id: Optional[int] = None):
+    """Добавление администратора per-ws.
+
+    V1.17.0O2 [Этап B B2]: workspace_id опциональный. None → ws=1 (legacy).
+    """
+    ws = workspace_id if workspace_id is not None else 1
     async with db_pool.get_connection() as db:
         await db.execute(
-            "INSERT OR IGNORE INTO admins (tg_id, added_by) VALUES (?, ?)",
-            (tg_id, added_by)
+            "INSERT OR IGNORE INTO admins (tg_id, added_by, workspace_id) VALUES (?, ?, ?)",
+            (tg_id, added_by, ws)
         )
         await db.execute(
             "UPDATE users SET role = ? WHERE tg_id = ?",
@@ -874,24 +906,42 @@ async def add_admin(tg_id: int, added_by: int):
         )
         await db.commit()
 
-async def remove_admin(tg_id: int):
-    """Удаление администратора"""
+async def remove_admin(tg_id: int, workspace_id: Optional[int] = None):
+    """Удаление администратора per-ws.
+
+    V1.17.0O2: workspace_id опциональный. None → удалить из всех ws (legacy).
+    При передаче — только из указанного ws.
+    """
     async with db_pool.get_connection() as db:
-        await db.execute("DELETE FROM admins WHERE tg_id = ?", (tg_id,))
+        if workspace_id is not None:
+            await db.execute(
+                "DELETE FROM admins WHERE tg_id = ? AND workspace_id = ?",
+                (tg_id, workspace_id)
+            )
+        else:
+            await db.execute("DELETE FROM admins WHERE tg_id = ?", (tg_id,))
         await db.execute(
             "UPDATE users SET role = ? WHERE tg_id = ?",
             (UserRole.USER, tg_id)
         )
         await db.commit()
 
-async def get_all_admins() -> List[dict]:
-    """Получение списка всех администраторов И владельца"""
+async def get_all_admins(workspace_id: Optional[int] = None) -> List[dict]:
+    """Получение списка всех администраторов И владельца per-ws.
+
+    V1.17.0O2: workspace_id фильтрует. None → все ws (legacy).
+    """
     async with db_pool.get_connection() as db:
-        # Получаем администраторов из таблицы admins
-        async with db.execute(
-            """SELECT u.* FROM users u 
-               INNER JOIN admins a ON u.tg_id = a.tg_id"""
-        ) as cursor:
+        if workspace_id is not None:
+            query = """SELECT u.* FROM users u
+                       INNER JOIN admins a ON u.tg_id = a.tg_id
+                       WHERE a.workspace_id = ?"""
+            params = (workspace_id,)
+        else:
+            query = """SELECT u.* FROM users u
+                       INNER JOIN admins a ON u.tg_id = a.tg_id"""
+            params = ()
+        async with db.execute(query, params) as cursor:
             rows = await cursor.fetchall()
             admins = rows_to_dict_list(rows)
     
@@ -969,10 +1019,21 @@ async def get_all_deputies() -> list:
 
 # ==================== BLACKLIST OPERATIONS ====================
 
-async def is_blacklisted(tg_id: int) -> bool:
-    """Проверка находится ли пользователь в черном списке"""
+async def is_blacklisted(tg_id: int, workspace_id: Optional[int] = None) -> bool:
+    """Проверка находится ли пользователь в черном списке per-ws.
+
+    V1.17.0O2 [Этап B B2]: workspace_id опциональный фильтр. None → глобально
+    (legacy single-tenant — Pulse поведение). При передаче — только в этом ws.
+    КРИТИЧНО для изоляции: ЧС одного ws не должен блокировать в другом.
+    """
     async with db_pool.get_connection() as db:
-        async with db.execute("SELECT 1 FROM blacklist WHERE tg_id = ?", (tg_id,)) as cursor:
+        if workspace_id is not None:
+            query = "SELECT 1 FROM blacklist WHERE tg_id = ? AND workspace_id = ?"
+            params = (tg_id, workspace_id)
+        else:
+            query = "SELECT 1 FROM blacklist WHERE tg_id = ?"
+            params = (tg_id,)
+        async with db.execute(query, params) as cursor:
             result = await cursor.fetchone()
             return result is not None
 
@@ -983,12 +1044,19 @@ async def get_blacklist_reason(tg_id: int) -> Optional[str]:
             result = await cursor.fetchone()
             return result[0] if result else None
 
-async def add_to_blacklist(tg_id: int, reason: str, admin_id: int):
-    """Добавление в черный список"""
+async def add_to_blacklist(tg_id: int, reason: str, admin_id: int,
+                           workspace_id: Optional[int] = None):
+    """Добавление в черный список per-ws.
+
+    V1.17.0O2: workspace_id опциональный. None → ws=1 (legacy).
+    """
+    ws = workspace_id if workspace_id is not None else 1
     async with db_pool.get_connection() as db:
+        # INSERT OR REPLACE по (tg_id, workspace_id) — каждый ws имеет свой ЧС
         await db.execute(
-            "INSERT OR REPLACE INTO blacklist (tg_id, reason, admin_id) VALUES (?, ?, ?)",
-            (tg_id, reason, admin_id)
+            """INSERT OR REPLACE INTO blacklist (tg_id, reason, admin_id, workspace_id)
+               VALUES (?, ?, ?, ?)""",
+            (tg_id, reason, admin_id, ws)
         )
         await db.execute(
             "UPDATE users SET is_banned = 1, ban_reason = ? WHERE tg_id = ?",

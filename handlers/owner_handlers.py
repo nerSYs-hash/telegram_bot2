@@ -184,7 +184,7 @@ async def show_owner_dashboard(query_or_update, context, db, admin_id: int) -> N
 #   ЭКОНОМИКА
 # ═══════════════════════════════════════════════════════════════
 
-async def show_economy_menu(query, db, admin_id: int) -> None:
+async def show_economy_menu(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -243,7 +243,7 @@ async def emit_start(query, context, db, admin_id: int) -> None:
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def wipe_confirm_step1(query, db, admin_id: int) -> None:
+async def wipe_confirm_step1(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -261,7 +261,7 @@ async def wipe_confirm_step1(query, db, admin_id: int) -> None:
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def wipe_execute(query, db, admin_id: int) -> None:
+async def wipe_execute(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -303,7 +303,7 @@ async def wipe_execute(query, db, admin_id: int) -> None:
 #  ⚙️ СИСТЕМА
 # ═══════════════════════════════════════════════════════════════
 
-async def show_system_menu(query, db, admin_id: int) -> None:
+async def show_system_menu(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -329,7 +329,7 @@ async def show_system_menu(query, db, admin_id: int) -> None:
     await query.edit_message_text(text, parse_mode='HTML', reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def toggle_maintenance(query, db, admin_id: int) -> None:
+async def toggle_maintenance(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -358,7 +358,7 @@ MUTE_DURATIONS = {
 
 # ── 👨‍💼 ПЕРСОНАЛ ──
 
-async def show_staff_menu(query, db, admin_id: int) -> None:
+async def show_staff_menu(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -424,7 +424,7 @@ async def staff_remove_start(query, context, db, admin_id: int) -> None:
 
 # ── 🛡 МОДЕРАЦИЯ (блэклист + мут по ID) ──
 
-async def show_moderation_menu(query, db, admin_id: int) -> None:
+async def show_moderation_menu(query, db, admin_id: int, context=None) -> None:
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
         return
@@ -1064,7 +1064,7 @@ _BBS_THREAD_ID = 8
 _NEWS_THREAD_ID = 26
 
 
-async def show_recovery_menu(query, db, admin_id: int) -> None:
+async def show_recovery_menu(query, db, admin_id: int, context=None) -> None:
     """Меню восстановления веток."""
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
@@ -1093,7 +1093,7 @@ async def show_recovery_menu(query, db, admin_id: int) -> None:
     await query.edit_message_text(text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(keyboard))
 
 
-async def restore_bbs_confirm(query, db, admin_id: int) -> None:
+async def restore_bbs_confirm(query, db, admin_id: int, context=None) -> None:
     """Запрос подтверждения восстановления BBS."""
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
@@ -1246,7 +1246,7 @@ async def restore_last_bbs_execute(query, context, db, admin_id: int) -> None:
         )
 
 
-async def restore_news_confirm(query, db, admin_id: int) -> None:
+async def restore_news_confirm(query, db, admin_id: int, context=None) -> None:
     """Запрос подтверждения восстановления НьюзON."""
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
@@ -1431,7 +1431,7 @@ async def compensate_bbs_confirm(query, context, db, admin_id: int) -> None:
     )
 
 
-async def recovery_other_confirm(query, db, admin_id: int) -> None:
+async def recovery_other_confirm(query, db, admin_id: int, context=None) -> None:
     """Показывает список объявлений «Другое», доступных к восстановлению."""
     if not _is_owner(db, query.from_user.id, admin_id, context=context):
         await query.answer("⛔", show_alert=True)
