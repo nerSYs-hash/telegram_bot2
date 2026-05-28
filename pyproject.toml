@@ -1,0 +1,67 @@
+[tool.ruff]
+# Целевая версия Python
+target-version = "py312"
+# Длина строки — не самое больное место, ставим вменяемо
+line-length = 120
+
+# Исключения — сгенерированный код, vendored, билды
+extend-exclude = [
+    "Admin_SITE/dist",
+    "Admin_SITE/node_modules",
+    ".venv",
+    "venv",
+    "economybot/venv",
+    "_design_incoming",
+    "_tmp_*",
+    "Скрпиты",      # дубль с опечаткой — кандидат на удаление
+    "script",       # дубль script/ vs scripts/
+    "план.py",       # скретчпад Ильи (не Python)
+    "build",
+    "dist",
+]
+
+[tool.ruff.lint]
+# Правила: на legacy кодовой базе включаем фокусно — самые опасные категории.
+# F = pyflakes (undefined names, unused imports — то что нашло context-баг)
+# B = bugbear (likely bugs: mutable defaults, asyncio gotchas, etc)
+# Остальные категории (E/W/I/UP) — пока не включаем, иначе шквал
+# warning'ов на легаси коде. Можно добавлять по мере очистки.
+select = [
+    "F",   # pyflakes — критические баги (наша главная цель)
+    "B",   # bugbear — likely bugs
+]
+ignore = [
+    "F401",  # unused import — слишком много в легаси, отдельной задачей
+    "F841",  # unused local var — то же
+    "F541",  # f-string без placeholders — стиль, не баг
+    "F811",  # повторное определение — много в легаси
+    "F403",  # import * — стиль
+    "B008",  # function call in default arg — типичный pattern в нашем коде
+    "B904",  # raise without from — отдельной правкой
+    "B007",  # unused loop var — слишком много
+    "B011",  # assert False — иногда нормально
+    "B023",  # function uses loop variable — редко проблема
+    "B009",  # get-attr-with-constant — стиль
+    "B905",  # zip без strict — Py 3.10+ best practice, не критично
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Тесты и миграции — мягче (могут иметь mock-import которые pyflakes
+# подсветит как unused).
+"tests/*" = ["F401", "F811"]
+"database/migrations/*" = ["F401"]
+
+# Legacy файлы с известными F821 (undefined names). НЕ мои сегодняшние
+# правки — отдельная задача очистить. Игнорируем чтобы pre-commit/CI
+# не блокировали новые правки. Список зафиксирован 28.05.2026.
+# TODO: разобрать каждый и удалить из этого списка по мере чистки.
+"handlers/Stats/stats_controller.py" = ["F821"]      # мёртвый файл 1679 строк (память)
+"handlers/Stats/stats_controller/interview.py" = ["F821"]
+"handlers/command_handler.py" = ["F821"]              # `show_profile` undefined в /profile
+"handlers/moderation.py" = ["F821"]                   # `until_date` в log call
+"handlers/registration.py" = ["F821"]                 # `state`, `user_id` в одной функции
+"utils/horoscope_parser.py" = ["F821"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "strict"
+testpaths = ["tests"]

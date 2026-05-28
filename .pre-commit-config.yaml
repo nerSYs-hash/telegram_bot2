@@ -1,0 +1,19 @@
+# V1.17.0O3: pre-commit guard — ruff lint на каждый git commit.
+# Установка (один раз на машине разработчика):
+#   pip install pre-commit
+#   pre-commit install
+# Бай-пасс (НЕ рекомендуется, баг проедет в репо):
+#   git commit --no-verify
+# Дополняется GitHub Action `.github/workflows/ci.yml` который ловит то же
+# самое при push (защита от --no-verify локально).
+
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.7.4
+    hooks:
+      # Линт (только check, без auto-fix — review перед фиксом)
+      - id: ruff
+        args: [--fix, --exit-non-zero-on-fix]
+      # Format check (не пишем стилевые правки, только сигналим)
+      - id: ruff-format
+        args: [--check]

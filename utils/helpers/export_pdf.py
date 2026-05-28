@@ -79,7 +79,7 @@ ICONS_MAP = {
     '🏦': 'bank.png',
     '🆕': 'new.png',
     '👋': 'left.png',
-    '📊': 'er_icon.png',
+    '📊': 'er_icon.png',  # noqa: F601 — TODO: дубль emoji '📊', затирает первый (chart.png). Заменить на другой emoji
     '🛡️': 'health.png'
 }
 
