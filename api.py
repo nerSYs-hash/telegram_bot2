@@ -137,6 +137,35 @@ _BOT_USERNAME = os.getenv("BOT_USERNAME", "Puls_ON_bot")
 _JWT_SECRET   = os.getenv("JWT_SECRET", "pulse-jwt-secret-2026")
 _JWT_DAYS     = 7
 
+# ── Cache: TG chat_member_count (для виджета Статистика по пользователям) ──
+import time as _time
+_CHAT_MEMBER_COUNT_CACHE = {}  # {chat_id: (count, fetched_at_epoch)}
+_CMC_TTL = 300  # 5 минут
+
+def _fetch_chat_member_count_sync(chat_id: int) -> int | None:
+    """Синхронный HTTP-call к TG getChatMemberCount. Кэш 5 мин.
+
+    Возвращает int или None при ошибке. Pulse-safe: ошибка → None,
+    caller использует legacy расчёт (running-baseline)."""
+    if not _BOT_TOKEN or not chat_id:
+        return None
+    now = _time.time()
+    cached = _CHAT_MEMBER_COUNT_CACHE.get(chat_id)
+    if cached and (now - cached[1]) < _CMC_TTL:
+        return cached[0]
+    try:
+        url = f"https://api.telegram.org/bot{_BOT_TOKEN}/getChatMemberCount"
+        r = httpx.get(url, params={"chat_id": chat_id}, timeout=5.0)
+        data = r.json()
+        if not data.get("ok"):
+            return None
+        count = int(data["result"])
+        _CHAT_MEMBER_COUNT_CACHE[chat_id] = (count, now)
+        return count
+    except Exception as e:
+        logger.debug(f"_fetch_chat_member_count_sync({chat_id}) failed: {e}")
+        return None
+
 
 def _verify_tg_hash(data: dict) -> bool:
     received = data.get("hash", "")
@@ -827,6 +856,26 @@ def _compute_series(granularity: str = 'day') -> dict:
         messages.append({"day": label, "messages": m, "writers": w})
         engagement.append({"day": label, "pct": round(w / total_users * 100, 1)})
         newcomers.append({"day": label, "total": j})
+
+    # V1.17.0M7: реальный chat_member_count из TG → переопределяем линию «Всего»
+    # назад от последнего дня. Молчаливые участники чата теперь учтены.
+    try:
+        _main_chat_row = db.cursor.execute(
+            "SELECT chat_id FROM bot_chats WHERE workspace_id=? AND role='main' LIMIT 1",
+            (ws_id,)
+        ).fetchone()
+        if _main_chat_row:
+            _main_chat_id = _main_chat_row['chat_id'] if hasattr(_main_chat_row, 'keys') else _main_chat_row[0]
+            real_count = _fetch_chat_member_count_sync(_main_chat_id)
+            if real_count is not None and users:
+                users[-1]["total"] = real_count
+                for i in range(len(users) - 2, -1, -1):
+                    users[i]["total"] = max(
+                        users[i + 1]["total"] - users[i + 1]["joined"] + users[i + 1]["left"],
+                        0
+                    )
+    except Exception as _cmce:
+        logger.debug(f"chat_member_count override skipped: {_cmce}")
 
     # ── w7: первое сообщение в 1-й день / позже ──
     db.cursor.execute('''
