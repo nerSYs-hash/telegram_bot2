@@ -35,8 +35,18 @@ class BingoHandler:
         self.bot_username = bot_username
         self._ensure_tables()
 
-    def _is_owner_user(self, user) -> bool:
-        """Проверка: главный владелец ИЛИ зам (is_owner=1)."""
+    def _is_owner_user(self, user, *, context=None, conn=None) -> bool:
+        """Per-ws (Этап A V1.17.0L3) или legacy «владелец / зам?» (is_owner=1).
+
+        I_WS_RBAC=1 + context: workspace_members.role=='owner' (или developer).
+        Иначе — legacy single-tenant: main_admin_id из конструктора + users.is_owner=1.
+        """
+        try:
+            from bot_core.ws_role import i_ws_rbac_enabled, is_ws_owner
+            if i_ws_rbac_enabled() and context is not None:
+                return is_ws_owner(context, user.id, conn=conn)
+        except Exception:
+            pass  # Pulse-safe: ошибка → legacy
         if user.id == self.main_admin_id:
             return True
         u = self.db.get_user(user.id)
