@@ -139,6 +139,62 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
     
     # === ПОЛЬЗОВАТЕЛЬ ВЕРНУЛСЯ ===
     elif is_now_in_chat and not was_in_chat:
+        # ═══ РЕФ-ТРЕКИНГ ПО TG INVITE-LINK (V1.17.0P1) ═══
+        # Если новичок пришёл по invite-link с name="ref_<inviter_id>",
+        # записываем referred_by + создаём pending в referral_transactions.
+        # Дальше check_referral_qualification сама проверит активность и
+        # bot.py:349 начислит referral_reward из economy_settings.
+        try:
+            inv = getattr(update.chat_member, 'invite_link', None)
+            inv_name = getattr(inv, 'name', None) if inv else None
+            if inv_name and inv_name.startswith('ref_'):
+                try:
+                    inviter_id = int(inv_name[4:])
+                except ValueError:
+                    inviter_id = None
+                if inviter_id and inviter_id != user_id:
+                    logging.info(
+                        f"🎟 REF-INVITE: user {user_id} joined via ref-link from {inviter_id}"
+                    )
+                    # 1. Записываем referred_by в users (main DB)
+                    try:
+                        db.cursor.execute(
+                            "UPDATE users SET referred_by = ? WHERE user_id = ? AND (referred_by IS NULL OR referred_by = 0)",
+                            (inviter_id, user_id),
+                        )
+                        db.conn.commit()
+                    except Exception as _ue:
+                        logging.warning(f"ref-invite: main DB referred_by update: {_ue}")
+                    # 2. Создаём pending referral transaction в pulse_bot.db
+                    try:
+                        from database.db_friend import db_pool as _db_pool
+                        async with _db_pool.get_connection() as _rdb:
+                            # Проверяем что не было уже
+                            exists = await _rdb.execute(
+                                "SELECT 1 FROM referral_transactions WHERE referred_id = ?",
+                                (user_id,),
+                            )
+                            if not await exists.fetchone():
+                                await _rdb.execute(
+                                    "INSERT INTO referral_transactions "
+                                    "(referrer_id, referred_id, amount, status) "
+                                    "VALUES (?, ?, 1, 'pending')",
+                                    (inviter_id, user_id),
+                                )
+                                await _rdb.execute(
+                                    "UPDATE users SET referred_by = ? WHERE tg_id = ?",
+                                    (inviter_id, user_id),
+                                )
+                                await _rdb.commit()
+                                logging.info(
+                                    f"🎟 REF-INVITE: pending transaction created "
+                                    f"inviter={inviter_id} new={user_id}"
+                                )
+                    except Exception as _rt:
+                        logging.warning(f"ref-invite: pending transaction: {_rt}")
+        except Exception as _re:
+            logging.error(f"ref-invite parsing error: {_re}")
+
         logging.info(f"🔄 Triggering RETURN logic for user {user_id}")
         await handle_user_returned(update, context, user_id, db, admin_id, target_chat_id)
 
