@@ -1169,13 +1169,33 @@ async def _set_tg_admin_rights(update, context, target_id: int, promote: bool) -
             )
             tg_msg = "📛 TG-права админа сняты в главном чате."
     except Exception as e:
-        # Самые частые причины: юзер не в чате, у бота нет prom_members,
-        # бот не админ. Показываем коротко.
+        # Telegram возвращает ошибки в разных кейсах. Классифицируем
+        # понятно для Владельца, иначе показываем сырой текст.
         err = str(e)
-        if 'not enough rights' in err.lower() or 'CHAT_ADMIN_REQUIRED' in err:
-            tg_msg = "⚠️ TG-права не выданы: у бота нет прав promote_members в этом чате."
-        elif 'USER_NOT_PARTICIPANT' in err or 'not found' in err.lower():
-            tg_msg = "⚠️ TG-права не выданы: юзер не в чате (должен войти сам)."
+        err_l = err.lower()
+        if "can't remove chat owner" in err_l or "cant remove chat owner" in err_l:
+            tg_msg = (
+                "ℹ️ TG-права не нужны: юзер уже создатель чата в TG (owner). "
+                "Любые админ-операции для него и так доступны."
+            )
+        elif ('chat_admin_required' in err_l
+              or 'not enough rights' in err_l
+              or 'rights to invite' in err_l
+              or 'rights to manage' in err_l):
+            tg_msg = (
+                "⚠️ TG-права не выданы: у бота нет прав promote_members "
+                "в этом чате. Дай боту разрешение «Назначение администраторов» "
+                "в настройках админов чата."
+            )
+        elif ('user_not_participant' in err_l
+              or 'participant_not_found' in err_l
+              or 'user not found' in err_l
+              or 'user is not a member' in err_l):
+            tg_msg = "⚠️ TG-права не выданы: юзер не в чате (должен сначала войти)."
+        elif 'user_is_blocked' in err_l or 'bot_blocked' in err_l:
+            tg_msg = "⚠️ TG-права не выданы: юзер заблокировал бота."
+        elif 'method_invalid_for_chat' in err_l or 'channel_private' in err_l:
+            tg_msg = "⚠️ TG-права не выданы: бот не может управлять этим типом чата."
         else:
             tg_msg = f"⚠️ TG-права: {err[:200]}"
         logger.warning(f"promote_chat_member({main_chat}, {target_id}) failed: {e}")
