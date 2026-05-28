@@ -31,7 +31,7 @@
 
 
 
-## ✅ Уже работает (70%)
+## ✅ Уже работает (80%)
 
 | Аспект | Состояние |
 |---|---|
@@ -49,27 +49,33 @@
 | Сайт ↔ Бот: фикс 3.2 mirror `users.is_admin` при add админа с сайта | ✅ |
 | Бот ↔ TG: фикс k23 `promote_chat_member` при add админа из бот-панели | ✅ |
 | Бот ↔ Сайт: фикс k23 INSERT `workspace_members` при add из бота | ✅ |
+| **`chat_stats` per-ws — все поля сводно (msgs/words/active/replies/mentions/media)** | ✅ V1.17.0k27 + backfill k28 |
+| **Пульт Владельца — `_is_owner` per-ws через workspace_members** | ✅ V1.17.0L2 (Этап A T2) |
+| **Bingo/Lottery — `_is_owner_user` per-ws** | ✅ V1.17.0L3/L4 (Этап A T3/T4) |
+| **`admin_moderation` strict_owner gates (назначение/снятие замов) per-ws** | ✅ V1.17.0L5 (Этап A T6) |
+| **`message_handler.is_user_excluded` per-ws (mining gate)** | ✅ V1.17.0L6 (Этап A T7) |
+| **`OWNER_ID` глобал — Pulse-safe fallback, основной путь per-ws** | ✅ V1.17.0L2/L5/L6 (Этап A) |
+| **`is_owner_or_deputy()` через `bot_core.ws_role.is_ws_owner`** | ✅ (раньше через подпроект I, сейчас полноценно живёт) |
 
 ## ⚠️ Работает частично
 
 | Аспект | Что не так | Куда фиксить |
 |---|---|---|
-| **3 системы прав** | `users.is_admin` (БД), `workspace_members` (БД), TG `promoteChatMember` — синхронизируются через bridges, но архитектурно расходятся при ЛЮБОМ ручном изменении не через flow | Этап A |
-| `chat_stats` | Только `total_pulses_mined` пишется. `total_messages`, `active_users`, `total_chars` — нули. Графики «сообщения по дням» на сайте показывают пустоту | Этап D |
 | `journal-канал` для ws=1 | Хранится одновременно в `bot_chats.role='journal'` И в `settings.journal_channel_id` (legacy fallback). TG-меню «Канал N» пишет в settings, сайт читает из bot_chats | Этап C |
 | Onboarding UX | Технически бот создаёт ws, но юзеру не приходит явная инструкция «иди на сайт залогинься» | Этап E |
+| Этап A flip на проде | Код залит, локально 383/383 зелёный. На проде `I_WS_RBAC=1` уже стоит. Нужна ручная приёмка Ильи (добавить юзера на сайте → проверить что бот сразу его признаёт) | T9/Этап A |
+| **Экономика real-time** | `get_dynamic_economy_config` читает БД через `db.get_econ`, но wrapper хардкодит `_DEFAULT_WS_ID=1` (`database/db_manager.py:688`). Для ws=1 PositivЭ работает, для ws=2+ нужен ws_id из контекста сообщения | Параллельно с Этапом B |
 
 ## ❌ Не работает (нарушает изоляцию)
 
 | Аспект | Проблема | Куда фиксить |
 |---|---|---|
 | **`db_friend.py` / `pulse_bot.db`** | Вторая БД для регистрации/заявок/блэклиста/замов/инвайтов БЕЗ `workspace_id`. На ws=2 анкеты пойдут в общую очередь, ЧС будет глобальный, замы Pulse станут замами PositivE. **Треть бота не изолирована.** | Этап B |
-| `ADMIN_CHAT_ID` хардкод в `admin_moderation.py` (10 мест) | Карточки заявок, досье, кнопки панели — отправляются в `ADMIN_CHAT_ID` из `.env`. ws=2 не сможет получать свои заявки в свой admin-чат | Этап C |
+| `ADMIN_CHAT_ID` хардкод в `admin_moderation.py` (10 мест) | Карточки заявок, досье, кнопки панели — отправляются в `ADMIN_CHAT_ID` из `.env`. ws=2 не сможет получать свои заявки в свой admin-чат. Чек прав (`_is_strict_owner`) уже per-ws (T6), но destination отправки — нет. | Этап C |
 | `APPLICATIONS_THREAD_ID` / `DOSSIER_THREAD_ID` хардкод | Треды берутся из `.env`, не из `bot_chat_topics.kind`. ws=2 без своих тредов = заявки идут в Pulse-тред | Этап C |
-| `OWNER_ID` = `.env.MAIN_ADMIN_ID` глобально | Бот проверяет «владелец?» через одну константу. Владелец ws=2 не сможет открыть Панель Владельца в своём чате | Этап A |
-| `is_owner_or_deputy()` глобально через `users.is_owner` | То же — `is_owner=1` делает юзера владельцем во всех ws | Этап A |
 | `Site/backend/main.py` (старый сайт-backend) | Endpoints per-chat (`/api/admin/{chat_id}/...`), не per-ws. Скорее всего deprecated, но если используется — нарушает изоляцию | Этап B/проверить |
 | Регистрация (анкета) при заявке | `CHAT_ID` хардкод в `registration.py` для `get_chat_member`. Анкета привязана к одному чату | Этап B |
+| Центр подключений на сайте | Нет единого UI. Журнал-канал только в боте; «где админка» дублируется бот/сайт; нет «создать тред в admin-чате при подключении». Bug-треды/BBS нельзя подключить без правки .env | Этап C (расширенный) |
 
 ## 🗺️ Дорожная карта (5 этапов)
 
