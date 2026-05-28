@@ -2,7 +2,18 @@
 
 > **Цель проекта** (Илья 28.05.2026): добавили бота в чат → всё работает само в этом workspace, без беготни. Полная изоляция WS друг от друга: чаты, статистика, права, регистрация, журнал. Один бот = много изолированных «миров».
 >
-> **Текущий процент готовности: ~73%** (28.05 Этап A T2/9: Пульт Владельца per-ws).
+> **Текущий процент готовности: ~74%** (28.05 Этап A T3/9 + чистка истории Pulse из ws=1).
+
+## 🔴 28.05 ~16:00 ИНЦИДЕНТ: история Pulse была смешана с PositivЭ
+
+См. memory `incident_pulse_history_merged_2026_05_28`. Закрыто Вариантом B:
+- DELETE из user_stats/chat_stats/messages/topics/journal_messages/etc. строк с date<2026-05-25 или chat_id∉PositivЭ.
+- Балансы users сохранены полностью (@ares0255 и др.).
+- Бэкап `pre_pulse_history_purge_20260528_160257` сохранён.
+
+Урок: ДО merge-операций ВСЕГДА проверять что лежит в целевом ws.
+
+
 
 ## 📌 Прогресс Этапа A (V1.17.0L1-...)
 
@@ -10,7 +21,7 @@
 |---|---|---|
 | T1 | `is_ws_admin()` в `bot_core/ws_role.py` + тесты | ✅ V1.17.0L1 |
 | T2 | `owner_handlers._is_owner` per-ws + 27 callsites + тесты | ✅ V1.17.0L2 |
-| T3 | `bingo_handlers._is_owner_user_ws` | 🔜 |
+| T3 | `bingo_handlers._is_owner_user` per-ws + тесты | ✅ V1.17.0L3 |
 | T4 | `lottery_handlers._is_owner_user_ws` | 🔜 |
 | T5 | `titles_handlers` owner-check | 🔜 (если есть) |
 | T6 | `admin_moderation` глобальные `OWNER_ID==user.id` | 🔜 |
