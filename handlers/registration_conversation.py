@@ -779,7 +779,13 @@ async def finish_registration(update: Update, context: ContextTypes.DEFAULT_TYPE
         status='pending'
     )
 
-    app_id = await create_application(user_id)
+    # Этап B B4 (V1.17.0O5): per-ws заявка через workspace юзера
+    try:
+        from handlers.registration import _user_workspace_id as _uwsid
+        _app_ws = _uwsid(user_id)
+    except Exception:
+        _app_ws = None
+    app_id = await create_application(user_id, workspace_id=_app_ws)
 
     # Подтягиваем @username реферера для отображения
     referrer_display = 'нет'

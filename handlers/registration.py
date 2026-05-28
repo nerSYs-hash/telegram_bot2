@@ -26,6 +26,51 @@ from utils.keyboards import (
 from database import get_user, create_user, update_user, create_application, get_all_admins, get_new_applications
 from utils.formatters import format_application_text
 from config import OWNER_ID, CHAT_ID
+
+
+def _user_workspace_id(user_id: int) -> int | None:
+    """Этап B B4 (V1.17.0O5): резолвит workspace_id для юзера через членство.
+
+    None → caller использует legacy ws=1 fallback (для PositivЭ работает).
+    Для multi-ws: юзер-член ws=N → его регистрация и проверка членства
+    идут в этот ws.
+    """
+    try:
+        import sqlite3, os
+        from bot_core.ws_resolver import resolve_user_primary_workspace
+        db_path = os.getenv('DB_PATH', 'database/bot_database.db')
+        conn = sqlite3.connect(db_path)
+        try:
+            return resolve_user_primary_workspace(conn, user_id)
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.debug(f"_user_workspace_id fallback: {e}")
+    return None
+
+
+def _user_main_chat(user_id: int, fallback: int) -> int:
+    """Main_chat workspace юзера. Fallback на CHAT_ID если ws не найден.
+
+    V1.17.0O5: для регистрации/инвайтов — определяем чат куда юзер должен
+    войти после одобрения заявки.
+    """
+    try:
+        import sqlite3, os
+        from bot_core.ws_resolver import resolve_user_primary_workspace, resolve_role_chat
+        db_path = os.getenv('DB_PATH', 'database/bot_database.db')
+        conn = sqlite3.connect(db_path)
+        try:
+            ws_id = resolve_user_primary_workspace(conn, user_id)
+            if ws_id is not None:
+                main_chat = resolve_role_chat(conn, ws_id, 'main')
+                if main_chat:
+                    return main_chat
+        finally:
+            conn.close()
+    except Exception as e:
+        logger.debug(f"_user_main_chat fallback: {e}")
+    return fallback
 from handlers.reminder import save_questionnaire_state, clear_questionnaire_state
 
 logger = logging.getLogger(__name__)
@@ -97,8 +142,8 @@ async def submit_application(message_or_callback, state: FSMContext, data: dict,
     
     await update_user(user_id, **update_data)
 
-    # Создаем заявку
-    app_id = await create_application(user_id)
+    # Создаем заявку (Этап B B4: per-ws)
+    app_id = await create_application(user_id, workspace_id=_user_workspace_id(user_id))
 
     # ============================================
     # РАССЫЛАЕМ УВЕДОМЛЕНИЯ - ИСПРАВЛЕНО: владелец получает 1 уведомление
@@ -205,13 +250,14 @@ async def cmd_start(message: Message):
         except Exception as e:
             logger.error(f"Error checking blocked status: {e}")
 
-    # Проверяем через API, действительно ли пользователь в чате
+    # Проверяем через API, действительно ли пользователь в чате (B4: per-ws main)
     is_actually_in_chat = False
-    if CHAT_ID:
+    _check_chat = _user_main_chat(user_id, CHAT_ID)
+    if _check_chat:
         try:
-            chat_member = await message.bot.get_chat_member(CHAT_ID, user_id)
+            chat_member = await message.bot.get_chat_member(_check_chat, user_id)
             is_actually_in_chat = chat_member.status in ['member', 'administrator', 'creator']
-            logger.info(f"User {user_id} actual chat status: {chat_member.status} -> in_chat: {is_actually_in_chat}")
+            logger.info(f"User {user_id} actual chat status: {chat_member.status} -> in_chat: {is_actually_in_chat} (ws-chat={_check_chat})")
         except Exception as e:
             logger.error(f"Error checking chat member for user {user_id}: {e}")
 
@@ -625,11 +671,13 @@ async def main_menu_check_status(callback: CallbackQuery):
             )
         else:
             is_in_chat = False
-            if CHAT_ID:
+            # B4: per-ws main chat
+            _check_chat = _user_main_chat(user_id, CHAT_ID)
+            if _check_chat:
                 try:
-                    chat_member = await callback.bot.get_chat_member(CHAT_ID, user_id)
+                    chat_member = await callback.bot.get_chat_member(_check_chat, user_id)
                     is_in_chat = chat_member.status in ['member', 'administrator', 'creator']
-                except:
+                except Exception:
                     pass
             
             if is_in_chat:
