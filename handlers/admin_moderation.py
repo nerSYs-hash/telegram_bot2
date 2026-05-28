@@ -1122,6 +1122,96 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
 
+async def _set_tg_admin_rights(update, context, target_id: int, promote: bool) -> str:
+    """SaaS блокер дополнение: после фикса 1.1 (БД-флаг is_admin) также
+    выдаёт/снимает реальные TG-права админа через bot.promote_chat_member
+    + зеркалит в workspace_members (для сайта).
+
+    Возвращает строку статуса для добавления в reply пользователю.
+    Не падает на ошибках — TG/БД могут отказать, юзер увидит почему.
+    """
+    from bot_core.ws_resolver import resolve_gate_chat
+    from config import CHAT_ID
+    # main-chat workspace (per-ws через ws_resolver, fallback на .env CHAT_ID)
+    try:
+        from database.db_manager import Database
+        import os
+        sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+        main_chat = resolve_gate_chat(
+            sync_db.conn, context, CHAT_ID, user_id=update.effective_user.id
+        )
+        sync_db.conn.close()
+    except Exception as e:
+        logger.warning(f"_set_tg_admin_rights resolve main_chat: {e}")
+        main_chat = CHAT_ID
+
+    # TG promote/demote
+    tg_msg = ""
+    try:
+        if promote:
+            await context.bot.promote_chat_member(
+                chat_id=main_chat, user_id=target_id,
+                can_manage_chat=True, can_delete_messages=True,
+                can_restrict_members=True, can_invite_users=True,
+                can_pin_messages=True, can_manage_topics=True,
+                can_change_info=False, can_promote_members=False,
+                can_manage_video_chats=True,
+            )
+            tg_msg = "📛 TG-права админа выданы в главном чате."
+        else:
+            await context.bot.promote_chat_member(
+                chat_id=main_chat, user_id=target_id,
+                can_manage_chat=False, can_delete_messages=False,
+                can_restrict_members=False, can_invite_users=False,
+                can_pin_messages=False, can_manage_topics=False,
+                can_change_info=False, can_promote_members=False,
+                can_manage_video_chats=False,
+            )
+            tg_msg = "📛 TG-права админа сняты в главном чате."
+    except Exception as e:
+        # Самые частые причины: юзер не в чате, у бота нет prom_members,
+        # бот не админ. Показываем коротко.
+        err = str(e)
+        if 'not enough rights' in err.lower() or 'CHAT_ADMIN_REQUIRED' in err:
+            tg_msg = "⚠️ TG-права не выданы: у бота нет прав promote_members в этом чате."
+        elif 'USER_NOT_PARTICIPANT' in err or 'not found' in err.lower():
+            tg_msg = "⚠️ TG-права не выданы: юзер не в чате (должен войти сам)."
+        else:
+            tg_msg = f"⚠️ TG-права: {err[:200]}"
+        logger.warning(f"promote_chat_member({main_chat}, {target_id}) failed: {e}")
+
+    # Зеркало в workspace_members (для сайта). Ws=1 main_chat → ws_id того чата.
+    try:
+        from database.db_manager import Database
+        import os
+        sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+        ws_row = sync_db.conn.execute(
+            "SELECT workspace_id FROM bot_chats WHERE chat_id=? AND role='main' LIMIT 1",
+            (main_chat,)
+        ).fetchone()
+        if ws_row:
+            ws_id = ws_row[0]
+            if promote:
+                sync_db.conn.execute(
+                    "INSERT OR REPLACE INTO workspace_members"
+                    "(workspace_id, user_id, role) VALUES (?, ?, 'admin')",
+                    (ws_id, target_id)
+                )
+            else:
+                # Удаляем только если был admin (не трогаем owner)
+                sync_db.conn.execute(
+                    "DELETE FROM workspace_members "
+                    "WHERE workspace_id=? AND user_id=? AND role='admin'",
+                    (ws_id, target_id)
+                )
+            sync_db.conn.commit()
+        sync_db.conn.close()
+    except Exception as e:
+        logger.warning(f"mirror workspace_members for {target_id}: {e}")
+
+    return tg_msg
+
+
 async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстового ввода для панели владельца"""
     from database.db_friend import (
@@ -1193,8 +1283,13 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 parse_mode="HTML")
             return True
         if changed > 0:
+            # Дополнительно: реальные TG-права админа в main-чате workspace.
+            tg_status = await _set_tg_admin_rights(
+                update, context, target_id, promote=True
+            )
             await update.message.reply_text(
-                f"✅ Пользователь <code>{target_id}</code> назначен администратором.",
+                f"✅ Пользователь <code>{target_id}</code> назначен администратором.\n"
+                f"{tg_status}",
                 parse_mode="HTML")
         else:
             await update.message.reply_text(
@@ -1227,8 +1322,13 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
                 parse_mode="HTML")
             return True
         if changed > 0:
+            # Дополнительно: снять TG-права админа в main-чате workspace.
+            tg_status = await _set_tg_admin_rights(
+                update, context, target_id, promote=False
+            )
             await update.message.reply_text(
-                f"✅ Пользователь <code>{target_id}</code> удалён из администраторов.",
+                f"✅ Пользователь <code>{target_id}</code> удалён из администраторов.\n"
+                f"{tg_status}",
                 parse_mode="HTML")
         else:
             await update.message.reply_text(
