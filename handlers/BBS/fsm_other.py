@@ -19,6 +19,30 @@ from telegram import (
 
 import asyncio
 
+
+def _resolve_other_thread(context, fallback):
+    """V1.17.0Q4: per-ws thread для bbs_other.
+    Priority: bot_chat_topics.kind='bbs_other' → fallback на 'bbs' → fallback аргумент.
+    Илья 29.05: «у bbs_other если не выбирает пользователь — публикуется в общий ББС-тред (как у Вити)»."""
+    try:
+        import os, sqlite3
+        from bot_core.ws_resolver import resolve_thread, _ws_ctx_from_context
+        ws_ctx = _ws_ctx_from_context(context)
+        ws_id = ws_ctx.workspace_id if ws_ctx is not None else None
+        if ws_id is not None:
+            conn = sqlite3.connect(os.getenv('DB_PATH', 'database/bot_database.db'))
+            try:
+                tid = resolve_thread(conn, ws_id, 'bbs_other')
+                if tid is None:
+                    tid = resolve_thread(conn, ws_id, 'bbs')
+                if tid is not None:
+                    return tid
+            finally:
+                conn.close()
+    except Exception as e:
+        logging.debug(f"_resolve_other_thread fallback: {e}")
+    return fallback
+
 from handlers.BBS.helpers_bbs import city_to_hashtag
 from handlers.BBS.database_bbs import get_other_post
 from utils.helpers import get_moscow_time
@@ -637,6 +661,8 @@ async def delete_other_post_messages(bot, db, post, target_chat_id, deleted_by: 
 
 
 async def publish_other_post(query, context, db, target_chat_id, bbs_thread_id):
+    # V1.17.0Q4: per-ws override для bbs_other (отдельный тред или общий ББС)
+    bbs_thread_id = _resolve_other_thread(context, bbs_thread_id)
     user = query.from_user
     data = get_other_data(context)
     text = build_other_post_text(data)

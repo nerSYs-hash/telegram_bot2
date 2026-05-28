@@ -30,12 +30,45 @@ def _get_chat_id(context, explicit=None):
         return None
 
 
-def _get_thread_id(context, explicit=None):
+def _get_thread_id(context, explicit=None, kind='bbs'):
+    """V1.17.0Q4: BBS thread per-ws через bot_chat_topics.kind.
+
+    Приоритет:
+    1. explicit (если передан конкретный thread_id) — для override.
+    2. runtime context.user_data['bbs_edit_thread_id'] — сессионный.
+    3. bot_chat_topics.kind=<kind> для активного ws (правильный путь).
+       Для kind='bbs_other' — fallback на kind='bbs' (общий ББС-тред,
+       как у Вити, см. memory bbs_family_thread_binding_2026_05_29).
+    4. .env BBS_THREAD_ID — legacy fallback.
+    """
     if explicit:
         return explicit
     v = context.user_data.get('bbs_edit_thread_id')
     if v:
         return v
+    # 3. Per-ws через bot_chat_topics.
+    try:
+        from bot_core.ws_resolver import resolve_thread, _ws_ctx_from_context
+        # ws_id из контекста (middleware ws_ctx)
+        ws_ctx = _ws_ctx_from_context(context)
+        ws_id = ws_ctx.workspace_id if ws_ctx is not None else None
+        if ws_id is not None:
+            # Открываем conn через DB_PATH
+            import sqlite3
+            db_path = os.getenv('DB_PATH', 'database/bot_database.db')
+            conn = sqlite3.connect(db_path)
+            try:
+                tid = resolve_thread(conn, ws_id, kind)
+                # bbs_other → fallback на bbs если своего нет
+                if tid is None and kind == 'bbs_other':
+                    tid = resolve_thread(conn, ws_id, 'bbs')
+                if tid is not None:
+                    return tid
+            finally:
+                conn.close()
+    except Exception as e:
+        logging.debug(f"BBS _get_thread_id ws-lookup fallback: {e}")
+    # 4. Legacy fallback
     try:
         return int(os.getenv('BBS_THREAD_ID', 0)) or None
     except Exception:

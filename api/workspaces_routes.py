@@ -30,6 +30,14 @@ class WorkspacePatch(BaseModel):
 class ChatPatch(BaseModel):
     role: Optional[str] = None  # 'main' | 'admin' | 'journal' | None
 
+
+class TopicPut(BaseModel):
+    """V1.17.0Q4: установка thread_id для kind в bot_chat_topics.
+    chat_id опциональный — по умолчанию main-чат ws.
+    """
+    thread_id: int
+    chat_id: Optional[int] = None
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/workspaces", tags=["workspaces"])
@@ -247,6 +255,118 @@ async def patch_workspace_chat(
 
     update_bot_chat_role(_db.conn, chat_id, body.role)
     return {"ok": True, "chat_id": chat_id, "role": body.role}
+
+
+# ── V1.17.0Q4: треды (bot_chat_topics) per-ws ──
+
+# Список kind которые можно настраивать через UI.
+# applications/dossier — карточки заявок и досье (admin-чат).
+# bbs — главный ББС-тред (объявления знакомств).
+# bbs_other — отдельный тред для bbs_other (объявления продаж/аренды).
+#             Если не задан — fallback на 'bbs'.
+# bug_bot / bug_site — баг-треды (репорты).
+_VALID_TOPIC_KINDS = {'applications', 'dossier', 'bbs', 'bbs_other', 'bug_bot', 'bug_site'}
+
+
+@router.get("/{ws_id}/topics")
+async def list_workspace_topics(ws_id: int, authorization: str = Header(default=None)):
+    """Возвращает все настроенные треды в bot_chat_topics для ws."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'admin')
+
+    rows = _db.conn.execute(
+        "SELECT chat_id, thread_id, kind FROM bot_chat_topics WHERE workspace_id=?",
+        (ws_id,),
+    ).fetchall()
+    return {
+        "topics": [
+            {"chat_id": r[0], "thread_id": r[1], "kind": r[2]}
+            for r in rows
+        ]
+    }
+
+
+@router.put("/{ws_id}/topics/{kind}")
+async def put_workspace_topic(
+    ws_id: int, kind: str, body: TopicPut,
+    authorization: str = Header(default=None)
+):
+    """Установить (upsert) thread_id для kind в активном ws.
+    chat_id по умолчанию = main-чат ws (если он есть)."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if kind not in _VALID_TOPIC_KINDS:
+        raise HTTPException(
+            status_code=400,
+            detail=f"kind должен быть одним из: {', '.join(sorted(_VALID_TOPIC_KINDS))}",
+        )
+
+    # Резолвим chat_id: если не передан — берём main-чат ws.
+    chat_id = body.chat_id
+    if chat_id is None:
+        row = _db.conn.execute(
+            "SELECT chat_id FROM bot_chats WHERE workspace_id=? AND role='main' LIMIT 1",
+            (ws_id,),
+        ).fetchone()
+        if not row:
+            raise HTTPException(
+                status_code=400,
+                detail="Нет main-чата в этом сообществе. Сначала привяжи main-чат."
+            )
+        chat_id = row[0]
+
+    # Upsert через INSERT OR REPLACE по (workspace_id, kind) — уникальная пара.
+    # Если у kind уже есть запись с другим chat_id, она будет перезаписана.
+    _db.conn.execute(
+        "DELETE FROM bot_chat_topics WHERE workspace_id=? AND kind=?",
+        (ws_id, kind),
+    )
+    _db.conn.execute(
+        "INSERT INTO bot_chat_topics (workspace_id, chat_id, thread_id, kind) "
+        "VALUES (?, ?, ?, ?)",
+        (ws_id, chat_id, body.thread_id, kind),
+    )
+    _db.conn.commit()
+
+    # Сбрасываем кеш резолвера в боте (на след. update пересчитает).
+    try:
+        from bot_core.ws_resolver import invalidate_resolver_cache
+        invalidate_resolver_cache()
+    except Exception:
+        pass
+
+    return {"ok": True, "ws_id": ws_id, "kind": kind,
+            "chat_id": chat_id, "thread_id": body.thread_id}
+
+
+@router.delete("/{ws_id}/topics/{kind}")
+async def delete_workspace_topic(
+    ws_id: int, kind: str, authorization: str = Header(default=None)
+):
+    """Удалить настройку kind. Для bbs_other это означает «fallback на bbs»."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'owner')
+
+    if kind not in _VALID_TOPIC_KINDS:
+        raise HTTPException(status_code=400, detail="Неверный kind")
+
+    _db.conn.execute(
+        "DELETE FROM bot_chat_topics WHERE workspace_id=? AND kind=?",
+        (ws_id, kind),
+    )
+    _db.conn.commit()
+
+    try:
+        from bot_core.ws_resolver import invalidate_resolver_cache
+        invalidate_resolver_cache()
+    except Exception:
+        pass
+
+    return {"ok": True, "ws_id": ws_id, "kind": kind, "removed": True}
 
 
 # ── V1.17.0c (G): удаление чатов и сообществ ──

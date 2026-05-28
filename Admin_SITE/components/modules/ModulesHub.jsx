@@ -7,8 +7,10 @@ import {
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
   MoonStar, ClipboardList, MoreHorizontal, Settings, BarChart3, Check,
   Pickaxe, Ticket, Dices, CalendarHeart, UserPlus, Award, Rocket, Zap, MinusCircle,
+  Link2,
 } from 'lucide-react';
 import Button from '../shared/Button';
+import BBSThreadPanel from './BBSThreadPanel';
 
 /**
  * ModulesHub — хаб «Модули» = КАТАЛОГ (IA_MODULES).
@@ -193,7 +195,7 @@ SECTIONS.forEach(s => s.modules.forEach(m => {
 //  уже есть — реально не готовы только виджеты-графики Статистики.)
 const isWip = (mod) => !!mod.wip;
 
-function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconnect }) {
+function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconnect, onOpenBbsThreads }) {
   const Icon = mod.icon;
   const wip = isWip(mod);
   const hasChildren = !!mod.children;
@@ -245,6 +247,13 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         <p className="text-[12px] text-txd mt-1.5 leading-snug line-clamp-2">{mod.desc}</p>
       </div>
 
+      {/* V1.17.0Q4: подсказка наследования треда для детей BBS-семейства */}
+      {(mod.id === 'bbs_edit' || mod.id === 'vip_bbs' || mod.id === 'bbs_bonus') && (
+        <div className="text-[10px] text-txd italic flex items-center gap-1">
+          <Link2 size={10} />Наследует тред от «Пульс ББС»
+        </div>
+      )}
+
       <div className="flex gap-2" onClick={e => e.stopPropagation()}>
         {hasChildren && (
           <Button size="sm" variant={connected ? 'primary' : 'secondary'} icon={ArrowRight}
@@ -263,6 +272,14 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
             Подключить
           </Button>
         )}
+        {/* V1.17.0Q4: настройка тредов BBS-семейства (только на главной карточке) */}
+        {mod.id === 'bbs_pulse' && connected && (
+          <button onClick={onOpenBbsThreads}
+                  className="px-2.5 py-1.5 rounded-xl border border-bd hover:bg-sf2 transition flex items-center gap-1"
+                  title="Настроить треды публикаций ББС">
+            <Link2 size={14} className="text-cta" />
+          </button>
+        )}
       </div>
     </div>
   );
@@ -278,6 +295,8 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
   const [reason, setReason] = useState('');
   const [toast, setToast] = useState(null);
   const [query, setQuery] = useState('');
+  // V1.17.0Q4: панель настройки тредов BBS-семейства
+  const [bbsThreadsOpen, setBbsThreadsOpen] = useState(false);
 
   const isOn = (id) => !!connected && connected.has(id);
   const section = SECTIONS.find(s => s.id === activeSection) || SECTIONS[0];
@@ -442,6 +461,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
               onOpen={onOpen}
               onConnect={handleConnect}
               onDisconnect={setDisc}
+              onOpenBbsThreads={() => setBbsThreadsOpen(true)}
             />
           </div>
         ))}
@@ -520,6 +540,9 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
       >
         <ArrowUp size={20} />
       </button>
+
+      {/* V1.17.0Q4: модал настройки тредов BBS-семейства */}
+      <BBSThreadPanel open={bbsThreadsOpen} onClose={() => setBbsThreadsOpen(false)} />
     </div>
   );
 }
