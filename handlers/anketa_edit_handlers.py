@@ -215,14 +215,33 @@ def _build_dossier_text(reg_data: dict, target_user_id: int, admin_username: str
 #  Обновление сообщения в треде
 # ─────────────────────────────────────────────
 
-async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
+def _admin_dossier_dest(context, conn):
+    """Этап C T2 (V1.17.0M2): (admin_chat_id, dossier_thread_id) per-ws.
+
+    При H_RUNTIME_WS=1: bot_chats.role='admin' + bot_chat_topics.kind='dossier'.
+    Fallback: ADMIN_CHAT_ID / DOSSIER_THREAD_ID из .env.
+    """
+    from bot_core.ws_resolver import resolve_admin_chat, resolve_admin_thread
+    chat_id = ADMIN_CHAT_ID
+    thread_id = DOSSIER_THREAD_ID
+    if conn is not None and context is not None:
+        try:
+            chat_id = resolve_admin_chat(conn, context, ADMIN_CHAT_ID)
+            thread_id = resolve_admin_thread(conn, context, 'dossier', DOSSIER_THREAD_ID)
+        except Exception as e:
+            logger.debug(f"_admin_dossier_dest fallback: {e}")
+    return chat_id, thread_id
+
+
+async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict, *, context=None) -> None:
     """Перестраивает досье и редактирует / пересылает сообщение в треде."""
     import html as _html
     row = get_anketa_edit(db, user_id) or {}
 
     note = row.get('note')
     custom_photo = row.get('custom_photo_id')
-    chat_id = row.get('dossier_chat_id') or ADMIN_CHAT_ID
+    _admin_chat_ws, _dossier_thread_ws = _admin_dossier_dest(context, getattr(db, 'conn', None))
+    chat_id = row.get('dossier_chat_id') or _admin_chat_ws
     msg_id  = row.get('dossier_msg_id')
     is_photo = bool(row.get('dossier_is_photo'))
 
@@ -262,8 +281,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                     except Exception:
                         pass
                     sent = await bot.send_photo(
-                        chat_id=ADMIN_CHAT_ID,
-                        message_thread_id=DOSSIER_THREAD_ID,
+                        chat_id=_admin_chat_ws,
+                        message_thread_id=_dossier_thread_ws,
                         photo=custom_photo,
                         caption=text,
                         parse_mode='HTML',
@@ -282,7 +301,7 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                     pass
                 sent = await bot.send_message(
                     chat_id=chat_id,
-                    message_thread_id=DOSSIER_THREAD_ID,
+                    message_thread_id=_dossier_thread_ws,
                     text=text,
                     parse_mode='HTML',
                     reply_markup=kb,
@@ -320,8 +339,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
     photo_id = custom_photo
     if photo_id:
         sent = await bot.send_photo(
-            chat_id=ADMIN_CHAT_ID,
-            message_thread_id=DOSSIER_THREAD_ID,
+            chat_id=_admin_chat_ws,
+            message_thread_id=_dossier_thread_ws,
             photo=photo_id,
             caption=text,
             parse_mode='HTML',
@@ -333,8 +352,8 @@ async def _rebuild_and_update(bot, db, user_id: int, reg_data: dict) -> None:
                            dossier_chat_id=sent.chat.id)
     else:
         sent = await bot.send_message(
-            chat_id=ADMIN_CHAT_ID,
-            message_thread_id=DOSSIER_THREAD_ID,
+            chat_id=_admin_chat_ws,
+            message_thread_id=_dossier_thread_ws,
             text=text,
             parse_mode='HTML',
             reply_markup=kb,
@@ -508,7 +527,7 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
     if action == 'clrphoto':
         upsert_anketa_edit(db, user_id, custom_photo_id=None)
         await query.answer("🗑 Кастомное фото убрано")
-        await _rebuild_and_update(context.bot, db, user_id, reg_data)
+        await _rebuild_and_update(context.bot, db, user_id, reg_data, context=context)
         await _show_edit_menu(query, context, db, user_id, reg_data)
         return True
 
@@ -516,7 +535,7 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
     if action == 'clrnote':
         upsert_anketa_edit(db, user_id, note=None)
         await query.answer("🗑 Примечание убрано")
-        await _rebuild_and_update(context.bot, db, user_id, reg_data)
+        await _rebuild_and_update(context.bot, db, user_id, reg_data, context=context)
         await _show_edit_menu(query, context, db, user_id, reg_data)
         return True
 
@@ -528,7 +547,7 @@ async def handle_anketa_edit_callback(query, context, db, data: str) -> bool:
         # и delete_message() убирало бы само досье навсегда.
         menu_msg_id = query.message.message_id
         if reg_data:
-            await _rebuild_and_update(context.bot, db, user_id, reg_data)
+            await _rebuild_and_update(context.bot, db, user_id, reg_data, context=context)
             # Если rebuild создал НОВОЕ сообщение (msg_id изменился) — удаляем старое меню
             updated_row = get_anketa_edit(db, user_id) or {}
             if updated_row.get('dossier_msg_id') != menu_msg_id:
@@ -596,7 +615,7 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
         upsert_anketa_edit(db, user_id, custom_photo_id=photo)
 
         if reg_data:
-            await _rebuild_and_update(context.bot, db, user_id, reg_data)
+            await _rebuild_and_update(context.bot, db, user_id, reg_data, context=context)
 
         conf = await message.reply_text(f"✅ Фото анкеты #{user_id} обновлено.")
         asyncio.create_task(_autodelete(conf, delay=4))
@@ -619,7 +638,7 @@ async def handle_anketa_edit_input(message, context, db) -> bool:
         upsert_anketa_edit(db, user_id, note=text)
 
         if reg_data:
-            await _rebuild_and_update(context.bot, db, user_id, reg_data)
+            await _rebuild_and_update(context.bot, db, user_id, reg_data, context=context)
 
         # Удаляем ForceReply-промпт и ответ пользователя
         if prompt_msg_id:
