@@ -934,6 +934,28 @@ async def _show_app_card(query, context, app, reg_data):
             )
 
 
+def _is_strict_owner(context, user_id: int, conn=None) -> bool:
+    """Этап A T6 (V1.17.0L5): «ТОЛЬКО владелец» гейт per-ws.
+
+    Используется в panel_deputy_add / panel_deputy_remove (назначение/снятие
+    замов — операция исключительно владельца WS, не зама и не админа).
+
+    I_WS_RBAC=1: workspace_members.role=='owner' (или developer).
+    Legacy / context=None: user_id == OWNER_ID из config (single-tenant Pulse).
+    """
+    try:
+        from bot_core.ws_role import i_ws_rbac_enabled, is_ws_owner
+        if i_ws_rbac_enabled() and context is not None:
+            return is_ws_owner(context, user_id, conn=conn)
+    except Exception:
+        pass
+    try:
+        from config import OWNER_ID
+        return user_id == OWNER_ID
+    except Exception:
+        return False
+
+
 async def _is_owner_or_deputy(user_id: int, context=None) -> bool:
     """
     Проверка: владелец или зам владельца (доступ к Панели Владельца).
@@ -1027,8 +1049,8 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             [InlineKeyboardButton("➕ Добавить админа", callback_data="panel_admin_add"),
              InlineKeyboardButton("➖ Удалить админа", callback_data="panel_admin_remove")],
         ]
-        # Кнопки зама — только для главного владельца
-        if user_id == OWNER_ID:
+        # Кнопки зама — только для главного владельца (Этап A: per-ws)
+        if _is_strict_owner(context, user_id):
             buttons.append(
                 [InlineKeyboardButton("👑 Назначить зама", callback_data="panel_deputy_add"),
                  InlineKeyboardButton("👑 Снять зама", callback_data="panel_deputy_remove")]
@@ -1053,7 +1075,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # ─── ЗАМ ВЛАДЕЛЬЦА (только главный владелец) ───
     elif data == "panel_deputy_add":
-        if user_id != OWNER_ID:
+        if not _is_strict_owner(context, user_id):
             await query.answer("⛔ Только владелец может назначать замов.", show_alert=True)
             return
         context.user_data['panel_awaiting'] = 'deputy_add'
@@ -1065,7 +1087,7 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
 
     elif data == "panel_deputy_remove":
-        if user_id != OWNER_ID:
+        if not _is_strict_owner(context, user_id):
             await query.answer("⛔ Только владелец может снимать замов.", show_alert=True)
             return
         from database.db_friend import get_all_deputies

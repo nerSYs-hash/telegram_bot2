@@ -2,7 +2,7 @@
 
 > **Цель проекта** (Илья 28.05.2026): добавили бота в чат → всё работает само в этом workspace, без беготни. Полная изоляция WS друг от друга: чаты, статистика, права, регистрация, журнал. Один бот = много изолированных «миров».
 >
-> **Текущий процент готовности: ~74%** (28.05 Этап A T3/9 + чистка истории Pulse из ws=1).
+> **Текущий процент готовности: ~76%** (28.05 Этап A T6/9 — strict_owner gates per-ws).
 
 ## 🔴 28.05 ~16:00 ИНЦИДЕНТ: история Pulse была смешана с PositivЭ
 
@@ -23,8 +23,8 @@
 | T2 | `owner_handlers._is_owner` per-ws + 27 callsites + тесты | ✅ V1.17.0L2 |
 | T3 | `bingo_handlers._is_owner_user` per-ws + тесты | ✅ V1.17.0L3 |
 | T4 | `lottery_handlers._is_owner_user` per-ws + тесты | ✅ V1.17.0L4 |
-| T5 | `titles_handlers` owner-check | 🔜 (если есть) |
-| T6 | `admin_moderation` глобальные `OWNER_ID==user.id` | 🔜 |
+| T5 | `titles_handlers` owner-check | ⏭ skip (нет owner-check, есть только destination main_admin_id для DM) |
+| T6 | `admin_moderation._is_strict_owner` per-ws + 3 deputy gates | ✅ V1.17.0L5 |
 | T7 | `message_handler.is_user_excluded` per-ws | 🔜 |
 | T8 | Локально `I_WS_RBAC=1` + регресс-тесты | 🔜 |
 | T9 | Прод `I_WS_RBAC=1` + критерий приёмки | 🔜 |
