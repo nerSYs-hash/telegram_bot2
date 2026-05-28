@@ -126,13 +126,88 @@ def resolve_gate_chat(conn, context, fallback_chat_id, *, user_id=None):
     bot.py resolve_workspace_middleware) и резолвит эффективный главный
     чат. Флаг OFF → fallback_chat_id байт-в-байт. Единый источник
     логики для message_handler и registration_conversation."""
-    ws_ctx = None
-    for attr in ('chat_data', 'user_data'):
-        store = getattr(context, attr, None)
-        if isinstance(store, dict) and store.get('ws_ctx') is not None:
-            ws_ctx = store['ws_ctx']
-            break
+    ws_ctx = _ws_ctx_from_context(context)
     return effective_main_chat(
         conn, ws_ctx, fallback_chat_id,
         enabled=runtime_ws_enabled(), user_id=user_id,
     )
+
+
+def _ws_ctx_from_context(context):
+    """Helper: достаёт ws_ctx из context.chat_data / user_data."""
+    for attr in ('chat_data', 'user_data'):
+        store = getattr(context, attr, None)
+        if isinstance(store, dict) and store.get('ws_ctx') is not None:
+            return store['ws_ctx']
+    return None
+
+
+def _effective_role_chat(
+    conn: sqlite3.Connection,
+    ws_ctx,
+    role: str,
+    fallback_chat_id: int,
+    *,
+    enabled: bool,
+    user_id: Optional[int] = None,
+) -> int:
+    """Общая логика для role-based чата (admin/journal/main).
+    Аналог effective_main_chat, но с произвольной ролью."""
+    if not enabled:
+        return fallback_chat_id
+    ws_id = ws_ctx.workspace_id if ws_ctx is not None else None
+    if ws_id is None and user_id is not None:
+        ws_id = resolve_user_primary_workspace(conn, user_id)
+    if ws_id is None:
+        return fallback_chat_id
+    resolved = resolve_role_chat(conn, ws_id, role)
+    return resolved if resolved is not None else fallback_chat_id
+
+
+def effective_admin_chat(
+    conn: sqlite3.Connection, ws_ctx, fallback_chat_id: int,
+    *, enabled: bool, user_id: Optional[int] = None,
+) -> int:
+    """ADMIN_CHAT_ID workspace-а или fallback. Подпроект H, расширение
+    для админ-чата (Группа 4 блокера)."""
+    return _effective_role_chat(
+        conn, ws_ctx, 'admin', fallback_chat_id,
+        enabled=enabled, user_id=user_id,
+    )
+
+
+def effective_journal_chat(
+    conn: sqlite3.Connection, ws_ctx, fallback_chat_id: int,
+    *, enabled: bool, user_id: Optional[int] = None,
+) -> int:
+    """JOURNAL_CHANNEL_ID workspace-а или fallback. Дублирует часть логики
+    journal_handlers._get_journal_channel — но без silent skip для ws≠1
+    (используется когда journal обязателен)."""
+    return _effective_role_chat(
+        conn, ws_ctx, 'journal', fallback_chat_id,
+        enabled=enabled, user_id=user_id,
+    )
+
+
+def resolve_admin_chat(conn, context, fallback_chat_id, *, user_id=None):
+    """Context-aware effective_admin_chat. Аналог resolve_gate_chat."""
+    ws_ctx = _ws_ctx_from_context(context)
+    return effective_admin_chat(
+        conn, ws_ctx, fallback_chat_id,
+        enabled=runtime_ws_enabled(), user_id=user_id,
+    )
+
+
+def resolve_admin_thread(conn, context, kind, fallback_thread_id, *, user_id=None):
+    """Резолвит thread_id топика по kind (applications/dossier/bug_bot/...)
+    для workspace из context. Fallback — старая константа из .env."""
+    if not runtime_ws_enabled():
+        return fallback_thread_id
+    ws_ctx = _ws_ctx_from_context(context)
+    ws_id = ws_ctx.workspace_id if ws_ctx is not None else None
+    if ws_id is None and user_id is not None:
+        ws_id = resolve_user_primary_workspace(conn, user_id)
+    if ws_id is None:
+        return fallback_thread_id
+    resolved = resolve_thread(conn, ws_id, kind)
+    return resolved if resolved is not None else fallback_thread_id
