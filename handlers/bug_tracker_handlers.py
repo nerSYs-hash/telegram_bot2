@@ -361,11 +361,17 @@ async def show_card_preview(context, db, orig_id: int, query_to_delete=None, cha
     # Если чат не передан и query нет (вызов после редактирования текста)
     else:
         if not chat_id:
+            # Этап C C3 (V1.17.0M3): per-ws admin chat через ws_resolver
             try:
-                from config import ADMIN_CHAT_ID
+                from bot_core.ws_resolver import resolve_admin_chat
+                _db = context.bot_data.get('db')
+                _conn = getattr(_db, 'conn', None) if _db else None
+                if _conn is not None:
+                    chat_id = resolve_admin_chat(_conn, context, ADMIN_CHAT_ID)
+                else:
+                    chat_id = context.bot_data.get('target_chat_id') or ADMIN_CHAT_ID
+            except Exception:
                 chat_id = context.bot_data.get('target_chat_id') or ADMIN_CHAT_ID
-            except ImportError:
-                pass
                 
         try:
             await context.bot.delete_message(chat_id=chat_id, message_id=old_card_msg_id)
