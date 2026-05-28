@@ -247,10 +247,10 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         <p className="text-[12px] text-txd mt-1.5 leading-snug line-clamp-2">{mod.desc}</p>
       </div>
 
-      {/* V1.17.0Q4: подсказка наследования треда для детей BBS-семейства */}
+      {/* V1.17.0Q4: подсказка наследования ветки для детей BBS-семейства */}
       {(mod.id === 'bbs_edit' || mod.id === 'vip_bbs' || mod.id === 'bbs_bonus') && (
         <div className="text-[10px] text-txd italic flex items-center gap-1">
-          <Link2 size={10} />Наследует тред от «Пульс ББС»
+          <Link2 size={10} />Использует ветку модуля «Пульс ББС»
         </div>
       )}
 
@@ -276,7 +276,7 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         {mod.id === 'bbs_pulse' && connected && (
           <button onClick={onOpenBbsThreads}
                   className="px-2.5 py-1.5 rounded-xl border border-bd hover:bg-sf2 transition flex items-center gap-1"
-                  title="Настроить треды публикаций ББС">
+                  title="Настроить ветки публикаций ББС">
             <Link2 size={14} className="text-cta" />
           </button>
         )}

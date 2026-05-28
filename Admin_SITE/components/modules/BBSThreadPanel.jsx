@@ -105,7 +105,7 @@ export default function BBSThreadPanel({ open, onClose }) {
            onClick={e => e.stopPropagation()}>
         {/* Заголовок */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-bd">
-          <h2 className="text-lg font-black text-tx">Треды ББС-семейства</h2>
+          <h2 className="text-lg font-black text-tx">Ветки публикаций ББС</h2>
           <button onClick={onClose}
                   className="p-2 hover:bg-sf2 rounded-lg transition">
             <X size={20} className="text-txd" />
@@ -114,20 +114,20 @@ export default function BBSThreadPanel({ open, onClose }) {
 
         {/* Тело */}
         <div className="p-6 space-y-5">
-          {/* Главный ББС-тред */}
+          {/* Главная ветка ББС */}
           <div>
             <label className="block text-sm font-bold text-tx mb-2">
-              Главный тред для анкет
+              Главная ветка для анкет
             </label>
             <div className="text-[12px] text-txd mb-2">
               Куда бот будет публиковать анкеты участников.
               Остальные модули ББС (Редактор анкет, VIP BBS, BBS-бонусы)
-              автоматически работают в этом же треде.
+              автоматически работают в этой же ветке.
             </div>
             <div className="flex gap-2">
               <input type="number" value={bbsThread}
                      onChange={e => setBbsThread(e.target.value)}
-                     placeholder="ID треда"
+                     placeholder="ID ветки"
                      className="flex-1 px-3 py-2 rounded-xl border border-bd bg-sff text-tx text-sm focus:outline-none focus:border-cta" />
               <button onClick={() => saveTopic('bbs', bbsThread)}
                       className="px-4 py-2 rounded-xl bg-cta text-white font-bold text-sm hover:opacity-90 transition flex items-center gap-1.5">
@@ -146,19 +146,19 @@ export default function BBSThreadPanel({ open, onClose }) {
           {/* ББС Другое override */}
           <div className="pt-4 border-t border-bd">
             <label className="block text-sm font-bold text-tx mb-2">
-              Отдельный тред для объявлений — по желанию
+              Отдельная ветка для объявлений — по желанию
             </label>
             <div className="text-[12px] text-txd mb-2">
               Касается раздела «ББС Другое» — продажи, аренда, услуги.
               <br />
-              Можно выделить этим объявлениям свой тред — заполни поле ниже.
+              Можно выделить этим объявлениям свою ветку — заполни поле ниже.
               <br />
-              Можно оставить <b>пустым</b> — тогда объявления пойдут в тот же тред что и анкеты.
+              Можно оставить <b>пустым</b> — тогда объявления пойдут в ту же ветку что и анкеты.
             </div>
             <div className="flex gap-2">
               <input type="number" value={otherThread}
                      onChange={e => setOtherThread(e.target.value)}
-                     placeholder="ID треда (или оставь пустым)"
+                     placeholder="ID ветки (или оставь пустым)"
                      className="flex-1 px-3 py-2 rounded-xl border border-bd bg-sff text-tx text-sm focus:outline-none focus:border-cta" />
               <button onClick={() => saveTopic('bbs_other', otherThread)}
                       className="px-4 py-2 rounded-xl bg-cta text-white font-bold text-sm hover:opacity-90 transition flex items-center gap-1.5">
@@ -178,7 +178,7 @@ export default function BBSThreadPanel({ open, onClose }) {
           <div className="bg-sf2 rounded-2xl p-4 text-[12px] text-txd flex gap-2">
             <Info size={16} className="text-cta shrink-0 mt-0.5" />
             <div>
-              <b>Где взять ID треда:</b> зайди в нужный тред чата в Telegram,
+              <b>Где взять ID ветки:</b> зайди в нужную ветку чата в Telegram,
               отправь команду <code className="font-mono">/get_thread_id</code> —
               бот ответит числом. Скопируй и вставь сюда.
             </div>
