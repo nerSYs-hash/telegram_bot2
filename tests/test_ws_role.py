@@ -1,7 +1,7 @@
 # tests/test_ws_role.py
 import sqlite3
 import pytest
-from bot_core.ws_role import i_ws_rbac_enabled, resolve_bot_role, is_ws_owner
+from bot_core.ws_role import i_ws_rbac_enabled, resolve_bot_role, is_ws_owner, is_ws_admin
 
 
 class _Ctx:
@@ -74,3 +74,42 @@ def test_moderator_is_not_owner(monkeypatch, conn):
     # workspace_members.role='moderator' → resolve_ws_role -> 'admin'
     assert resolve_bot_role(_Ctx(7), 555, conn=conn) == 'admin'
     assert is_ws_owner(_Ctx(7), 555, conn=conn) is False
+
+
+# ─── is_ws_admin (Этап A, V1.17.0L1) ───
+def test_is_ws_admin_owner_true(monkeypatch, conn):
+    """owner ws=7 — is_ws_admin=True в ws=7."""
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    assert is_ws_admin(_Ctx(7), 8376708692, conn=conn) is True
+
+
+def test_is_ws_admin_moderator_true(monkeypatch, conn):
+    """moderator (= admin в permissions) ws=7 — is_ws_admin=True в ws=7."""
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    assert is_ws_admin(_Ctx(7), 555, conn=conn) is True
+
+
+def test_is_ws_admin_user_false(monkeypatch, conn):
+    """plain user — is_ws_admin=False."""
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    assert is_ws_admin(_Ctx(7), 424242, conn=conn) is False
+
+
+def test_is_ws_admin_cross_ws_false(monkeypatch, conn):
+    """owner ws=7 — is_ws_admin=False в ws=1 (он там не член)."""
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    assert is_ws_admin(_Ctx(1), 8376708692, conn=conn) is False
+
+
+def test_is_ws_admin_developer_true(monkeypatch, conn):
+    """developer god-mode — is_ws_admin=True везде."""
+    monkeypatch.setenv('I_WS_RBAC', '1')
+    monkeypatch.setenv('DEVELOPER_ID', '999')
+    assert is_ws_admin(_Ctx(7), 999, conn=conn) is True
+    assert is_ws_admin(_Ctx(1), 999, conn=conn) is True
+
+
+def test_is_ws_admin_flag_off_returns_false(monkeypatch, conn):
+    """I_WS_RBAC=0 → is_ws_admin=False (caller уходит в legacy fallback)."""
+    monkeypatch.delenv('I_WS_RBAC', raising=False)
+    assert is_ws_admin(_Ctx(7), 8376708692, conn=conn) is False

@@ -82,3 +82,19 @@ def is_ws_owner(context, user_id: int,
                 conn: Optional[sqlite3.Connection] = None) -> bool:
     """MVP-предикат: владелец (или developer god-mode) своего ws."""
     return resolve_bot_role(context, user_id, conn) in ('owner', 'developer')
+
+
+def is_ws_admin(context, user_id: int,
+                conn: Optional[sqlite3.Connection] = None) -> bool:
+    """Этап A (V1.17.0L1): True для owner/deputy/admin/developer своего ws.
+
+    Используется хендлерами для гейтов «админ ИЛИ владелец» (Пульт Владельца,
+    модерация заявок, бинго/лотерея/титулы и т.д.). Под капотом — единая
+    точка правды workspace_members через resolve_bot_role.
+
+    Pulse-safe: при I_WS_RBAC=0 даёт False — caller уходит в legacy fallback
+    (свой старый чек на users.is_admin/is_owner или main_admin_id).
+    """
+    return resolve_bot_role(context, user_id, conn) in (
+        'owner', 'deputy', 'admin', 'developer'
+    )
