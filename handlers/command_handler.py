@@ -450,6 +450,77 @@ class CommandHandler:
         """Handle /balance command — delegates to economy_commands"""
         await balance_command(update, context, self.db)
 
+    async def myref_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+        """Handle /myref command (V1.17.0P4).
+
+        Юзер пишет /myref в любом чате (общем или DM) → бот шлёт ссылку в ЛС.
+        В групповом чате сообщение юзера удаляется чтобы не засорять.
+        Если бот не может писать юзеру в ЛС (тот не /start'нул бота) —
+        отвечает в чате коротко.
+        """
+        from handlers.commands.system_commands import send_my_referral_link
+        msg = update.message
+        chat_type = update.effective_chat.type if update.effective_chat else 'private'
+        user_id = update.effective_user.id if update.effective_user else None
+
+        if chat_type == 'private':
+            # В ЛС просто отдаём
+            await send_my_referral_link(update, context, self.db, self.target_chat_id)
+            return
+
+        # В групповом — пробуем отправить в ЛС
+        try:
+            # Имитируем DM-message чтобы send_my_referral_link отправил туда
+            class _FakeUpdate:
+                def __init__(self, original, msg_to_dm):
+                    self.message = msg_to_dm
+                    self.effective_user = original.effective_user
+                    self.effective_chat = msg_to_dm.chat if msg_to_dm else original.effective_chat
+
+            # Создаём pseudo-message который ответит в ЛС
+            class _ReplyToDM:
+                def __init__(self, bot, uid, user):
+                    self._bot = bot
+                    self._uid = uid
+                    self.from_user = user
+                    self.chat = type('C', (), {'id': uid, 'type': 'private'})()
+
+                async def reply_text(self, text, **kwargs):
+                    return await self._bot.send_message(chat_id=self._uid, text=text, **kwargs)
+
+            fake_msg = _ReplyToDM(context.bot, user_id, update.effective_user)
+            fake_update = _FakeUpdate(update, fake_msg)
+            await send_my_referral_link(fake_update, context, self.db, self.target_chat_id)
+
+            # Подтверждение в чате (опционально) + удаление команды
+            try:
+                await msg.delete()
+            except Exception:
+                pass
+        except Exception as e:
+            # Бот не смог написать в ЛС — ответим в чате
+            logger.warning(f"myref_command DM-send failed for {user_id}: {e}")
+            try:
+                ack = await msg.reply_text(
+                    "🎟 Чтобы получить твою реф-ссылку — сначала открой бота в ЛС "
+                    "(нажми на имя бота → Старт), потом отправь /myref"
+                )
+                # Удаляем оба через 15 сек
+                import asyncio
+                async def _del():
+                    await asyncio.sleep(15)
+                    try:
+                        await ack.delete()
+                    except Exception:
+                        pass
+                    try:
+                        await msg.delete()
+                    except Exception:
+                        pass
+                asyncio.create_task(_del())
+            except Exception:
+                pass
+
     async def top_command(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """Handle /top command — delegates to top_commands"""
         await _top_command(update, context, self.db)

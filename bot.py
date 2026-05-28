@@ -697,6 +697,8 @@ class TelegramBot:
         self.application.add_handler(CommandHandler("help", self.command_handler.help_command))
         self.application.add_handler(CommandHandler("recalc", lambda u, c: recalc_rate_command(u, c, self.db, self.main_admin_id, self.target_chat_id)))
         self.application.add_handler(CommandHandler("profile", self.command_handler.profile_command))
+        # V1.17.0P4: /myref — персональная реф-ссылка (работает и в DM и в общем чате)
+        self.application.add_handler(CommandHandler("myref", self.command_handler.myref_command))
         self.application.add_handler(CommandHandler("wipe_balances", self.command_handler.wipe_balances_command))
         self.application.add_handler(CommandHandler("set_bank", self.command_handler.set_bank_command))
         self.application.add_handler(CommandHandler("fix_left", self.command_handler.fix_left_command))

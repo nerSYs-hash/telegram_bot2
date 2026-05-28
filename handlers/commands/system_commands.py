@@ -142,28 +142,55 @@ async def send_my_referral_link(update: Update, context: ContextTypes.DEFAULT_TY
         )
         return
 
-    # Текст награды берём из economy_settings (редактируется Ильей с сайта).
+    # Размер награды + условия квалификации — из economy_settings (редактируется
+    # Ильей с сайта). Все попадают в template как placeholders.
     try:
         reward = int(db.get_econ('referral.qualified_reward',
                                  int(os.getenv('REFERRAL_REWARD', 500))) or 500)
     except Exception:
         reward = 500
+    try:
+        hours = int(db.get_econ('referral.qualification_hours', 24) or 24)
+    except Exception:
+        hours = 24
+    try:
+        min_msg = int(db.get_econ('referral.qualification_messages', 5) or 5)
+    except Exception:
+        min_msg = 5
+    try:
+        min_react = int(db.get_econ('referral.qualification_reactions', 3) or 3)
+    except Exception:
+        min_react = 3
 
-    if mode == 'tg_invite':
-        body = (
-            f"🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
-            f"<code>{link}</code>\n\n"
-            f"Перешли её другу — он зайдёт прямо в чат.\n"
-            f"Когда друг освоится (24ч + 5 сообщ. или 3 реакции), тебе капнет "
-            f"<b>{reward} 💎</b>."
-        )
-    else:
-        body = (
-            f"🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
-            f"<code>{link}</code>\n\n"
-            f"Перешли её другу — он пройдёт анкету и попадёт в чат.\n"
-            f"После того как друг освоится — тебе капнет <b>{reward} 💎</b>."
-        )
+    # V1.17.0P4: текст сообщения редактируется с сайта через settings.
+    # Плейсхолдеры: {link}, {reward}, {hours}, {messages}, {reactions}
+    DEFAULT_TPL_TG_INVITE = (
+        "🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
+        "<code>{link}</code>\n\n"
+        "Перешли её другу — он зайдёт прямо в чат.\n"
+        "Когда друг освоится ({hours}ч + {messages} сообщ. или {reactions} реакции), "
+        "тебе капнет <b>{reward} 💎</b>."
+    )
+    DEFAULT_TPL_DEEP_LINK = (
+        "🎟 <b>Твоя личная реф-ссылка:</b>\n\n"
+        "<code>{link}</code>\n\n"
+        "Перешли её другу — он пройдёт анкету и попадёт в чат.\n"
+        "После того как друг освоится — тебе капнет <b>{reward} 💎</b>."
+    )
+
+    settings_key = 'referral_message_tg_invite' if mode == 'tg_invite' else 'referral_message_deep_link'
+    tpl = None
+    try:
+        tpl = db.get_setting(settings_key)
+    except Exception:
+        pass
+    if not tpl:
+        tpl = DEFAULT_TPL_TG_INVITE if mode == 'tg_invite' else DEFAULT_TPL_DEEP_LINK
+
+    body = tpl.format(
+        link=link, reward=reward, hours=hours,
+        messages=min_msg, reactions=min_react,
+    )
 
     await message.reply_text(body, parse_mode='HTML', disable_web_page_preview=True)
 
