@@ -141,22 +141,15 @@ class CommandHandler:
             ]
         ])
 
-        # Пробуем найти фото с лицом
+        # V1.17.0Q2: face_detector удалён. Берём первую аватарку (без AI-проверки).
         face_photo = None
         try:
-            from utils.face_detector import has_human_face
-            photos = await context.bot.get_user_profile_photos(target_id, limit=3)
+            photos = await context.bot.get_user_profile_photos(target_id, limit=1)
             for photo_size_list in (photos.photos or []):
-                try:
-                    file = await context.bot.get_file(photo_size_list[-1].file_id)
-                    byte_array = await file.download_as_bytearray()
-                    if await has_human_face(byte_array):
-                        face_photo = photo_size_list[-1].file_id
-                        break
-                except Exception:
-                    continue
+                face_photo = photo_size_list[-1].file_id
+                break
         except Exception as e:
-            logger.warning(f"resend_dossier photo check error: {e}")
+            logger.debug(f"resend_dossier avatar fetch failed: {e}")
 
         # Отправляем напрямую с нормальными ошибками
         try:

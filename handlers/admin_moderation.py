@@ -15,7 +15,6 @@ from database.db_friend import (
     get_user, get_application, create_invite_link
 )
 from config import CHAT_ID, ADMIN_CHAT_ID, DOSSIER_THREAD_ID, APPLICATIONS_THREAD_ID
-from utils.face_detector import has_human_face
 
 logger = logging.getLogger(__name__)
 
@@ -113,35 +112,21 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
     dossier_text = inject_presence(dossier_text, in_chat=True)
 
     try:
-        photos = await bot.get_user_profile_photos(user_id, limit=3)
+        # V1.17.0Q2: face_detector удалён (Илья 29.05 — «не работает, удалить целиком»).
+        # Берём первую доступную аватарку юзера, если есть. Без AI-проверки лица.
         face_photo = None
-
-        # Сначала проверяем profile_photos
-        for photo_size_list in (photos.photos or []):
-            try:
-                file = await bot.get_file(photo_size_list[-1].file_id)
-                byte_array = await file.download_as_bytearray()
-                if await has_human_face(byte_array):
-                    face_photo = photo_size_list[-1].file_id
-                    break
-            except Exception as e:
-                logger.warning(f"_send_dossier: ошибка обработки фото: {e}")
-                continue
-
-        # Если не найдено ни одного фото с лицом — пробуем главное фото-аватар
-        if not face_photo:
-            try:
+        try:
+            photos = await bot.get_user_profile_photos(user_id, limit=1)
+            for photo_size_list in (photos.photos or []):
+                face_photo = photo_size_list[-1].file_id
+                break
+            if not face_photo:
                 user = await bot.get_chat(user_id)
                 if hasattr(user, 'photo') and user.photo:
-                    # Берём маленькую или большую версию аватара
-                    avatar_file_id = getattr(user.photo, 'big_file_id', None) or getattr(user.photo, 'small_file_id', None)
-                    if avatar_file_id:
-                        file = await bot.get_file(avatar_file_id)
-                        byte_array = await file.download_as_bytearray()
-                        if await has_human_face(byte_array):
-                            face_photo = avatar_file_id
-            except Exception as e:
-                logger.warning(f"_send_dossier: ошибка обработки главного аватара: {e}")
+                    face_photo = (getattr(user.photo, 'big_file_id', None)
+                                  or getattr(user.photo, 'small_file_id', None))
+        except Exception as e:
+            logger.debug(f"_send_dossier: не смог достать аватарку: {e}")
 
         _admin_chat, _dossier_thread = _admin_dest(context, db.conn if db else None, 'dossier')
         if face_photo:
@@ -161,7 +146,7 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
                                    admin_username=admin_username,
                                    base_text=dossier_text)
         else:
-            no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
+            no_face_text = dossier_text + "\n\n<i>(аватарка не доступна)</i>"
             sent = await bot.send_message(
                 chat_id=_admin_chat,
                 message_thread_id=_dossier_thread,
