@@ -562,6 +562,25 @@ function CategoryDetailModal({
                 sectionEnabled={sectionEnabled}
               />
 
+              {category.key === 'referral' && (
+                <div className="mt-6 pt-6 border-t border-bd">
+                  <div className="rounded-2xl border border-bd bg-sf2 p-4 text-sm text-tx">
+                    <div className="font-bold mb-2">ℹ️ Одна система — два сообщения</div>
+                    <p className="text-txd leading-relaxed">
+                      Размер награды и условия квалификации (часы, сообщения, реакции)
+                      одинаково применяются и к <b>большому реф-сообщению</b> (то что
+                      приходит после прохождения анкеты), и к <b>маленькому сообщению</b>{' '}
+                      по кнопке «🎟 Моя ссылка» / команде <code>/myref</code>.
+                    </p>
+                    <p className="text-txd leading-relaxed mt-2">
+                      Это одна и та же реф-система. Просто работает в двух режимах:
+                      с анкетой (если модуль «Регистрация» включён) — через ссылку на
+                      бота; без анкеты — через TG-invite ссылку прямо в чат.
+                    </p>
+                  </div>
+                </div>
+              )}
+
               {category.key === 'vip_bbs' && (
                 <div className="mt-6 pt-6 border-t border-bd">
                   <TitlesPanel token={token} canEdit={canEdit} />
