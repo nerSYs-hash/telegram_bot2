@@ -1369,10 +1369,28 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if await is_deputy(target_id):
             await update.message.reply_text("ℹ️ Уже является замом владельца.")
             return True
-        target_user = await get_user(target_id)
+        # SaaS блокер 1.1+: проверяем юзера в ОСНОВНОЙ БД (bot_database.db),
+        # не в db_friend (pulse_bot.db) — там юзер может отсутствовать, если
+        # он не проходил регистрацию-анкету (просто вошёл в чат по invite).
+        target_user = None
+        try:
+            from database.db_manager import Database
+            import os
+            _check_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            _row = _check_db.conn.execute(
+                "SELECT user_id, username, first_name FROM users WHERE user_id=?",
+                (target_id,)
+            ).fetchone()
+            _check_db.conn.close()
+            if _row:
+                target_user = {'tg_id': _row[0], 'username': _row[1], 'first_name': _row[2]}
+        except Exception as e:
+            logger.warning(f"deputy_add check main DB: {e}")
         if not target_user:
-            await update.message.reply_text(f"❌ Пользователь <code>{target_id}</code> не найден в базе.",
-                                            parse_mode="HTML")
+            await update.message.reply_text(
+                f"❌ Пользователь <code>{target_id}</code> не найден в базе бота.\n"
+                f"Он должен сначала написать в чат, чтобы бот его зарегистрировал.",
+                parse_mode="HTML")
             return True
         await add_deputy(target_id, added_by=OWNER_ID)
         # Синхронная БД: is_owner=1 чтобы зам видел клавиатуру "Панель Владельца"
@@ -1406,7 +1424,21 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if not await is_deputy(target_id):
             await update.message.reply_text("ℹ️ Этот пользователь не является замом.")
             return True
-        target_user = await get_user(target_id)
+        # Имя для красивого сообщения — из основной БД (см. deputy_add фикс).
+        target_user = None
+        try:
+            from database.db_manager import Database
+            import os
+            _check_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            _row = _check_db.conn.execute(
+                "SELECT user_id, username, first_name FROM users WHERE user_id=?",
+                (target_id,)
+            ).fetchone()
+            _check_db.conn.close()
+            if _row:
+                target_user = {'tg_id': _row[0], 'username': _row[1], 'first_name': _row[2]}
+        except Exception as e:
+            logger.warning(f"deputy_remove check main DB: {e}")
         await remove_deputy(target_id)
         # Синхронная БД: вернуть is_owner=0
         try:
