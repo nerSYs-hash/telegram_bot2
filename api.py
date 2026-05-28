@@ -764,10 +764,14 @@ def _compute_series(granularity: str = 'day') -> dict:
                 "kpi": {}}
 
     # ── joined / left по дням ──
+    # Этап C+ (V1.17.0M6): фильтр per-ws — учитываем только тех юзеров,
+    # которые хотя бы раз писали в активном workspace. Иначе виджет
+    # подсасывает старых Pulse-юзеров с joined_at до подключения PositivЭ.
     db.cursor.execute(
         "SELECT date(joined_at) d, COUNT(*) c FROM users "
         "WHERE date(joined_at) BETWEEN ? AND ? AND is_admin=0 AND is_owner=0 "
-        "GROUP BY d", (s_iso, e_iso))
+        "  AND user_id IN (SELECT DISTINCT user_id FROM messages WHERE workspace_id=?) "
+        "GROUP BY d", (s_iso, e_iso, ws_id))
     joined_by = {}
     for r in db.cursor.fetchall():
         joined_by[bucket(r['d'])] = joined_by.get(bucket(r['d']), 0) + int(r['c'])
@@ -791,10 +795,12 @@ def _compute_series(granularity: str = 'day') -> dict:
         msg_by[k] = msg_by.get(k, 0) + int(r['m'])
         wr_by[k] = wr_by.get(k, 0) + int(r['w'])
 
-    # базовый размер сообщества до окна (для линии «Всего»)
+    # базовый размер сообщества до окна (для линии «Всего») — per-ws фильтр
     db.cursor.execute(
         "SELECT COUNT(*) c FROM users WHERE date(joined_at) < ? "
-        "AND is_admin=0 AND is_owner=0", (s_iso,))
+        "AND is_admin=0 AND is_owner=0 "
+        "AND user_id IN (SELECT DISTINCT user_id FROM messages WHERE workspace_id=?)",
+        (s_iso, ws_id))
     base = int((db.cursor.fetchone() or {'c': 0})['c'])
     db.cursor.execute(
         "SELECT COUNT(*) c FROM transactions WHERE workspace_id=? "
@@ -802,8 +808,11 @@ def _compute_series(granularity: str = 'day') -> dict:
     base -= int((db.cursor.fetchone() or {'c': 0})['c'])
     base = max(base, 0)
 
+    # total для расчёта engagement % — per-ws (юзеры с активностью в этом ws)
     db.cursor.execute(
-        "SELECT COUNT(*) c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0")
+        "SELECT COUNT(*) c FROM users WHERE is_left=0 AND is_admin=0 AND is_owner=0 "
+        "AND user_id IN (SELECT DISTINCT user_id FROM messages WHERE workspace_id=?)",
+        (ws_id,))
     total_users = int((db.cursor.fetchone() or {'c': 0})['c']) or 1
 
     users, messages, engagement, newcomers = [], [], [], []
