@@ -203,7 +203,7 @@ async def approve_application(
         or reg_data.get("q_name") or "—"
     )
     user_link = f'<a href="tg://user?id={target_user_id}">{full_name}</a>'
-    group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">Pulse 4ever</a>'
+    group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">PositivЭ</a>'
 
     card_text = (
         f"#Одобрено\n"

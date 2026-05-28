@@ -248,7 +248,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=user_id,
             text=(
                 f"{user_name}, мы сожалеем, но ты заблокирован администрацией "
-                f"чата Pulse 4ever из-за: {reason}.\n\n"
+                f"чата PositivЭ из-за: {reason}.\n\n"
                 f"Если считаешь, что попал в ЧС по ошибке — нажми кнопку ниже."
             ),
             parse_mode="HTML",
@@ -370,7 +370,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await context.bot.send_message(
                 chat_id=user_id,
                 text=(
-                    f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                    f"🚫 К сожалению, ты был заблокирован в чате PositivЭ.\n\n"
                     f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
                     f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения."
                 ),
@@ -392,7 +392,7 @@ async def start_reg(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 chat_id=user_id,
                 text=(
                     f"👋 С возвращением, {display_name}!\n\n"
-                    f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                    f"Рады снова видеть тебя в PositivЭ 🤍\n\n"
                     f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
                     f"⚠️ Ссылка одноразовая — действует только для тебя и "
                     f"сгорит сразу после использования."
@@ -717,7 +717,7 @@ async def get_ref_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 _build_form(
                     context.user_data,
                     f"Д. Реф. код (ник пользователя)\n\n"
-                    f"❌ Пользователь @{html.escape(username_clean)} не найден в Pulse 4ever.\n"
+                    f"❌ Пользователь @{html.escape(username_clean)} не найден в PositivЭ.\n"
                     f"Введи корректный @username или пропусти."
                 ),
                 keyboard=keyboard,

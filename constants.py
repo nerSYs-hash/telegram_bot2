@@ -195,7 +195,7 @@ class Messages:
     )
     
     APPROVED = (
-        "{name}, ты на пороге входа в чат Pulse 4ever, "
+        "{name}, ты на пороге входа в чат PositivЭ, "
         "просто используй свою личную ссылку: {link}"
     )
     

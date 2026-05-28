@@ -67,7 +67,7 @@ async def send_unused_link_reminders_5min(context):
 
             msg = await context.bot.send_message(
                 chat_id=user_id,
-                text=f"<b>{display_name}</b>,\nМы заметили, что ты ещё не воспользовался ссылкой и не перешёл в чат Pulse 4ever. Ждём тебя!",
+                text=f"<b>{display_name}</b>,\nМы заметили, что ты ещё не воспользовался ссылкой и не перешёл в чат PositivЭ. Ждём тебя!",
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
@@ -101,7 +101,7 @@ async def send_unused_link_reminders_10days(context):
 
             msg = await context.bot.send_message(
                 chat_id=user_id,
-                text=f"<b>{display_name}</b>, с возвращением! 👋\n\nМы заметили, что ты не воспользовался своей персональной ссылкой для входа в чат Pulse 4ever.\nВозможно, ты отвлёкся или потерял её — не проблема!",
+                text=f"<b>{display_name}</b>, с возвращением! 👋\n\nМы заметили, что ты не воспользовался своей персональной ссылкой для входа в чат PositivЭ.\nВозможно, ты отвлёкся или потерял её — не проблема!",
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )

@@ -102,7 +102,7 @@ def build_single_message(horoscopes: dict, cache: dict, target_date=None) -> str
     date_str = target_date.strftime('%d.%m.%Y')
 
     header = f"<b>🔮 ГОРОСКОП • {date_str}</b>\n"
-    footer = "\n<i>© Сообщество Pulse 2026</i>"
+    footer = "\n<i>© PositivЭ 2026</i>"
     
     # Считаем бюджет видимых символов
     # header visible: ~30, footer visible: ~25, formatting: ~50
@@ -150,7 +150,7 @@ def build_single_message(horoscopes: dict, cache: dict, target_date=None) -> str
 async def show_horoscope_menu(query, user, db, admin_id):
     if not await _is_horoscope_privileged(user.id, admin_id): return
     await query.edit_message_text(
-        f"🔮 <b>Гороскоп © Сообщество Pulse 2026</b>\n\nСкоростной парринг расширенных текстов включен.",
+        f"🔮 <b>Гороскоп © PositivЭ 2026</b>\n\nСкоростной парринг расширенных текстов включен.",
         parse_mode='HTML',
         reply_markup=InlineKeyboardMarkup([
             [InlineKeyboardButton("🚀 Опубликовать в чат", callback_data="horoscope_publish")],

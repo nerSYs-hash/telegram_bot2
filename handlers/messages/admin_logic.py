@@ -185,7 +185,7 @@ async def publish_press_release(message, context, target_chat_id):
         # Format press release text
         press_release = (
             f"{make_first_line_bold(text)}\n\n"
-            "<i>© Сообщество Pulse</i>"
+            "<i>© PositivЭ</i>"
         )
 
         # Check if message has photo
@@ -459,7 +459,7 @@ async def _handle_awaiting_schedule_time(message, user, context, db, target_chat
     pr_text = pr_data.get('text', '')
     press_release_text = (
         f"{make_first_line_bold(pr_text)}\n\n"
-        "<i>© Сообщество Pulse</i>"
+        "<i>© PositivЭ</i>"
     )
 
     post_id = db.add_scheduled_post(
@@ -1023,7 +1023,7 @@ async def _handle_awaiting_edit_text(message, context, db):
     # Форматируем как пресс-релиз
     formatted_text = (
         f"{make_first_line_bold(new_text)}\n\n"
-        "<i>© Сообщество Pulse</i>"
+        "<i>© PositivЭ</i>"
     )
 
     updated = db.update_scheduled_post(post_id, text=formatted_text)

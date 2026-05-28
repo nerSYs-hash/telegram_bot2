@@ -186,12 +186,12 @@ async def _send_invite_link(bot, user_id: int, user_name: str):
     # Отправляем пуш (ссылка скрыта в кнопке, защита от пересылки)
     try:
         keyboard = InlineKeyboardMarkup([
-            [InlineKeyboardButton("🚪 Войти в чат Pulse 4ever", url=invite_link)]
+            [InlineKeyboardButton("🚪 Войти в чат PositivЭ", url=invite_link)]
         ])
         msg = await bot.send_message(
             chat_id=user_id,
             text=(
-                f"{user_name}, ты на пороге входа в чат Pulse 4ever! 🎉\n\n"
+                f"{user_name}, ты на пороге входа в чат PositivЭ! 🎉\n\n"
                 f"Нажми кнопку ниже, чтобы присоединиться.\n\n"
                 f"⚠️ Ссылка одноразовая и только для тебя — никому не передавай!"
             ),
@@ -389,7 +389,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
             or reg_data.get('q_name') or '—'
         )
         user_link = f'<a href="tg://user?id={target_user_id}">{full_name}</a>'
-        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">Pulse 4ever</a>'
+        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">PositivЭ</a>'
 
         card_text = (
             f"#Одобрено\n"

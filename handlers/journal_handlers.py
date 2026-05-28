@@ -174,7 +174,7 @@ def _fmt_chat_block(chat) -> str:
         return "Группа: —"
     chat_id = chat.id
     clean = _chat_id_clean(chat_id)
-    title = chat.title or "Pulse 4ever"
+    title = chat.title or "PositivЭ"
     link = f"https://t.me/c/{clean}/2147483647"
     return f'Группа: <a href="{link}">{title}</a> [<a href="{link}">{chat_id}</a>] #c{clean}'
 
@@ -321,7 +321,7 @@ async def log_join(
     if chat:
         chat_id = chat.id
         clean = _chat_id_clean(chat_id)
-        title = chat.title or "Pulse 4ever"
+        title = chat.title or "PositivЭ"
         link = f"https://t.me/c/{clean}/2147483647"
         lines.append(f'Группа: <a href="{link}">{title}</a> [<a href="{link}">{chat_id}</a>] #c{clean}')
         lines.append("")
@@ -411,7 +411,7 @@ async def log_leave(
     if chat:
         chat_id = chat.id
         clean = _chat_id_clean(chat_id)
-        title = chat.title or "Pulse 4ever"
+        title = chat.title or "PositivЭ"
         link = f"https://t.me/c/{clean}/2147483647"
         lines.append(f'Группа: <a href="{link}">{title}</a> [<a href="{link}">{chat_id}</a>] #c{clean}')
         lines.append("")
@@ -465,7 +465,7 @@ async def log_kick(
     # ─ Блок В: группа ─
     if chat_id:
         clean = _chat_id_clean(chat_id)
-        title = chat_title or "Pulse 4ever"
+        title = chat_title or "PositivЭ"
         link = f"https://t.me/c/{clean}/2147483647"
         lines.append(f'Группа: <a href="{link}">{title}</a> [<a href="{link}">{chat_id}</a>] #c{clean}')
         lines.append("")
@@ -1009,7 +1009,7 @@ async def log_activity(
     # ─ Блок В: группа ─
     if chat_id:
         clean = _chat_id_clean(chat_id)
-        title = chat_title or "Pulse 4ever"
+        title = chat_title or "PositivЭ"
         link = f"https://t.me/c/{clean}/2147483647"
         lines.append(f'Группа: <a href="{link}">{title}</a> [<a href="{link}">{chat_id}</a>] #c{clean}')
         lines.append("")

@@ -682,7 +682,7 @@ async def main_menu_check_status(callback: CallbackQuery):
             
             if is_in_chat:
                 await callback.message.edit_text(
-                    "✅ Вы уже в чате Pulse 4ever!\n\n"
+                    "✅ Вы уже в чате PositivЭ!\n\n"
                     "Приглашайте друзей и общайтесь!"
                 )
             else:

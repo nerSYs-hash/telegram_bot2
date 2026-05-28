@@ -95,7 +95,7 @@ class CommandHandler:
             or reg_data.get('q_name') or '—'
         )
         user_link = f'<a href="tg://user?id={target_id}">{full_name}</a>'
-        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">Pulse 4ever</a>'
+        group_link = f'<a href="https://t.me/c/{str(CHAT_ID).replace("-100", "")}/1">PositivЭ</a>'
         applied_at = _fmt_date(reg_data.get('created_at'))
         joined_at = _msk_now()
 
@@ -289,7 +289,7 @@ class CommandHandler:
                     owner_name = str(OWNER_ID)
                 await update.message.reply_text(
                     f"⛔ {update.effective_user.first_name}, ты заблокирован(а) "
-                    f"по решению администрации чата Pulse 4ever.\n\n"
+                    f"по решению администрации чата PositivЭ.\n\n"
                     f"📝 Причина: {reason}\n\n"
                     f"Если считаешь, что это ошибка — свяжись с администратором: "
                     f'<a href="tg://user?id={OWNER_ID}">{owner_name}</a>',
@@ -332,7 +332,7 @@ class CommandHandler:
                         InlineKeyboardButton("📝 Подать заявку", callback_data="restart_registration")
                     ]])
                     await update.message.reply_text(
-                        "👋 Привет! Ты ещё не зарегистрирован в Pulse 4ever.\n\n"
+                        "👋 Привет! Ты ещё не зарегистрирован в PositivЭ.\n\n"
                         "Нажми кнопку ниже, чтобы подать заявку:",
                         reply_markup=kb
                     )
@@ -364,7 +364,7 @@ class CommandHandler:
                 if tg_status == 'kicked':
                     owner_link = f'<a href="tg://user?id={self.main_admin_id}">владельца чата</a>'
                     await update.message.reply_text(
-                        f"🚫 К сожалению, ты был заблокирован в чате Pulse 4ever.\n\n"
+                        f"🚫 К сожалению, ты был заблокирован в чате PositivЭ.\n\n"
                         f"Самостоятельное возвращение невозможно. Если считаешь, что блокировка "
                         f"была ошибочной — напиши {owner_link}, чтобы уточнить возможность возвращения.",
                         parse_mode="HTML"
@@ -381,7 +381,7 @@ class CommandHandler:
                         invite_url = invite_obj.invite_link
                         sent = await update.message.reply_text(
                             f"👋 С возвращением, {name}!\n\n"
-                            f"Рады снова видеть тебя в Pulse 4ever 🤍\n\n"
+                            f"Рады снова видеть тебя в PositivЭ 🤍\n\n"
                             f"🔗 Твоя персональная ссылка для входа в чат:\n{invite_url}\n\n"
                             f"⚠️ Ссылка одноразовая — действует только для тебя и "
                             f"сгорит сразу после использования."
