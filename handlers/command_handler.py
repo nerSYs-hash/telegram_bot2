@@ -67,9 +67,15 @@ class CommandHandler:
             await update.message.reply_text("⛔ Нет доступа.")
             return
 
+        # Этап C C5 (V1.17.0M5): /resend_dossier — admin-чат/тред per-ws
+        from bot_core.ws_resolver import resolve_admin_chat, resolve_admin_thread
+        _admin_chat_ws = resolve_admin_chat(self.db.conn, context, ADMIN_CHAT_ID)
+        _dossier_thread_ws = resolve_admin_thread(
+            self.db.conn, context, 'dossier', DOSSIER_THREAD_ID
+        )
         await update.message.reply_text(
             f"⏳ Ищу данные для user_id={target_id}…\n"
-            f"📍 Цель: chat={ADMIN_CHAT_ID} thread={DOSSIER_THREAD_ID}"
+            f"📍 Цель: chat={_admin_chat_ws} thread={_dossier_thread_ws}"
         )
 
         reg_data = await _get_reg_user(target_id)
@@ -157,8 +163,8 @@ class CommandHandler:
             ensure_anketa_edit_tables(self.db)
             if face_photo:
                 sent = await context.bot.send_photo(
-                    chat_id=ADMIN_CHAT_ID,
-                    message_thread_id=DOSSIER_THREAD_ID,
+                    chat_id=_admin_chat_ws,
+                    message_thread_id=_dossier_thread_ws,
                     photo=face_photo,
                     caption=card_text,
                     parse_mode="HTML",
@@ -173,8 +179,8 @@ class CommandHandler:
             else:
                 no_face_text = card_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на аватарках)</i>"
                 sent = await context.bot.send_message(
-                    chat_id=ADMIN_CHAT_ID,
-                    message_thread_id=DOSSIER_THREAD_ID,
+                    chat_id=_admin_chat_ws,
+                    message_thread_id=_dossier_thread_ws,
                     text=no_face_text,
                     parse_mode="HTML",
                     reply_markup=kb,
