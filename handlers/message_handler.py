@@ -555,35 +555,51 @@ class MessageHandler:
         except Exception as e:
             logging.error(f"shipper resonance hook error: {e}")
         
-       # === ОБНОВЛЕНИЕ СТАТИСТИКИ ЧАТА ===
-        # ЭТОТ БЛОК БОЛЬШЕ НЕ НУЖЕН, ТАК КАК МЫ БЕРЕМ ДАННЫЕ ИЗ USER_STATS
-        # is_admin_message = is_excluded
-        # 
-        # self.db.cursor.execute('''
-        #     INSERT INTO chat_stats (date, total_chars, total_messages, total_messages_with_admins,
-        #                            total_messages_without_admins, total_words, total_replies, 
-        #                            total_mentions, total_media, other_threads_posts)
-        #     VALUES (?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
-        #     ON CONFLICT(date) DO UPDATE SET
-        #         total_chars = total_chars + excluded.total_chars,
-        #         total_messages = total_messages + 1,
-        #         total_messages_with_admins = total_messages_with_admins + excluded.total_messages_with_admins,
-        #         total_messages_without_admins = total_messages_without_admins + excluded.total_messages_without_admins,
-        #         total_words = total_words + excluded.total_words,
-        #         total_replies = total_replies + excluded.total_replies,
-        #         total_mentions = total_mentions + excluded.total_mentions,
-        #         total_media = total_media + excluded.total_media,
-        #         other_threads_posts = other_threads_posts + excluded.other_threads_posts,
-        #         avg_message_length = CAST(total_chars AS REAL) / total_messages
-        # ''', (today, char_count, 
-        #       1 if is_admin_message else 0,  # with admins
-        #       0 if is_admin_message else 1,  # without admins
-        #       word_count, 
-        #       1 if (is_reply and not is_self_reply) else 0,
-        #       mentions_count,
-        #       1 if is_media else 0,
-        #       1 if thread_id is not None else 0))
-        # self.db.conn.commit()
+        # === ОБНОВЛЕНИЕ СВОДНОЙ СТАТИСТИКИ ЧАТА (chat_stats) ===
+        # Этап D полной изоляции (V1.17.0k27): per-ws upsert всех полей.
+        # Раньше блок был закомментирован — поэтому на сайте графики «сообщения по дням»
+        # / «активные юзеры» показывали нули. user_stats есть, а сводных нет.
+        # active_users пересчитываем из user_stats (уникальные user_id за сегодня в этом ws).
+        is_admin_message = is_excluded
+        _ws_id = getattr(self.db, '_DEFAULT_WS_ID', 1)
+        try:
+            self.db.cursor.execute('''
+                INSERT INTO chat_stats (workspace_id, date, total_chars, total_messages,
+                                       total_messages_with_admins, total_messages_without_admins,
+                                       total_words, total_replies, total_mentions, total_media,
+                                       other_threads_posts)
+                VALUES (?, ?, ?, 1, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(workspace_id, date) DO UPDATE SET
+                    total_chars = COALESCE(total_chars,0) + excluded.total_chars,
+                    total_messages = COALESCE(total_messages,0) + 1,
+                    total_messages_with_admins = COALESCE(total_messages_with_admins,0) + excluded.total_messages_with_admins,
+                    total_messages_without_admins = COALESCE(total_messages_without_admins,0) + excluded.total_messages_without_admins,
+                    total_words = COALESCE(total_words,0) + excluded.total_words,
+                    total_replies = COALESCE(total_replies,0) + excluded.total_replies,
+                    total_mentions = COALESCE(total_mentions,0) + excluded.total_mentions,
+                    total_media = COALESCE(total_media,0) + excluded.total_media,
+                    other_threads_posts = COALESCE(other_threads_posts,0) + excluded.other_threads_posts,
+                    avg_message_length = CAST(COALESCE(total_chars,0) AS REAL) / NULLIF(COALESCE(total_messages,0), 0)
+            ''', (_ws_id, today, char_count,
+                  1 if is_admin_message else 0,
+                  0 if is_admin_message else 1,
+                  word_count,
+                  1 if (is_reply and not is_self_reply) else 0,
+                  len(mentioned_user_ids),
+                  1 if is_media else 0,
+                  1 if thread_id is not None else 0))
+            # active_users: уникальные user_id из user_stats за сегодня в этом ws.
+            # Делаем подзапросом, чтобы не зависеть от порядка вызовов update_user_activity.
+            self.db.cursor.execute('''
+                UPDATE chat_stats SET active_users = (
+                    SELECT COUNT(DISTINCT user_id) FROM user_stats
+                    WHERE workspace_id = chat_stats.workspace_id
+                      AND date = chat_stats.date
+                ) WHERE workspace_id = ? AND date = ?
+            ''', (_ws_id, today))
+            self.db.conn.commit()
+        except Exception as e:
+            logging.error(f"chat_stats update error (ws={_ws_id}, date={today}): {e}")
         
         # === НАЧИСЛЕНИЕ НАГРАД ===
         _reward, _notification = process_mining_reward(
