@@ -22,7 +22,7 @@
 | T1 | `is_ws_admin()` в `bot_core/ws_role.py` + тесты | ✅ V1.17.0L1 |
 | T2 | `owner_handlers._is_owner` per-ws + 27 callsites + тесты | ✅ V1.17.0L2 |
 | T3 | `bingo_handlers._is_owner_user` per-ws + тесты | ✅ V1.17.0L3 |
-| T4 | `lottery_handlers._is_owner_user_ws` | 🔜 |
+| T4 | `lottery_handlers._is_owner_user` per-ws + тесты | ✅ V1.17.0L4 |
 | T5 | `titles_handlers` owner-check | 🔜 (если есть) |
 | T6 | `admin_moderation` глобальные `OWNER_ID==user.id` | 🔜 |
 | T7 | `message_handler.is_user_excluded` per-ws | 🔜 |
