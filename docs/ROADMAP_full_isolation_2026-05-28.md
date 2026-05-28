@@ -22,7 +22,7 @@
 | C1 | `admin_moderation._admin_dest` + миграция 4/5 callsites (досье, карточка заявки) | ✅ V1.17.0M1 |
 | C2 | `anketa_edit_handlers._rebuild_and_update` + 5 callers per-ws | ✅ V1.17.0M2 |
 | C3 | `bug_tracker_handlers` chat_id per-ws (BUG_THREADS — dead, оставлен) | ✅ V1.17.0M3 |
-| C4 | `exit_survey_handlers` (576/605) | 🔜 |
+| C4 | `exit_survey_handlers` admin-чат per-ws (отчёт ухода) | ✅ V1.17.0M4 |
 | C5 | `command_handler` /setup-команды (4 места) | 🔜 |
 | C6 | `send_applications_button` startup — итерация по всем ws | 🔜 |
 | C7 | Журнал-канал legacy fallback (`settings.journal_channel_id` → удалить) | 🔜 |

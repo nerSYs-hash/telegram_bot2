@@ -602,8 +602,17 @@ async def handle_exit_final(query, data: str, context, db) -> None:
                     f"\n<b>3. Конкретное событие:</b> {val('q3_event')}"
                     f"\n<b>4. Ожидания при вступлении:</b> {val('q4_expectations')}"
                 )
-                # Отправляем OWNER_ID и ADMIN_CHAT_ID
-                for admin_chat in {OWNER_ID, ADMIN_CHAT_ID}:
+                # Этап C C4 (V1.17.0M4): admin-чат per-ws через resolve_admin_chat.
+                # owner DM остаётся OWNER_ID из .env (TODO: resolve_ws_owner_id).
+                _admin_chat = ADMIN_CHAT_ID
+                try:
+                    from bot_core.ws_resolver import resolve_admin_chat
+                    _conn = getattr(db, 'conn', None)
+                    if _conn is not None:
+                        _admin_chat = resolve_admin_chat(_conn, context, ADMIN_CHAT_ID)
+                except Exception as _re:
+                    logger.debug(f"exit_survey resolve_admin_chat fallback: {_re}")
+                for admin_chat in {OWNER_ID, _admin_chat}:
                     try:
                         await context.bot.send_message(
                             chat_id=admin_chat,
