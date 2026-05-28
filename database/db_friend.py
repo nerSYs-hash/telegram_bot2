@@ -376,8 +376,18 @@ async def init_db():
         
         await db.execute("CREATE INDEX IF NOT EXISTS idx_invite_links_user_id ON invite_links(user_id)")
         await db.execute("CREATE INDEX IF NOT EXISTS idx_invite_links_active ON invite_links(is_active)")
-        
+
         await db.commit()
+
+    # Этап B B1 (V1.17.0O1): multi-tenant миграция pulse_bot.db.
+    # ADD COLUMN workspace_id во все таблицы (idempotent, существующие → ws=1).
+    try:
+        from database.migrations.db_friend_multitenancy import (
+            migrate_db_friend_to_multitenant,
+        )
+        migrate_db_friend_to_multitenant(DB_PATH)
+    except Exception as _mt_e:
+        logger.warning(f"db_friend multi-tenant миграция: {_mt_e}")
 
 # ==================== USER OPERATIONS ====================
 
