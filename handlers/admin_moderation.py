@@ -52,8 +52,41 @@ def get_applications_keyboard(is_owner: bool = False) -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(buttons, resize_keyboard=True, selective=True)
 
 
+def _admin_dest(context, conn, kind: str | None = None):
+    """Этап C T1 (V1.17.0M1): per-ws (chat_id, thread_id) для админских операций.
+
+    При H_RUNTIME_WS=1 (runtime_ws_enabled): резолвит из bot_chats.role='admin' +
+    bot_chat_topics.kind={applications|dossier|...} для активного workspace.
+    Fallback: ADMIN_CHAT_ID / APPLICATIONS_THREAD_ID / DOSSIER_THREAD_ID из .env.
+    """
+    from bot_core.ws_resolver import resolve_admin_chat, resolve_admin_thread
+    chat_id = ADMIN_CHAT_ID
+    thread_id = None
+    if conn is not None and context is not None:
+        try:
+            chat_id = resolve_admin_chat(conn, context, ADMIN_CHAT_ID)
+        except Exception as e:
+            logger.debug(f"resolve_admin_chat fallback: {e}")
+            chat_id = ADMIN_CHAT_ID
+    if kind:
+        _fallback_map = {
+            'applications': APPLICATIONS_THREAD_ID,
+            'dossier': DOSSIER_THREAD_ID,
+        }
+        fb = _fallback_map.get(kind)
+        if conn is not None and context is not None:
+            try:
+                thread_id = resolve_admin_thread(conn, context, kind, fb)
+            except Exception as e:
+                logger.debug(f"resolve_admin_thread({kind}) fallback: {e}")
+                thread_id = fb
+        else:
+            thread_id = fb
+    return chat_id, thread_id
+
+
 async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
-                        admin_username: str = '—'):
+                        admin_username: str = '—', context=None):
     """Отправляет досье с фото (если найдено лицо) в тред администраторов.
     Сохраняет msg_id в anketa_edits для последующего редактирования.
     """
@@ -110,10 +143,11 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
             except Exception as e:
                 logger.warning(f"_send_dossier: ошибка обработки главного аватара: {e}")
 
+        _admin_chat, _dossier_thread = _admin_dest(context, db.conn if db else None, 'dossier')
         if face_photo:
             sent = await bot.send_photo(
-                chat_id=ADMIN_CHAT_ID,
-                message_thread_id=DOSSIER_THREAD_ID,
+                chat_id=_admin_chat,
+                message_thread_id=_dossier_thread,
                 photo=face_photo,
                 caption=dossier_text,
                 parse_mode="HTML",
@@ -129,8 +163,8 @@ async def _send_dossier(bot, user_id: int, dossier_text: str, keyboard, db=None,
         else:
             no_face_text = dossier_text + "\n\n<i>(⚠️ ИИ не обнаружил человеческого лица на открытых аватарках)</i>"
             sent = await bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                message_thread_id=DOSSIER_THREAD_ID,
+                chat_id=_admin_chat,
+                message_thread_id=_dossier_thread,
                 text=no_face_text,
                 parse_mode="HTML",
                 reply_markup=new_kb,
@@ -414,7 +448,7 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         _admin_name = f"@{query.from_user.username}" if query.from_user.username else str(query.from_user.id)
         asyncio.create_task(
             _send_dossier(context.bot, target_user_id, card_text, card_kb,
-                          db=main_db, admin_username=_admin_name)
+                          db=main_db, admin_username=_admin_name, context=context)
         )
 
     elif action == "rej":
@@ -636,7 +670,12 @@ def _admin_inline_panel() -> InlineKeyboardMarkup:
 
 
 async def send_applications_button(bot):
-    """Отправляет InlineKeyboard панель в тред заявок при старте бота"""
+    """Отправляет InlineKeyboard панель в тред заявок при старте бота.
+
+    TODO(Этап C T2 follow-up): для multi-WS — итерировать по всем
+    bot_chats.role='admin' + bot_chat_topics.kind='applications', отправлять
+    в каждый. Сейчас (single-WS PositivЭ) — legacy ADMIN_CHAT_ID из .env.
+    """
     keyboard = _owner_inline_panel()
     try:
         await bot.send_message(
@@ -859,8 +898,11 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
 
 async def _show_app_card(query, context, app, reg_data):
     """Вспомогательная функция для отрисовки карточки заявки admin-у"""
-    from config import ADMIN_CHAT_ID, APPLICATIONS_THREAD_ID
-    
+    # Этап C T1: per-ws через _admin_dest; fallback на .env-константы
+    _db = context.bot_data.get('db')
+    _admin_chat_local, _apps_thread_local = _admin_dest(
+        context, getattr(_db, 'conn', None) if _db else None, 'applications'
+    )
     app_id = app['id']
     user_id = app['user_id']
     
@@ -919,8 +961,8 @@ async def _show_app_card(query, context, app, reg_data):
         # Если не удалось отредактировать — отправляем новое
         try:
             await context.bot.send_message(
-                chat_id=ADMIN_CHAT_ID,
-                message_thread_id=APPLICATIONS_THREAD_ID,
+                chat_id=_admin_chat_local,
+                message_thread_id=_apps_thread_local,
                 text=text,
                 reply_markup=keyboard,
                 parse_mode="HTML"
