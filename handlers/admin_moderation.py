@@ -1125,7 +1125,6 @@ async def panel_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Обработчик текстового ввода для панели владельца"""
     from database.db_friend import (
-        is_admin, add_admin, remove_admin,
         is_blacklisted, add_to_blacklist, remove_from_blacklist,
         get_user, get_user_by_username
     )
@@ -1177,9 +1176,31 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно изменить роль владельца.")
             return True
-        await add_admin(target_id, added_by=OWNER_ID)
-        await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> назначен администратором.",
-                                        parse_mode="HTML")
+        # Пишем в основную БД bot_database.db (users.is_admin), не в legacy db_friend.
+        # Проверяем rowcount, чтобы не было ложного success на несуществующем user_id.
+        try:
+            from database.db_manager import Database
+            import os
+            sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            sync_db.cursor.execute('UPDATE users SET is_admin = 1 WHERE user_id = ?', (target_id,))
+            changed = sync_db.cursor.rowcount
+            sync_db.conn.commit()
+            sync_db.conn.close()
+        except Exception as e:
+            logger.exception(f"add_admin DB error for {target_id}: {e}")
+            await update.message.reply_text(
+                f"❌ Не удалось назначить администратором <code>{target_id}</code>: ошибка БД.",
+                parse_mode="HTML")
+            return True
+        if changed > 0:
+            await update.message.reply_text(
+                f"✅ Пользователь <code>{target_id}</code> назначен администратором.",
+                parse_mode="HTML")
+        else:
+            await update.message.reply_text(
+                f"❌ Пользователь <code>{target_id}</code> не найден в базе бота.\n"
+                f"Он должен сначала написать в чат, чтобы бот его зарегистрировал.",
+                parse_mode="HTML")
 
     # ─── УДАЛИТЬ АДМИНА ───
     elif awaiting == 'admin_remove':
@@ -1191,9 +1212,28 @@ async def handle_panel_input(update: Update, context: ContextTypes.DEFAULT_TYPE)
         if target_id == OWNER_ID:
             await update.message.reply_text("⛔ Невозможно удалить владельца из списка администраторов.")
             return True
-        await remove_admin(target_id)
-        await update.message.reply_text(f"✅ Пользователь <code>{target_id}</code> удалён из администраторов.",
-                                        parse_mode="HTML")
+        try:
+            from database.db_manager import Database
+            import os
+            sync_db = Database(os.getenv('DB_PATH', 'database/bot_database.db'))
+            sync_db.cursor.execute('UPDATE users SET is_admin = 0 WHERE user_id = ?', (target_id,))
+            changed = sync_db.cursor.rowcount
+            sync_db.conn.commit()
+            sync_db.conn.close()
+        except Exception as e:
+            logger.exception(f"remove_admin DB error for {target_id}: {e}")
+            await update.message.reply_text(
+                f"❌ Не удалось снять админа <code>{target_id}</code>: ошибка БД.",
+                parse_mode="HTML")
+            return True
+        if changed > 0:
+            await update.message.reply_text(
+                f"✅ Пользователь <code>{target_id}</code> удалён из администраторов.",
+                parse_mode="HTML")
+        else:
+            await update.message.reply_text(
+                f"❌ Пользователь <code>{target_id}</code> не найден в базе бота.",
+                parse_mode="HTML")
 
     # ─── НАЗНАЧИТЬ ЗАМА ───
     elif awaiting == 'deputy_add':
