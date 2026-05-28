@@ -117,16 +117,17 @@ export default function BBSThreadPanel({ open, onClose }) {
           {/* Главный ББС-тред */}
           <div>
             <label className="block text-sm font-bold text-tx mb-2">
-              Главный тред «Пульс ББС» (kind=bbs)
+              Главный тред для анкет
             </label>
             <div className="text-[12px] text-txd mb-2">
-              Куда публикуется лента анкет. Дети (Редактор анкет, VIP BBS, BBS-бонусы)
-              публикуют сюда же — наследуют этот тред.
+              Куда бот будет публиковать анкеты участников.
+              Остальные модули ББС (Редактор анкет, VIP BBS, BBS-бонусы)
+              автоматически работают в этом же треде.
             </div>
             <div className="flex gap-2">
               <input type="number" value={bbsThread}
                      onChange={e => setBbsThread(e.target.value)}
-                     placeholder="thread_id (число)"
+                     placeholder="ID треда"
                      className="flex-1 px-3 py-2 rounded-xl border border-bd bg-sff text-tx text-sm focus:outline-none focus:border-cta" />
               <button onClick={() => saveTopic('bbs', bbsThread)}
                       className="px-4 py-2 rounded-xl bg-cta text-white font-bold text-sm hover:opacity-90 transition flex items-center gap-1.5">
@@ -135,7 +136,7 @@ export default function BBSThreadPanel({ open, onClose }) {
               {bbsThread && (
                 <button onClick={() => clearTopic('bbs')}
                         className="px-3 py-2 rounded-xl border border-bd hover:bg-sf2 transition"
-                        title="Сбросить (вернуться к .env BBS_THREAD_ID)">
+                        title="Очистить настройку">
                   <Trash2 size={14} className="text-danger" />
                 </button>
               )}
@@ -145,16 +146,19 @@ export default function BBSThreadPanel({ open, onClose }) {
           {/* ББС Другое override */}
           <div className="pt-4 border-t border-bd">
             <label className="block text-sm font-bold text-tx mb-2">
-              Тред «ББС Другое» (kind=bbs_other) — опционально
+              Отдельный тред для объявлений — по желанию
             </label>
             <div className="text-[12px] text-txd mb-2">
-              Объявления продаж / аренды / услуг. Если задано — публикуются в этот
-              тред. Если <b>пусто</b> — публикуются в общий ББС-тред выше (как у Вити было).
+              Касается раздела «ББС Другое» — продажи, аренда, услуги.
+              <br />
+              Можно выделить этим объявлениям свой тред — заполни поле ниже.
+              <br />
+              Можно оставить <b>пустым</b> — тогда объявления пойдут в тот же тред что и анкеты.
             </div>
             <div className="flex gap-2">
               <input type="number" value={otherThread}
                      onChange={e => setOtherThread(e.target.value)}
-                     placeholder="thread_id (число) или пусто"
+                     placeholder="ID треда (или оставь пустым)"
                      className="flex-1 px-3 py-2 rounded-xl border border-bd bg-sff text-tx text-sm focus:outline-none focus:border-cta" />
               <button onClick={() => saveTopic('bbs_other', otherThread)}
                       className="px-4 py-2 rounded-xl bg-cta text-white font-bold text-sm hover:opacity-90 transition flex items-center gap-1.5">
@@ -163,7 +167,7 @@ export default function BBSThreadPanel({ open, onClose }) {
               {otherThread && (
                 <button onClick={() => clearTopic('bbs_other')}
                         className="px-3 py-2 rounded-xl border border-bd hover:bg-sf2 transition"
-                        title="Сбросить (fallback на общий ББС-тред)">
+                        title="Очистить — объявления пойдут вместе с анкетами">
                   <Trash2 size={14} className="text-danger" />
                 </button>
               )}
@@ -174,9 +178,9 @@ export default function BBSThreadPanel({ open, onClose }) {
           <div className="bg-sf2 rounded-2xl p-4 text-[12px] text-txd flex gap-2">
             <Info size={16} className="text-cta shrink-0 mt-0.5" />
             <div>
-              <b>Как узнать thread_id:</b> в Telegram открой нужный тред в чате PositivЭ
-              и отправь команду <code className="font-mono">/get_thread_id</code> —
-              бот пришлёт число.
+              <b>Где взять ID треда:</b> зайди в нужный тред чата в Telegram,
+              отправь команду <code className="font-mono">/get_thread_id</code> —
+              бот ответит числом. Скопируй и вставь сюда.
             </div>
           </div>
 
