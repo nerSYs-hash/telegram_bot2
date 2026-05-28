@@ -19,9 +19,17 @@ export default function WorkspaceSwitcher({ token, onSwitch }) {
       .then((d) => {
         const ws = d.workspaces || [];
         setList(ws);
-        if (getActiveWs() == null && ws.length) {
-          setActiveWs(ws[0].id);
-          setActive(ws[0].id);
+        // V1.17.0P6: если в localStorage стоит ws_id которого больше НЕТ
+        // в списке доступных (например после merge/delete workspace),
+        // переключаемся на первый доступный. Иначе клики на тумблеры/Права
+        // молча уходят в 404.
+        if (ws.length > 0) {
+          const current = getActiveWs();
+          const exists = ws.some((w) => w.id === current);
+          if (current == null || !exists) {
+            setActiveWs(ws[0].id);
+            setActive(ws[0].id);
+          }
         }
       })
       .catch(() => {});
