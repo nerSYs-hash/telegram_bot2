@@ -113,6 +113,15 @@ class MessageHandler:
             self.db.conn, context, self.target_chat_id, user_id=user_id
         )
 
+    def _gate_admin_chat(self, context, user_id=None):
+        """SaaS блокер 4.2: эффективный админ-чат workspace вместо
+        хардкода ADMIN_CHAT_ID. Аналог _gate_target_chat для роли admin."""
+        from bot_core.ws_resolver import resolve_admin_chat
+        from config import ADMIN_CHAT_ID
+        return resolve_admin_chat(
+            self.db.conn, context, ADMIN_CHAT_ID, user_id=user_id
+        )
+
     async def get_chat_administrators(self, context):
         """Get list of chat administrators with caching"""
         import logging
@@ -202,9 +211,10 @@ class MessageHandler:
             return
         
         if message.chat.id != self._gate_target_chat(context):
-            from config import ADMIN_CHAT_ID
-            if message.chat.id == ADMIN_CHAT_ID:
-                # Исключение: сообщения из ADMIN_CHAT_ID — обрабатываем кнопки и причину отказа
+            # SaaS блокер 4.2: ADMIN_CHAT_ID резолвится per-workspace
+            admin_chat_for_ws = self._gate_admin_chat(context, user_id=user.id)
+            if message.chat.id == admin_chat_for_ws:
+                # Исключение: сообщения из админ-чата workspace — обрабатываем кнопки и причину отказа
                 if message.text and context.user_data.get('awaiting_reject_reason'):
                     from handlers.admin_moderation import handle_reject_reason
                     await handle_reject_reason(update, context)

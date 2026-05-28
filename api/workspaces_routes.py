@@ -131,6 +131,19 @@ async def add_workspace_member(
         raise HTTPException(status_code=409, detail="Юзер уже член этого сообщества")
 
     add_member(_db.conn, ws_id, body.user_id, body.role)
+
+    # SaaS блокер 3.2: пока бот ещё проверяет права через users.is_admin
+    # (Группа 4 переедет на workspace_members) — дублируем флаг для совместимости.
+    # Только для роли 'admin': moderator не даёт админских прав в боте.
+    if body.role == 'admin':
+        try:
+            _db.conn.execute(
+                "UPDATE users SET is_admin=1 WHERE user_id=?", (body.user_id,)
+            )
+            _db.conn.commit()
+        except Exception as e:
+            logger.warning(f"mirror users.is_admin=1 for {body.user_id}: {e}")
+
     return {"ok": True, "user_id": body.user_id, "role": body.role}
 
 
@@ -155,7 +168,27 @@ async def remove_workspace_member(
     if target_role[0] == 'owner':
         raise HTTPException(status_code=400, detail="Owner нельзя удалить (нужен transfer ownership)")
 
+    was_admin = target_role[0] == 'admin'
     remove_member(_db.conn, ws_id, member_user_id)
+
+    # SaaS блокер 3.2 (зеркало): если юзер БЫЛ admin и больше нигде не остался
+    # admin/owner — снимаем users.is_admin для бота (пока бот не переехал на
+    # workspace_members). Multi-ws-safe: проверка по всем ws.
+    if was_admin:
+        try:
+            still_admin = _db.conn.execute(
+                "SELECT 1 FROM workspace_members "
+                "WHERE user_id=? AND role IN ('owner','admin') LIMIT 1",
+                (member_user_id,)
+            ).fetchone()
+            if not still_admin:
+                _db.conn.execute(
+                    "UPDATE users SET is_admin=0 WHERE user_id=?", (member_user_id,)
+                )
+                _db.conn.commit()
+        except Exception as e:
+            logger.warning(f"mirror users.is_admin=0 for {member_user_id}: {e}")
+
     return {"ok": True}
 
 
