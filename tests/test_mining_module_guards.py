@@ -56,7 +56,7 @@ def _run(monkeypatch, toggles):
     Возвращает счётчик вызовов блоков combo/sprint/penalty."""
     calls = {"combo": 0, "sprint": 0, "penalty": 0}
 
-    monkeypatch.setattr(ml, "get_dynamic_economy_config", lambda db: (
+    monkeypatch.setattr(ml, "get_dynamic_economy_config", lambda db, workspace_id=None: (
         0.002, {}, {}, {}, {},
         {"buff_multiplier": 1, "buff_duration_min": 1,
          "silence_min": 1, "silence_max": 1},

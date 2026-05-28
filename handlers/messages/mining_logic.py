@@ -135,40 +135,55 @@ PENALTY_COEFFICIENTS: dict[str, int] = {
 #  ДИНАМИЧЕСКИЕ НАСТРОЙКИ ЭКОНОМИКИ
 # ══════════════════════════════════════════════════════════════════════════════
 
-def get_dynamic_economy_config(db) -> tuple[float, dict, dict, dict, dict, dict]:
+def get_dynamic_economy_config(db, workspace_id: int = None) -> tuple[float, dict, dict, dict, dict, dict]:
     """
-    Читает все настройки экономики из БД в реальном времени.
+    Читает все настройки экономики из БД в реальном времени per-ws.
+
+    V1.17.0N1 (Экономика real-time): workspace_id — явный ws-контекст
+    (резолвится в caller из chat_id сообщения). Если None — fallback на
+    db._DEFAULT_WS_ID (legacy single-tenant). Для multi-ws всегда передавать.
+
     Возвращает (global_rate, base_coeffs, combo_coeffs, sprints_config, penalty_coeffs, defib_config).
     Если настройка не задана в БД — используется значение из глобальных констант.
     """
     try:
-        global_rate = float(db.get_econ('mining.global_rate', GLOBAL_BASE_RATE) or GLOBAL_BASE_RATE)
+        # При наличии явного ws_id — читаем через прямой _get_econ(workspace_id).
+        # Иначе legacy путь через db.get_econ (использует _DEFAULT_WS_ID=1).
+        if workspace_id is not None:
+            from database.db_economy import get_econ as _get_econ
+            def _econ(key, default, vt='float'):
+                return _get_econ(db, workspace_id, key, default, vt)
+        else:
+            def _econ(key, default, vt='float'):
+                return db.get_econ(key, default, vt)
+
+        global_rate = float(_econ('mining.global_rate', GLOBAL_BASE_RATE) or GLOBAL_BASE_RATE)
 
         base_coeffs = {
-            name: int(db.get_econ(f'base.{name}', val) or val)
+            name: int(_econ(f'base.{name}', val) or val)
             for name, val in BASE_COEFFICIENTS.items()
         }
 
         combo_coeffs = {
-            name: int(db.get_econ(f'combo.{name}', val) or val)
+            name: int(_econ(f'combo.{name}', val) or val)
             for name, val in COMBO_COEFFICIENTS.items()
         }
 
         sprints_config = {
-            name: int(db.get_econ(f'sprint.{name}', cfg['coeff']) or cfg['coeff'])
+            name: int(_econ(f'sprint.{name}', cfg['coeff']) or cfg['coeff'])
             for name, cfg in SPRINTS_CONFIG.items()
         }
 
         penalty_coeffs = {
-            name: int(db.get_econ(f'penalty.{name}', val) or val)
+            name: int(_econ(f'penalty.{name}', val) or val)
             for name, val in PENALTY_COEFFICIENTS.items()
         }
 
         defib_config = {
-            'buff_multiplier':   float(db.get_econ('defib.buff_multiplier',   DEFIBRILLATOR_BUFF_MULTIPLIER) or DEFIBRILLATOR_BUFF_MULTIPLIER),
-            'buff_duration_min': int(db.get_econ('defib.buff_duration_min',   DEFIBRILLATOR_BUFF_DURATION_MIN) or DEFIBRILLATOR_BUFF_DURATION_MIN),
-            'silence_min':       int(db.get_econ('defib.silence_min_minutes', DEFIBRILLATOR_SILENCE_MIN) or DEFIBRILLATOR_SILENCE_MIN),
-            'silence_max':       int(db.get_econ('defib.silence_max_minutes', DEFIBRILLATOR_SILENCE_MAX) or DEFIBRILLATOR_SILENCE_MAX),
+            'buff_multiplier':   float(_econ('defib.buff_multiplier',   DEFIBRILLATOR_BUFF_MULTIPLIER) or DEFIBRILLATOR_BUFF_MULTIPLIER),
+            'buff_duration_min': int(_econ('defib.buff_duration_min',   DEFIBRILLATOR_BUFF_DURATION_MIN) or DEFIBRILLATOR_BUFF_DURATION_MIN),
+            'silence_min':       int(_econ('defib.silence_min_minutes', DEFIBRILLATOR_SILENCE_MIN) or DEFIBRILLATOR_SILENCE_MIN),
+            'silence_max':       int(_econ('defib.silence_max_minutes', DEFIBRILLATOR_SILENCE_MAX) or DEFIBRILLATOR_SILENCE_MAX),
         }
 
         return global_rate, base_coeffs, combo_coeffs, sprints_config, penalty_coeffs, defib_config
@@ -1043,12 +1058,15 @@ def process_mining_reward(
         #  ЧТЕНИЕ НАСТРОЕК ЭКОНОМИКИ ИЗ БД
         # ⚡️ Читаем настройки ровно в ту миллисекунду, когда пришло сообщение!
         # ══════════════════════════════════════════════════════════════════
-        _econ_rate, _base_coeffs, _combo_coeffs, _sprint_coeffs, _penalty_coeffs, _defib_cfg = get_dynamic_economy_config(db)
+        # V1.17.0N1: явно пробрасываем _ws_id (резолвится из chat_id сообщения)
+        # вместо легасі fallback на db._DEFAULT_WS_ID=1.
+        _econ_rate, _base_coeffs, _combo_coeffs, _sprint_coeffs, _penalty_coeffs, _defib_cfg = get_dynamic_economy_config(db, workspace_id=_ws_id)
 
         # Owner-настройка топиков срабатывания (#5/#9). Пусто = весь чат —
         # тогда фильтры ниже просто не применяются (нулевой риск регресса).
         try:
-            _topic_scopes = db.get_econ_topic_scopes('mining')
+            from database.db_economy import get_econ_topic_scopes as _get_topic_scopes
+            _topic_scopes = _get_topic_scopes(db, _ws_id, category='mining')
         except Exception:
             _topic_scopes = {}
 
