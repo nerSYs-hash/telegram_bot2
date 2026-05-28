@@ -145,24 +145,46 @@ class MessageHandler:
             logging.error(f"Error fetching chat administrators: {e}")
             return self.chat_admins_cache  # Return cached version on error
     
-    def is_user_excluded(self, user_id, user_data, chat_admins=None):
-        """Check if user should be excluded from rewards"""
-        # 1. Check database flags
-        if user_data and (user_data['is_admin'] or user_data['is_owner']):
-            return True, "database_flag"
-        
-        # 2. Check main admin ID
+    def is_user_excluded(self, user_id, user_data, chat_admins=None, *, context=None, conn=None):
+        """Check if user should be excluded from rewards.
+
+        Этап A T7 (V1.17.0L6): при I_WS_RBAC=1 + context — приоритетная per-ws
+        проверка через bot_core.ws_role.is_ws_admin. owner/deputy/admin/developer
+        активного ws — excluded. Это решает кейс «owner ws=1 в чате ws=2
+        не должен считаться excluded».
+
+        Legacy (флаг OFF или context=None): прежняя single-tenant логика —
+        user_data['is_admin']/['is_owner'] (глобальные флаги БД).
+        """
+        # 1a. Per-ws (приоритет): admin/owner текущего ws → excluded
+        try:
+            from bot_core.ws_role import i_ws_rbac_enabled, is_ws_admin
+            if i_ws_rbac_enabled() and context is not None:
+                if is_ws_admin(context, user_id, conn=conn):
+                    return True, "ws_role"
+                # При флаге ON — пропускаем legacy database_flag (он cross-ws «грязный»).
+                # Идём дальше в gates 2-4 (main_admin / excluded_list / TG chat_admins).
+            else:
+                # 1b. Legacy: глобальные флаги БД
+                if user_data and (user_data['is_admin'] or user_data['is_owner']):
+                    return True, "database_flag"
+        except Exception:
+            # Pulse-safe: ошибка → legacy
+            if user_data and (user_data['is_admin'] or user_data['is_owner']):
+                return True, "database_flag"
+
+        # 2. Main admin ID (Илья = developer god-mode, всегда excluded)
         if user_id == self.main_admin_id:
             return True, "main_admin_id"
-        
-        # 3. Check manual exclusion list from .env
+
+        # 3. Manual exclusion list from .env
         if user_id in self.excluded_user_ids:
             return True, "excluded_list"
-        
-        # 4. Check Telegram chat administrators
+
+        # 4. Telegram chat administrators (TG-источник, не БД)
         if chat_admins and user_id in chat_admins:
             return True, "telegram_admin"
-        
+
         return False, None
     
     async def handle_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -514,7 +536,7 @@ class MessageHandler:
         chat_admins = await self.get_chat_administrators(context)
         
         # Check if user should be excluded from rewards
-        is_excluded, exclusion_reason = self.is_user_excluded(user.id, user_data, chat_admins)
+        is_excluded, exclusion_reason = self.is_user_excluded(user.id, user_data, chat_admins, context=context)
         
         logging.info(f"👤 User {user.id}: is_admin={user_data['is_admin']}, is_owner={user_data['is_owner']}, "
                     f"in_chat_admins={user.id in chat_admins}, in_excluded_list={user.id in self.excluded_user_ids}, "
