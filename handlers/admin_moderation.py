@@ -286,8 +286,8 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
         context.user_data.pop('rej_reg_data', None)
         context.user_data.pop('rej_applied_at', None)
         
-        # Показываем карточку заявки заново
-        app_data = await get_application(app_id)
+        # Показываем карточку заявки заново (Этап B B3: per-ws)
+        app_data = await get_application(app_id, workspace_id=_ws_from_context(context))
         reg_data = await get_user(target_user_id)
         if app_data and reg_data:
             await _show_app_card(query, context, app_data, reg_data)
@@ -297,8 +297,8 @@ async def admin_moderation_callback(update: Update, context: ContextTypes.DEFAUL
 
     main_db = context.bot_data.get('db')
 
-    # Получаем данные заявки и пользователя
-    app_data = await get_application(app_id)
+    # Получаем данные заявки и пользователя (B3: per-ws)
+    app_data = await get_application(app_id, workspace_id=_ws_from_context(context))
 
     # Защита от двойного нажатия — если заявка уже обработана
     if app_data and app_data.get('status') in ('approved', 'rejected', 'deleted'):
@@ -554,9 +554,9 @@ async def handle_reject_reason(update: Update, context: ContextTypes.DEFAULT_TYP
     if not app_id or not target_user_id:
         return
 
-    # Сохраняем отказ в БД
+    # Сохраняем отказ в БД (B3: per-ws)
     from database.db_friend import get_application
-    app_data = await get_application(app_id)
+    app_data = await get_application(app_id, workspace_id=_ws_from_context(context))
     
     await reject_application(app_id, update.effective_user.id, reason)
     await update_user(target_user_id, status='rejected')
@@ -756,7 +756,7 @@ async def handle_new_apps_text(update: Update, context: ContextTypes.DEFAULT_TYP
     except Exception:
         pass
 
-    apps = await get_new_applications(exclude_locked=True)
+    apps = await get_new_applications(exclude_locked=True, workspace_id=_ws_from_context(context))
     if not apps:
         buttons = [[InlineKeyboardButton("📋 Новые заявки", callback_data="new_app")]]
         if update.effective_chat.type == 'private':
@@ -856,7 +856,7 @@ async def new_application_callback(update: Update, context: ContextTypes.DEFAULT
         logger.info(f"Admin {admin_id} released app {prev_app_id}")
 
     # Берём следующую свободную заявку (исключая ту что только что смотрели)
-    apps = await get_new_applications(exclude_locked=True)
+    apps = await get_new_applications(exclude_locked=True, workspace_id=_ws_from_context(context))
     if prev_app_id:
         apps = [a for a in apps if a['id'] != prev_app_id]
     if not apps:
@@ -974,6 +974,20 @@ async def _show_app_card(query, context, app, reg_data):
                 reply_markup=keyboard,
                 parse_mode="HTML"
             )
+
+
+def _ws_from_context(context) -> int | None:
+    """Этап B B3 (V1.17.0O4): резолвит workspace_id из ws_ctx (middleware
+    ставит при входящем апдейте в chat_data/user_data). None → caller
+    использует legacy ws=1 fallback внутри db_friend функций.
+    """
+    for attr in ('chat_data', 'user_data'):
+        store = getattr(context, attr, None)
+        if isinstance(store, dict) and store.get('ws_ctx') is not None:
+            ws_id = getattr(store['ws_ctx'], 'workspace_id', None)
+            if ws_id is not None:
+                return ws_id
+    return None
 
 
 def _is_strict_owner(context, user_id: int, conn=None) -> bool:
