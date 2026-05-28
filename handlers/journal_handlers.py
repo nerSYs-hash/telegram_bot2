@@ -65,41 +65,36 @@ def ensure_journal_tables(db) -> None:
 # ═══════════════════════════════════════════════════════════════
 
 def _get_journal_channel(db, chat_id: Optional[int] = None) -> Optional[int]:
-    """ID канала-журнала.
+    """ID канала-журнала per-ws.
 
-    M3 (V1.17.0k11): per-ws резолв. Если передан `chat_id` события —
-    резолвим workspace через bot_chats и берём канал с role='journal'
-    для этого ws. Если у ws нет своего журнала:
-      - ws=1 (Pulse) → fallback на legacy settings.journal_channel_id
-      - не-Pulse ws → None (silent skip, чтобы не спамить чужой Pulse-журнал)
+    Этап C C7 (V1.17.0M8): legacy fallback на settings.journal_channel_id
+    УДАЛЁН. Источник правды — bot_chats.role='journal' для активного ws.
 
-    Если chat_id не передан — старый legacy путь (для Pulse-only вызовов
-    вроде log_trigger / log_admin_action).
+    Резолв:
+    - Если передан chat_id события — определяем ws через bot_chats и
+      берём journal-канал того же ws.
+    - Если ws не найден или у ws нет журнала — None (silent skip, бот не
+      спамит чужие чаты).
+    - Если chat_id не передан (вызовы без контекста сообщения) — тоже None;
+      caller должен передавать chat_id явно (фикс делается в местах вызова).
+
+    Миграция: settings.journal_channel_id для ws=1 (-1003930021144) перенесён
+    в bot_chats(workspace_id=1, role='journal') 28.05.2026.
     """
-    if chat_id is not None:
-        try:
-            from bot_core.workspace_context import resolve_workspace_for_chat
-            from bot_core.ws_resolver import resolve_role_chat
-            ws_id = resolve_workspace_for_chat(db.conn, chat_id)
-        except Exception:
-            ws_id = None
-        if ws_id is not None:
-            try:
-                journal = resolve_role_chat(db.conn, ws_id, 'journal')
-            except Exception:
-                journal = None
-            if journal is not None:
-                return journal
-            if ws_id != 1:
-                # Не-Pulse ws без своего журнала — молчим (не спамим Pulse)
-                return None
-    val = db.get_setting('journal_channel_id')
-    if val:
-        try:
-            return int(val)
-        except (ValueError, TypeError):
-            pass
-    return None
+    if chat_id is None:
+        return None
+    try:
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        from bot_core.ws_resolver import resolve_role_chat
+        ws_id = resolve_workspace_for_chat(db.conn, chat_id)
+    except Exception:
+        return None
+    if ws_id is None:
+        return None
+    try:
+        return resolve_role_chat(db.conn, ws_id, 'journal')
+    except Exception:
+        return None
 
 
 def _get_journal_channel_2(db) -> tuple:

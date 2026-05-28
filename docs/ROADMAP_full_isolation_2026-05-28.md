@@ -2,7 +2,7 @@
 
 > **Цель проекта** (Илья 28.05.2026): добавили бота в чат → всё работает само в этом workspace, без беготни. Полная изоляция WS друг от друга: чаты, статистика, права, регистрация, журнал. Один бот = много изолированных «миров».
 >
-> **Текущий процент готовности: ~80%** (28.05 Этап A T7+T8/9 — код готов и зелёный локально).
+> **Текущий процент готовности: ~88%** (28.05 Этап A T1-T8 ✅ + Этап C C1-C7 ✅ + чистка истории Pulse ✅ + Stats per-ws ✅).
 
 ## 🔴 28.05 ~16:00 ИНЦИДЕНТ: история Pulse была смешана с PositivЭ
 
@@ -24,8 +24,8 @@
 | C3 | `bug_tracker_handlers` chat_id per-ws (BUG_THREADS — dead, оставлен) | ✅ V1.17.0M3 |
 | C4 | `exit_survey_handlers` admin-чат per-ws (отчёт ухода) | ✅ V1.17.0M4 |
 | C5 | `command_handler` /resend_dossier admin-чат/тред per-ws | ✅ V1.17.0M5 |
-| C6 | `send_applications_button` startup — итерация по всем ws | 🔜 |
-| C7 | Журнал-канал legacy fallback (`settings.journal_channel_id` → удалить) | 🔜 |
+| C6 | `send_applications_button` startup — итерация по всем ws | ⏭ skip (dead — отключено в bot.py:144) |
+| C7 | Журнал-канал legacy fallback удалён + миграция в bot_chats | ✅ V1.17.0M8 |
 
 ## 📌 Прогресс Этапа A (V1.17.0L1-...)
 
@@ -73,7 +73,7 @@
 
 | Аспект | Что не так | Куда фиксить |
 |---|---|---|
-| `journal-канал` для ws=1 | Хранится одновременно в `bot_chats.role='journal'` И в `settings.journal_channel_id` (legacy fallback). TG-меню «Канал N» пишет в settings, сайт читает из bot_chats | Этап C |
+| ~~`journal-канал` для ws=1~~ | ~~Хранится одновременно в `bot_chats.role='journal'` И в `settings.journal_channel_id` (legacy fallback)~~ | ✅ V1.17.0M8 (Этап C C7) — миграция в bot_chats, fallback удалён |
 | Onboarding UX | Технически бот создаёт ws, но юзеру не приходит явная инструкция «иди на сайт залогинься» | Этап E |
 | Этап A flip на проде | Код залит, локально 383/383 зелёный. На проде `I_WS_RBAC=1` уже стоит. Нужна ручная приёмка Ильи (добавить юзера на сайте → проверить что бот сразу его признаёт) | T9/Этап A |
 | **Экономика real-time** | `get_dynamic_economy_config` читает БД через `db.get_econ`, но wrapper хардкодит `_DEFAULT_WS_ID=1` (`database/db_manager.py:688`). Для ws=1 PositivЭ работает, для ws=2+ нужен ws_id из контекста сообщения | Параллельно с Этапом B |
