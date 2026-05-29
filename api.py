@@ -997,6 +997,36 @@ async def get_stats_series(granularity: str = Query('day')):
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/stats/heatmap")
+async def get_stats_heatmap(days: int = Query(90)):
+    """Теплокарта активности: сетка [день недели 0=Вс..6=Сб] × [час 0..23].
+    messages — сумма сообщений, active — уникальные авторы. Из user_stats_hourly.
+    NB: user_stats_hourly без workspace_id — на проде 1 активный ws; per-ws — TODO изоляции.
+    """
+    if not db:
+        return {"messages": [], "active": []}
+    from datetime import date as _d, timedelta as _td
+    days = max(1, min(int(days), 365))
+    start = (_d.today() - _td(days=days)).isoformat()
+    try:
+        rows = db.cursor.execute(
+            "SELECT CAST(strftime('%w', date) AS INTEGER) wd, hour, "
+            "COALESCE(SUM(total_messages),0) msgs, COUNT(DISTINCT user_id) act "
+            "FROM user_stats_hourly WHERE date >= ? GROUP BY wd, hour",
+            (start,)).fetchall()
+    except Exception as e:
+        logger.error(f"Error in /api/stats/heatmap: {e}")
+        return {"messages": [], "active": []}
+    M, A = {}, {}
+    for r in rows:
+        wd, h = int(r['wd']), int(r['hour'])
+        M[(wd, h)] = int(r['msgs'])
+        A[(wd, h)] = int(r['act'])
+    def grid(src):
+        return [[src.get((wd, h), 0) for h in range(24)] for wd in range(7)]
+    return {"messages": grid(M), "active": grid(A)}
+
+
 @app.get("/api/stats")
 async def get_stats(period: str = Query('today')):
     """Статистика за период: today / yesterday / week / month / year"""

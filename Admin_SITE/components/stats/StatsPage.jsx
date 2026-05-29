@@ -162,9 +162,12 @@ function ChartLegend({ items, hidden, onToggle }) {
           <button key={it.label} type="button"
             onClick={clickable ? () => onToggle(it.k) : undefined}
             title={clickable ? 'Скрыть / показать на графике' : undefined}
-            className={`flex items-center gap-1.5 text-[11px] font-medium transition-opacity ${
-              clickable ? 'cursor-pointer hover:opacity-70' : 'cursor-default'
-            } ${off ? 'opacity-35 line-through' : 'text-txd'}`}>
+            className={`flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-1 rounded-full border transition-all duration-150 ${
+              clickable ? 'cursor-pointer active:scale-95' : 'cursor-default'
+            } ${off
+              ? 'bg-sf2 border-bd text-lbl'
+              : 'bg-sff border-bd text-txd hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:shadow-sm'
+            }`}>
             <span className="w-2.5 h-2.5 rounded-full"
                   style={{ background: off ? '#C7CDD6' : it.color }} />
             {it.label}
@@ -200,6 +203,7 @@ function downloadCSV(filename, header, rows) {
 function WidgetUsers({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
+  const [hidden, toggleHidden] = useHiddenSeries('users');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
 
@@ -243,10 +247,13 @@ function WidgetUsers({ cache, ensure, refresh }) {
               <Tooltip content={<StatTooltip />}
                        cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
               <Bar yAxisId="bars" dataKey="joined" name="Вступили" fill={C.ok}
+                   hide={hidden.has('joined')}
                    radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="left" name="Вышли" fill={C.danger}
+                   hide={hidden.has('left')}
                    radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
               <Line yAxisId="line" type="monotone" dataKey="total" name="Всего"
+                    hide={hidden.has('total')}
                     stroke={C.cta} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.cta, strokeWidth: 0 }}
                     activeDot={{ r: 5, fill: C.cta, stroke: '#fff', strokeWidth: 2 }}
@@ -255,10 +262,10 @@ function WidgetUsers({ cache, ensure, refresh }) {
                      travellerWidth={9} tickFormatter={() => ''} />
             </ComposedChart>
           </ResponsiveContainer>
-          <ChartLegend items={[
-            { label: 'Вступили', color: C.ok },
-            { label: 'Вышли',    color: C.danger },
-            { label: 'Всего',    color: C.cta },
+          <ChartLegend hidden={hidden} onToggle={toggleHidden} items={[
+            { k: 'joined', label: 'Вступили', color: C.ok },
+            { k: 'left',   label: 'Вышли',    color: C.danger },
+            { k: 'total',  label: 'Всего',    color: C.cta },
           ]} />
         </>
       )}
@@ -270,6 +277,7 @@ function WidgetUsers({ cache, ensure, refresh }) {
 function WidgetMessages({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
+  const [hidden, toggleHidden] = useHiddenSeries('messages');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
 
@@ -313,16 +321,18 @@ function WidgetMessages({ cache, ensure, refresh }) {
               <Tooltip content={<StatTooltip />}
                        cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
               <Bar yAxisId="msg" dataKey="messages" name="Сообщения" fill={C.cta}
+                   hide={hidden.has('messages')}
                    radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
               <Bar yAxisId="wr" dataKey="writers" name="Писали" fill={C.purple}
+                   hide={hidden.has('writers')}
                    radius={[5, 5, 0, 0]} maxBarSize={22} animationDuration={500} />
               <Brush dataKey="day" height={24} stroke={C.cta} fill={C.brush}
                      travellerWidth={9} tickFormatter={() => ''} />
             </ComposedChart>
           </ResponsiveContainer>
-          <ChartLegend items={[
-            { label: 'Сообщения', color: C.cta },
-            { label: 'Писали',    color: C.purple },
+          <ChartLegend hidden={hidden} onToggle={toggleHidden} items={[
+            { k: 'messages', label: 'Сообщения', color: C.cta },
+            { k: 'writers',  label: 'Писали',    color: C.purple },
           ]} />
         </>
       )}
@@ -632,6 +642,7 @@ function WidgetNewReturning({ cache, ensure, refresh }) {
 function WidgetMessageStats({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
+  const [hidden, toggleHidden] = useHiddenSeries('msg_stats');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
 
@@ -675,12 +686,16 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
               <Tooltip content={<StatTooltip />}
                        cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
               <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
+                   hide={hidden.has('comments')}
                    radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
+                   hide={hidden.has('replies')}
                    radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
+                   hide={hidden.has('edited')}
                    radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
               <Line yAxisId="line" type="monotone" dataKey="total" name="Всего"
+                    hide={hidden.has('total')}
                     stroke={C.mint} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.mint, strokeWidth: 0 }}
                     activeDot={{ r: 5, fill: C.mint, stroke: '#fff', strokeWidth: 2 }}
@@ -689,11 +704,11 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
                      travellerWidth={9} tickFormatter={() => ''} />
             </ComposedChart>
           </ResponsiveContainer>
-          <ChartLegend items={[
-            { label: 'Комментарии', color: C.cta },
-            { label: 'Ответы',      color: C.purple },
-            { label: 'Правки',      color: C.warn },
-            { label: 'Всего',       color: C.mint },
+          <ChartLegend hidden={hidden} onToggle={toggleHidden} items={[
+            { k: 'comments', label: 'Комментарии', color: C.cta },
+            { k: 'replies',  label: 'Ответы',      color: C.purple },
+            { k: 'edited',   label: 'Правки',      color: C.warn },
+            { k: 'total',    label: 'Всего',       color: C.mint },
           ]} />
         </>
       )}
@@ -782,6 +797,69 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
             { k: 'mentions', label: 'Упоминания', color: C.ok },
           ]} />
         </>
+      )}
+    </WidgetCard>
+  );
+}
+
+// ═══════════ Виджеты №4/№5 — Теплокарты (день недели × час) ═══════════
+const _WD_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];  // index = strftime %w
+const _WD_ORDER = [1, 2, 3, 4, 5, 6, 0];                        // показываем Пн-первым
+
+function WidgetHeatmap({ metric, title, accent, hint }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState(false);
+
+  const load = useCallback(() => {
+    const token = localStorage.getItem('jwt') || '';
+    const wsId = localStorage.getItem('active_ws_id');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (wsId) headers['X-Workspace-Id'] = String(wsId);
+    setError(false); setData(null);
+    fetch('/api/stats/heatmap', { headers })
+      .then((r) => (r.ok ? r.json() : Promise.reject(r.status)))
+      .then(setData)
+      .catch(() => setError(true));
+  }, []);
+  useEffect(() => { load(); }, [load]);
+
+  const grid = data && data[metric];               // 7×24 [wd][hour]
+  const max = grid ? Math.max(1, ...grid.flat()) : 1;
+  const cellBg = (v) => v
+    ? `color-mix(in oklab, ${accent} ${Math.round(10 + (v / max) * 80)}%, transparent)`
+    : '#F1F3F7';
+
+  return (
+    <WidgetCard icon={Grid2x2} accent={accent} title={title} hint={hint} onRefresh={load}>
+      {error ? <WidgetState kind="error" />
+        : !grid ? <WidgetState kind="loading" />
+        : (
+        <div className="px-2 pb-2 overflow-x-auto">
+          <div className="inline-block">
+            {/* подписи часов */}
+            <div className="flex pl-9">
+              {Array.from({ length: 24 }).map((_, h) => (
+                <div key={h} className="text-[8px] text-lbl text-center"
+                     style={{ width: '14px' }}>{h % 3 === 0 ? h : ''}</div>
+              ))}
+            </div>
+            {_WD_ORDER.map((wd) => (
+              <div key={wd} className="flex items-center">
+                <div className="text-[9px] font-bold text-txd w-9 flex-shrink-0">{_WD_NAMES[wd]}</div>
+                {Array.from({ length: 24 }).map((_, h) => {
+                  const v = grid[wd] ? grid[wd][h] : 0;
+                  return (
+                    <div key={h} title={`${_WD_NAMES[wd]} ${h}:00 — ${v.toLocaleString('ru-RU')}`}
+                         className="rounded-[2px]"
+                         style={{ width: '12px', height: '12px', margin: '1px', background: cellBg(v) }} />
+                  );
+                })}
+              </div>
+            ))}
+            <div className="text-[10px] text-lbl pt-2 pl-9">Темнее = выше активность · копится вперёд</div>
+          </div>
+        </div>
       )}
     </WidgetCard>
   );
@@ -878,9 +956,15 @@ export default function StatsPage() {
       {/* ── №9 — собран (активность пользователей) ── */}
       <WidgetUserActivity cache={cache} ensure={ensure} refresh={refresh} />
 
-      {/* ── №4,5 — в работе (теплокарты, ждут почасовых) ── */}
-      <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта" />
-      <SoonCard icon={MessageSquare} title="Сообщения · теплокарта" />
+      {/* ── №4 — Активные · теплокарта ── */}
+      <WidgetHeatmap metric="active" accent={C.cta}
+        title="Активные · теплокарта"
+        hint="Когда участники активнее всего: день недели × час. Темнее клетка — больше уникальных писавших в этот час. Почасовые данные копятся вперёд." />
+
+      {/* ── №5 — Сообщения · теплокарта ── */}
+      <WidgetHeatmap metric="messages" accent={C.purple}
+        title="Сообщения · теплокарта"
+        hint="Объём сообщений по дням недели и часам. Темнее клетка — больше сообщений в этот час. Почасовые данные копятся вперёд." />
     </div>
   );
 }
