@@ -34,6 +34,51 @@ def _login_kb():
     return login_keyboard() if login_url_enabled() else None
 
 
+GREETING_DELETE_SECONDS = int(os.getenv('GREETING_DELETE_SECONDS', '120'))
+
+
+def _greeting_text() -> str:
+    """Короткое приветствие в группе (самоудаляемое). Тексты — черновик,
+    финал согласуем перед выкатом (см. спеку E1)."""
+    return (
+        "👋 Привет! Я Puls_bot — статистика, экономика и модерация чата.\n"
+        "⚠️ Для полной работы дай мне права администратора.\n"
+        "Это сообщение исчезнет через пару минут, чтобы не засорять чат."
+    )
+
+
+def _owner_dm_text(chat_title: str) -> str:
+    """Личное сообщение владельцу после подключения чата."""
+    return (
+        f"✅ Подключил чат «{chat_title}» к твоему кабинету.\n"
+        f"Зайди настроить — роли, модули, статистика: {SITE_URL}"
+    )
+
+
+async def _delete_greeting_job(context):
+    """JobQueue-callback: удаляет приветствие в группе. Ошибки не критичны."""
+    data = context.job.data
+    try:
+        await context.bot.delete_message(data['chat_id'], data['message_id'])
+    except Exception as e:
+        logger.debug(f"greeting auto-delete failed: {e}")
+
+
+def _schedule_greeting_delete(context, chat_id, message_id, delay=GREETING_DELETE_SECONDS):
+    """Планирует самоудаление приветствия. job_queue может отсутствовать."""
+    jq = getattr(context, 'job_queue', None)
+    if jq is None:
+        return
+    try:
+        jq.run_once(
+            _delete_greeting_job, delay,
+            data={'chat_id': chat_id, 'message_id': message_id},
+            name=f"del_greeting_{chat_id}",
+        )
+    except Exception as e:
+        logger.warning(f"schedule greeting delete failed: {e}")
+
+
 async def on_bot_added_to_chat(update, context, db):
     """ChatMemberHandler.MY_CHAT_MEMBER — бот добавлен в чат.
 
@@ -137,6 +182,34 @@ async def on_bot_added_to_chat(update, context, db):
                 await context.bot.leave_chat(chat_id)
             except Exception as e:
                 logger.warning(f"leave_chat (already bound elsewhere) failed: {e}")
+        return
+
+    # ── E1 (V1.17.0R): упрощённый онбординг за флагом CONNECT_FLOW_V2 ──
+    # Чат подключается «как есть» (role=main), owner = добавивший. Роли и
+    # группировка в сообщества раздаются на сайте (E2 — Центр подключений).
+    # Ноль inline-выбора в групповом чате; гейт регистрации убран (вход через
+    # OAuth-кнопку сам создаёт сессию).
+    if connect_flow_v2_enabled():
+        ws_id = create_workspace(db.conn, chat_title, owner_user_id=from_user.id)
+        add_bot_chat(db.conn, chat_id, ws_id, added_by=from_user.id,
+                     title=chat_title, chat_type=chat.type, role='main')
+        invalidate_cache(chat_id)
+        logger.info(
+            f"E1 auto-connect chat={chat_id} ws={ws_id} "
+            f"owner={from_user.id} role=main"
+        )
+        try:
+            sent = await context.bot.send_message(
+                chat_id, _greeting_text(), reply_markup=_login_kb())
+            _schedule_greeting_delete(context, chat_id, sent.message_id)
+        except Exception as e:
+            logger.warning(f"E1 greeting send failed: {e}")
+        try:
+            await context.bot.send_message(
+                from_user.id, _owner_dm_text(chat_title),
+                reply_markup=_login_kb())
+        except Exception as e:
+            logger.warning(f"E1 owner DM failed: {e}")
         return
 
     # 5. registered?

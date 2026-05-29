@@ -266,3 +266,112 @@ async def test_bot_left_removes_chat_from_bot_chats(db):
     await on_bot_added_to_chat(update, ctx, db)
 
     assert db.get_workspace_by_chat(-800) is None
+
+
+# ── E1 (V1.17.0R): упрощённый онбординг ──
+
+@pytest.mark.asyncio
+async def test_schedule_greeting_delete_calls_run_once():
+    from handlers.bot_membership import _schedule_greeting_delete
+    ctx = MagicMock()
+    ctx.job_queue.run_once = MagicMock()
+    _schedule_greeting_delete(ctx, chat_id=-100, message_id=7, delay=120)
+    ctx.job_queue.run_once.assert_called_once()
+    _args, kwargs = ctx.job_queue.run_once.call_args
+    assert kwargs['data'] == {'chat_id': -100, 'message_id': 7}
+
+
+@pytest.mark.asyncio
+async def test_schedule_greeting_delete_no_jobqueue_is_safe():
+    from handlers.bot_membership import _schedule_greeting_delete
+    ctx = MagicMock()
+    ctx.job_queue = None
+    _schedule_greeting_delete(ctx, chat_id=-100, message_id=7, delay=120)
+
+
+@pytest.mark.asyncio
+async def test_delete_greeting_job_calls_delete_message():
+    from handlers.bot_membership import _delete_greeting_job
+    ctx = MagicMock()
+    ctx.bot.delete_message = AsyncMock()
+    ctx.job.data = {'chat_id': -100, 'message_id': 7}
+    await _delete_greeting_job(ctx)
+    ctx.bot.delete_message.assert_awaited_once_with(-100, 7)
+
+
+def test_owner_dm_text_contains_title_and_site():
+    from handlers.bot_membership import _owner_dm_text, SITE_URL
+    txt = _owner_dm_text('Моя Группа')
+    assert 'Моя Группа' in txt
+    assert SITE_URL in txt
+
+
+@pytest.mark.asyncio
+async def test_e1_owner_with_existing_ws_autoconnects(db, monkeypatch):
+    """Флаг ON: владелец с сообществом добавляет бота → авто-создан НОВЫЙ ws
+    role=main, БЕЗ inline-кнопок выбора, бот не уходит."""
+    monkeypatch.setenv('CONNECT_FLOW_V2', '1')
+    from handlers.bot_membership import on_bot_added_to_chat
+    db.conn.execute("INSERT INTO users (user_id, username) VALUES (42,'alice')")
+    db.conn.commit()
+    create_workspace(db.conn, 'Existing', owner_user_id=42)  # ws=1
+
+    update = _make_update(999, 'administrator', -200, 'New Chat', 'supergroup', 42)
+    ctx = _make_context(999)
+    await on_bot_added_to_chat(update, ctx, db)
+
+    ws_id = db.get_workspace_by_chat(-200)
+    assert ws_id is not None and ws_id != 1  # отдельный новый ws
+    role = db.conn.execute(
+        "SELECT role FROM bot_chats WHERE chat_id=?", (-200,)).fetchone()[0]
+    assert role == 'main'
+    ctx.bot.leave_chat.assert_not_called()
+    for _a, kwargs in ctx.bot.send_message.call_args_list:
+        mk = kwargs.get('reply_markup')
+        if mk is not None and hasattr(mk, 'inline_keyboard'):
+            data = [b.callback_data for row in mk.inline_keyboard for b in row]
+            assert not any((d or '').startswith('connect_chat') for d in data)
+
+
+@pytest.mark.asyncio
+async def test_e1_unregistered_connects_without_leave(db, monkeypatch):
+    """Флаг ON: гейт регистрации убран — незарегистрированный подключает чат,
+    бот НЕ уходит, ws создаётся с ним как owner."""
+    monkeypatch.setenv('CONNECT_FLOW_V2', '1')
+    from handlers.bot_membership import on_bot_added_to_chat
+    update = _make_update(999, 'administrator', -210, 'Fresh', 'supergroup', 666)
+    ctx = _make_context(999)
+    await on_bot_added_to_chat(update, ctx, db)
+
+    ws_id = db.get_workspace_by_chat(-210)
+    assert ws_id is not None
+    owner = db.conn.execute(
+        "SELECT owner_user_id FROM workspaces WHERE id=?", (ws_id,)).fetchone()[0]
+    assert owner == 666
+    ctx.bot.leave_chat.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_e1_sends_group_greeting_and_owner_dm(db, monkeypatch):
+    """Флаг ON: бот шлёт приветствие в группу И отдельный DM владельцу."""
+    monkeypatch.setenv('CONNECT_FLOW_V2', '1')
+    from handlers.bot_membership import on_bot_added_to_chat
+    update = _make_update(999, 'administrator', -220, 'Greet Chat', 'supergroup', 77)
+    ctx = _make_context(999)
+    await on_bot_added_to_chat(update, ctx, db)
+
+    sent_chat_ids = [a[0] for a, _ in ctx.bot.send_message.call_args_list]
+    assert -220 in sent_chat_ids
+    assert 77 in sent_chat_ids
+
+
+@pytest.mark.asyncio
+async def test_e1_schedules_greeting_self_delete(db, monkeypatch):
+    """Флаг ON: самоудаление приветствия запланировано через job_queue."""
+    monkeypatch.setenv('CONNECT_FLOW_V2', '1')
+    from handlers.bot_membership import on_bot_added_to_chat
+    update = _make_update(999, 'administrator', -230, 'Del Chat', 'supergroup', 88)
+    ctx = _make_context(999)
+    ctx.job_queue.run_once = MagicMock()
+    await on_bot_added_to_chat(update, ctx, db)
+    ctx.job_queue.run_once.assert_called_once()
