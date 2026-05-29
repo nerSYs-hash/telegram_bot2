@@ -855,11 +855,12 @@ class Database:
     def add_transaction(self, from_user_id, to_user_id, amount, transaction_type, description=None):
         return _add_transaction(self, self._DEFAULT_WS_ID, from_user_id, to_user_id, amount, transaction_type, description)
 
-    def get_bank_balance(self):
-        return _get_bank_balance(self)
+    def get_bank_balance(self, ws_id=None):
+        return _get_bank_balance(self, ws_id if ws_id is not None else self._DEFAULT_WS_ID)
 
-    def update_bank_balance(self, amount, operation='subtract'):
-        return _update_bank_balance(self, amount, operation)
+    def update_bank_balance(self, amount, operation='subtract', ws_id=None):
+        return _update_bank_balance(self, amount, operation,
+                                    ws_id if ws_id is not None else self._DEFAULT_WS_ID)
 
     # ── Stats ──
     def update_user_activity(self, user_id, date, event_id: str = None,
