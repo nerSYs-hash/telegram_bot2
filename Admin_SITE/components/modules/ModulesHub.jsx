@@ -45,7 +45,7 @@ export const SECTIONS = [
           { id: 'chart:newcomers',   icon: BarChart3, name: 'Новые и вернувшиеся',          desc: 'Сколько новых пришло и сколько вернувшихся (уходили и зашли снова). Копится вперёд.' },
           { id: 'chart:first_msg',   icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
           { id: 'chart:msg_stats',   icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Линия «всего» + бары: комментарии, ответы, правки (правки копятся вперёд).' },
-          { id: 'chart:user_act',    wip: true, icon: BarChart3, name: 'Активность пользователей',     desc: 'MAU / реплаи / упоминания / ссылки.' },
+          { id: 'chart:user_act',    icon: BarChart3, name: 'Статистика активности пользователей', desc: 'Активные (линия) + бары: комментарии, ответы, правки, со ссылкой, с упоминанием.' },
           { id: 'chart:active_sum',  icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
           { id: 'chart:kpi',         icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
         ] },

@@ -824,18 +824,21 @@ def _compute_series(granularity: str = 'day') -> dict:
         msg_by[k] = msg_by.get(k, 0) + int(r['m'])
         wr_by[k] = wr_by.get(k, 0) + int(r['w'])
 
-    # ── w8: структура сообщений (комментарии/ответы/правки) по дням ──
+    # ── w8/w9: структура сообщений + активность по дням ──
     db.cursor.execute(
         "SELECT date, COALESCE(SUM(other_threads_posts),0) c, "
-        "COALESCE(SUM(replies_sent),0) rp, COALESCE(SUM(edited_count),0) ed "
+        "COALESCE(SUM(replies_sent),0) rp, COALESCE(SUM(edited_count),0) ed, "
+        "COALESCE(SUM(links_sent),0) lk, COALESCE(SUM(mentions_received),0) mn "
         "FROM user_stats WHERE date BETWEEN ? AND ? AND workspace_id=? GROUP BY date",
         (s_iso, e_iso, ws_id))
-    cm_by, rp_by, ed_by = {}, {}, {}
+    cm_by, rp_by, ed_by, lk_by, mn_by = {}, {}, {}, {}, {}
     for r in db.cursor.fetchall():
         k = bucket(r['date'])
         cm_by[k] = cm_by.get(k, 0) + int(r['c'])
         rp_by[k] = rp_by.get(k, 0) + int(r['rp'])
         ed_by[k] = ed_by.get(k, 0) + int(r['ed'])
+        lk_by[k] = lk_by.get(k, 0) + int(r['lk'])
+        mn_by[k] = mn_by.get(k, 0) + int(r['mn'])
 
     # базовый размер сообщества до окна (для линии «Всего») — per-ws фильтр
     db.cursor.execute(
@@ -857,7 +860,7 @@ def _compute_series(granularity: str = 'day') -> dict:
         (ws_id,))
     total_users = int((db.cursor.fetchone() or {'c': 0})['c']) or 1
 
-    users, messages, engagement, newcomers, message_stats = [], [], [], [], []
+    users, messages, engagement, newcomers, message_stats, user_activity = [], [], [], [], [], []
     running = base
     for key, label in spine:
         j = joined_by.get(key, 0)
@@ -873,6 +876,12 @@ def _compute_series(granularity: str = 'day') -> dict:
                               "comments": cm_by.get(key, 0),
                               "replies": rp_by.get(key, 0),
                               "edited": ed_by.get(key, 0)})
+        user_activity.append({"day": label, "active": w,
+                              "comments": cm_by.get(key, 0),
+                              "replies": rp_by.get(key, 0),
+                              "edited": ed_by.get(key, 0),
+                              "links": lk_by.get(key, 0),
+                              "mentions": mn_by.get(key, 0)})
 
     # V1.17.0M7: реальный chat_member_count из TG → переопределяем линию «Всего»
     # назад от последнего дня. Молчаливые участники чата теперь учтены.
@@ -965,6 +974,7 @@ def _compute_series(granularity: str = 'day') -> dict:
         "activeSummary": active_summary,
         "newReturning": new_returning,
         "messageStats": message_stats,
+        "userActivity": user_activity,
         "kpi": kpi,
         # пробелы (этап 2, см. STATS_SPEC): почасовые heatmap'ы,
         # edited/links, атрибуция новых, «удалён ботом», онлайн.

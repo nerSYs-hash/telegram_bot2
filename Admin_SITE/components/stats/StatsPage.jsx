@@ -672,6 +672,85 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
   );
 }
 
+// ═══════════ Виджет №9 — Статистика активности пользователей ═══════════
+function WidgetUserActivity({ cache, ensure, refresh }) {
+  const [gran, setGran] = useState('day');
+  const [activeIndex, setActiveIndex] = useState(null);
+
+  useEffect(() => { ensure(gran); }, [gran, ensure]);
+
+  const series = cache[gran];
+  const data = series?.userActivity || [];
+  const loading = !series;
+  const error = series?.error;
+
+  return (
+    <WidgetCard
+      icon={Activity} accent={C.pink}
+      title="Статистика активности пользователей"
+      onRefresh={() => refresh(gran)}
+      hint="Активные (линия) — уникальные авторы за период. Бары: Комментарии (в ветках/под постами), Ответы (реплаи), Правки, со Ссылкой, с Упоминанием. Правки/ссылки копятся вперёд."
+      onExport={data.length ? () => downloadCSV(
+        `user_activity_${gran}.csv`,
+        ['Период', 'Активные', 'Комментарии', 'Ответы', 'Правки', 'Ссылки', 'Упоминания'],
+        data.map((d) => [d.day, d.active, d.comments, d.replies, d.edited, d.links, d.mentions]),
+      ) : undefined}
+    >
+      <div className="px-2 pb-1">
+        <GranTabs value={gran} onChange={setGran} />
+      </div>
+
+      {loading ? <WidgetState kind="loading" />
+        : error ? <WidgetState kind="error" />
+        : (
+        <>
+          <ResponsiveContainer width="100%" height={290}>
+            <ComposedChart data={data} margin={{ top: 10, right: 6, left: -14, bottom: 0 }}
+              onMouseMove={(s) => setActiveIndex(s?.activeTooltipIndex ?? null)}
+              onMouseLeave={() => setActiveIndex(null)}>
+              <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+              <XAxis dataKey="day" height={30} axisLine={false} tickLine={false}
+                     interval="preserveStartEnd"
+                     tick={<DateTick activeIndex={activeIndex} />} />
+              <YAxis yAxisId="bars" width={34} allowDecimals={false}
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <YAxis yAxisId="line" orientation="right" width={34} allowDecimals={false}
+                     tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+              <Tooltip content={<StatTooltip />}
+                       cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
+              <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
+                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+              <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
+                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+              <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
+                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+              <Bar yAxisId="bars" dataKey="links" name="Ссылки" fill={C.mint}
+                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+              <Bar yAxisId="bars" dataKey="mentions" name="Упоминания" fill={C.ok}
+                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+              <Line yAxisId="line" type="monotone" dataKey="active" name="Активные"
+                    stroke={C.pink} strokeWidth={2.5}
+                    dot={{ r: 3, fill: C.pink, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: C.pink, stroke: '#fff', strokeWidth: 2 }}
+                    animationDuration={650} />
+              <Brush dataKey="day" height={24} stroke={C.pink} fill={C.brush}
+                     travellerWidth={9} tickFormatter={() => ''} />
+            </ComposedChart>
+          </ResponsiveContainer>
+          <ChartLegend items={[
+            { label: 'Активные',   color: C.pink },
+            { label: 'Комментарии', color: C.cta },
+            { label: 'Ответы',     color: C.purple },
+            { label: 'Правки',     color: C.warn },
+            { label: 'Ссылки',     color: C.mint },
+            { label: 'Упоминания', color: C.ok },
+          ]} />
+        </>
+      )}
+    </WidgetCard>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title }) {
   return (
@@ -760,8 +839,12 @@ export default function StatsPage() {
       {/* ── №8 — собран (структура сообщений) ── */}
       <WidgetMessageStats cache={cache} ensure={ensure} refresh={refresh} />
 
-      {/* ── №4,5,9 — в работе ── */}
+      {/* ── №9 — собран (активность пользователей) ── */}
+      <WidgetUserActivity cache={cache} ensure={ensure} refresh={refresh} />
+
+      {/* ── №4,5 — в работе (теплокарты, ждут почасовых) ── */}
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта" />
+      <SoonCard icon={MessageSquare} title="Сообщения · теплокарта" />
     </div>
   );
 }
