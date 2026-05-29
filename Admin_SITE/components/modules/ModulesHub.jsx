@@ -7,7 +7,7 @@ import {
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
   MoonStar, ClipboardList, MoreHorizontal, Settings, BarChart3, Check,
   Pickaxe, Ticket, Dices, CalendarHeart, UserPlus, Award, Rocket, Zap, MinusCircle,
-  Link2,
+  Link2, HelpCircle,
 } from 'lucide-react';
 import Button from '../shared/Button';
 import BBSThreadPanel from './BBSThreadPanel';
@@ -42,9 +42,9 @@ export const SECTIONS = [
           { id: 'chart:engagement',  icon: BarChart3, name: 'Коэффициент вовлечённости',    desc: 'Доля пишущих от всех участников.' },
           { id: 'chart:active_hm',   wip: true, icon: BarChart3, name: 'Активные (heatmap)',           desc: 'Тепловая карта активности.' },
           { id: 'chart:msg_hm',      wip: true, icon: BarChart3, name: 'Сообщения (heatmap)',          desc: 'Тепловая карта объёма сообщений.' },
-          { id: 'chart:newcomers',   wip: true, icon: BarChart3, name: 'Сводная новых по дням',        desc: 'Новые / вернувшиеся / приглашённые.' },
+          { id: 'chart:newcomers',   icon: BarChart3, name: 'Новые и вернувшиеся',          desc: 'Сколько новых пришло и сколько вернувшихся (уходили и зашли снова). Копится вперёд.' },
           { id: 'chart:first_msg',   icon: BarChart3, name: 'Первое сообщение',             desc: 'В 1-й день / после 1-го дня.' },
-          { id: 'chart:msg_stats',   wip: true, icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Всего / ответы / отредактированные.' },
+          { id: 'chart:msg_stats',   icon: BarChart3, name: 'Статистика по сообщениям',     desc: 'Линия «всего» + бары: комментарии, ответы, правки (правки копятся вперёд).' },
           { id: 'chart:user_act',    wip: true, icon: BarChart3, name: 'Активность пользователей',     desc: 'MAU / реплаи / упоминания / ссылки.' },
           { id: 'chart:active_sum',  icon: BarChart3, name: 'Сводная по активным',          desc: 'Новые / постоянные / активные.' },
           { id: 'chart:kpi',         icon: BarChart3, name: 'Ряд mini-KPI',                 desc: '4 компактных показателя активности.' },
@@ -230,16 +230,31 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
         }`}>
           <Icon size={20} />
         </div>
-        {wip ? (
-          <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--warn)_14%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_38%,transparent)]">
-            В разработке
-          </span>
-        ) : connected ? (
-          <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--ok)_8%,var(--sff))] text-tx border border-[color-mix(in_oklab,var(--ok)_26%,transparent)]">
-            <span className="w-1.5 h-1.5 rounded-full bg-ok" />
-            Подключён
-          </span>
-        ) : null}
+        <div className="flex items-center gap-1.5" onClick={e => e.stopPropagation()}>
+          {/* ❓ описание модуля/графика (полный desc в тултипе) */}
+          {mod.desc && (
+            <div className="relative group/hint">
+              <HelpCircle size={15} className="text-lbl cursor-help" />
+              <div className="absolute right-0 top-6 w-60 text-left normal-case font-normal tracking-normal
+                              text-[11px] leading-relaxed rounded-xl p-3 z-50 shadow-xl bg-white border border-bd text-txd
+                              opacity-0 invisible translate-y-1
+                              group-hover/hint:opacity-100 group-hover/hint:visible group-hover/hint:translate-y-0
+                              transition-all duration-150">
+                {mod.desc}
+              </div>
+            </div>
+          )}
+          {wip ? (
+            <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--warn)_14%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_38%,transparent)]">
+              В разработке
+            </span>
+          ) : connected ? (
+            <span className="inline-flex items-center gap-1.5 whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--ok)_8%,var(--sff))] text-tx border border-[color-mix(in_oklab,var(--ok)_26%,transparent)]">
+              <span className="w-1.5 h-1.5 rounded-full bg-ok" />
+              Подключён
+            </span>
+          ) : null}
+        </div>
       </div>
 
       <div className="flex-1">
