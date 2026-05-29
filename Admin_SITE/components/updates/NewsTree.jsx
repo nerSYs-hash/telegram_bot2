@@ -1,5 +1,5 @@
 import React, { useState, useMemo } from 'react';
-import { Newspaper, Sparkles, Wrench, Gift, ChevronDown } from 'lucide-react';
+import { Newspaper, Sparkles, Wrench, Gift, ChevronDown, MapPin } from 'lucide-react';
 
 // ═══════════════════════════════════════════════════════════════════
 //  НОВОСТНОЙ РАЗДЕЛ  ·  дерево новостей по месяцам
@@ -64,6 +64,12 @@ function NewsRow({ item }) {
       </span>
       <div className="flex-1 min-w-0">
         <p className="text-[13px] text-tx font-medium leading-relaxed">{item.text}</p>
+        {item.place && (
+          <p className="flex items-center gap-1 mt-1.5 text-[11px] font-bold text-cta">
+            <MapPin size={11} className="flex-shrink-0" />
+            {item.place}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-1.5 mt-1.5">
           <span className="text-[10px] font-black uppercase tracking-wide" style={{ color: cfg.color }}>
             {cfg.label}
@@ -160,6 +166,7 @@ export default function NewsTree({ updates = [], baseline = null }) {
         map.get(mk).push({
           text: it.text,
           tag: it.tag,
+          place: it.place,
           cat: catOf(it),
           version: u.version,
           fresh: ui < freshIdx,
