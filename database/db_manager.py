@@ -121,6 +121,7 @@ from database.db_stats import (
     register_stat_event as _register_stat_event,
     cleanup_stat_events_log as _cleanup_stat_events_log,
 )
+from database.db_member_history import create_member_history as _create_member_history
 
 
 class Database:
@@ -600,6 +601,7 @@ class Database:
         _create_stat_events_log(self)
         _add_removed_at_to_bot_chats(self)
         _add_icon_columns_to_workspaces(self)
+        _create_member_history(self)  # V1.17.0U: история членства (виджет №6)
 
         # Migration: add is_left column to users
         try:
