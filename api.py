@@ -1995,6 +1995,15 @@ async def ai_chat(req: AiRequest):
 AI_UPDATES_FILE = 'ai_updates.json'
 DEPLOY_SECRET   = os.environ.get('DEPLOY_SECRET', 'pulse-deploy-secret')
 
+# Месяцы в родительном падеже — формат даты, который ждёт лента NewsTree
+# («29 мая 2026»). Иначе запись не группируется под нужным месяцем.
+_RU_MONTHS_GEN = ['', 'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+                  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря']
+
+
+def _news_date(dt) -> str:
+    return f"{dt.day} {_RU_MONTHS_GEN[dt.month]} {dt.year}"
+
 def _load_ai_updates() -> list:
     try:
         if os.path.exists(AI_UPDATES_FILE):
@@ -2007,6 +2016,32 @@ def _load_ai_updates() -> list:
 def _save_ai_updates(data: list):
     with open(AI_UPDATES_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+
+
+# Однократная подгрузка заготовленных вручную новостей (бэкфилл за май).
+# Маркер-файл гарантирует, что сид применяется один раз — иначе удалённые
+# владельцем записи воскресали бы при каждом рестарте.
+NEWS_SEED_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', 'news_may_2026.json')
+NEWS_SEED_MARKER = 'ai_updates.seeded'
+
+def _seed_news_once():
+    try:
+        if os.path.exists(NEWS_SEED_MARKER) or not os.path.exists(NEWS_SEED_FILE):
+            return
+        with open(NEWS_SEED_FILE, 'r', encoding='utf-8') as f:
+            seed = json.load(f)
+        cur = _load_ai_updates()
+        have = {e.get('id') for e in cur}
+        add = [e for e in seed if e.get('id') not in have]
+        if add:
+            _save_ai_updates(add + cur)
+        with open(NEWS_SEED_MARKER, 'w', encoding='utf-8') as f:
+            f.write('done')
+        logger.info(f"news seed: applied {len(add)} entries")
+    except Exception as e:
+        logger.warning(f"news seed failed: {e}")
+
+_seed_news_once()
 
 @app.get("/api/updates")
 async def get_updates():
@@ -2060,12 +2095,12 @@ async def generate_update(event: DeployEvent):
     else:
         upd_type = 'improve'
 
-    prompt = f"""Ты пишешь краткие заметки об обновлениях для Telegram-бота и веб-панели управления чатом "PULSE 4ever 18+".
+    prompt = f"""Ты пишешь краткие новости об обновлениях продукта Puls_bot / Puls_chat (это Telegram-бот и веб-панель управления чатом) от лица нашей команды.
 
 Техническое описание коммита: "{event.commit_message}"
 
-Напиши 2-4 коротких пункта на русском языке, понятных обычному пользователю (без технических терминов).
-Каждый пункт начинай с одного из слов: «Добавлено», «Исправлено», «Улучшено» или «Теперь».
+Напиши 2-4 коротких пункта на русском языке, понятных обычному пользователю, БЕЗ технических терминов.
+Пиши от первого лица множественного числа — «Мы». Каждый пункт начинай со слов «Мы добавили», «Мы исправили», «Мы улучшили» или «Теперь».
 ВАЖНО: не используй markdown-разметку, звёздочки **, решётки # и другие спецсимволы.
 Верни ТОЛЬКО список пунктов, каждый на новой строке, без заголовков и нумерации."""
 
@@ -2102,12 +2137,12 @@ async def generate_update(event: DeployEvent):
         # Определяем тип каждой строки по первому слову
         def _line_type(line: str) -> str:
             l = line.lower()
-            if l.startswith('исправл'):
+            if l.startswith('мы исправили') or l.startswith('исправл'):
                 return 'fix'
-            elif l.startswith('улучш'):
+            elif l.startswith('мы улучшили') or l.startswith('улучш'):
                 return 'improve'
             else:
-                return 'new'  # «Добавлено», «Теперь» и всё остальное
+                return 'new'  # «Мы добавили», «Теперь» и всё остальное
 
         items = [{"type": _line_type(l), "text": l, "tag": tag} for l in lines]
 
@@ -2116,7 +2151,7 @@ async def generate_update(event: DeployEvent):
 
         entry = {
             "id":          int(_now_msk().timestamp()),
-            "date":        _now_msk().strftime('%d.%m.%Y'),
+            "date":        _news_date(_now_msk()),
             "version":     version,
             "title":       clean_title[:100],
             "tag":         tag,
