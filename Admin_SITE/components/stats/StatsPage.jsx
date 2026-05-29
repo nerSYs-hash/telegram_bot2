@@ -4,7 +4,7 @@ import {
   XAxis, YAxis, CartesianGrid, Tooltip, Cell, LabelList,
 } from 'recharts';
 import {
-  Users, HelpCircle, Download, Loader2,
+  Users, HelpCircle, Download, Loader2, RefreshCw,
   BarChart3, Activity, Grid2x2, MessageSquare, UserPlus,
 } from 'lucide-react';
 
@@ -92,7 +92,7 @@ function GranTabs({ value, onChange }) {
 }
 
 // ── Карточка-обёртка виджета: иконка, заголовок, подсказка, CSV. ──
-function WidgetCard({ icon: Icon, accent, title, hint, onExport, children }) {
+function WidgetCard({ icon: Icon, accent, title, hint, onExport, onRefresh, children }) {
   return (
     <section className="bg-sff rounded-[20px] border border-bd shadow-sm">
       <div className="flex items-center gap-3 px-5 pt-4 pb-3">
@@ -112,6 +112,12 @@ function WidgetCard({ icon: Icon, accent, title, hint, onExport, children }) {
               {hint}
             </div>
           </div>
+        )}
+        {onRefresh && (
+          <button onClick={onRefresh} title="Обновить эту карточку"
+                  className="text-lbl hover:text-cta transition-colors flex-shrink-0">
+            <RefreshCw size={15} />
+          </button>
         )}
         {onExport && (
           <button onClick={onExport} title="Выгрузить CSV"
@@ -162,7 +168,7 @@ function downloadCSV(filename, header, rows) {
 }
 
 // ═══════════ Виджет №1 — Статистика по пользователям ═══════════
-function WidgetUsers({ cache, ensure }) {
+function WidgetUsers({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
 
@@ -177,6 +183,7 @@ function WidgetUsers({ cache, ensure }) {
     <WidgetCard
       icon={Users} accent={C.cta}
       title="Статистика по пользователям"
+      onRefresh={() => refresh(gran)}
       hint="Вступили — присоединились за период. Вышли — покинули чат. Всего — общее число участников нарастающим итогом."
       onExport={data.length ? () => downloadCSV(
         `users_${gran}.csv`,
@@ -231,7 +238,7 @@ function WidgetUsers({ cache, ensure }) {
 }
 
 // ═══════════ Виджет №2 — Количество сообщений ═══════════
-function WidgetMessages({ cache, ensure }) {
+function WidgetMessages({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
 
@@ -246,6 +253,7 @@ function WidgetMessages({ cache, ensure }) {
     <WidgetCard
       icon={BarChart3} accent={C.cta}
       title="Количество сообщений"
+      onRefresh={() => refresh(gran)}
       hint="Сообщения — сколько всего написано за период. Писали — сколько уникальных участников отправили хотя бы одно сообщение. У показателей разный масштаб, поэтому две оси: сообщения слева, писали справа."
       onExport={data.length ? () => downloadCSV(
         `messages_${gran}.csv`,
@@ -294,7 +302,7 @@ function WidgetMessages({ cache, ensure }) {
 }
 
 // ═══════════ Виджет №3 — Коэффициент вовлечённости ═══════════
-function WidgetEngagement({ cache, ensure }) {
+function WidgetEngagement({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
 
@@ -309,6 +317,7 @@ function WidgetEngagement({ cache, ensure }) {
     <WidgetCard
       icon={Activity} accent={C.purple}
       title="Коэффициент вовлечённости"
+      onRefresh={() => refresh(gran)}
       hint="Доля участников, написавших хотя бы одно сообщение за период, от общего числа участников чата. Чем выше — тем активнее живёт чат."
       onExport={data.length ? () => downloadCSV(
         `engagement_${gran}.csv`, ['Период', 'Вовлечённость, %'],
@@ -373,7 +382,7 @@ function Spark({ values, color }) {
 }
 
 // ═══════════ Виджет №11 — Ряд mini-KPI ═══════════
-function WidgetKpi({ cache, ensure }) {
+function WidgetKpi({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
@@ -397,7 +406,13 @@ function WidgetKpi({ cache, ensure }) {
     <section className="bg-sff rounded-[20px] border border-bd shadow-sm p-4">
       <div className="flex items-center justify-between gap-3 mb-3">
         <h3 className="text-[13px] font-bold text-tx px-1">Сводка</h3>
-        <GranTabs value={gran} onChange={setGran} />
+        <div className="flex items-center gap-2">
+          <button onClick={() => refresh(gran)} title="Обновить"
+                  className="text-lbl hover:text-cta transition-colors">
+            <RefreshCw size={15} />
+          </button>
+          <GranTabs value={gran} onChange={setGran} />
+        </div>
       </div>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
         {tiles.map((t) => (
@@ -424,7 +439,7 @@ function WidgetKpi({ cache, ensure }) {
 
 // ═══════════ Виджет №7 — Первое сообщение в чате ═══════════
 // Снимок «за всё время» — от градации не зависит.
-function WidgetFirstMessage({ cache, ensure }) {
+function WidgetFirstMessage({ cache, ensure, refresh }) {
   useEffect(() => { ensure('day'); }, [ensure]);
 
   const series = cache.day;
@@ -443,6 +458,7 @@ function WidgetFirstMessage({ cache, ensure }) {
     <WidgetCard
       icon={MessageSquare} accent={C.ok}
       title="Первое сообщение в чате"
+      onRefresh={() => refresh('day')}
       hint="Среди участников, которые хоть раз писали: сколько отправили первое сообщение в день вступления, а сколько — позже."
       onExport={fm ? () => downloadCSV(
         'first_message.csv', ['Когда', 'Участников'],
@@ -477,7 +493,7 @@ function WidgetFirstMessage({ cache, ensure }) {
 }
 
 // ═══════════ Виджет №10 — Сводная по активным ═══════════
-function WidgetActiveSummary({ cache, ensure }) {
+function WidgetActiveSummary({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
@@ -497,6 +513,7 @@ function WidgetActiveSummary({ cache, ensure }) {
     <WidgetCard
       icon={Users} accent={C.cta}
       title="Сводная по активным"
+      onRefresh={() => refresh(gran)}
       hint="Среди участников, активных за выбранный период: Новые — вступили за последние 14 дней; Активные — от 14 до 30 дней назад; Постоянные — больше 30 дней в чате."
       onExport={as ? () => downloadCSV(
         `active_summary_${gran}.csv`, ['Группа', 'Участников'],
@@ -530,7 +547,7 @@ function WidgetActiveSummary({ cache, ensure }) {
 }
 
 // ═══════════ Виджет №6 — Новые и вернувшиеся ═══════════
-function WidgetNewReturning({ cache, ensure }) {
+function WidgetNewReturning({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('month');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
@@ -549,6 +566,7 @@ function WidgetNewReturning({ cache, ensure }) {
     <WidgetCard
       icon={UserPlus} accent={C.ok}
       title="Новые и вернувшиеся"
+      onRefresh={() => refresh(gran)}
       hint="Новые — впервые вступили за период. Вернувшиеся — уходили и снова зашли. Данные копятся с момента включения: «вернувшиеся» появятся, когда участники начнут возвращаться."
       onExport={nr ? () => downloadCSV(
         `new_returning_${gran}.csv`, ['Группа', 'Участников'],
@@ -582,7 +600,7 @@ function WidgetNewReturning({ cache, ensure }) {
 }
 
 // ═══════════ Виджет №8 — Статистика по сообщениям ═══════════
-function WidgetMessageStats({ cache, ensure }) {
+function WidgetMessageStats({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('day');
   const [activeIndex, setActiveIndex] = useState(null);
 
@@ -597,6 +615,7 @@ function WidgetMessageStats({ cache, ensure }) {
     <WidgetCard
       icon={MessageSquare} accent={C.mint}
       title="Статистика по сообщениям"
+      onRefresh={() => refresh(gran)}
       hint="Всего — все сообщения за период (линия). Комментарии — сообщения в ветках/темах, либо комментарии под постами канала (считается по типу чата). Ответы — реплаи на чужие сообщения. Правки — отредактированные сообщения (копятся вперёд)."
       onExport={data.length ? () => downloadCSV(
         `message_stats_${gran}.csv`,
@@ -695,6 +714,13 @@ export default function StatsPage() {
       });
   }, []);
 
+  // ↻ Обновить одну карточку: сбросить кеш её градации и перезапросить.
+  const refresh = useCallback((gran) => {
+    requested.current.delete(gran);
+    setCache((c) => { const n = { ...c }; delete n[gran]; return n; });
+    ensure(gran);
+  }, [ensure]);
+
   return (
     <div className="space-y-4 pb-24">
       {/* ── Шапка ── */}
@@ -711,28 +737,28 @@ export default function StatsPage() {
       </div>
 
       {/* ── №11 — сводка-плитки сверху ── */}
-      <WidgetKpi cache={cache} ensure={ensure} />
+      <WidgetKpi cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №1 — собран ── */}
-      <WidgetUsers cache={cache} ensure={ensure} />
+      <WidgetUsers cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №2 — собран ── */}
-      <WidgetMessages cache={cache} ensure={ensure} />
+      <WidgetMessages cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №3 — собран ── */}
-      <WidgetEngagement cache={cache} ensure={ensure} />
+      <WidgetEngagement cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №7 — собран ── */}
-      <WidgetFirstMessage cache={cache} ensure={ensure} />
+      <WidgetFirstMessage cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №10 — собран ── */}
-      <WidgetActiveSummary cache={cache} ensure={ensure} />
+      <WidgetActiveSummary cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №6 — собран (новые/вернувшиеся, копится вперёд) ── */}
-      <WidgetNewReturning cache={cache} ensure={ensure} />
+      <WidgetNewReturning cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №8 — собран (структура сообщений) ── */}
-      <WidgetMessageStats cache={cache} ensure={ensure} />
+      <WidgetMessageStats cache={cache} ensure={ensure} refresh={refresh} />
 
       {/* ── №4,5,9 — в работе ── */}
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта" />
