@@ -17,15 +17,27 @@ class GiftHandler:
         self.db = db
         self.target_chat_id = target_chat_id
         self.main_admin_id = main_admin_id
-    
+        # V1.17.0T (M5): изоляция per-ws — миграция колонки + ws этого хендлера.
+        try:
+            self.db.cursor.execute(
+                "ALTER TABLE monthly_gifts ADD COLUMN workspace_id INTEGER DEFAULT 1")
+            self.db.conn.commit()
+        except Exception:
+            pass  # колонка уже есть / таблица создастся позже
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            self.ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+        except Exception:
+            self.ws_id = 1
+
     def _get_current_gift(self):
         """Get or create current month's gift config"""
         from datetime import datetime
         current_month = datetime.now().strftime('%Y-%m')
-        
+
         self.db.cursor.execute('''
-            SELECT * FROM monthly_gifts WHERE month = ? ORDER BY id DESC LIMIT 1
-        ''', (current_month,))
+            SELECT * FROM monthly_gifts WHERE month = ? AND workspace_id = ? ORDER BY id DESC LIMIT 1
+        ''', (current_month, self.ws_id))
         gift = self.db.cursor.fetchone()
         return gift, current_month
     
@@ -203,8 +215,8 @@ class GiftHandler:
             ''', (amount, gift['id']))
         else:
             self.db.cursor.execute('''
-                INSERT INTO monthly_gifts (month, prize_amount, status) VALUES (?, ?, 'active')
-            ''', (current_month, amount))
+                INSERT INTO monthly_gifts (month, prize_amount, status, workspace_id) VALUES (?, ?, 'active', ?)
+            ''', (current_month, amount, self.ws_id))
         self.db.conn.commit()
         
         message = f"✅ Сумма: {format_number(amount)} Пульсов\n\n"
@@ -713,9 +725,10 @@ class GiftHandler:
                    mg.awarded_at, mg.status, u.username, u.first_name
             FROM monthly_gifts mg
             LEFT JOIN users u ON mg.winner_id = u.user_id
+            WHERE mg.workspace_id = ?
             ORDER BY mg.created_at DESC
             LIMIT 12
-        ''')
+        ''', (self.ws_id,))
         
         history = self.db.cursor.fetchall()
         
@@ -956,10 +969,10 @@ class GiftHandler:
             SELECT mg.month, mg.prize_amount, mg.prize_type, u.username, u.first_name
             FROM monthly_gifts mg
             JOIN users u ON mg.winner_id = u.user_id
-            WHERE mg.status = 'completed'
+            WHERE mg.status = 'completed' AND mg.workspace_id = ?
             ORDER BY mg.awarded_at DESC
             LIMIT 12
-        ''')
+        ''', (self.ws_id,))
         
         history = self.db.cursor.fetchall()
         type_emojis = {'pulses': '💎', 'title': '👑', 'custom': '🎯'}
