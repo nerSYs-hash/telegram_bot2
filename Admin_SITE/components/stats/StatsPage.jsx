@@ -674,7 +674,7 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
 
 // ═══════════ Виджет №9 — Статистика активности пользователей ═══════════
 function WidgetUserActivity({ cache, ensure, refresh }) {
-  const [gran, setGran] = useState('day');
+  const [gran, setGran] = useState('week');  // 5 баров: день слишком плотный → по умолчанию неделя
   const [activeIndex, setActiveIndex] = useState(null);
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
@@ -719,15 +719,15 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
               <Tooltip content={<StatTooltip />}
                        cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
               <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
-                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
-                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
-                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="links" name="Ссылки" fill={C.mint}
-                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="mentions" name="Упоминания" fill={C.ok}
-                   radius={[4, 4, 0, 0]} maxBarSize={14} animationDuration={500} />
+                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Line yAxisId="line" type="monotone" dataKey="active" name="Активные"
                     stroke={C.pink} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.pink, strokeWidth: 0 }}
