@@ -9,6 +9,7 @@ import StatsPage from './components/stats/StatsPage';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import NewsTree from './components/updates/NewsTree';
 import UpdateToast from './components/updates/UpdateToast';
+import SiteUpdateToast from './components/updates/SiteUpdateToast';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import { useModules } from './hooks/useModules';
 import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
@@ -5514,6 +5515,9 @@ export default function App() {
           }}
         />
       )}
+
+      {/* Тихое обновление: новая сборка сайта → мягкий тост «Обновить» */}
+      <SiteUpdateToast />
 
       <main className="flex-1 flex flex-col h-screen overflow-hidden bg-transparent">
         <header className="h-16 lg:h-16 bg-sff border-b border-bd flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
