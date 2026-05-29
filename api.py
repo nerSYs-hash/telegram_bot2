@@ -609,7 +609,7 @@ def _compute_stats(period: str) -> dict:
         hist_end   = today
         history    = _build_daily_history(hist_start, hist_end)
 
-    bank         = float(db.get_bank_balance()) if db else 0
+    bank         = float(db.get_bank_balance(ws_id=current_ws_id())) if db else 0
     rate         = float(db.get_setting('pulse_rate', '1.42')) if db else 1.42
     difficulty_k = float(db.get_setting('difficulty_k', '5.0')) if db else 5.0
 

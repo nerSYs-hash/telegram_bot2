@@ -34,6 +34,12 @@ class LotteryHandler:
         self.main_admin_id = main_admin_id
         self.bot_username = bot_username
         self._ensure_tables()
+        # V1.17.0T (M5): workspace этого хендлера — резолвится из target_chat_id.
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            self.ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+        except Exception:
+            self.ws_id = 1
 
     def _is_owner_user(self, user, *, context=None, conn=None) -> bool:
         """Per-ws (Этап A V1.17.0L4) или legacy «владелец?».
@@ -76,7 +82,8 @@ class LotteryHandler:
             self.db.cursor.execute("PRAGMA table_info(lotteries)")
             cols = {r[1] for r in self.db.cursor.fetchall()}
             for c, t in [('winner_id','INTEGER'),('message_id','INTEGER'),
-                         ('winners_mode','INTEGER NOT NULL DEFAULT 1')]:
+                         ('winners_mode','INTEGER NOT NULL DEFAULT 1'),
+                         ('workspace_id','INTEGER DEFAULT 1')]:  # V1.17.0T (M5): изоляция per-ws
                 if c not in cols:
                     self.db.cursor.execute(f'ALTER TABLE lotteries ADD COLUMN {c} {t}')
             self.db.conn.commit()
@@ -87,19 +94,23 @@ class LotteryHandler:
     #  ДЖЕКПОТ «ПУЛЬСАР»
     # ══════════════════════════════════════════
 
+    def _jackpot_key(self):
+        """V1.17.0T (M5): джекпот per-ws. ws=1 — старый ключ (сохраняем пул)."""
+        return 'jackpot_pool' if getattr(self, 'ws_id', 1) == 1 else f'jackpot_pool_{self.ws_id}'
+
     def _jackpot_pool(self):
         """Текущий размер джекпот-пула."""
-        val = self.db.get_setting('jackpot_pool', '0')
+        val = self.db.get_setting(self._jackpot_key(), '0')
         return int(float(val))
 
     def _jackpot_add(self, amount):
         """Добавить в джекпот-пул."""
         current = self._jackpot_pool()
-        self.db.set_setting('jackpot_pool', str(current + int(amount)))
+        self.db.set_setting(self._jackpot_key(), str(current + int(amount)))
 
     def _jackpot_reset(self):
         """Сбросить джекпот-пул в 0."""
-        self.db.set_setting('jackpot_pool', '0')
+        self.db.set_setting(self._jackpot_key(), '0')
 
     # ══════════════════════════════════════════
     #  ХЕЛПЕРЫ
@@ -112,7 +123,9 @@ class LotteryHandler:
         return self.db.cursor.fetchone()
 
     def _active(self):
-        self.db.cursor.execute("SELECT * FROM lotteries WHERE status='active' ORDER BY id DESC")
+        self.db.cursor.execute(
+            "SELECT * FROM lotteries WHERE status='active' AND workspace_id=? ORDER BY id DESC",
+            (self.ws_id,))
         return self.db.cursor.fetchall()
 
     def _my(self, lid, uid):
@@ -428,8 +441,8 @@ class LotteryHandler:
             logger.info(f"Creating lottery: price={price}, dur={dur}, end_time={end_str}, mode={wm}")
             try:
                 self.db.cursor.execute(
-                    'INSERT INTO lotteries (ticket_price,duration,end_time,status,total_pool,winners_mode)'
-                    " VALUES (?,?,?,'active',0,?)", (price, dur, end_str, wm))
+                    'INSERT INTO lotteries (ticket_price,duration,end_time,status,total_pool,winners_mode,workspace_id)'
+                    " VALUES (?,?,?,'active',0,?,?)", (price, dur, end_str, wm, self.ws_id))
                 self.db.conn.commit()
                 lid = self.db.cursor.lastrowid
             except Exception as e:

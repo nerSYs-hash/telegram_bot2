@@ -300,6 +300,7 @@ def ensure_trigger_tables(db) -> None:
 def _migrate_trigger_columns(db):
     """Добавляет новые колонки v2 к существующей таблице."""
     new_cols = [
+        ("workspace_id",         "INTEGER DEFAULT 1"),  # V1.17.0T: изоляция per-ws (backfill existing → 1)
         ("where_fires",          "TEXT DEFAULT 'all'"),
         ("initiator",            "TEXT DEFAULT 'all'"),
         ("target",               "TEXT DEFAULT 'nobody'"),
@@ -355,8 +356,10 @@ def _get_all_triggers(db) -> list:
     db.cursor.execute('SELECT * FROM triggers ORDER BY id')
     return db.cursor.fetchall()
 
-def _get_enabled_triggers(db) -> list:
-    db.cursor.execute('SELECT * FROM triggers WHERE is_enabled = 1 ORDER BY id')
+def _get_enabled_triggers(db, ws_id: int = 1) -> list:
+    db.cursor.execute(
+        'SELECT * FROM triggers WHERE is_enabled = 1 AND workspace_id = ? ORDER BY id',
+        (ws_id,))
     return db.cursor.fetchall()
 
 def _get_trigger(db, trigger_id: int):
@@ -1590,8 +1593,14 @@ async def process_triggers(
         pass
 
     ensure_trigger_tables(db)
-    triggers = _get_enabled_triggers(db)
-    logger.info(f"[TRIGGERS] process_triggers called: user={user.id}, text={repr(message.text[:50] if message.text else '')}, triggers_count={len(triggers)}")
+    # V1.17.0T2 (M7): срабатывают только триггеры workspace этого чата.
+    try:
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        _trig_ws = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+    except Exception:
+        _trig_ws = 1
+    triggers = _get_enabled_triggers(db, _trig_ws)
+    logger.info(f"[TRIGGERS] process_triggers called: user={user.id}, ws={_trig_ws}, text={repr(message.text[:50] if message.text else '')}, triggers_count={len(triggers)}")
     if not triggers:
         return False
 

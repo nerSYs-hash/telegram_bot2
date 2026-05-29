@@ -25,18 +25,31 @@ def add_transaction(db, workspace_id, from_user_id, to_user_id, amount, transact
     return db.cursor.lastrowid
 
 
-def get_bank_balance(db):
-    """Get central bank balance. ГЛОБАЛЬНО (Pulse-токен)."""
+BANK_INITIAL_CAPITAL = 10_000_000  # стартовый капитал банка каждого workspace
+
+
+def _bank_key(ws_id=1) -> str:
+    """V1.17.0T (M5): банк per-ws. ws=1 — старый ключ (сохраняем баланс),
+    остальные ws — отдельный ключ. Каждый ws стартует с 10М (дефолт)."""
     try:
-        val = get_setting(db, 'bank_balance', '10000000')
+        ws = int(ws_id)
+    except (TypeError, ValueError):
+        ws = 1
+    return 'bank_balance' if ws == 1 else f'bank_balance_{ws}'
+
+
+def get_bank_balance(db, ws_id=1):
+    """Баланс банка workspace (виртуальные Пульсы). Новый ws → 10М по дефолту."""
+    try:
+        val = get_setting(db, _bank_key(ws_id), str(BANK_INITIAL_CAPITAL))
         return float(val)
     except (ValueError, TypeError):
-        return 10000000.0
+        return float(BANK_INITIAL_CAPITAL)
 
 
-def update_bank_balance(db, amount, operation='subtract'):
-    """Update bank balance. ГЛОБАЛЬНО."""
-    current = get_bank_balance(db)
+def update_bank_balance(db, amount, operation='subtract', ws_id=1):
+    """Изменить баланс банка workspace."""
+    current = get_bank_balance(db, ws_id)
     amount = float(amount)
 
     if operation == 'add':
@@ -49,5 +62,5 @@ def update_bank_balance(db, amount, operation='subtract'):
         new_balance = amount
 
     new_balance = round(new_balance, 2)
-    set_setting(db, 'bank_balance', str(new_balance))
+    set_setting(db, _bank_key(ws_id), str(new_balance))
     return True
