@@ -734,10 +734,22 @@ class TelegramBot:
             )
         )
         
+        # Edited-message handler — учёт «отредактированных» для статистики (виджеты №8/9).
+        # ВАЖНО: РЕГИСТРИРУЕТСЯ ПЕРЕД общим message-хендлером. В PTB v20 общий
+        # MessageHandler ловит и отредактированные апдейты (через effective_message),
+        # а в одной группе срабатывает только ПЕРВЫЙ совпавший — иначе правка
+        # уходит в handle_message (где update.message=None → return) и теряется.
+        self.application.add_handler(
+            MessageHandler(
+                filters.UpdateType.EDITED_MESSAGE,
+                self.message_handler.handle_edited_message
+            )
+        )
+
         # Message handler
         self.application.add_handler(
             MessageHandler(
-                (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE | 
+                (filters.TEXT | filters.PHOTO | filters.VIDEO | filters.VOICE |
                  filters.AUDIO | filters.ANIMATION | filters.Document.ALL |
                  filters.VIDEO_NOTE | filters.Sticker.ALL) & (~filters.StatusUpdate.ALL),
                 self.message_handler.handle_message
