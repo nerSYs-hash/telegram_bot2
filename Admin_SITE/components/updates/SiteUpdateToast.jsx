@@ -31,7 +31,13 @@ export default function SiteUpdateToast() {
         const m = html.match(/assets\/index-[A-Za-z0-9_-]+\.js/);
         const fresh = m ? m[0] : null;
         if (!stop && fresh && baseline.current && fresh !== baseline.current) {
-          setShow(true);
+          // Не торопимся: показываем тост, ТОЛЬКО когда новый бандл реально
+          // доступен (деплой завершён). Иначе ждём следующей проверки —
+          // чтобы не предлагать «Обновить», пока обновление ещё катится.
+          try {
+            const probe = await fetch(`/${fresh}`, { method: 'HEAD', cache: 'no-store' });
+            if (!stop && probe.ok) setShow(true);
+          } catch { /* бандл ещё не готов — подождём */ }
         }
       } catch { /* офлайн/сеть — молча пропускаем */ }
     };
