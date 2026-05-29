@@ -2017,6 +2017,32 @@ def _save_ai_updates(data: list):
     with open(AI_UPDATES_FILE, 'w', encoding='utf-8') as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
 
+
+# Однократная подгрузка заготовленных вручную новостей (бэкфилл за май).
+# Маркер-файл гарантирует, что сид применяется один раз — иначе удалённые
+# владельцем записи воскресали бы при каждом рестарте.
+NEWS_SEED_FILE   = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'scripts', 'news_may_2026.json')
+NEWS_SEED_MARKER = 'ai_updates.seeded'
+
+def _seed_news_once():
+    try:
+        if os.path.exists(NEWS_SEED_MARKER) or not os.path.exists(NEWS_SEED_FILE):
+            return
+        with open(NEWS_SEED_FILE, 'r', encoding='utf-8') as f:
+            seed = json.load(f)
+        cur = _load_ai_updates()
+        have = {e.get('id') for e in cur}
+        add = [e for e in seed if e.get('id') not in have]
+        if add:
+            _save_ai_updates(add + cur)
+        with open(NEWS_SEED_MARKER, 'w', encoding='utf-8') as f:
+            f.write('done')
+        logger.info(f"news seed: applied {len(add)} entries")
+    except Exception as e:
+        logger.warning(f"news seed failed: {e}")
+
+_seed_news_once()
+
 @app.get("/api/updates")
 async def get_updates():
     """Список AI-сгенерированных заметок об обновлениях"""
