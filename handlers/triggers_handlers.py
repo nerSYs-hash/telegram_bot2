@@ -300,6 +300,7 @@ def ensure_trigger_tables(db) -> None:
 def _migrate_trigger_columns(db):
     """Добавляет новые колонки v2 к существующей таблице."""
     new_cols = [
+        ("workspace_id",         "INTEGER DEFAULT 1"),  # V1.17.0T: изоляция per-ws (backfill existing → 1)
         ("where_fires",          "TEXT DEFAULT 'all'"),
         ("initiator",            "TEXT DEFAULT 'all'"),
         ("target",               "TEXT DEFAULT 'nobody'"),
