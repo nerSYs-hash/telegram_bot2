@@ -809,6 +809,7 @@ const _WD_ORDER = [1, 2, 3, 4, 5, 6, 0];                        // показы�
 function WidgetHeatmap({ metric, title, accent, hint }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
+  const [hover, setHover] = useState(null);  // {wd, h, v, x, y}
 
   const load = useCallback(() => {
     const token = localStorage.getItem('jwt') || '';
@@ -826,7 +827,8 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
 
   const grid = data && data[metric];               // 7×24 [wd][hour]
   const max = grid ? Math.max(1, ...grid.flat()) : 1;
-  const cellBg = (v) => v
+  const metricLabel = metric === 'active' ? 'Активных' : 'Сообщений';
+  const baseBg = (v) => v
     ? `color-mix(in oklab, ${accent} ${Math.round(10 + (v / max) * 80)}%, transparent)`
     : '#F1F3F7';
 
@@ -835,30 +837,56 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
       {error ? <WidgetState kind="error" />
         : !grid ? <WidgetState kind="loading" />
         : (
-        <div className="px-2 pb-2 overflow-x-auto">
-          <div className="inline-block">
-            {/* подписи часов */}
-            <div className="flex pl-9">
-              {Array.from({ length: 24 }).map((_, h) => (
-                <div key={h} className="text-[8px] text-lbl text-center"
-                     style={{ width: '14px' }}>{h % 3 === 0 ? h : ''}</div>
-              ))}
-            </div>
-            {_WD_ORDER.map((wd) => (
-              <div key={wd} className="flex items-center">
-                <div className="text-[9px] font-bold text-txd w-9 flex-shrink-0">{_WD_NAMES[wd]}</div>
-                {Array.from({ length: 24 }).map((_, h) => {
-                  const v = grid[wd] ? grid[wd][h] : 0;
-                  return (
-                    <div key={h} title={`${_WD_NAMES[wd]} ${h}:00 — ${v.toLocaleString('ru-RU')}`}
-                         className="rounded-[2px]"
-                         style={{ width: '12px', height: '12px', margin: '1px', background: cellBg(v) }} />
-                  );
-                })}
-              </div>
+        <div className="px-4 pb-3" onMouseLeave={() => setHover(null)}>
+          {/* подписи часов */}
+          <div className="flex gap-[3px] pl-12 mb-1.5">
+            {Array.from({ length: 24 }).map((_, h) => (
+              <div key={h} className="flex-1 text-[9px] text-lbl text-center">{h % 2 === 0 ? h : ''}</div>
             ))}
-            <div className="text-[10px] text-lbl pt-2 pl-9">Темнее = выше активность · копится вперёд</div>
           </div>
+          {_WD_ORDER.map((wd) => (
+            <div key={wd} className="flex gap-[3px] items-center mb-[3px]">
+              <div className="text-[11px] font-bold text-txd w-11 flex-shrink-0">{_WD_NAMES[wd]}</div>
+              {Array.from({ length: 24 }).map((_, h) => {
+                const v = grid[wd] ? grid[wd][h] : 0;
+                const isHover = hover && hover.wd === wd && hover.h === h;
+                return (
+                  <div key={h}
+                       onMouseMove={(e) => setHover({ wd, h, v, x: e.clientX, y: e.clientY })}
+                       className="flex-1 rounded-md transition-all duration-150 cursor-pointer"
+                       style={{
+                         height: '30px',
+                         background: isHover ? `color-mix(in oklab, ${baseBg(v)}, white 38%)` : baseBg(v),
+                         transform: isHover ? 'scale(1.18)' : 'none',
+                         boxShadow: isHover ? '0 4px 14px rgba(0,0,0,.18)' : 'none',
+                         zIndex: isHover ? 5 : 1,
+                       }} />
+                );
+              })}
+            </div>
+          ))}
+          <div className="text-[11px] text-lbl pt-3 pl-12">Темнее клетка = выше активность · данные копятся вперёд</div>
+
+          {/* Плавающая карточка-тултип в дизайне сайта, едет за курсором */}
+          {hover && (
+            <div className="fixed z-[300] pointer-events-none"
+                 style={{ left: hover.x + 16, top: hover.y + 16 }}>
+              <div className="bg-white rounded-2xl border border-bd shadow-xl px-3.5 py-2.5 min-w-[150px]">
+                <div className="text-[12px] font-black text-tx mb-1.5">
+                  {_WD_NAMES[hover.wd]}, {String(hover.h).padStart(2, '0')}:00
+                </div>
+                <div className="flex items-center justify-between gap-5">
+                  <span className="flex items-center gap-2 text-[12px] text-txd">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
+                    {metricLabel}
+                  </span>
+                  <span className="text-[13px] font-bold text-tx tabular-nums">
+                    {hover.v.toLocaleString('ru-RU')}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </WidgetCard>
