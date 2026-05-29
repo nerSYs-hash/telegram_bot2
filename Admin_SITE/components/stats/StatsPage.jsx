@@ -529,6 +529,58 @@ function WidgetActiveSummary({ cache, ensure }) {
   );
 }
 
+// ═══════════ Виджет №6 — Новые и вернувшиеся ═══════════
+function WidgetNewReturning({ cache, ensure }) {
+  const [gran, setGran] = useState('month');
+
+  useEffect(() => { ensure(gran); }, [gran, ensure]);
+
+  const series = cache[gran];
+  const nr = series?.newReturning;
+  const loading = !series;
+  const error = series?.error;
+
+  const data = nr ? [
+    { name: 'Новые',       value: nr.new,       fill: C.ok },
+    { name: 'Вернувшиеся', value: nr.returning, fill: C.cta },
+  ] : [];
+
+  return (
+    <WidgetCard
+      icon={UserPlus} accent={C.ok}
+      title="Новые и вернувшиеся"
+      hint="Новые — впервые вступили за период. Вернувшиеся — уходили и снова зашли. Данные копятся с момента включения: «вернувшиеся» появятся, когда участники начнут возвращаться."
+      onExport={nr ? () => downloadCSV(
+        `new_returning_${gran}.csv`, ['Группа', 'Участников'],
+        [['Новые', nr.new], ['Вернувшиеся', nr.returning]],
+      ) : undefined}
+    >
+      <div className="px-2 pb-1">
+        <GranTabs value={gran} onChange={setGran} />
+      </div>
+
+      {loading ? <WidgetState kind="loading" />
+        : error ? <WidgetState kind="error" />
+        : (
+        <ResponsiveContainer width="100%" height={250}>
+          <ComposedChart data={data} margin={{ top: 26, right: 12, left: -16, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke={C.grid} vertical={false} />
+            <XAxis dataKey="name" axisLine={false} tickLine={false}
+                   tick={{ fontSize: 11, fontWeight: 600, fill: C.txd }} />
+            <YAxis width={36} allowDecimals={false}
+                   tick={{ fontSize: 10, fill: C.axisDim }} axisLine={false} tickLine={false} />
+            <Bar dataKey="value" radius={[6, 6, 0, 0]} maxBarSize={84} animationDuration={550}>
+              {data.map((d, i) => <Cell key={i} fill={d.fill} />)}
+              <LabelList dataKey="value" position="top"
+                         fill={C.tx} fontSize={13} fontWeight={800} />
+            </Bar>
+          </ComposedChart>
+        </ResponsiveContainer>
+      )}
+    </WidgetCard>
+  );
+}
+
 // ── Заглушка «Скоро» для ещё не собранных виджетов. ──
 function SoonCard({ icon: Icon, title }) {
   return (
@@ -604,10 +656,12 @@ export default function StatsPage() {
       {/* ── №10 — собран ── */}
       <WidgetActiveSummary cache={cache} ensure={ensure} />
 
-      {/* ── №4,5,6,8,9 — в работе ── */}
+      {/* ── №6 — собран (новые/вернувшиеся, копится вперёд) ── */}
+      <WidgetNewReturning cache={cache} ensure={ensure} />
+
+      {/* ── №4,5,8,9 — в работе ── */}
       <SoonCard icon={Grid2x2} title="Активные пользователи · теплокарта" />
       <SoonCard icon={MessageSquare} title="Статистика по сообщениям" />
-      <SoonCard icon={UserPlus} title="Сводная новых по дням" />
     </div>
   );
 }

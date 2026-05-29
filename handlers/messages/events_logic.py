@@ -56,7 +56,23 @@ async def handle_member_left(update, context, db, admin_id, target_chat_id):
     if new_status == 'kicked' and getattr(new_member, 'until_date', None) and was_in_chat:
         logging.info(f"🔇 User {user_id} got TEMPORARY BAN until {new_member.until_date} — treating as mute, ignoring")
         return
-        
+
+    # === V1.17.0U: долгая история членства per-ws (виджет №6 «Новые/Вернувшиеся») ===
+    # Реальный вход/выход (мут/временный бан отфильтрованы выше). Данные копятся вперёд.
+    try:
+        _mh_event = None
+        if is_now_in_chat and not was_in_chat:
+            _mh_event = 'joined'
+        elif was_in_chat and not is_now_in_chat and new_status in ('left', 'kicked'):
+            _mh_event = 'left'
+        if _mh_event:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from database.db_member_history import log_member_event
+            _mh_ws = resolve_workspace_for_chat(db.conn, update.chat_member.chat.id) or 1
+            log_member_event(db, _mh_ws, user_id, _mh_event)
+    except Exception as _mh_e:
+        logging.warning(f"member_history log failed: {_mh_e}")
+
     # === ПОЛЬЗОВАТЕЛЬ ЗАБАНЕН АДМИНОМ ЧЕРЕЗ TG-КЛИЕНТ (вечный бан) ===
     # kicked без until_date = вечный бан → синхронизируем в наш ЧС + журнал.
     # (Временный бан с until_date уже отфильтрован выше как мут.)

@@ -926,6 +926,17 @@ def _compute_series(granularity: str = 'day') -> dict:
         "unit": _GRAN_UNIT[gran],
     }
 
+    # ── w6: новые / вернувшиеся за окно (member_history, копится вперёд) ──
+    try:
+        from datetime import datetime as _dt, time as _tm
+        from database.db_member_history import count_new_returning
+        _w_start = int(_dt.combine(start_date, _tm.min).timestamp())
+        _w_end = int(_dt.combine(end_date, _tm.max).timestamp())
+        new_returning = count_new_returning(db, ws_id, _w_start, _w_end)
+    except Exception as _nre:
+        logger.debug(f"newReturning skipped: {_nre}")
+        new_returning = {"new": 0, "returning": 0}
+
     return {
         "granularity": gran,
         "granularityLabel": _GRAN_LABELS[gran],
@@ -935,6 +946,7 @@ def _compute_series(granularity: str = 'day') -> dict:
         "newcomers": newcomers,
         "firstMessage": first_message,
         "activeSummary": active_summary,
+        "newReturning": new_returning,
         "kpi": kpi,
         # пробелы (этап 2, см. STATS_SPEC): почасовые heatmap'ы,
         # edited/links, атрибуция новых, «удалён ботом», онлайн.
