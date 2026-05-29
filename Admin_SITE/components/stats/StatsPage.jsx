@@ -131,17 +131,46 @@ function WidgetCard({ icon: Icon, accent, title, hint, onExport, onRefresh, chil
   );
 }
 
-// ── Подпись-легенда под графиком. ──
-function ChartLegend({ items }) {
+// ── Скрытые серии графика: персист в localStorage (не сбрасывается при
+//    рефреше/перезагрузке; данные всё равно считаются, прячется только показ). ──
+function useHiddenSeries(storeKey) {
+  const lsKey = `stats_hidden_${storeKey}`;
+  const [hidden, setHidden] = useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(lsKey) || '[]')); }
+    catch { return new Set(); }
+  });
+  const toggle = useCallback((k) => {
+    setHidden((prev) => {
+      const n = new Set(prev);
+      n.has(k) ? n.delete(k) : n.add(k);
+      try { localStorage.setItem(lsKey, JSON.stringify([...n])); } catch { /* ignore */ }
+      return n;
+    });
+  }, [lsKey]);
+  return [hidden, toggle];
+}
+
+// ── Подпись-легенда под графиком. Кликабельная: клик по пункту прячет/
+//    показывает серию (it.k = dataKey). Без onToggle — обычная подпись. ──
+function ChartLegend({ items, hidden, onToggle }) {
   return (
     <div className="flex items-center justify-center flex-wrap gap-x-5 gap-y-1 pt-3">
-      {items.map((it) => (
-        <span key={it.label}
-              className="flex items-center gap-1.5 text-[11px] font-medium text-txd">
-          <span className="w-2.5 h-2.5 rounded-full" style={{ background: it.color }} />
-          {it.label}
-        </span>
-      ))}
+      {items.map((it) => {
+        const off = hidden && it.k && hidden.has(it.k);
+        const clickable = !!(onToggle && it.k);
+        return (
+          <button key={it.label} type="button"
+            onClick={clickable ? () => onToggle(it.k) : undefined}
+            title={clickable ? 'Скрыть / показать на графике' : undefined}
+            className={`flex items-center gap-1.5 text-[11px] font-medium transition-opacity ${
+              clickable ? 'cursor-pointer hover:opacity-70' : 'cursor-default'
+            } ${off ? 'opacity-35 line-through' : 'text-txd'}`}>
+            <span className="w-2.5 h-2.5 rounded-full"
+                  style={{ background: off ? '#C7CDD6' : it.color }} />
+            {it.label}
+          </button>
+        );
+      })}
     </div>
   );
 }
@@ -676,6 +705,7 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
 function WidgetUserActivity({ cache, ensure, refresh }) {
   const [gran, setGran] = useState('week');  // 5 баров: день слишком плотный → по умолчанию неделя
   const [activeIndex, setActiveIndex] = useState(null);
+  const [hidden, toggleHidden] = useHiddenSeries('user_act');
 
   useEffect(() => { ensure(gran); }, [gran, ensure]);
 
@@ -719,16 +749,22 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
               <Tooltip content={<StatTooltip />}
                        cursor={{ stroke: C.axisDim, strokeWidth: 1.5, strokeDasharray: '4 4' }} />
               <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
+                   hide={hidden.has('comments')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
+                   hide={hidden.has('replies')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
+                   hide={hidden.has('edited')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="links" name="Ссылки" fill={C.mint}
+                   hide={hidden.has('links')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="mentions" name="Упоминания" fill={C.ok}
+                   hide={hidden.has('mentions')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Line yAxisId="line" type="monotone" dataKey="active" name="Активные"
+                    hide={hidden.has('active')}
                     stroke={C.pink} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.pink, strokeWidth: 0 }}
                     activeDot={{ r: 5, fill: C.pink, stroke: '#fff', strokeWidth: 2 }}
@@ -737,13 +773,13 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
                      travellerWidth={9} tickFormatter={() => ''} />
             </ComposedChart>
           </ResponsiveContainer>
-          <ChartLegend items={[
-            { label: 'Активные',   color: C.pink },
-            { label: 'Комментарии', color: C.cta },
-            { label: 'Ответы',     color: C.purple },
-            { label: 'Правки',     color: C.warn },
-            { label: 'Ссылки',     color: C.mint },
-            { label: 'Упоминания', color: C.ok },
+          <ChartLegend hidden={hidden} onToggle={toggleHidden} items={[
+            { k: 'active',   label: 'Активные',   color: C.pink },
+            { k: 'comments', label: 'Комментарии', color: C.cta },
+            { k: 'replies',  label: 'Ответы',     color: C.purple },
+            { k: 'edited',   label: 'Правки',     color: C.warn },
+            { k: 'links',    label: 'Ссылки',     color: C.mint },
+            { k: 'mentions', label: 'Упоминания', color: C.ok },
           ]} />
         </>
       )}
