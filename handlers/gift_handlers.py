@@ -610,8 +610,8 @@ class GiftHandler:
         except Exception:
             pass
 
-        # Award the prize (from bank)
-        bank_balance = self.db.get_bank_balance()
+        # Award the prize (from bank) — банк своего workspace
+        bank_balance = self.db.get_bank_balance(ws_id=self.ws_id)
         if bank_balance < gift_amount:
             await query.edit_message_text(
                 f"❌ Недостаточно средств в Банке!\n"
@@ -619,7 +619,7 @@ class GiftHandler:
                 f"🎁 Нужно: {format_number(gift_amount)} 💎")
             return
 
-        self.db.update_bank_balance(gift_amount, 'subtract')
+        self.db.update_bank_balance(gift_amount, 'subtract', ws_id=self.ws_id)
         self.db.update_user_balance(winner_id, gift_amount, 'add')
         self.db.add_transaction(
             None,
