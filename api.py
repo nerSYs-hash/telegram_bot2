@@ -998,13 +998,17 @@ async def get_stats_series(granularity: str = Query('day')):
 
 
 @app.get("/api/stats/heatmap")
-async def get_stats_heatmap(days: int = Query(90)):
-    """Теплокарта активности: сетка [день недели 0=Вс..6=Сб] × [час 0..23].
-    messages — сумма сообщений, active — уникальные авторы. Из user_stats_hourly.
-    NB: user_stats_hourly без workspace_id — на проде 1 активный ws; per-ws — TODO изоляции.
+async def get_stats_heatmap(days: int = Query(90), daily_weeks: int = Query(6)):
+    """Теплокарта активности — два среза:
+
+    • вкладка «Час»: сетка [день недели 0=Вс..6=Сб] × [час 0..23] (поля
+      messages/active) — из user_stats_hourly (без ws — на проде 1 активный ws).
+    • вкладка «День»: посуточно за последние `daily_weeks` недель (поле daily:
+      [{date, messages, active}]) — из user_stats с per-ws фильтром. Фронт
+      разворачивает в сетку день-недели × календарные недели.
     """
     if not db:
-        return {"messages": [], "active": []}
+        return {"messages": [], "active": [], "daily": []}
     from datetime import date as _d, timedelta as _td
     days = max(1, min(int(days), 365))
     start = (_d.today() - _td(days=days)).isoformat()
@@ -1016,7 +1020,7 @@ async def get_stats_heatmap(days: int = Query(90)):
             (start,)).fetchall()
     except Exception as e:
         logger.error(f"Error in /api/stats/heatmap: {e}")
-        return {"messages": [], "active": []}
+        return {"messages": [], "active": [], "daily": []}
     M, A = {}, {}
     for r in rows:
         wd, h = int(r['wd']), int(r['hour'])
@@ -1024,7 +1028,24 @@ async def get_stats_heatmap(days: int = Query(90)):
         A[(wd, h)] = int(r['act'])
     def grid(src):
         return [[src.get((wd, h), 0) for h in range(24)] for wd in range(7)]
-    return {"messages": grid(M), "active": grid(A)}
+
+    # ── вкладка «День»: посуточно, per-ws ──
+    daily = []
+    try:
+        ws_id = WS_ID_CTX.get() if db else 1
+        dw = max(1, min(int(daily_weeks), 26))
+        d_start = (_d.today() - _td(days=dw * 7)).isoformat()
+        drows = db.cursor.execute(
+            "SELECT date, COALESCE(SUM(total_messages),0) msgs, COUNT(DISTINCT user_id) act "
+            "FROM user_stats WHERE date >= ? AND workspace_id=? GROUP BY date ORDER BY date",
+            (d_start, ws_id)).fetchall()
+        daily = [{"date": r['date'], "messages": int(r['msgs']), "active": int(r['act'])}
+                 for r in drows]
+    except Exception as e:
+        logger.error(f"Error in /api/stats/heatmap daily: {e}")
+        daily = []
+
+    return {"messages": grid(M), "active": grid(A), "daily": daily}
 
 
 @app.get("/api/stats")

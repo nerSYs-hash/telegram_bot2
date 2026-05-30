@@ -688,9 +688,6 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
               <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
                    hide={hidden.has('comments')}
                    radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
-              <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
-                   hide={hidden.has('replies')}
-                   radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
                    hide={hidden.has('edited')}
                    radius={[5, 5, 0, 0]} maxBarSize={18} animationDuration={500} />
@@ -699,6 +696,13 @@ function WidgetMessageStats({ cache, ensure, refresh }) {
                     stroke={C.mint} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.mint, strokeWidth: 0 }}
                     activeDot={{ r: 5, fill: C.mint, stroke: '#fff', strokeWidth: 2 }}
+                    animationDuration={650} />
+              {/* «Ответы» — массовая метрика, линией на правой оси (дворила бары) */}
+              <Line yAxisId="line" type="monotone" dataKey="replies" name="Ответы"
+                    hide={hidden.has('replies')}
+                    stroke={C.purple} strokeWidth={2.5}
+                    dot={{ r: 3, fill: C.purple, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: C.purple, stroke: '#fff', strokeWidth: 2 }}
                     animationDuration={650} />
               <Brush dataKey="day" height={24} stroke={C.mint} fill={C.brush}
                      travellerWidth={9} tickFormatter={() => ''} />
@@ -766,9 +770,6 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
               <Bar yAxisId="bars" dataKey="comments" name="Комментарии" fill={C.cta}
                    hide={hidden.has('comments')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
-              <Bar yAxisId="bars" dataKey="replies" name="Ответы" fill={C.purple}
-                   hide={hidden.has('replies')}
-                   radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
               <Bar yAxisId="bars" dataKey="edited" name="Правки" fill={C.warn}
                    hide={hidden.has('edited')}
                    radius={[4, 4, 0, 0]} maxBarSize={30} animationDuration={500} />
@@ -783,6 +784,13 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
                     stroke={C.pink} strokeWidth={2.5}
                     dot={{ r: 3, fill: C.pink, strokeWidth: 0 }}
                     activeDot={{ r: 5, fill: C.pink, stroke: '#fff', strokeWidth: 2 }}
+                    animationDuration={650} />
+              {/* «Ответы» — массовая метрика, линией на правой оси (дворила бары) */}
+              <Line yAxisId="line" type="monotone" dataKey="replies" name="Ответы"
+                    hide={hidden.has('replies')}
+                    stroke={C.purple} strokeWidth={2.5}
+                    dot={{ r: 3, fill: C.purple, strokeWidth: 0 }}
+                    activeDot={{ r: 5, fill: C.purple, stroke: '#fff', strokeWidth: 2 }}
                     animationDuration={650} />
               <Brush dataKey="day" height={24} stroke={C.pink} fill={C.brush}
                      travellerWidth={9} tickFormatter={() => ''} />
@@ -802,14 +810,22 @@ function WidgetUserActivity({ cache, ensure, refresh }) {
   );
 }
 
-// ═══════════ Виджеты №4/№5 — Теплокарты (день недели × час) ═══════════
+// ═══════════ Виджеты №4/№5 — Теплокарты (вкладки Час / День) ═══════════
 const _WD_NAMES = ['Вс', 'Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб'];  // index = strftime %w
 const _WD_ORDER = [1, 2, 3, 4, 5, 6, 0];                        // показываем Пн-первым
+
+// 'YYYY-MM-DD' → локальный Date без tz-сдвига.
+const _pd = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const _iso = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
+// Понедельник недели, к которой принадлежит дата.
+const _monday = (dt) => { const x = new Date(dt); const wd = (x.getDay() + 6) % 7; x.setDate(x.getDate() - wd); x.setHours(0, 0, 0, 0); return x; };
+const _fmtDM = (dt) => dt.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long' });
 
 function WidgetHeatmap({ metric, title, accent, hint }) {
   const [data, setData] = useState(null);
   const [error, setError] = useState(false);
-  const [hover, setHover] = useState(null);  // {wd, h, v, x, y}
+  const [hover, setHover] = useState(null);     // {label, v, x, y}
+  const [mode, setMode] = useState('hour');      // 'hour' | 'day'
 
   const load = useCallback(() => {
     const token = localStorage.getItem('jwt') || '';
@@ -826,17 +842,43 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
   useEffect(() => { load(); }, [load]);
 
   const grid = data && data[metric];               // 7×24 [wd][hour]
-  const max = grid ? Math.max(1, ...grid.flat()) : 1;
   const metricLabel = metric === 'active' ? 'Активных' : 'Сообщений';
-  const baseBg = (v) => v
+
+  // ── Сетка «День»: день недели × календарные недели ──
+  const dayView = (() => {
+    const daily = data?.daily || [];
+    if (!daily.length) return { weeks: [], byKey: {}, max: 1 };
+    const byDate = {};
+    daily.forEach((r) => { byDate[r.date] = metric === 'active' ? r.active : r.messages; });
+    const sorted = daily.map((r) => r.date).sort();
+    const m0 = _monday(_pd(sorted[0]));
+    const m1 = _monday(_pd(sorted[sorted.length - 1]));
+    const weeks = [];
+    for (let t = new Date(m0); t <= m1; t.setDate(t.getDate() + 7)) weeks.push(new Date(t));
+    const max = Math.max(1, ...daily.map((r) => (metric === 'active' ? r.active : r.messages)));
+    return { weeks, byDate, max };
+  })();
+
+  const baseBg = (v, max) => v
     ? `color-mix(in oklab, ${accent} ${Math.round(10 + (v / max) * 80)}%, transparent)`
     : '#F1F3F7';
 
+  const Tab = ({ id, label }) => (
+    <button onClick={() => setMode(id)}
+      className={`px-3 py-1.5 text-[12px] font-bold transition-all border-b-2 ${
+        mode === id ? 'text-cta border-cta' : 'text-lbl border-transparent hover:text-txd'
+      }`}>{label}</button>
+  );
+
   return (
     <WidgetCard icon={Grid2x2} accent={accent} title={title} hint={hint} onRefresh={load}>
+      <div className="px-3 flex gap-1 border-b border-bd mb-2">
+        <Tab id="hour" label="Час" />
+        <Tab id="day" label="День" />
+      </div>
       {error ? <WidgetState kind="error" />
         : !grid ? <WidgetState kind="loading" />
-        : (
+        : mode === 'hour' ? (
         <div className="px-4 pb-3" onMouseLeave={() => setHover(null)}>
           {/* подписи часов */}
           <div className="flex gap-[3px] pl-12 mb-1.5">
@@ -849,14 +891,16 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
               <div className="text-[11px] font-bold text-txd w-11 flex-shrink-0">{_WD_NAMES[wd]}</div>
               {Array.from({ length: 24 }).map((_, h) => {
                 const v = grid[wd] ? grid[wd][h] : 0;
-                const isHover = hover && hover.wd === wd && hover.h === h;
+                const max = Math.max(1, ...grid.flat());
+                const lbl = `${_WD_NAMES[wd]}, ${String(h).padStart(2, '0')}:00`;
+                const isHover = hover && hover.label === lbl;
                 return (
                   <div key={h}
-                       onMouseMove={(e) => setHover({ wd, h, v, x: e.clientX, y: e.clientY })}
+                       onMouseMove={(e) => setHover({ label: lbl, v, x: e.clientX, y: e.clientY })}
                        className="flex-1 rounded-md transition-all duration-150 cursor-pointer"
                        style={{
                          height: '30px',
-                         background: isHover ? `color-mix(in oklab, ${baseBg(v)}, white 38%)` : baseBg(v),
+                         background: isHover ? `color-mix(in oklab, ${baseBg(v, max)}, white 38%)` : baseBg(v, max),
                          transform: isHover ? 'scale(1.18)' : 'none',
                          boxShadow: isHover ? '0 4px 14px rgba(0,0,0,.18)' : 'none',
                          zIndex: isHover ? 5 : 1,
@@ -866,27 +910,69 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
             </div>
           ))}
           <div className="text-[11px] text-lbl pt-3 pl-12">Темнее клетка = выше активность · данные копятся вперёд</div>
-
-          {/* Плавающая карточка-тултип в дизайне сайта, едет за курсором */}
-          {hover && (
-            <div className="fixed z-[300] pointer-events-none"
-                 style={{ left: hover.x + 16, top: hover.y + 16 }}>
-              <div className="bg-white rounded-2xl border border-bd shadow-xl px-3.5 py-2.5 min-w-[150px]">
-                <div className="text-[12px] font-black text-tx mb-1.5">
-                  {_WD_NAMES[hover.wd]}, {String(hover.h).padStart(2, '0')}:00
-                </div>
-                <div className="flex items-center justify-between gap-5">
-                  <span className="flex items-center gap-2 text-[12px] text-txd">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
-                    {metricLabel}
-                  </span>
-                  <span className="text-[13px] font-bold text-tx tabular-nums">
-                    {hover.v.toLocaleString('ru-RU')}
-                  </span>
-                </div>
+        </div>
+      ) : dayView.weeks.length === 0 ? (
+        <div className="px-4 pb-6 pt-2 text-[12px] text-lbl text-center">Пока нет посуточных данных — копятся вперёд.</div>
+      ) : (
+        <div className="px-4 pb-3" onMouseLeave={() => setHover(null)}>
+          {_WD_ORDER.map((wd) => {
+            const off = (wd === 0 ? 6 : wd - 1);  // смещение от понедельника
+            return (
+              <div key={wd} className="flex gap-[3px] items-center mb-[3px]">
+                <div className="text-[11px] font-bold text-txd w-11 flex-shrink-0">{_WD_NAMES[wd]}</div>
+                {dayView.weeks.map((mon, wi) => {
+                  const cell = new Date(mon); cell.setDate(cell.getDate() + off);
+                  const key = _iso(cell);
+                  const v = dayView.byDate[key] || 0;
+                  const lbl = `${_WD_NAMES[wd]}, ${_fmtDM(cell)}`;
+                  const isHover = hover && hover.label === lbl;
+                  return (
+                    <div key={wi}
+                         onMouseMove={(e) => setHover({ label: lbl, v, x: e.clientX, y: e.clientY })}
+                         className="flex-1 rounded-md transition-all duration-150 cursor-pointer"
+                         style={{
+                           height: '44px',
+                           background: isHover ? `color-mix(in oklab, ${baseBg(v, dayView.max)}, white 38%)` : baseBg(v, dayView.max),
+                           transform: isHover ? 'scale(1.06)' : 'none',
+                           boxShadow: isHover ? '0 4px 14px rgba(0,0,0,.18)' : 'none',
+                           zIndex: isHover ? 5 : 1,
+                         }} />
+                  );
+                })}
               </div>
+            );
+          })}
+          {/* плашки-даты недель снизу */}
+          <div className="flex gap-[3px] pl-12 pt-1.5">
+            {dayView.weeks.map((mon, wi) => {
+              const sun = new Date(mon); sun.setDate(sun.getDate() + 6);
+              return (
+                <div key={wi} className="flex-1 text-[9px] text-lbl text-center leading-tight">
+                  {_fmtDM(mon)} – {_fmtDM(sun)}
+                </div>
+              );
+            })}
+          </div>
+          <div className="text-[11px] text-lbl pt-3 pl-12">Темнее клетка = выше активность · данные копятся вперёд</div>
+        </div>
+      )}
+
+      {/* Плавающая карточка-тултип, едет за курсором */}
+      {hover && (
+        <div className="fixed z-[300] pointer-events-none"
+             style={{ left: hover.x + 16, top: hover.y + 16 }}>
+          <div className="bg-white rounded-2xl border border-bd shadow-xl px-3.5 py-2.5 min-w-[150px]">
+            <div className="text-[12px] font-black text-tx mb-1.5">{hover.label}</div>
+            <div className="flex items-center justify-between gap-5">
+              <span className="flex items-center gap-2 text-[12px] text-txd">
+                <span className="w-2.5 h-2.5 rounded-full" style={{ background: accent }} />
+                {metricLabel}
+              </span>
+              <span className="text-[13px] font-bold text-tx tabular-nums">
+                {hover.v.toLocaleString('ru-RU')}
+              </span>
             </div>
-          )}
+          </div>
         </div>
       )}
     </WidgetCard>
