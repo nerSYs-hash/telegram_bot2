@@ -389,33 +389,38 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
     balance = user_data['balance']
     message = f"📱 ГЛАВНОЕ МЕНЮ\n\n👤 {user.first_name}\n💰 Баланс: {format_number(balance)} 💎 Пульсов"
 
+    # Видимость функций per-ws: ws по членству юзера (в ЛС chat не в bot_chats).
+    # ws=None → feature_enabled_ws мягко падает в legacy-глобал.
+    from bot_core.ws_resolver import resolve_user_primary_workspace
+    ws_id = resolve_user_primary_workspace(db.conn, user.id)
+
     keyboard = []
 
-    if db.is_feature_enabled('profile'):
+    if db.feature_enabled_ws('profile', ws_id):
         keyboard.append([InlineKeyboardButton("👤 Профиль", callback_data="menu_profile")])
-    if db.is_feature_enabled('top') or db.is_feature_enabled('top_commands'):
+    if db.feature_enabled_ws('top', ws_id) or db.feature_enabled_ws('top_commands', ws_id):
         keyboard.append([InlineKeyboardButton("🏆 ТОП-5", callback_data="menu_top5")])
-    if db.is_feature_enabled('activities'):
+    if db.activities_visible(ws_id):  # 🎯 хаб виден, если включена хоть одна вложенная функция
         keyboard.append([InlineKeyboardButton("🎯 Активности", callback_data="menu_activities")])
-    if db.is_feature_enabled('bank'):
+    if db.feature_enabled_ws('bank', ws_id):
         keyboard.append([InlineKeyboardButton("🏦 Центробанк", callback_data="menu_bank")])
-    if db.is_feature_enabled('detalization'):
+    if db.feature_enabled_ws('detalization', ws_id):
         keyboard.append([InlineKeyboardButton("📋 Детализация", callback_data="my_detalization")])
-    if db.is_feature_enabled('bbs'):
+    if db.feature_enabled_ws('bbs', ws_id):
         keyboard.append([InlineKeyboardButton("❣️ Pulse BBS", callback_data="menu_bbs")])
     keyboard.append([InlineKeyboardButton("❓ FAQ / Помощь", callback_data="faq_menu")])
     keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
 
     # ── Статистика: для админов И владельца ──
     is_admin_user = user_data and (user_data['is_admin'] or user_data['is_owner'])
-    if (is_owner or is_admin_user) and db.is_feature_enabled('statistics'):
+    if (is_owner or is_admin_user) and db.feature_enabled_ws('statistics', ws_id):
         keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
 
     # ── Владелец/Зам ──
     if is_owner:
         keyboard.append([InlineKeyboardButton("💘 Шиппер", callback_data="owner_shipper_menu")])
         keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
-        if db.is_feature_enabled('horoscope'):
+        if db.feature_enabled_ws('horoscope', ws_id):
             keyboard.append([InlineKeyboardButton("🔮 Гороскоп", callback_data="horoscope_menu")])
 
     reply_markup = InlineKeyboardMarkup(keyboard)

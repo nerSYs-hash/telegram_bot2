@@ -49,6 +49,18 @@ def is_feature_enabled(db, feature_name):
     return value == '1'
 
 
+# 🎯 «Активности» — хаб-агрегатор, а НЕ самостоятельный тумблер.
+# Кнопка видна, если включена хотя бы одна вложенная функция (Донаты/Рефералы/
+# Лотерея/Бинго/Подарок месяца). Всё выключено → кнопки нет; включил лотерею →
+# кнопка сразу появляется. См. docs/UNIFIED_FEATURE_AUDIT_2026-05-30.md.
+ACTIVITIES_CHILDREN = ('donate', 'referral', 'lottery', 'bingo', 'monthly_gift')
+
+
+def activities_visible(db):
+    """True, если включена хотя бы одна вложенная функция «Активностей»."""
+    return any(is_feature_enabled(db, child) for child in ACTIVITIES_CHILDREN)
+
+
 def toggle_feature(db, feature_name):
     """Toggle feature on/off"""
     key = f'feature_{feature_name}'

@@ -12,6 +12,7 @@ from database.db_settings import (
     initialize_settings as _initialize_settings,
     is_feature_enabled as _is_feature_enabled,
     toggle_feature as _toggle_feature,
+    activities_visible as _activities_visible,
 )
 from database.db_users import (
     add_user as _add_user,
@@ -800,6 +801,21 @@ class Database:
 
     def is_feature_enabled(self, feature_name):
         return _is_feature_enabled(self, feature_name)
+
+    def feature_enabled_ws(self, feature_name, ws_id):
+        """Per-ws видимость функции (module_toggles) с fallback на legacy-глобал."""
+        from bot_core.feature_bridge import feature_enabled_ws as _f
+        return _f(self, feature_name, ws_id)
+
+    def activities_visible(self, ws_id=None):
+        """🎯 «Активности» — производная видимость хаба (OR вложенных функций).
+
+        ws_id задан → проверяем вложенные функции per-ws; иначе legacy-глобал.
+        """
+        from database.db_settings import ACTIVITIES_CHILDREN
+        if ws_id is not None:
+            return any(self.feature_enabled_ws(c, ws_id) for c in ACTIVITIES_CHILDREN)
+        return _activities_visible(self)
 
     def toggle_feature(self, feature_name):
         return _toggle_feature(self, feature_name)

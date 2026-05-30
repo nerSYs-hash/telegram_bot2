@@ -197,29 +197,34 @@ class CallbackHandler:
         message += f"👤 {user.first_name}\n"
         message += f"💰 Баланс: {format_number(balance)} 💎 Пульсов"
 
+        # Видимость функций per-ws: ws по членству юзера (в ЛС chat не в bot_chats).
+        # ws=None → feature_enabled_ws мягко падает в legacy-глобал.
+        from bot_core.ws_resolver import resolve_user_primary_workspace
+        ws_id = resolve_user_primary_workspace(self.db.conn, user.id)
+
         keyboard = []
 
         # ── Кнопки для ВСЕХ (если функция включена) ──
-        if self.db.is_feature_enabled('top') or self.db.is_feature_enabled('top_commands'):
+        if self.db.feature_enabled_ws('top', ws_id) or self.db.feature_enabled_ws('top_commands', ws_id):
             keyboard.append([InlineKeyboardButton("🏆 ТОП-5", callback_data="menu_top5")])
 
-        if self.db.is_feature_enabled('activities'):
+        if self.db.activities_visible(ws_id):  # 🎯 хаб виден, если включена хоть одна вложенная функция
             keyboard.append([InlineKeyboardButton("🎯 Активности", callback_data="menu_activities")])
 
-        if self.db.is_feature_enabled('bank'):
+        if self.db.feature_enabled_ws('bank', ws_id):
             keyboard.append([InlineKeyboardButton("🏦 Центробанк", callback_data="menu_bank")])
 
-        if self.db.is_feature_enabled('detalization'):
+        if self.db.feature_enabled_ws('detalization', ws_id):
             keyboard.append([InlineKeyboardButton("📋 Детализация", callback_data="my_detalization")])
 
-        if self.db.is_feature_enabled('bbs'):
+        if self.db.feature_enabled_ws('bbs', ws_id):
             keyboard.append([InlineKeyboardButton("❣️ Pulse BBS", callback_data="menu_bbs")])
 
         keyboard.append([InlineKeyboardButton("📋 Правила", url="https://t.me/c/3153855971/13")])
 
         # ── Статистика: для админов И владельца/зама ──
         is_admin_user = user_data and (user_data['is_admin'] or user_data['is_owner'])
-        if (is_owner or is_admin_user) and self.db.is_feature_enabled('statistics'):
+        if (is_owner or is_admin_user) and self.db.feature_enabled_ws('statistics', ws_id):
             keyboard.append([InlineKeyboardButton("📊 Статистика", callback_data="menu_stats")])
 
         # ── Владелец/Зам ──
@@ -227,7 +232,7 @@ class CallbackHandler:
             keyboard.append([InlineKeyboardButton("💘 Шиппер", callback_data="owner_shipper_menu")])
             keyboard.append([InlineKeyboardButton("📰 Пресс-релиз", callback_data="press_release_start")])
 
-            if self.db.is_feature_enabled('horoscope'):
+            if self.db.feature_enabled_ws('horoscope', ws_id):
                 keyboard.append([InlineKeyboardButton("🔮 Гороскоп", callback_data="horoscope_menu")])
 
         reply_markup = InlineKeyboardMarkup(keyboard)
@@ -583,25 +588,28 @@ class CallbackHandler:
         message = "🎯 АКТИВНОСТИ\n\n"
         message += "Выберите активность:"
 
+        from bot_core.ws_resolver import resolve_user_primary_workspace
+        ws_id = resolve_user_primary_workspace(self.db.conn, user.id)
+
         keyboard = []
 
         # Donate for ALL users
-        if self.db.is_feature_enabled('donate'):
+        if self.db.feature_enabled_ws('donate', ws_id):
             keyboard.append([InlineKeyboardButton("🎁 Донаты", callback_data="donate_menu")])
 
         # Referral system - for ALL users if enabled
-        if self.db.is_feature_enabled('referral'):
+        if self.db.feature_enabled_ws('referral', ws_id):
             keyboard.append([InlineKeyboardButton("👥 Реферальная система", callback_data="menu_referral")])
 
         # Lottery — видна ВСЕМ (owner → управление, user → активные лотереи)
-        if self.db.is_feature_enabled('lottery'):
+        if self.db.feature_enabled_ws('lottery', ws_id):
             if is_owner:
                 keyboard.append([InlineKeyboardButton("🎰 Лотерея (управление)", callback_data="menu_lottery")])
             else:
                 keyboard.append([InlineKeyboardButton("🎰 Лотерея", callback_data="menu_lottery")])
 
         # Бинго — видна ВСЕМ если включена
-        if self.db.is_feature_enabled('bingo'):
+        if self.db.feature_enabled_ws('bingo', ws_id):
             if is_owner:
                 keyboard.append([InlineKeyboardButton("🎱 Бинго (управление)", callback_data="menu_bingo")])
             else:
