@@ -459,7 +459,7 @@ export default function ModulesHub({ onOpen, connected, onConnect, onDisconnect 
       )}
 
       {/* ── Каталог: подключённые наверх, FLIP-перестановка ── */}
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
         {[...visibleItems]
           .sort((a, b) => (isOn(b.id) ? 1 : 0) - (isOn(a.id) ? 1 : 0))
           .map(m => (

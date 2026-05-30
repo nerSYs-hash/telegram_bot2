@@ -5571,7 +5571,12 @@ export default function App() {
         </header>
 
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-transparent custom-scrollbar">
-          <div className={(activeTab === 'triggers' && editingTrigger) || activeTab === 'economy' || activeTab === 'press_release' ? 'w-full' : 'max-w-3xl mx-auto'}>
+          <div className={
+            (activeTab === 'triggers' && editingTrigger) ||
+            ['modules', 'statistics', 'economy', 'press_release'].includes(activeTab)
+              ? 'w-full'
+              : 'max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto'
+          }>
             {renderContent()}
           </div>
         </div>

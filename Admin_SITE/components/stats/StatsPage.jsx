@@ -845,18 +845,21 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
   const metricLabel = metric === 'active' ? 'Активных' : 'Сообщений';
 
   // ── Сетка «День»: день недели × календарные недели ──
+  // Фиксированное окно — последние 6 недель (полтора месяца), всегда 6 столбцов.
+  // Пустые недели рисуются серыми и заполняются по мере накопления данных.
+  const DAY_WEEKS = 6;
   const dayView = (() => {
     const daily = data?.daily || [];
-    if (!daily.length) return { weeks: [], byKey: {}, max: 1 };
     const byDate = {};
     daily.forEach((r) => { byDate[r.date] = metric === 'active' ? r.active : r.messages; });
-    const sorted = daily.map((r) => r.date).sort();
-    const m0 = _monday(_pd(sorted[0]));
-    const m1 = _monday(_pd(sorted[sorted.length - 1]));
+    const thisMon = _monday(new Date());
     const weeks = [];
-    for (let t = new Date(m0); t <= m1; t.setDate(t.getDate() + 7)) weeks.push(new Date(t));
-    const max = Math.max(1, ...daily.map((r) => (metric === 'active' ? r.active : r.messages)));
-    return { weeks, byDate, max };
+    for (let i = DAY_WEEKS - 1; i >= 0; i--) {
+      const m = new Date(thisMon); m.setDate(m.getDate() - i * 7); weeks.push(m);
+    }
+    const vals = Object.values(byDate);
+    const max = vals.length ? Math.max(1, ...vals) : 1;
+    return { weeks, byDate, max, hasData: vals.length > 0 };
   })();
 
   const baseBg = (v, max) => v
@@ -911,8 +914,6 @@ function WidgetHeatmap({ metric, title, accent, hint }) {
           ))}
           <div className="text-[11px] text-lbl pt-3 pl-12">Темнее клетка = выше активность · данные копятся вперёд</div>
         </div>
-      ) : dayView.weeks.length === 0 ? (
-        <div className="px-4 pb-6 pt-2 text-[12px] text-lbl text-center">Пока нет посуточных данных — копятся вперёд.</div>
       ) : (
         <div className="px-4 pb-3" onMouseLeave={() => setHover(null)}>
           {_WD_ORDER.map((wd) => {
