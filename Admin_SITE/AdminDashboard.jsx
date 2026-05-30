@@ -5575,7 +5575,9 @@ export default function App() {
             (activeTab === 'triggers' && editingTrigger) ||
             ['modules', 'statistics', 'economy', 'press_release'].includes(activeTab)
               ? 'w-full'
-              : 'max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto'
+              : activeTab === 'triggers'
+                ? 'max-w-3xl mx-auto'
+                : 'max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto'
           }>
             {renderContent()}
           </div>
