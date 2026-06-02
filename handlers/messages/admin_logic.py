@@ -18,6 +18,7 @@ db, admin_id, target_chat_id передаются явно.
         publish_press_release_to_target,
     )
 """
+#dd
 
 import logging
 from datetime import datetime
@@ -142,7 +143,7 @@ async def build_topic_keyboard(context, db, target_chat_id):
             named_topics.append(topic)
 
     # Show topics with real names first
-    for topic in named_topics:
+    for topic in named_topics[:30]:
         keyboard.append([InlineKeyboardButton(
             f"🧵 {topic['thread_name']}",
             callback_data=f"pr_target_thread_{topic['thread_id']}"
@@ -150,7 +151,7 @@ async def build_topic_keyboard(context, db, target_chat_id):
 
     # Show unnamed topics (if any exist) in a compact way
     if unnamed_topics:
-        for topic in unnamed_topics:
+        for topic in unnamed_topics[:5]:
             keyboard.append([InlineKeyboardButton(
                 f"❓ Ветка #{topic['thread_id']} (имя неизвестно)",
                 callback_data=f"pr_target_thread_{topic['thread_id']}"

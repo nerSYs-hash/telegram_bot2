@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-
+#ff
 """
 Пресс-релизы — создание, публикация, планирование, редактирование.
 
@@ -326,7 +326,7 @@ async def handle_pr_add_photo(query, user, context, db, admin_id):
     )
 
 
-async def handle_pr_remove_photo(query, user, context, db, admin_id):
+async def handle_pr_remove_photo(query, user, context, db, admin_id, target_chat_id=None):
     """Кнопка '🗑 Очистить медиа' — убрать все прикреплённые медиафайлы"""
     if not await _is_pr_privileged(user.id, admin_id):
         await query.answer("У вас нет доступа.", show_alert=True)
@@ -576,7 +576,7 @@ async def show_scheduled_posts(query, user, context, db, admin_id, target_chat_i
     message = "📋 ЗАПЛАНИРОВАННЫЕ ПОСТЫ\n\n"
     keyboard = []
 
-    for post in posts:
+    for post in posts[:15]: # Показываем максимум 15 постов за раз
         text_preview = (post['text'] or '')[:50]
         if len(post['text'] or '') > 50:
             text_preview += "..."
