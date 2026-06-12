@@ -233,7 +233,16 @@ def get_bot_chat_topics(db, workspace_id: int, chat_id: int) -> list:
         WHERE b.workspace_id = ? AND b.chat_id = ?
         ORDER BY b.thread_id
     ''', (workspace_id, chat_id))
-    return [dict(r) for r in db.cursor.fetchall()]
+    
+    topics = []
+    for r in db.cursor.fetchall():
+        d = dict(r)
+        name = d.get('name') or ''
+        # Исключаем ветки комментариев каналов, которые бот записал под дефолтными именами
+        if not name.startswith('Ветка #') and not name.startswith('Топик #') and name.strip():
+            topics.append(d)
+            
+    return topics
 
 
 def delete_bot_chat_topic(db, workspace_id: int, chat_id: int, thread_id: int) -> bool:

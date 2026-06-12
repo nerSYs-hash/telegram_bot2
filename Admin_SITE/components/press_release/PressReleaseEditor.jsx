@@ -851,11 +851,11 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
     : 'не задано';
 
   return (
-    <div className="rounded-xl border border-bd overflow-hidden">
+    <div className="rounded-xl border border-bd">
       <div className="grid grid-cols-2">
         <button
           onClick={() => setTab(tab === 'where' ? null : 'where')}
-          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          className={`flex items-center gap-2 p-3 transition-all ${tab === 'where' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'} rounded-tl-xl ${!tab ? 'rounded-bl-xl' : ''}`}>
           <Megaphone size={14} className={tab === 'where' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Куда</div>
@@ -866,7 +866,7 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
         </button>
         <button
           onClick={() => setTab(tab === 'when' ? null : 'when')}
-          className={`flex items-center gap-2 p-3 border-l border-bd transition-all ${tab === 'when' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'}`}>
+          className={`flex items-center gap-2 p-3 border-l border-bd transition-all ${tab === 'when' ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'hover:bg-sf2'} rounded-tr-xl ${!tab ? 'rounded-br-xl' : ''}`}>
           <Calendar size={14} className={tab === 'when' ? 'text-cta' : 'text-lbl'} />
           <div className="flex-1 text-left min-w-0">
             <div className="text-[10px] font-bold uppercase tracking-wider text-txd">Когда</div>
@@ -875,12 +875,12 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
         </button>
       </div>
       {tab === 'where' && (
-        <div className="border-t border-bd p-3">
+        <div className="border-t border-bd p-3 rounded-b-xl">
           <TargetsPicker chats={chats} value={targets} onChange={onTargetsChange} />
         </div>
       )}
       {tab === 'when' && (
-        <div className="border-t border-bd p-3 space-y-2">
+        <div className="border-t border-bd p-3 space-y-2 rounded-b-xl">
           <DateTimePicker value={publishAt} onChange={onPublishAtChange} />
           <div className="flex items-center gap-2 pt-1">
             <label className="text-xs font-bold text-tx">Напомнить за:</label>

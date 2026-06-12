@@ -60,11 +60,15 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
   useEffect(() => {
     const v = parseValue(value);
     if (v) {
-      setSelected(v);
-      setYear(v.getFullYear());
-      setMonth(v.getMonth());
-      setHh(pad(v.getHours()));
-      setMm(pad(v.getMinutes()));
+      if (!selected || v.getTime() !== selected.getTime()) {
+        setSelected(v);
+        setYear(v.getFullYear());
+        setMonth(v.getMonth());
+      }
+      setHh(prev => (prev && parseInt(prev, 10) === v.getHours()) ? prev : pad(v.getHours()));
+      setMm(prev => (prev && parseInt(prev, 10) === v.getMinutes()) ? prev : pad(v.getMinutes()));
+    } else {
+      setSelected(null);
     }
   }, [value]);
 
@@ -76,7 +80,7 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
     out.setSeconds(0);
     out.setMilliseconds(0);
     // Use local time instead of UTC to match backend expectations
-    const isoStr = `${out.getFullYear()}-${pad(out.getMonth() + 1)}-${pad(out.getDate())}T${pad(out.getHours())}:${pad(out.getMinutes())}:00.000Z`;
+    const isoStr = `${out.getFullYear()}-${pad(out.getMonth() + 1)}-${pad(out.getDate())}T${pad(out.getHours())}:${pad(out.getMinutes())}:00.000`;
     onChange?.(isoStr);
   };
 
@@ -88,21 +92,19 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
     emit(d, hh, mm);
   };
 
-  // При вводе: оставляем только цифры. Если длина > 2 — берём ПОСЛЕДНИЕ 2 цифры
-  // (а не первые), это позволяет естественно вводить новое значение поверх старого.
-  const sanitize = (v, max) => {
-    const digits = (v || '').replace(/\D/g, '');
-    let n = digits.length > 2 ? digits.slice(-2) : digits;
-    if (n && parseInt(n, 10) > max) n = String(max);
-    return n;
-  };
+  // При вводе: оставляем только цифры.
+  // Разрешаем вводить по одной цифре.
   const handleHhChange = (v) => {
-    const n = sanitize(v, 23);
+    let n = (v || '').replace(/\D/g, '');
+    if (n.length > 2) n = n.slice(-2);
+    if (n && parseInt(n, 10) > 23) n = '23';
     setHh(n);
     if (selected) emit(selected, n || '0', mm || '0');
   };
   const handleMmChange = (v) => {
-    const n = sanitize(v, 59);
+    let n = (v || '').replace(/\D/g, '');
+    if (n.length > 2) n = n.slice(-2);
+    if (n && parseInt(n, 10) > 59) n = '59';
     setMm(n);
     if (selected) emit(selected, hh || '0', n || '0');
   };
