@@ -1,6 +1,33 @@
 import sqlite3
+import os
 
-db_path = 'database/bot_db.sqlite'
+potential_db_paths = [
+    'pulse_bot.db',
+    'database/pulse_bot.db',
+    'database/bot_database.db',
+    'database/bot_db.sqlite',
+    'bot_database.db'
+]
+
+db_path = None
+for path in potential_db_paths:
+    if os.path.exists(path):
+        # Let's check if the table exists here
+        try:
+            conn = sqlite3.connect(path)
+            c = conn.cursor()
+            c.execute("SELECT 1 FROM bot_chat_topics LIMIT 1")
+            conn.close()
+            db_path = path
+            break
+        except:
+            pass
+
+if not db_path:
+    print("Error: Could not find the database file containing the bot_chat_topics table.")
+    exit(1)
+
+print(f"Using database at: {db_path}")
 
 threads_to_delete = [
     1595, 1793, 1818, 1836, 1862, 1867, 1874, 1890, 1900, 1930, 1944, 1955, 1958, 
