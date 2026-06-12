@@ -887,6 +887,7 @@ function PublishBlock({ chats, targets, onTargetsChange, publishAt, onPublishAtC
             <StyledSelect
               value={reminder}
               onChange={(v) => onReminderChange(parseInt(v, 10))}
+              align="top"
               options={[
                 { value: 0,  label: 'Не напоминать' },
                 { value: 5,  label: '5 минут'       },

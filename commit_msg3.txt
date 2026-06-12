@@ -1,0 +1,4 @@
+fix(V1.17.0X14) [PR][Site]: UI fixes for dropdown and time input
+
+1. Fixed "Напомнить за" dropdown being hidden by parent boundary. Replaced overflow-hidden with manual border-radius application for tab buttons and bodies.
+2. Fixed time input jumping to tomorrow/losing focus. Refactored DateTimePicker component: removed trailing 'Z' from output string to treat time locally, and updated handleHhChange logic avoiding state overwrites.

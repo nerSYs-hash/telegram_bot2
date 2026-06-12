@@ -11,7 +11,7 @@ import { ChevronDown, Check } from 'lucide-react';
  *   onChange(v)    — колбэк
  *   placeholder    — текст когда нет выбранного значения
  *   className      — доп. классы для триггер-кнопки
- *   align          — 'left' | 'right' (как раскрывается меню)
+ *   align          — 'left' | 'right' | 'top' (как раскрывается меню)
  *   size           — 'sm' | 'md' (плотность)
  */
 export default function StyledSelect({
@@ -66,7 +66,11 @@ export default function StyledSelect({
 
       {open && (
         <div
-          className={`absolute z-50 mt-1.5 min-w-full bg-sff border border-bd rounded-xl shadow-xl py-1 origin-top animate-in fade-in zoom-in-95 slide-in-from-top-1 duration-150 ${align === 'right' ? 'right-0' : 'left-0'}`}
+          className={`absolute z-50 min-w-full bg-sff border border-bd rounded-xl shadow-xl py-1 animate-in fade-in zoom-in-95 duration-150 ${
+            align === 'right' ? 'mt-1.5 right-0 origin-top slide-in-from-top-1' :
+            align === 'top' ? 'bottom-full mb-1.5 left-0 origin-bottom slide-in-from-bottom-1' :
+            'mt-1.5 left-0 origin-top slide-in-from-top-1'
+          }`}
           style={{ minWidth: '100%' }}
         >
           {options.map(opt => {

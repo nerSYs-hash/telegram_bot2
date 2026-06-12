@@ -1,0 +1,368 @@
+Список пользователей (всего 366):
+--------------------------------------------------
+ID: 1283941769   | нет username         | Имя: без имени
+ID: 7536752126   | нет username         | Имя: без имени
+ID: 5185492047   | @volgehu             | Имя: )))) ))))
+ID: 6134779475   | нет username         | Имя: .
+ID: 7683648489   | @annsjdje            | Имя: . .
+ID: 5250090871   | @ser69nik            | Имя: 29-23
+ID: 5511066227   | @alexxxcw            | Имя: 40732 Алекс
+ID: 37888994     | @tn_dok              | Имя: ALTER EGO
+ID: 266670146    | @artecurci           | Имя: ARTEMY
+ID: 1780175783   | @Vova2432            | Имя: Activny Vova
+ID: 744129163    | @Alex3021            | Имя: Aleks
+ID: 207532478    | @AMWQR               | Имя: Aleksadr 🌿
+ID: 268924153    | @GreeMM              | Имя: Alekse¡
+ID: 59171434     | @jackson2042         | Имя: Alex G
+ID: 150492583    | @surik99             | Имя: Alex Surikatov
+ID: 219012146    | @Ts_Alex             | Имя: Alex Ts
+ID: 319623620    | нет username         | Имя: Alex Sukanoss🐻
+ID: 391543448    | @Kazarka_Alex_Storm  | Имя: Alex
+ID: 1057336686   | @akval               | Имя: Alex
+ID: 1146597788   | @Asd00712            | Имя: Alex SH
+ID: 1313476481   | @vizit2021           | Имя: Alex
+ID: 1719570036   | @Mystery570          | Имя: Alex Diamond
+ID: 5334102865   | @Alex_moscow1988     | Имя: Alex Pnv
+ID: 5932601880   | @ParaMedPAR          | Имя: Alex
+ID: 449999029    | @alexa_1661          | Имя: Alexa
+ID: 380584580    | @KrugloffAlexander   | Имя: Alexander
+ID: 1818383546   | @Aleks35l            | Имя: Anatoli
+ID: 6798201888   | нет username         | Имя: Anatoliy
+ID: 813208046    | @Aries_le            | Имя: Andy
+ID: 1072725716   | @farando             | Имя: Anton
+ID: 5104194265   | @ares0255            | Имя: Ares
+ID: 8122518001   | @ArseeniyAktt        | Имя: Arseniy
+ID: 187149287    | @masartem            | Имя: Artem
+ID: 6151513254   | @arturmegan          | Имя: Artur
+ID: 1954381306   | @maslevich_LV        | Имя: Artyom Maslyonkin
+ID: 443314534    | @Auberto             | Имя: Auberto
+ID: 44307653     | @Biofly              | Имя: Biofly
+ID: 1024438308   | @Chrono3923          | Имя: Chrono
+ID: 7112083232   | @energo136           | Имя: Crypto
+ID: 480902780    | @Ken6ma              | Имя: D
+ID: 8514904116   | @afrosiabb           | Имя: D. . Z
+ID: 103238       | @DimMsk              | Имя: DIM
+ID: 147841288    | @DNordmann           | Имя: DNordMann
+ID: 866099262    | @DmY29               | Имя: DREAM 🇮🇱🇺🇦 MIKE
+ID: 1298505518   | @gnysniytip          | Имя: Dani
+ID: 877360938    | @reD2og              | Имя: Danila Chernyshev
+ID: 1392468063   | @Silver987           | Имя: Dargan(Рустам). Moscow
+ID: 914451898    | @sinon135            | Имя: Darksiders🇬🇪
+ID: 774676638    | @dankasuarez         | Имя: Dañka Suárez
+ID: 265955820    | @Dinamiko            | Имя: Deema Petersburg
+ID: 376935312    | @dinjin              | Имя: Denis Zhdanov
+ID: 1365735038   | @i9009v              | Имя: Denis
+ID: 444556991    | @z_diman_e           | Имя: DiM@N
+ID: 1409649043   | @Dimchik_Dmitrov_MO  | Имя: Dmitriy Dmitriy
+ID: 483472704    | @volodya712          | Имя: Donau
+ID: 1388683059   | @Dopustim_vildan     | Имя: Dopustim Vildan
+ID: 6201655504   | @drimtimdim          | Имя: Drimtim
+ID: 5803492566   | @P2RTD               | Имя: ES
+ID: 1135804638   | @Destrwell           | Имя: Erestyye
+ID: 8026846567   | @eugenerasputin      | Имя: Eugenius Евгеньев
+ID: 463940631    | @euillfou            | Имя: Eugène
+ID: 1343100993   | @White_Mustang90     | Имя: Evidence
+ID: 1270105861   | @TotochkaBezToto     | Имя: FugaBachA FBA
+ID: 8469270076   | @S1171717            | Имя: Garun Raschid
+ID: 1445004532   | @googoodguy          | Имя: GooGoodGuy
+ID: 5209884522   | @havenstay8          | Имя: HavenStay
+ID: 494124166    | @Stalker82           | Имя: Helldrummer
+ID: 765862249    | @Garriig             | Имя: I. M
+ID: 8143257808   | @iglokot             | Имя: Iglokot
+ID: 5109936239   | @igni13              | Имя: IgniS
+ID: 691555635    | @xoivxo              | Имя: Ivan
+ID: 886273132    | @jaiv32              | Имя: Ivan Janek
+ID: 7511939739   | @Ivantihii1          | Имя: Ivan Tihii
+ID: 6129967057   | @Ivsn0499            | Имя: Ivsn
+ID: 7967006569   | @jorrger             | Имя: Jorge
+ID: 7646275215   | @Zxd123Vsh           | Имя: Jupiter
+ID: 7276547399   | @Dum675              | Имя: K Ооо
+ID: 625868201    | @Kentmsk             | Имя: KENT♂️
+ID: 5050646143   | @kirrrrr111          | Имя: KSMAss
+ID: 88018281     | @contrargument       | Имя: Kir
+ID: 6912211232   | @kir_bulygin         | Имя: Kir B.
+ID: 983518483    | @KlausKhoffman       | Имя: Klaus Khoffman (Nicola)
+ID: 1721115728   | @MariuS1805          | Имя: Kon$t@ntiN
+ID: 5548374047   | @Lehan_Zel           | Имя: Lehan
+ID: 593136620    | @Nu_Kak_Ego_Eto_Samoe | Имя: Leonid
+ID: 6347152151   | @Lestatlegran        | Имя: Lestat Legran
+ID: 5955630355   | @lopes1711           | Имя: Life is beautiful.
+ID: 320014709    | @LikeOMG             | Имя: Like OMG
+ID: 1505922186   | @Lhjeyl79            | Имя: Lios
+ID: 1186388867   | @rust298432          | Имя: Logist298441
+ID: 5810424098   | @Maksim_2501         | Имя: Maksim
+ID: 617133695    | @Nikol38             | Имя: Maksimkin
+ID: 1389073884   | @Sii_foo             | Имя: Man 🍀🛑
+ID: 864223569    | @Maks_d79            | Имя: Max D
+ID: 2115205488   | @Abuse_loska         | Имя: Max Stolz
+ID: 516456686    | @Megatron_telegram   | Имя: Mega
+ID: 897560843    | @mi_in_spb           | Имя: Mi
+ID: 928438325    | @hivplusmike         | Имя: Mikhail
+ID: 337422306    | @kniaje              | Имя: Mr. Arrr🤴🏼
+ID: 358142909    | @bombr9              | Имя: Mарк Савченко
+ID: 717184668    | @Dentata144          | Имя: Nikita
+ID: 5898867786   | нет username         | Имя: Niknik
+ID: 937905158    | @OrcusOrca           | Имя: Niko Lotus
+ID: 612118987    | @ONBoyzz             | Имя: ON
+ID: 468870128    | @NyashniyYojik       | Имя: Oleg
+ID: 622254656    | @call_me_paull       | Имя: Paul
+ID: 5649133585   | @Melkiy_3_3          | Имя: Pavel
+ID: 6744999361   | @loo0901             | Имя: Pavel
+ID: 7795665891   | @Ydo_I               | Имя: Pavel
+ID: 761076127    | @pashabrend          | Имя: Pavel Мастер
+ID: 5666966188   | @Pilik3392           | Имя: Pilik
+ID: 6951595157   | @PrinceDaedraAless   | Имя: Prince Daedra Aless 🌒🌓🌔🌑🌖🌗🌘
+ID: 5337476958   | @Heartless_86        | Имя: ROMIK♈
+ID: 585560873    | @zen160516           | Имя: Ram
+ID: 423788838    | @red_hare            | Имя: Red Hare
+ID: 6632226441   | @A202524             | Имя: Rent
+ID: 1111204147   | @Rey_nn08            | Имя: Rey
+ID: 1779260881   | @riders_10           | Имя: Rider10
+ID: 230457833    | @stepan1971          | Имя: Roman SPB
+ID: 5110252010   | @ihaaarr             | Имя: Roro Dr
+ID: 6704675072   | @Rusik1007           | Имя: Ru+
+ID: 5148607947   | @Rusya_0511          | Имя: Rus Lik
+ID: 8729020034   | @Angel198441         | Имя: Rus.angels
+ID: 275552691    | @RusScorpio          | Имя: RusScorpio
+ID: 1148133959   | @SSSSYY1104          | Имя: S S
+ID: 1009021998   | @SeregaKrot          | Имя: S.Z.
+ID: 5528027298   | @SEREGARHANGEL       | Имя: SERGEI SHADRIN
+ID: 1792995289   | @SergKesh            | Имя: SK
+ID: 7234245903   | @miclezh             | Имя: Sam
+ID: 6193775463   | @Samirhanov137       | Имя: Samirhanov
+ID: 1074512125   | @sarushdakkar        | Имя: Sarush Dakkar
+ID: 5357862069   | @Chipicaocrisp       | Имя: SavageGarage
+ID: 7408396146   | @saharok_noch        | Имя: Saveliy Saharok
+ID: 6029274405   | @Zagorelovboy        | Имя: Say
+ID: 864729410    | @SMbrzspb            | Имя: Sega
+ID: 1467227531   | @ser252525           | Имя: Ser
+ID: 2079832811   | @kod209              | Имя: Sergio Markus
+ID: 5297728245   | @kisenik             | Имя: Sergio
+ID: 5575374425   | @Shket36             | Имя: Shket36
+ID: 1915270120   | @ghosfck             | Имя: Sinner
+ID: 643565903    | @Skilur30            | Имя: Skilur
+ID: 548881300    | @Svyatoslav173       | Имя: Slavka
+ID: 1058309601   | @Slam1010            | Имя: Slaм
+ID: 6929412248   | @SomSova             | Имя: Sova Sova
+ID: 8265974170   | нет username         | Имя: Stranger
+ID: 490829170    | @Istrelez            | Имя: Strelez
+ID: 744150821    | @Harith_cat          | Имя: Tar'Kiritian
+ID: 5124237869   | @teflonik            | Имя: Teflonik
+ID: 6857056511   | @TheOscar24          | Имя: The Oscar💲
+ID: 735625971    | @koteusus            | Имя: Ti J
+ID: 516636797    | @samarabear          | Имя: Tot Kto Nado 🐻
+ID: 366321151    | @FreshCrabs          | Имя: UNО
+ID: 559919838    | @MAKS_CRAZY          | Имя: VM Crazy
+ID: 8072586111   | @Vs19880201          | Имя: VS
+ID: 5735439256   | @vadimir2025         | Имя: Vadimir28
+ID: 8293923806   | @io78073             | Имя: Valdis
+ID: 7449817184   | @VikAnt_28           | Имя: Vik Ant
+ID: 2004702415   | @Olegator2904        | Имя: Vizhen
+ID: 6164817685   | @Everythinkprint     | Имя: Vladimir
+ID: 187147592    | @ducha6              | Имя: V😺 V😻
+ID: 1145187770   | @ivanko1304          | Имя: YU
+ID: 6218804337   | @yuraNN7             | Имя: YuraN
+ID: 575539617    | @SYuras              | Имя: Yuras S
+ID: 5371701725   | @Mehanik0602         | Имя: ZAVKIBEG YATIMOV
+ID: 189844845    | @Ya_aYz              | Имя: Zar YA
+ID: 137634208    | @Zhenyokmsk          | Имя: ZhenyOK
+ID: 765406912    | @alex112t            | Имя: alex 112
+ID: 889518830    | @dpmskru             | Имя: dp
+ID: 880240098    | @igor_11111d         | Имя: igor_11111d
+ID: 5061260492   | @je_suis_andrey      | Имя: je_suis_andrey
+ID: 8374710980   | @mrCatAstanaldj      | Имя: mr.CatAstana
+ID: 5116355974   | @grustnayasukaaa     | Имя: noname nosurname
+ID: 522015481    | @sewlkog1997         | Имя: sewlkog1997 🇷🇺 🏳️‍🌈
+ID: 5529485560   | @skullero            | Имя: skelletik
+ID: 7821849414   | нет username         | Имя: ¡juilo
+ID: 1484525004   | @evo777ion           | Имя: А. S.
+ID: 811149485    | @Alexei_1w           | Имя: А_L
+ID: 6616409032   | @AVS0204             | Имя: АВС143
+ID: 5050035147   | @apekyn              | Имя: Алекс
+ID: 654031070    | @smegos11            | Имя: Александр
+ID: 689171952    | @FFGuy               | Имя: Александр
+ID: 928667555    | @Sanches147          | Имя: Александр
+ID: 1199806337   | @Devided1986         | Имя: Александр М.
+ID: 1262441876   | @remalex74           | Имя: Александр
+ID: 1275308835   | @alexandreev_me      | Имя: Александр
+ID: 1766504335   | @Sacha72             | Имя: Александр
+ID: 6290509993   | @BloodyShadow39      | Имя: Александр
+ID: 8206558940   | @Aleksandr_Alex88    | Имя: Александр
+ID: 828417100    | @Aleksandr_Glamyr    | Имя: Александр Николаевич
+ID: 6591362241   | @Ametrin24           | Имя: Александр♊ Ярославич
+ID: 276055343    | @bigL812             | Имя: Алексей
+ID: 385604619    | @nabirkinalex        | Имя: Алексей
+ID: 398855705    | @W_o_l_f_one         | Имя: Алексей Волк
+ID: 5426564821   | @Anton111579         | Имя: Алексей
+ID: 6211093463   | @Luxorius_38         | Имя: Алексей
+ID: 7824676715   | @Alex_Alexee         | Имя: Алексей Алексеев
+ID: 5343683043   | @ALEXSEI1102         | Имя: Алексей Александрович Корякин Капитан Корякин
+ID: 1877973705   | @Mark_20_1_50        | Имя: Анатолий
+ID: 512138181    | @Andrei_ES           | Имя: Андрей
+ID: 1913558987   | @And05061991         | Имя: Андрей
+ID: 2032091983   | @Anjel8904           | Имя: Андрей Гольман
+ID: 5294789578   | @Fagot_77            | Имя: Андрей
+ID: 6940507070   | @kaze_no_koibito     | Имя: Андрей
+ID: 1051631570   | @antonZ_12           | Имя: Антон А
+ID: 7248724025   | @Anton19891989       | Имя: Антон 19
+ID: 1369368630   | нет username         | Имя: Артем г
+ID: 471067131    | @BilliMiligaan       | Имя: Артур
+ID: 530671607    | @Tattooel4567        | Имя: Артур
+ID: 186984411    | @Timurrrart          | Имя: Артём Коробов
+ID: 6492100754   | @ArtemKoss37         | Имя: Артём
+ID: 386840370    | @Zix_Din_Leo         | Имя: Барон ГринДеВальд Мюнхаузен 🔮🛡️🗝️
+ID: 8207303212   | нет username         | Имя: Борис Годунов
+ID: 6318382915   | нет username         | Имя: Ваня
+ID: 392504745    | @Vaselek1992         | Имя: Васек Белозеров
+ID: 444508694    | @Yaroh555            | Имя: Василий
+ID: 6566104122   | @Vas_ka_66           | Имя: Василий
+ID: 8384964642   | @Vik280577           | Имя: Вик+
+ID: 1336297685   | @viktorka81          | Имя: Виктор
+ID: 993390452    | @Cerberusinlaw       | Имя: Виталий
+ID: 1697010453   | @tasyatram           | Имя: Виталий
+ID: 1816113066   | @joy_kazino          | Имя: Виталий
+ID: 686821591    | @A8vstraliec8        | Имя: Виталий Вэ эН
+ID: 1264783446   | @qwizzzaa            | Имя: Витя
+ID: 914343913    | @TUgePogd87          | Имя: Влад
+ID: 1239276267   | @Vov1984             | Имя: Владимир
+ID: 1723255541   | @Vladzimir_gv23      | Имя: Владимир
+ID: 7014979011   | @Vovan7822           | Имя: Вован Павлов
+ID: 8018727923   | @evgenii_klepinin    | Имя: Гадёныш
+ID: 1066210255   | @bellum314           | Имя: Герман Будко
+ID: 5043652035   | @qw29h               | Имя: Гоша
+ID: 5858530729   | @neznakomiwith       | Имя: Д
+ID: 1037507556   | @Dumb_master         | Имя: Данька
+ID: 197480513    | @demidrealtor        | Имя: Демид Мещеряков
+ID: 787069882    | @DenisLazarev        | Имя: Денис Лазарев
+ID: 7340765451   | @Stavropolanuta      | Имя: Дима
+ID: 1764831738   | @dimas_msk85         | Имя: Димас
+ID: 356741343    | @Dimetrius_1         | Имя: Дмитрий
+ID: 560743399    | @DmitriyLestat       | Имя: Дмитрий
+ID: 6574205800   | @thinks_better       | Имя: Дмитрий
+ID: 7779279705   | @Agent_MEN           | Имя: Дмитрий Тонов
+ID: 7518436986   | нет username         | Имя: Дмитрий Александрович
+ID: 765713703    | @medvedmen           | Имя: Дэнчик
+ID: 8622184639   | @devol14             | Имя: Евгени
+ID: 168397168    | @Eugenmck            | Имя: Евгений
+ID: 5856483734   | @Cheroky19           | Имя: Евгений Просто Женя
+ID: 6257975492   | @Zhenik_2026         | Имя: Евгений
+ID: 336954493    | @Veter27             | Имя: Евгений МСК
+ID: 480831995    | @Povlushiche         | Имя: Евгений Марков
+ID: 5629538172   | @egor090999          | Имя: Егор
+ID: 5764053448   | @zhenyaesya          | Имя: Женя
+ID: 6728667233   | @pixel2519           | Имя: Женя
+ID: 657196987    | @ibragimovichh       | Имя: Ибрагимович
+ID: 384054395    | @Jonny088            | Имя: Иван
+ID: 1269590436   | @IVAN_ROMANOV3857    | Имя: Иван Алексеевич
+ID: 5279231266   | @vllvlllvvv          | Имя: Игорь Пешкин
+ID: 7765344181   | @Gimranov2003        | Имя: Игорь Гимранов
+ID: 5263642521   | @IgorekRGL           | Имя: Игорь (RGL)
+ID: 281005666    | @bruh_boychik        | Имя: Ильдар
+ID: 1460764452   | @Name29Ilia          | Имя: Илья
+ID: 5821424960   | @staytayk            | Имя: Илья
+ID: 6020734732   | @T2303009            | Имя: Илья
+ID: 868474614    | @KES_0315            | Имя: КЕS
+ID: 777046648    | @SarozhaTheBest      | Имя: Капитан Клубничка
+ID: 8198807167   | @Hghjkjbbnkkn        | Имя: Каспер
+ID: 264905125    | @pltnk_k             | Имя: Кир
+ID: 8376708692   | @Groufeed            | Имя: Кирилл
+ID: 107222456    | @Kostya_Kon          | Имя: Константин
+ID: 193067318    | @Constantin01        | Имя: Константин Ⓜ️
+ID: 6559425698   | @Edinopogz           | Имя: Костик
+ID: 1102549144   | @New0r               | Имя: Креветкин
+ID: 971287052    | @Papa_Legba_1        | Имя: Леонид
+ID: 1923896863   | @Glibido             | Имя: Либидо
+ID: 394451245    | @kreditin            | Имя: Лидокаин
+ID: 6712781668   | @hellcat_001         | Имя: Лисья Морда🦊
+ID: 7238536035   | @Krasava490          | Имя: Лучший из лучших
+ID: 5475798417   | @Michael19101957     | Имя: Майкл
+ID: 629841209    | @Masik782            | Имя: Макс
+ID: 1057176919   | @fromhornet          | Имя: Макс Сазонов
+ID: 422565445    | @Emaks_art           | Имя: Максим
+ID: 846466765    | @Maksonchik051       | Имя: Максим
+ID: 2026707403   | @maxipanda89         | Имя: Максим
+ID: 5639035109   | @filadelfia96        | Имя: Максим
+ID: 5780462901   | @Mar2005lee          | Имя: Марк
+ID: 109362658    | @Mister_Mim1         | Имя: Мистер Мим
+ID: 7031388664   | @MishaRus1           | Имя: Миха
+ID: 6083596529   | @cadiev              | Имя: Не🐋
+ID: 7022106079   | @owl9595             | Имя: НиК))
+ID: 7661526967   | нет username         | Имя: Ник Кор
+ID: 892843474    | @Vdova1234           | Имя: Николай
+ID: 1529569671   | @Nikant01            | Имя: Николай
+ID: 5002405058   | @nikoly_samson       | Имя: Николай
+ID: 7060921503   | @Niko_Moss           | Имя: Николя 🎭
+ID: 391343919    | @DryanOleg           | Имя: Олег А
+ID: 2024926560   | нет username         | Имя: Олег
+ID: 5195136316   | @AAA1976ASDZ         | Имя: Павел
+ID: 5432667310   | @maikun92            | Имя: Павел Валерьевич
+ID: 307079095    | @PavArx              | Имя: Павлик Архитектор
+ID: 7645405800   | @Kzn_Panda           | Имя: Панда
+ID: 1021171739   | @lukinps             | Имя: Паша
+ID: 1079481090   | @KaiMeiron           | Имя: Первый
+ID: 5764700240   | @timatimatika        | Имя: Просто
+ID: 398987295    | @Rodik_S             | Имя: Родион
+ID: 244064846    | @Li_Pri_RomaSh       | Имя: Роман
+ID: 324375051    | @RomanT1983          | Имя: Роман
+ID: 826831621    | @Pasynkovroman       | Имя: Роман
+ID: 1783750249   | @riordanbard         | Имя: Роман
+ID: 1839964228   | @roman_of77          | Имя: Романов Игорь
+ID: 572790133    | @rusl55555           | Имя: Руслан Start
+ID: 6180289214   | @Angel6767670        | Имя: Рыжий Стич
+ID: 1057829749   | нет username         | Имя: Самарский
+ID: 5401812253   | @AlexusDUB           | Имя: Саня
+ID: 5237194514   | @bvvxz45             | Имя: Саша
+ID: 2045908274   | @Segaplus            | Имя: Сега
+ID: 210175817    | @Sergey0811          | Имя: Серëга
+ID: 340950119    | @seryozhenka         | Имя: Сергей
+ID: 1485798663   | @Skanblk             | Имя: Сергей
+ID: 1801150209   | нет username         | Имя: Сергей
+ID: 5278402931   | @MUCTEP3OM6U         | Имя: Сергей Белый
+ID: 217515430    | @sd8765              | Имя: Сергейка
+ID: 684857155    | @mstisl11            | Имя: Серега
+ID: 6382885087   | @Serega1988kzn       | Имя: Серёга
+ID: 7154157744   | @chup2377            | Имя: Толик
+ID: 1914612974   | @renhus77            | Имя: Хренакула
+ID: 7763560506   | @maximforyou         | Имя: Человек
+ID: 186262183    | @zaarvik             | Имя: Шурик
+ID: 5520176114   | @IGOR_ZHDANOV_OFFICIAL | Имя: Ы
+ID: 1061180669   | @SilaVelesa          | Имя: Эдуард Дементьев
+ID: 6081192773   | @ExhaustedSix        | Имя: Эрвин Викторович
+ID: 454516369    | @It_is_NOPE          | Имя: Это я
+ID: 6874377898   | @chuv0809            | Имя: Юрий
+ID: 797799578    | @Alieva_happy        | Имя: Юрий Захарченко
+ID: 592867410    | @harry_z1984         | Имя: игÖрь
+ID: 1473377866   | @ms_haus             | Имя: неизвестный
+ID: 859416991    | @grin4578            | Имя: сергей
+ID: 1428310761   | @S3lava              | Имя: สลาวาไพรวาลูชิน
+ID: 8287551390   | @dfhvdfhh            | Имя: ᴊᴏᴋᴇʀ
+ID: 6367262159   | @Mahar0555           | Имя: ᴍᴀʜᴏʀᴀɢᴀ
+ID: 6973383215   | @yjaex               | Имя: Ἴκαρος
+ID: 1171637647   | @RomaKhanRiz         | Имя: •‌● 🆁🅾🅼🅰 🆂 •‌●
+ID: 229467929    | @Dimanikfox          | Имя: ₳Ɽ₳₥₭₳ 🐳
+ID: 6073469504   | @alex_moskovs        | Имя: ☕🪡🧵Alexandr Karpuk🧵🪡☕
+ID: 7063315070   | @Zigan2616           | Имя: ⚜️ Foxik ⚜️ 🇧🇾
+ID: 8420226027   | @rom26_16            | Имя: ⚜️ ROMALE ⚜️
+ID: 400102449    | @MosKir79            | Имя: 《V~L~A~D~I~M~I~R》
+ID: 809642338    | @Qwe19i8             | Имя: 男生
+ID: 6128680421   | @Limonchik678        | Имя: ꧁Omega ꧂🦮🐕‍🦺🐕🐩
+ID: 281503815    | @jangalex            | Имя: 하나엘
+ID: 5251689563   | @bysinka_94          | Имя: ＼(^o^)／𝓘 𝓵 𝔂 𝓪＼(^o^)／
+ID: 8454338036   | @evgenyevsi          | Имя: 𝐸𝑣𝑔𝑒𝑛𝑦
+ID: 950910405    | @vova_990            | Имя: 𝓥𝓸𝓿𝓪
+ID: 556952375    | @ANRI4499            | Имя: 𝔸ℕ𝔻ℝ𝔼𝕐©
+ID: 8718237950   | @nikmal_an           | Имя: 𝙽𝙸𝙺𝙼𝙰𝙻
+ID: 7640045799   | @zzzzeeeeffffs       | Имя: 🃟𝐉𝐨𝐤𝐞𝐫 𝐌𝐚𝐤𝐬𝐢𝐦 𝐍𝐢𝐤𝐨𝐥𝐚𝐞𝐯𝐢𝐜𝐡
+ID: 2069502813   | @Galakticos_Msk      | Имя: 🅶🅰️🅻🅰️🅺🆃🅸🅲🅾️🆂
+ID: 336412472    | @Akexxxxxx           | Имя: 🇷🇺 Евгений 🫰
+ID: 383714606    | @wonderful_angeI     | Имя: 🌙Moonboy Melan
+ID: 393125861    | @cheri5060           | Имя: 🍒
+ID: 254120079    | @Wolf_Balto          | Имя: 🐾🅱️🅰️🅻🆃🅾️ 🐾
+ID: 8065299968   | @Nove0111            | Имя: 💞💘
+ID: 1754046032   | @oraldeepfun         | Имя: 💯🔝
+ID: 7422119783   | @Data_Rebel          | Имя: 🖤 🥷
+ID: 328149309    | @kostik67            | Имя: 😉const
+ID: 1049551207   | @Romario9608         | Имя: 🦅ᵣₒ𝑚ₐ𝑠ⲏⲕₐ 🦅
+ID: 1822203815   | @BlackFoX15          | Имя: 🦊🍂Fox 🍂🦊
+ID: 125789508    | @I_Lorenz            | Имя: 🧭 Игнатий Лоренц
+ID: 248777477    | @Ohuenchik89         | Имя: 🪴🌳💡🤔

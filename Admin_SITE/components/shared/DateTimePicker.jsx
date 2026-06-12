@@ -99,17 +99,25 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
     if (n.length > 2) n = n.slice(-2);
     if (n && parseInt(n, 10) > 23) n = '23';
     setHh(n);
-    if (selected) emit(selected, n || '0', mm || '0');
   };
   const handleMmChange = (v) => {
     let n = (v || '').replace(/\D/g, '');
     if (n.length > 2) n = n.slice(-2);
     if (n && parseInt(n, 10) > 59) n = '59';
     setMm(n);
-    if (selected) emit(selected, hh || '0', n || '0');
   };
-  const handleHhBlur = () => { if (hh) setHh(pad(parseInt(hh, 10))); else setHh('00'); };
-  const handleMmBlur = () => { if (mm) setMm(pad(parseInt(mm, 10))); else setMm('00'); };
+  const handleHhBlur = () => { 
+    let finalH = hh;
+    if (finalH) finalH = pad(parseInt(finalH, 10)); else finalH = '00';
+    setHh(finalH);
+    if (selected) emit(selected, finalH, mm || '00');
+  };
+  const handleMmBlur = () => { 
+    let finalM = mm;
+    if (finalM) finalM = pad(parseInt(finalM, 10)); else finalM = '00';
+    setMm(finalM);
+    if (selected) emit(selected, hh || '00', finalM);
+  };
 
   const prevMonth = () => {
     if (month === 0) { setMonth(11); setYear(y => y - 1); }
