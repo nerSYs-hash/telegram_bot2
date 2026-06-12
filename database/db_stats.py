@@ -170,7 +170,7 @@ def update_topic_name(db, workspace_id, chat_id, thread_id, thread_name):
         INSERT INTO topics (workspace_id, chat_id, thread_id, thread_name, is_main_thread,
                             last_message_at, total_messages)
         VALUES (?, ?, ?, ?, 0, CURRENT_TIMESTAMP, 0)
-        ON CONFLICT(chat_id, thread_id) DO UPDATE SET
+        ON CONFLICT(workspace_id, chat_id, thread_id) DO UPDATE SET
             thread_name = ?
     ''', (workspace_id, chat_id, thread_id, thread_name, thread_name))
     db.conn.commit()
