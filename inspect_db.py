@@ -1,26 +1,19 @@
 import sqlite3
+db = sqlite3.connect('database/bot_database.db')
+db.row_factory = sqlite3.Row
 
-db_path = r"C:\bot_2\telegram_bot2\Временные\mybot\bot_database.db"
+print("=== bot_chats ===")
+for row in db.execute("SELECT * FROM bot_chats").fetchall():
+    print(dict(row))
 
-conn = sqlite3.connect(db_path)
-cursor = conn.cursor()
+print("\n=== bot_chat_topics ===")
+for row in db.execute("SELECT * FROM bot_chat_topics").fetchall():
+    print(dict(row))
 
-# Get tables
-cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
-tables = cursor.fetchall()
-print("Tables:", [t[0] for t in tables])
+print("\n=== scheduled_posts ===")
+for row in db.execute("SELECT id, title, status, status_log FROM scheduled_posts ORDER BY id DESC LIMIT 5").fetchall():
+    print(dict(row))
 
-# Check users table schema
-if ('users',) in tables:
-    cursor.execute("PRAGMA table_info(users)")
-    print("Schema of users:", cursor.fetchall())
-    
-    # Let's count them
-    cursor.execute("SELECT COUNT(*) FROM users")
-    print("Total users:", cursor.fetchone()[0])
-    
-    # Get a sample
-    cursor.execute("SELECT * FROM users LIMIT 3")
-    print("Sample:", cursor.fetchall())
-
-conn.close()
+print("\n=== press_release_targets ===")
+for row in db.execute("SELECT * FROM press_release_targets ORDER BY id DESC LIMIT 5").fetchall():
+    print(dict(row))

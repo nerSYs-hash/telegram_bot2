@@ -238,8 +238,7 @@ def get_bot_chat_topics(db, workspace_id: int, chat_id: int) -> list:
     for r in db.cursor.fetchall():
         d = dict(r)
         name = d.get('name') or ''
-        # Исключаем ветки комментариев каналов, которые бот записал под дефолтными именами
-        if not name.startswith('Ветка #') and not name.startswith('Топик #') and name.strip():
+        if name.strip():
             topics.append(d)
             
     return topics

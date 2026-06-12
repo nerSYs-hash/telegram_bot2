@@ -73,10 +73,12 @@ def _resolve_media_input(value: str):
         if os.path.exists(path):
             return open(path, 'rb')
         logger.warning(f"media file not found: {path}")
-        return value  # fallback
+        raise ValueError(f"Локальный медиа-файл не найден: {fname}")
     # Абсолютный путь
-    if value.startswith('/') and os.path.exists(value):
-        return open(value, 'rb')
+    if value.startswith('/') or (len(value) > 1 and value[1] == ':'):
+        if os.path.exists(value):
+            return open(value, 'rb')
+        raise ValueError(f"Файл не найден по пути: {value}")
     # Иначе — file_id
     return value
 
