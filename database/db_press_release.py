@@ -225,10 +225,13 @@ def upsert_bot_chat_topic(db, workspace_id: int, chat_id: int, thread_id: int,
 def get_bot_chat_topics(db, workspace_id: int, chat_id: int) -> list:
     """Список топиков для конкретного чата (в скоупе workspace)."""
     db.cursor.execute('''
-        SELECT id, chat_id, thread_id, name, source, created_at
-        FROM bot_chat_topics
-        WHERE workspace_id = ? AND chat_id = ?
-        ORDER BY thread_id
+        SELECT b.id, b.chat_id, b.thread_id, 
+               CASE WHEN t.thread_name IS NOT NULL AND t.thread_name != '' THEN t.thread_name ELSE b.name END as name, 
+               b.source, b.created_at
+        FROM bot_chat_topics b
+        LEFT JOIN topics t ON b.chat_id = t.chat_id AND b.thread_id = t.thread_id
+        WHERE b.workspace_id = ? AND b.chat_id = ?
+        ORDER BY b.thread_id
     ''', (workspace_id, chat_id))
     return [dict(r) for r in db.cursor.fetchall()]
 
@@ -263,6 +266,8 @@ def create_press_release(db, workspace_id: int, author_id: int, **fields) -> int
     # publish_at — обязателен в схеме, кладём заглушку для черновиков
     if not fields.get('publish_at'):
         fields['publish_at'] = '1970-01-01 00:00:00'
+    else:
+        fields['publish_at'] = fields['publish_at'].replace('T', ' ')[:19]
     # target_chat_id — обязателен в схеме (NOT NULL); для черновиков 0
     fields.setdefault('target_chat_id', 0)
 
@@ -280,6 +285,8 @@ def create_press_release(db, workspace_id: int, author_id: int, **fields) -> int
 def update_press_release(db, workspace_id: int, post_id: int, **fields) -> bool:
     """Обновить поля пресс-релиза. Только поля из ALLOWED_FIELDS."""
     updates = {k: v for k, v in fields.items() if k in ALLOWED_FIELDS}
+    if 'publish_at' in updates and updates['publish_at']:
+        updates['publish_at'] = updates['publish_at'].replace('T', ' ')[:19]
     if not updates:
         return False
     set_clause = ', '.join(f'{k} = ?' for k in updates)
@@ -410,7 +417,7 @@ def get_pending_press_releases(db, workspace_id: int, before_time: str) -> list:
         SELECT sp.*, u.username, u.first_name
         FROM scheduled_posts sp
         LEFT JOIN users u ON sp.author_id = u.user_id
-        WHERE sp.workspace_id = ? AND sp.status = 'scheduled' AND sp.publish_at <= ?
+        WHERE sp.workspace_id = ? AND sp.status IN ('scheduled', 'pending') AND REPLACE(sp.publish_at, 'T', ' ') <= ?
         ORDER BY sp.publish_at ASC
     ''', (workspace_id, before_time))
     return [dict(r) for r in db.cursor.fetchall()]
@@ -424,7 +431,7 @@ def get_all_pending_press_releases(db, before_time: str) -> list:
         SELECT sp.*, u.username, u.first_name
         FROM scheduled_posts sp
         LEFT JOIN users u ON sp.author_id = u.user_id
-        WHERE sp.status = 'scheduled' AND sp.publish_at <= ?
+        WHERE sp.status IN ('scheduled', 'pending') AND REPLACE(sp.publish_at, 'T', ' ') <= ?
         ORDER BY sp.workspace_id, sp.publish_at ASC
     ''', (before_time,))
     return [dict(r) for r in db.cursor.fetchall()]

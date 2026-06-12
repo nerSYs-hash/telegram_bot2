@@ -75,7 +75,9 @@ export default function DateTimePicker({ value, onChange, minDate = new Date(), 
     out.setMinutes(parseInt(m || '0', 10));
     out.setSeconds(0);
     out.setMilliseconds(0);
-    onChange?.(out.toISOString());
+    // Use local time instead of UTC to match backend expectations
+    const isoStr = `${out.getFullYear()}-${pad(out.getMonth() + 1)}-${pad(out.getDate())}T${pad(out.getHours())}:${pad(out.getMinutes())}:00.000Z`;
+    onChange?.(isoStr);
   };
 
   const handleDayClick = (cell) => {

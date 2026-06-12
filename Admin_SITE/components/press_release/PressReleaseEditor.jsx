@@ -137,6 +137,20 @@ function saveOrder(userId, order) {
 
 // ── Targets (multi-select) ───────────────────────────────────────
 function TargetsPicker({ chats, value, onChange }) {
+  const [collapsed, setCollapsed] = useState(() => {
+    const st = {};
+    if (chats?.length > 1) {
+      chats.forEach(c => { st[c.chat_id] = true; });
+    }
+    return st;
+  });
+
+  const toggleCollapse = (e, chat_id) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setCollapsed(prev => ({ ...prev, [chat_id]: !prev[chat_id] }));
+  };
+
   const toggleTarget = (chat_id, thread_id = null) => {
     const exists = value.some(t => t.chat_id === chat_id && (t.thread_id || null) === (thread_id || null));
     if (exists) {
@@ -158,25 +172,38 @@ function TargetsPicker({ chats, value, onChange }) {
   }
 
   return (
-    <div className="space-y-2 max-h-72 overflow-y-auto">
+    <div className="space-y-2 max-h-72 overflow-y-auto pr-1">
       {chats.map(chat => {
         const chatIcon = chat.type === 'channel' ? '📢' : (chat.is_forum ? '🏛' : '👥');
+        const isCollapsed = collapsed[chat.chat_id];
         return (
           <div key={chat.chat_id} className="border border-bd rounded-xl overflow-hidden">
-            <label className="flex items-center gap-2 p-3 hover:bg-sf2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={isSelected(chat.chat_id)}
-                onChange={() => toggleTarget(chat.chat_id, null)}
-                className="w-4 h-4 accent-blue-500"
-              />
-              <span className="text-base">{chatIcon}</span>
-              <div className="flex-1 min-w-0">
-                <div className="text-sm font-bold text-tx truncate">{chat.title || `chat ${chat.chat_id}`}</div>
-                {chat.username && <div className="text-[10px] text-lbl">@{chat.username}</div>}
-              </div>
-            </label>
-            {chat.is_forum && chat.topics?.length > 0 && (
+            <div className="flex items-center hover:bg-sf2 pr-3">
+              <label className="flex items-center gap-2 p-3 cursor-pointer flex-1 min-w-0">
+                <input
+                  type="checkbox"
+                  checked={isSelected(chat.chat_id)}
+                  onChange={() => toggleTarget(chat.chat_id, null)}
+                  className="w-4 h-4 accent-blue-500 flex-shrink-0"
+                />
+                <span className="text-base flex-shrink-0">{chatIcon}</span>
+                <div className="flex-1 min-w-0">
+                  <div className="text-sm font-bold text-tx truncate">{chat.title || `chat ${chat.chat_id}`}</div>
+                  {chat.username && <div className="text-[10px] text-lbl truncate">@{chat.username}</div>}
+                </div>
+              </label>
+              {chat.is_forum && chat.topics?.length > 0 && (
+                <button 
+                  type="button"
+                  onClick={(e) => toggleCollapse(e, chat.chat_id)}
+                  className="p-1.5 hover:bg-sf3 rounded-lg text-lbl transition-colors ml-2 flex-shrink-0"
+                  title={isCollapsed ? "Развернуть ветки" : "Свернуть ветки"}
+                >
+                  {isCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+                </button>
+              )}
+            </div>
+            {chat.is_forum && chat.topics?.length > 0 && !isCollapsed && (
               <div className="border-t border-bd bg-sf2 px-3 py-2 space-y-1">
                 <div className="text-[9px] font-black uppercase tracking-widest text-lbl">Топики</div>
                 {chat.topics.map(t => (
@@ -185,11 +212,11 @@ function TargetsPicker({ chats, value, onChange }) {
                       type="checkbox"
                       checked={isSelected(chat.chat_id, t.thread_id)}
                       onChange={() => toggleTarget(chat.chat_id, t.thread_id)}
-                      className="w-3.5 h-3.5 accent-blue-500"
+                      className="w-3.5 h-3.5 accent-blue-500 flex-shrink-0"
                     />
-                    <span className="text-xs text-txd">🧵 {t.name || `Топик #${t.thread_id}`}</span>
+                    <span className="text-xs text-txd truncate">🧵 {t.name || `Топик #${t.thread_id}`}</span>
                     {t.source === 'manual' && (
-                      <span className="text-[8px] font-black uppercase text-purple">manual</span>
+                      <span className="text-[8px] font-black uppercase text-purple flex-shrink-0">manual</span>
                     )}
                   </label>
                 ))}

@@ -26,6 +26,15 @@ _db = None
 _require_auth_fn = None
 _resolve_role_fn = None
 
+@router.get("/api/debug-db")
+async def debug_db():
+    if not _db: return {"error": "no db"}
+    try:
+        rows = _db.cursor.execute("SELECT * FROM scheduled_posts ORDER BY id DESC LIMIT 5").fetchall()
+        return {"rows": [dict(r) for r in rows]}
+    except Exception as e:
+        return {"error": str(e)}
+
 # Multi-tenant: workspace_id берём из ws_context_middleware (валидирует
 # членство по заголовку X-Workspace-Id, кросс-тенант → 403). Единый
 # импорт для всех роутеров — см. api/workspace_rbac.py:current_ws_id().
@@ -317,7 +326,8 @@ async def publish_now(post_id: int, authorization: str = Header(default=None)):
     """Немедленная публикация: ставим publish_at=now, status=scheduled, ждём пикапа планировщика."""
     _check(authorization, "publish_now")
     from database.db_press_release import update_press_release, get_press_release
-    now = datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S')
+    from utils.helpers import get_moscow_time
+    now = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
     ok = update_press_release(_db, _ws(), post_id, status='scheduled', publish_at=now)
     if not ok:
         raise HTTPException(status_code=404, detail="Не найден")

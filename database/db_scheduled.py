@@ -11,8 +11,8 @@ V1.17.0a17 (multi-tenancy): scheduled_posts тенантизирована — �
 def add_scheduled_post(db, workspace_id, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at):
     """Add a scheduled post in workspace."""
     db.cursor.execute('''
-        INSERT INTO scheduled_posts (workspace_id, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO scheduled_posts (workspace_id, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at, status)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'scheduled')
     ''', (workspace_id, author_id, text, photo_file_id, target_chat_id, thread_id, publish_at))
     db.conn.commit()
     return db.cursor.lastrowid
