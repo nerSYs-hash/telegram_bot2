@@ -81,15 +81,13 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
             <span>{targetSummary}</span>
           </div>
         </div>
-        {userCan('press_release.delete') && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
-            title="Удалить"
-            className="p-1 text-lbl hover:text-danger hover:bg-red-50 rounded-lg flex-shrink-0"
-          >
-            <X size={16} />
-          </button>
-        )}
+        <button
+          onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
+          title="Удалить"
+          className="p-1 text-lbl hover:text-danger hover:bg-red-50 rounded-lg flex-shrink-0"
+        >
+          <X size={16} />
+        </button>
       </div>
 
       {/* Actions row */}

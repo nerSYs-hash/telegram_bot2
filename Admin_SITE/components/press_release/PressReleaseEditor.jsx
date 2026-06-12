@@ -701,9 +701,17 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
             {draft.status === 'published' ? 'Опубликован' : 'Опубликовать сейчас'}
           </Button>
         )}
-        {draft.id && userCan('press_release.delete') && (
+        {draft.id && (
           <Button variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}
             aria-label="Удалить" className="text-red-400 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" />
+        )}
+        {!draft.id && (
+          <Button variant="ghost" size="sm" icon={Trash2} onClick={() => {
+            if (confirm('Очистить форму?')) {
+              setDraft(makeBlankPost());
+              initialRef.current = JSON.stringify(makeBlankPost());
+            }
+          }} aria-label="Очистить форму" className="text-red-400 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" />
         )}
       </div>
 
