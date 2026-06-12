@@ -692,13 +692,13 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         </Button>
         {userCan('press_release.publish_now') && (
           <Button
-            variant="success" size="sm" icon={Send}
+            variant="primary" size="sm" icon={Send}
             state={savingAction === 'published' ? 'loading' : doneAction === 'published' ? 'done' : 'idle'}
             loadingLabel="Публикую…"
             onClick={handlePublishNow}
             disabled={saving || draft.targets?.length === 0 || draft.status === 'published'}
           >
-            {draft.status === 'published' ? 'Опубликован' : 'Сейчас'}
+            {draft.status === 'published' ? 'Опубликован' : 'Опубликовать сейчас'}
           </Button>
         )}
         {draft.id && userCan('press_release.delete') && (

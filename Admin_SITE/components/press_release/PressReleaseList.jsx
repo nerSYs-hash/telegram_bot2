@@ -4,7 +4,7 @@
 import { useState, useMemo } from 'react';
 import {
   FileText, Calendar, CheckCircle2, XCircle, AlertTriangle, Trash2,
-  Send, Copy, RotateCcw, Edit3, Eye, Plus, Search,
+  Send, Copy, RotateCcw, Edit3, Eye, Plus, Search, X,
 } from 'lucide-react';
 import StyledSelect from '../shared/StyledSelect';
 import Card from '../shared/Card';
@@ -81,6 +81,15 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
             <span>{targetSummary}</span>
           </div>
         </div>
+        {userCan('press_release.delete') && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
+            title="Удалить"
+            className="p-1 text-lbl hover:text-danger hover:bg-red-50 rounded-lg flex-shrink-0"
+          >
+            <X size={16} />
+          </button>
+        )}
       </div>
 
       {/* Actions row */}
@@ -129,14 +138,6 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
             title="Удалить из Telegram (на сайте останется)"
             className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
             <span className="text-[10px] font-black">TG</span>
-          </button>
-        )}
-        {userCan('press_release.delete') && (
-          <button
-            onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
-            title="Удалить с сайта (сообщение в Telegram останется)"
-            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
-            <Trash2 size={12} />
           </button>
         )}
       </div>
