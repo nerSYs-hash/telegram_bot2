@@ -36,6 +36,8 @@
     {"id": "journal:survey",    "name": "Журнал · Опросы",         "section": "journal", "parent": "journal", "description": "Создание и итоги опросов."},
     {"id": "journal:profile",   "name": "Журнал · Профиль",        "section": "journal", "parent": "journal", "description": "Изменения профиля."},
     {"id": "journal:activity",  "name": "Журнал · Активность",     "section": "journal", "parent": "journal", "description": "События активности."},
-    {"id": "journal:photo",     "name": "Журнал · Смена фото",     "section": "journal", "parent": "journal", "description": "Смена аватара."}
+    {"id": "journal:photo",     "name": "Журнал · Смена фото",     "section": "journal", "parent": "journal", "description": "Смена аватара."},
+    {"id": "garbage_collector", "name": "Очистка чата от бота",    "section": "utilities", "description": "Сборщик мусора: настройка автоматического удаления системных ответов бота."},
+    {"id": "branding",          "name": "Глобальный брендинг",     "section": "utilities", "description": "Единая подпись для публикаций в каналах сообщества."}
   ]
 }

@@ -116,7 +116,7 @@ function DraggableSection({ id, onDragStart, onDragOver, onDrop, isDraggingOver,
   );
 }
 
-const DEFAULT_SECTION_ORDER = ['name', 'media', 'content', 'branding', 'publish', 'keyboard', 'settings'];
+const DEFAULT_SECTION_ORDER = ['name', 'media', 'content', 'publish', 'keyboard', 'settings'];
 
 function getStoredOrder(userId) {
   try {
@@ -560,13 +560,6 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           </Section>
         );
 
-      case 'branding':
-        return (
-          <Section icon={Palette} title="Подпись и брендинг" dragHandle={handle}>
-            <BrandingPanel token={token} onChange={onBrandingChange} compact />
-          </Section>
-        );
-
       case 'publish':
         return (
           <Section icon={Calendar} title="Куда + Когда" dragHandle={handle}>
@@ -702,7 +695,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
               disabled={saving}
               title="Дополнительные действия"
             >
-              <ChevronDown size={16} />
+              <span className="font-bold tracking-widest leading-none rotate-90 text-[10px]">(:)</span>
             </button>
           )}
 
