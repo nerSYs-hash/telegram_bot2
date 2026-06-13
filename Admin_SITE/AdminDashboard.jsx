@@ -604,6 +604,7 @@ export default function App() {
   const [jigglingNav, setJigglingNav] = useState(null);
 
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedNav, setExpandedNav] = useState({ system: false });
   const [showDetailedIndices, setShowDetailedIndices] = useState(false);
   const [activeIndexTooltip, setActiveIndexTooltip] = useState(null);
   const [showHealthTooltip, setShowHealthTooltip] = useState(false);
@@ -1120,15 +1121,23 @@ export default function App() {
   const navigation = [
     { id: 'updates',       name: 'Новости',        icon: Newspaper,      group: 'top' },
     { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
-    { id: 'system',        name: 'Система',        icon: Settings,       group: 'top',      resource: 'system' },
+    { 
+      id: 'system',        
+      name: 'Система',        
+      icon: Settings,       
+      group: 'top',      
+      resource: 'system',
+      subItems: [
+        { id: 'garbage_collector', name: 'Очистка от бота', icon: Trash2,    resource: 'system', isModule: true },
+        { id: 'branding',      name: 'Брендинг',       icon: Palette,        resource: 'system', isModule: true }
+      ]
+    },
     { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
     { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'modules',  resource: 'journal',       isModule: true },
     { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers',      isModule: true },
     { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release', isModule: true },
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
-    { id: 'garbage_collector', name: 'Очистка от бота', icon: Trash2,    group: 'system_group', resource: 'system', isModule: true },
-    { id: 'branding',      name: 'Брендинг',       icon: Palette,        group: 'system_group', resource: 'system', isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
@@ -5495,43 +5504,95 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
-          {['top', 'system_group', 'modules', 'features'].map(group => {
+          {['top', 'modules', 'features'].map(group => {
             const groupItems = navigation.filter(n =>
               n.group === group
               && (!n.ownerOnly || isOwner)
               && (!n.resource || userCanAny(n.resource))
-              // Разделы модулей теперь всегда видны — тумблер влияет
-              // только на работу функции в боте (статус-баннер сверху страницы).
             );
             if (groupItems.length === 0) return null;
             return (
             <div key={group} className="space-y-2">
               {group !== 'top' && (
                 <p className="px-5 text-[11px] font-black text-lbl uppercase tracking-[0.3em] mb-6">
-                  {group === 'modules' ? 'Подключённые' : group === 'system_group' ? 'Система' : 'Сервис'}
+                  {group === 'modules' ? 'Подключённые' : 'Сервис'}
                 </p>
               )}
-              {groupItems.map((item) => (
-                <button
-                  key={item.id}
-                  onClick={() => { navigateTo(item.id); setIsSidebarOpen(false); setJigglingNav(item.id); }}
-                  className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 ${
-                    activeTab === item.id
-                    ? 'bg-cta text-white shadow-md font-black'
-                    : 'text-txd hover:bg-ih active:bg-ia'
-                  }`}
-                >
-                  <item.icon
-                    size={18}
-                    onAnimationEnd={() => setJigglingNav(null)}
-                    className={`mr-3 ${activeTab === item.id ? 'text-white' : 'text-txd'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
-                  />
-                  <span className="text-sm flex-1">{item.name}</span>
-                  {item.id === 'updates' && hasNewUpdate && (
-                    <span className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse" />
-                  )}
-                </button>
-              ))}
+              {groupItems.map((item) => {
+                const hasSub = item.subItems && item.subItems.length > 0;
+                const isExpanded = expandedNav[item.id];
+                const isActive = activeTab === item.id;
+                
+                return (
+                  <div key={item.id} className="flex flex-col space-y-1">
+                    <button
+                      onClick={() => {
+                        if (hasSub) {
+                          setExpandedNav(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                        }
+                        navigateTo(item.id);
+                        if (!hasSub) setIsSidebarOpen(false);
+                        setJigglingNav(item.id);
+                      }}
+                      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                        isActive
+                        ? 'bg-cta text-white shadow-md font-black'
+                        : 'text-txd hover:bg-ih active:bg-ia'
+                      }`}
+                    >
+                      <item.icon
+                        size={18}
+                        onAnimationEnd={() => setJigglingNav(null)}
+                        className={`mr-3 ${isActive ? 'text-white' : 'text-txd'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
+                      />
+                      <span className="text-sm flex-1 text-left">{item.name}</span>
+                      
+                      {item.id === 'updates' && hasNewUpdate && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse mr-2" />
+                      )}
+
+                      {hasSub && (
+                        <span className={`transition-transform duration-200 ${isActive ? 'text-white' : 'text-txd'}`}>
+                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {hasSub && isExpanded && (
+                      <div className="flex flex-col mt-1 ml-4 pl-3 border-l-2 border-bd space-y-1">
+                        {item.subItems.map(sub => {
+                          if (sub.ownerOnly && !isOwner) return null;
+                          if (sub.resource && !userCanAny(sub.resource)) return null;
+                          
+                          const isSubActive = activeTab === sub.id;
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => {
+                                navigateTo(sub.id);
+                                setIsSidebarOpen(false);
+                                setJigglingNav(sub.id);
+                              }}
+                              className={`w-full flex items-center px-3 py-2 rounded-xl transition-all duration-200 ${
+                                isSubActive
+                                ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta font-black'
+                                : 'text-txd hover:bg-ih hover:text-tx'
+                              }`}
+                            >
+                              <sub.icon
+                                size={16}
+                                onAnimationEnd={() => setJigglingNav(null)}
+                                className={`mr-2 ${isSubActive ? 'text-cta' : 'text-txd'} ${jigglingNav === sub.id ? 'tag-jiggle' : ''}`}
+                              />
+                              <span className="text-sm flex-1 text-left">{sub.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
             );
           })}

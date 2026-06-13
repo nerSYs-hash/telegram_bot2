@@ -660,7 +660,7 @@ def set_branding(db, workspace_id: int, key: str, value: str, by_user_id: int) -
     db.cursor.execute('''
         INSERT INTO branding_settings (workspace_id, key, value, updated_by, updated_at)
         VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
-        ON CONFLICT(key) DO UPDATE SET
+        ON CONFLICT(workspace_id, key) DO UPDATE SET
             workspace_id = excluded.workspace_id,
             value = excluded.value,
             updated_by = excluded.updated_by,

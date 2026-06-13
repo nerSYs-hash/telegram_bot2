@@ -348,7 +348,19 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
   const [draft, setDraft] = useState(() => post || makeBlankPost());
   // savingAction/doneAction — для stateful-кнопок (loading/done на конкретной кнопке)
   const [savingAction, setSavingAction] = useState(null);   // 'draft' | 'scheduled' | 'published' | null
-  const [doneAction, setDoneAction]     = useState(null);   // то же
+  const [doneAction, setDoneAction]     = useState(null);
+  const [publishMenuOpen, setPublishMenuOpen] = useState(false);
+  const publishMenuRef = useRef(null);
+
+  useEffect(() => {
+    function handleClickOutside(e) {
+      if (publishMenuRef.current && !publishMenuRef.current.contains(e.target)) {
+        setPublishMenuOpen(false);
+      }
+    }
+    if (publishMenuOpen) document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [publishMenuOpen]);   // то же
   const saving = savingAction !== null;
   const [showSettings, setShowSettings] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -651,10 +663,7 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
   return (
     <div className="space-y-3 pb-24">
       {/* ── Шапка действий ── */}
-      {/* before-псевдоэлемент закрывает «прозрачную» полосу над sticky-карточкой:
-          скролл-контейнер AdminDashboard имеет p-4..p-8 сверху, через который
-          контент мог просвечивать из-за rounded-углов. */}
-      <div className="bg-sff rounded-2xl border border-bd shadow-sm p-3 flex items-center gap-2 sticky top-0 z-20 before:content-[''] before:absolute before:left-0 before:right-0 before:bottom-full before:h-12 before:bg-gradient-to-t before:from-gray-50 before:via-gray-50/85 before:to-transparent before:pointer-events-none">
+      <div className="bg-sff rounded-2xl border border-bd shadow-sm p-3 flex items-center gap-2 relative z-20 mb-4">
         <Button variant="ghost" size="sm" icon={X} onClick={onClose} aria-label="Закрыть" />
         <div className="flex-1 min-w-0 flex items-center gap-2">
           <div className="text-sm font-black text-tx truncate">
@@ -672,26 +681,44 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
         >
           Черновик
         </Button>
-        <Button
-          variant="primary" size="sm" icon={Calendar}
-          state={savingAction === 'scheduled' ? 'loading' : doneAction === 'scheduled' ? 'done' : 'idle'}
-          loadingLabel="Сохраняю…"
-          onClick={() => handleSave('scheduled')}
-          disabled={saving || !draft.publish_at || draft.targets?.length === 0}
-        >
-          {draft.status === 'scheduled' ? 'Перепланировать' : 'Запланировать'}
-        </Button>
-        {userCan('press_release.publish_now') && (
+        
+        {/* Сплит-кнопка Запланировать / Опубликовать сейчас */}
+        <div className="relative flex" ref={publishMenuRef}>
           <Button
-            variant="primary" size="sm" icon={Send}
-            state={savingAction === 'published' ? 'loading' : doneAction === 'published' ? 'done' : 'idle'}
-            loadingLabel="Публикую…"
-            onClick={handlePublishNow}
-            disabled={saving || draft.targets?.length === 0 || draft.status === 'published'}
+            variant="primary" size="sm" icon={Calendar}
+            state={savingAction === 'scheduled' ? 'loading' : doneAction === 'scheduled' ? 'done' : 'idle'}
+            loadingLabel="Сохраняю…"
+            onClick={() => handleSave('scheduled')}
+            disabled={saving || !draft.publish_at || draft.targets?.length === 0}
+            className={userCan('press_release.publish_now') ? '!rounded-r-none' : ''}
           >
-            {draft.status === 'published' ? 'Опубликован' : 'Опубликовать сейчас'}
+            {draft.status === 'scheduled' ? 'Перепланировать' : 'Запланировать'}
           </Button>
-        )}
+          {userCan('press_release.publish_now') && (
+            <button
+              onClick={() => setPublishMenuOpen(!publishMenuOpen)}
+              className="px-2.5 bg-cta text-white hover:brightness-110 border-l border-white/20 !rounded-l-none rounded-r-2xl transition-all disabled:opacity-50 flex items-center justify-center pulse-btn-glow"
+              style={{ '--glow-from': '#3b82f6', '--glow-via': '#a855f7', '--glow-to': '#3b82f6' }}
+              disabled={saving}
+              title="Дополнительные действия"
+            >
+              <ChevronDown size={16} />
+            </button>
+          )}
+
+          {publishMenuOpen && userCan('press_release.publish_now') && (
+            <div className="absolute top-full right-0 mt-2 w-56 bg-sff border border-bd shadow-xl rounded-xl overflow-hidden z-30 animate-in fade-in slide-in-from-top-2 duration-200">
+              <button
+                onClick={() => { setPublishMenuOpen(false); handlePublishNow(); }}
+                disabled={saving || draft.targets?.length === 0 || draft.status === 'published'}
+                className="w-full text-left px-4 py-3 hover:bg-ih text-sm font-bold flex items-center gap-2 disabled:opacity-50 text-tx transition-colors"
+              >
+                <Send size={16} className="text-cta" />
+                {draft.status === 'published' ? 'Опубликован' : 'Опубликовать сейчас'}
+              </button>
+            </div>
+          )}
+        </div>
         {draft.id && (
           <Button variant="ghost" size="sm" icon={Trash2} onClick={handleDelete}
             aria-label="Удалить" className="text-red-400 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)]" />
@@ -767,6 +794,19 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
           onClose={() => setShowPreview(false)}
         />
       )}
+
+      {/* Scroll to Top FAB */}
+      <button
+        onClick={() => {
+          const editorContainer = document.querySelector('.custom-scrollbar');
+          if (editorContainer) editorContainer.scrollTo({ top: 0, behavior: 'smooth' });
+          else window.scrollTo({ top: 0, behavior: 'smooth' });
+        }}
+        className="fixed bottom-8 right-8 w-12 h-12 bg-cta text-white rounded-[1.2rem] shadow-xl flex items-center justify-center hover:scale-105 transition-all z-50 active:scale-95"
+        title="Наверх"
+      >
+        <ArrowUp size={24} />
+      </button>
     </div>
   );
 });
