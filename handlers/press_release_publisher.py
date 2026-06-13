@@ -327,6 +327,13 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
                 parts = [p for p in (sign, text, year.strip()) if p]
                 if parts:
                     sig_default = " ".join(parts)
+                    font_style = gs.get('font_style', 'normal')
+                    if font_style == 'bold':
+                        sig_default = f"<b>{sig_default}</b>"
+                    elif font_style == 'italic':
+                        sig_default = f"<i>{sig_default}</i>"
+                    elif font_style == 'mono':
+                        sig_default = f"<code>{sig_default}</code>"
         else:
             # Fallback for old signature format
             sig_default = get_branding(db, ws_id, 'signature', '') or ''

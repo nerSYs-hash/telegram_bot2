@@ -7,7 +7,7 @@ import {
   ListChecks, UserCircle, Activity, Crown, Sparkles, ArrowUp, Gift, Trophy,
   MoonStar, ClipboardList, MoreHorizontal, Settings, BarChart3, Check,
   Pickaxe, Ticket, Dices, CalendarHeart, UserPlus, Award, Rocket, Zap, MinusCircle,
-  Link2, HelpCircle,
+  Link2, HelpCircle, ChevronDown, ChevronUp
 } from 'lucide-react';
 import Button from '../shared/Button';
 import BBSThreadPanel from './BBSThreadPanel';
@@ -172,12 +172,18 @@ export const SECTIONS = [
     id: 'utilities',
     name: 'Утилиты',
     modules: [
-      { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
-        name: 'Очистка чата от бота',
-        desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
-      { id: 'branding', nav: 'branding', target: 'branding', icon: Palette,
-        name: 'Глобальный брендинг',
-        desc: 'Единая подпись для публикаций в каналах сообщества.' },
+      { id: 'system_group', icon: Settings,
+        name: 'Система',
+        desc: 'Базовые системные настройки и утилиты чата.',
+        children: [
+          { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
+            name: 'Очистка чата от бота',
+            desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
+          { id: 'branding', nav: 'branding', target: 'branding', icon: Palette,
+            name: 'Глобальный брендинг',
+            desc: 'Единая подпись для публикаций в каналах сообщества.' }
+        ]
+      }
     ],
   },
 ];
@@ -212,10 +218,12 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
   const Icon = mod.icon;
   const wip = isWip(mod);
   const hasChildren = !!mod.children;
-  // Клик по карточке: с под-каталогом → открыть его; иначе если
+  const [isExpanded, setIsExpanded] = useState(false);
+
+  // Клик по карточке: с под-каталогом → развернуть аккордеон; иначе если
   // подключён и есть страница → перейти на неё.
   const cardClick = hasChildren
-    ? () => onOpenModule(mod)
+    ? () => setIsExpanded(!isExpanded)
     : (connected && mod.target ? () => onOpen(mod.target) : undefined);
 
   return (
@@ -257,6 +265,11 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
               </div>
             </div>
           )}
+          {hasChildren && (
+            <button onClick={(e) => { e.stopPropagation(); setIsExpanded(!isExpanded); }} className="p-1 hover:bg-sf2 rounded-lg text-lbl transition-colors ml-1">
+              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            </button>
+          )}
           {wip ? (
             <span className="whitespace-nowrap text-[9px] font-black uppercase tracking-wide px-2.5 py-1 rounded-full bg-[color-mix(in_oklab,var(--warn)_14%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_38%,transparent)]">
               В разработке
@@ -283,23 +296,17 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
       )}
 
       <div className="flex gap-2" onClick={e => e.stopPropagation()}>
-        {hasChildren && (
-          <Button size="sm" variant={connected ? 'primary' : 'secondary'} icon={ArrowRight}
-            className="flex-1" onClick={() => onOpenModule(mod)}>
-            Открыть
-          </Button>
-        )}
-        {connected ? (
+        {!hasChildren && connected ? (
           <Button size="sm" variant="secondary" className="flex-1"
             onClick={() => onDisconnect(mod)}>
             Отключить
           </Button>
-        ) : (
-          <Button size="sm" variant="primary" icon={hasChildren ? undefined : Plus}
+        ) : !hasChildren ? (
+          <Button size="sm" variant="primary"
             className="flex-1" onClick={() => onConnect(mod.id)}>
             Подключить
           </Button>
-        )}
+        ) : null}
         {/* V1.17.0Q4: настройка тредов BBS-семейства (только на главной карточке) */}
         {mod.id === 'bbs_pulse' && connected && (
           <button onClick={onOpenBbsThreads}
@@ -309,6 +316,33 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
           </button>
         )}
       </div>
+
+      {hasChildren && isExpanded && (
+        <div className="mt-2 pt-3 border-t border-bd space-y-2" onClick={e => e.stopPropagation()}>
+          {mod.children.map(child => {
+             const isChildConnected = !!connected && connected.has(child.id);
+             return (
+               <div key={child.id} className="flex flex-col p-3 rounded-xl bg-sf2 border border-bd gap-2 hover:border-[color-mix(in_oklab,var(--cta)_30%,transparent)] transition-colors">
+                 <div className="flex items-center gap-2">
+                   <child.icon size={16} className={isChildConnected ? 'text-cta' : 'text-lbl'} />
+                   <div className="text-sm font-bold text-tx">{child.name}</div>
+                 </div>
+                 <div className="text-[11px] text-txd leading-snug">{child.desc}</div>
+                 <div className="flex gap-2 mt-1">
+                   {isChildConnected ? (
+                     <Button size="sm" variant="secondary" className="flex-1 h-8 text-[11px]" onClick={() => onDisconnect(child)}>Отключить</Button>
+                   ) : (
+                     <Button size="sm" variant="primary" className="flex-1 h-8 text-[11px]" onClick={() => onConnect(child.id)}>Подключить</Button>
+                   )}
+                   {isChildConnected && child.target && (
+                     <Button size="sm" variant="outlined" className="flex-1 h-8 text-[11px]" onClick={() => onOpen(child.target)}>Открыть</Button>
+                   )}
+                 </div>
+               </div>
+             );
+          })}
+        </div>
+      )}
     </div>
   );
 }
