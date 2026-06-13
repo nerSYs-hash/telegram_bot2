@@ -3,7 +3,7 @@ import {
   Save, X, Send, Trash2, Copy, RotateCcw, FileText, Palette,
   Image as ImageIcon, Calendar, Settings as SettingsIcon, ChevronDown, ChevronUp,
   Bold, Plus, GripVertical, Link as LinkIcon, MousePointerClick, AlertTriangle,
-  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone, Eye, RefreshCw,
+  CheckCircle2, Pin, EyeOff, BellOff, Lock, Megaphone, Eye, RefreshCw, ArrowUp
 } from 'lucide-react';
 import DateTimePicker from '../shared/DateTimePicker';
 import RichTextEditor from '../shared/RichTextEditor';
