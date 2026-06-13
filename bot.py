@@ -436,6 +436,14 @@ class TelegramBot:
             await tick_scheduler(self.application, self.db)
         except Exception as e:
             logger.error(f"check_scheduled_posts: {e}", exc_info=True)
+            
+    async def check_garbage_collector(self):
+        """Garbage Collector: фоновое удаление сервисных сообщений."""
+        try:
+            from services.garbage_collector import tick_garbage_collector
+            await tick_garbage_collector(self.application.bot, self.db)
+        except Exception as e:
+            logger.error(f"check_garbage_collector error: {e}")
     
     async def cleanup_expired_freezes(self):
         """Clean up expired frozen balances"""
@@ -1011,6 +1019,14 @@ class TelegramBot:
             'interval',
             seconds=30,
             id='check_scheduled_posts'
+        )
+
+        # Garbage Collector check every 10 seconds
+        self.scheduler.add_job(
+            self.check_garbage_collector,
+            'interval',
+            seconds=10,
+            id='check_garbage_collector'
         )
 
         # Авто-публикация гороскопа — проверка каждую минуту

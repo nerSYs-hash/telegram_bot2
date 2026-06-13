@@ -454,6 +454,17 @@ class Database:
         ''')
 
         self.cursor.execute('''
+            CREATE TABLE IF NOT EXISTS scheduled_deletions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                workspace_id INTEGER NOT NULL,
+                chat_id INTEGER NOT NULL,
+                message_id INTEGER NOT NULL,
+                category TEXT NOT NULL,
+                delete_at TIMESTAMP NOT NULL
+            )
+        ''')
+
+        self.cursor.execute('''
             CREATE TABLE IF NOT EXISTS shipper_phrases (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 category TEXT NOT NULL,

@@ -238,21 +238,26 @@ async def create_press(body: PressReleaseBody, authorization: str = Header(defau
         fields["inline_keyboard"] = json.dumps(fields["inline_keyboard"], ensure_ascii=False)
     if "settings_json" in fields and fields["settings_json"] is not None:
         fields["settings_json"] = json.dumps(fields["settings_json"], ensure_ascii=False)
-    # Throttling: не более N релизов за час (если settings.throttle.enabled)
+    # Throttling warning (не блокируем, просто возвращаем флаг)
     settings = body.settings_json or {}
     throttle = settings.get("throttle", {})
+    flood_warning = False
     if throttle.get("enabled") and body.status == "scheduled":
         from database.db_press_release import count_recent_press_releases
         since = (datetime.utcnow() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
         n = count_recent_press_releases(_db, _ws(), uid, since)
         limit = int(throttle.get("limit_per_hour", 5))
         if n >= limit:
-            raise HTTPException(status_code=429, detail=f"Лимит {limit} релизов в час исчерпан")
+            flood_warning = True
+
     pid = create_press_release(_db, _ws(), uid, **fields)
     if targets:
         replace_targets(_db, _ws(), pid, [t.dict() if hasattr(t, "dict") else t for t in targets])
     from database.db_press_release import get_press_release
-    return _serialize_post(get_press_release(_db, _ws(), pid))
+    post_data = _serialize_post(get_press_release(_db, _ws(), pid))
+    if flood_warning:
+        post_data["_flood_warning"] = f"Риск флуда велик! Вы запланировали более {limit} публикаций в этот час."
+    return post_data
 
 
 @router.put("/api/press-releases/{post_id}")
@@ -274,10 +279,27 @@ async def update_press(post_id: int, body: PressReleaseBody, authorization: str 
         fields["inline_keyboard"] = json.dumps(fields["inline_keyboard"], ensure_ascii=False)
     if "settings_json" in fields and fields["settings_json"] is not None:
         fields["settings_json"] = json.dumps(fields["settings_json"], ensure_ascii=False)
+
+    # Throttling warning
+    settings = body.settings_json or {}
+    throttle = settings.get("throttle", {})
+    flood_warning = False
+    if throttle.get("enabled") and body.status == "scheduled":
+        from database.db_press_release import count_recent_press_releases
+        since = (datetime.utcnow() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+        n = count_recent_press_releases(_db, _ws(), uid, since)
+        limit = int(throttle.get("limit_per_hour", 5))
+        if n >= limit:
+            flood_warning = True
+
     update_press_release(_db, _ws(), post_id, **fields)
     if targets is not None:
         replace_targets(_db, _ws(), post_id, [t.dict() if hasattr(t, "dict") else t for t in targets])
-    return _serialize_post(get_press_release(_db, _ws(), post_id))
+    
+    post_data = _serialize_post(get_press_release(_db, _ws(), post_id))
+    if flood_warning:
+        post_data["_flood_warning"] = f"Риск флуда велик! Запланировано более {limit} публикаций за час."
+    return post_data
 
 
 @router.delete("/api/press-releases/{post_id}")
@@ -324,14 +346,36 @@ async def clone_press(post_id: int, authorization: str = Header(default=None)):
 @router.post("/api/press-releases/{post_id}/publish-now")
 async def publish_now(post_id: int, authorization: str = Header(default=None)):
     """Немедленная публикация: ставим publish_at=now, status=scheduled, ждём пикапа планировщика."""
-    _check(authorization, "publish_now")
-    from database.db_press_release import update_press_release, get_press_release
+    uid = _check(authorization, "publish_now")
+    from database.db_press_release import update_press_release, get_press_release, count_recent_press_releases
     from utils.helpers import get_moscow_time
+    
+    post = get_press_release(_db, _ws(), post_id)
+    if not post:
+        raise HTTPException(status_code=404, detail="Не найден")
+        
+    settings = {}
+    try:
+        settings = json.loads(post.get("settings_json") or "{}")
+    except Exception:
+        pass
+        
+    throttle = settings.get("throttle", {})
+    flood_warning = False
+    if throttle.get("enabled"):
+        since = (datetime.utcnow() - timedelta(hours=1)).strftime('%Y-%m-%d %H:%M:%S')
+        n = count_recent_press_releases(_db, _ws(), uid, since)
+        limit = int(throttle.get("limit_per_hour", 5))
+        if n >= limit:
+            flood_warning = True
+
     now = get_moscow_time().strftime('%Y-%m-%d %H:%M:%S')
     ok = update_press_release(_db, _ws(), post_id, status='scheduled', publish_at=now)
-    if not ok:
-        raise HTTPException(status_code=404, detail="Не найден")
-    return _serialize_post(get_press_release(_db, _ws(), post_id))
+    
+    post_data = _serialize_post(get_press_release(_db, _ws(), post_id))
+    if flood_warning:
+        post_data["_flood_warning"] = f"Риск флуда велик! Запланировано более {limit} публикаций за час."
+    return post_data
 
 
 @router.delete("/api/press-releases/{post_id}/from-telegram")

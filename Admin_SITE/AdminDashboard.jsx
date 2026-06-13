@@ -6,6 +6,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import EconomyPage from './components/economy/EconomyPage';
 import StatsPage from './components/stats/StatsPage';
+import GarbageCollectorPanel from './components/utilities/GarbageCollectorPanel';
 import PressReleasePage from './components/press_release/PressReleasePage';
 import NewsTree from './components/updates/NewsTree';
 import UpdateToast from './components/updates/UpdateToast';
@@ -1125,6 +1126,7 @@ export default function App() {
     { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release', isModule: true },
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
+    { id: 'garbage_collector', name: 'Очистка от бота', icon: Trash2,    group: 'system_group', resource: 'system', isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
@@ -5447,6 +5449,13 @@ export default function App() {
           />
         );
 
+      case 'garbage_collector':
+        return (
+          <GarbageCollectorPanel
+            token={localStorage.getItem('auth_token')}
+          />
+        );
+
       default: return null;
     }
   };
@@ -5473,7 +5482,7 @@ export default function App() {
         </div>
 
         <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
-          {['top', 'modules', 'features'].map(group => {
+          {['top', 'system_group', 'modules', 'features'].map(group => {
             const groupItems = navigation.filter(n =>
               n.group === group
               && (!n.ownerOnly || isOwner)
@@ -5486,7 +5495,7 @@ export default function App() {
             <div key={group} className="space-y-2">
               {group !== 'top' && (
                 <p className="px-5 text-[11px] font-black text-lbl uppercase tracking-[0.3em] mb-6">
-                  {group === 'modules' ? 'Подключённые' : 'Сервис'}
+                  {group === 'modules' ? 'Подключённые' : group === 'system_group' ? 'Система' : 'Сервис'}
                 </p>
               )}
               {groupItems.map((item) => (

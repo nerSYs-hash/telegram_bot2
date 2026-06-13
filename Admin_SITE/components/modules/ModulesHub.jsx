@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import Button from '../shared/Button';
 import BBSThreadPanel from './BBSThreadPanel';
+import { Trash2 } from 'lucide-react';
 
 /**
  * ModulesHub — хаб «Модули» = КАТАЛОГ (IA_MODULES).
@@ -165,6 +166,15 @@ export const SECTIONS = [
         name: 'Активность',      desc: 'События активности участников.' },
       { id: 'journal:photo',     nav: 'journal', target: 'journal', icon: ImageIcon,
         name: 'Смена фото',      desc: 'Смена аватара/фото профиля.' },
+    ],
+  },
+  {
+    id: 'utilities',
+    name: 'Утилиты',
+    modules: [
+      { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
+        name: 'Очистка чата от бота',
+        desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
     ],
   },
 ];

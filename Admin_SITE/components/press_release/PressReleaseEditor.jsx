@@ -14,7 +14,7 @@ import ButtonGroup from '../shared/ButtonGroup';
 import Toggle from '../shared/Toggle';
 import Stepper from '../shared/Stepper';
 import Card from '../shared/Card';
-import BrandingPanel, { parseSignatures } from './BrandingPanel';
+import BrandingPanel from './BrandingPanel';
 
 // Этапы пресс-релиза для Stepper. Edge-кейсы (failed/cancelled) показываем
 // отдельным баннером, в потоке степпера их нет.
@@ -273,7 +273,7 @@ function KeyboardEditor({ keyboard, onChange }) {
                   onChange={(v) => updBtn(ri, bi, { type: v })}
                   options={[
                     { value: 'url',      label: 'URL' },
-                    { value: 'callback', label: 'Callback (бета)' },
+                    { value: 'callback', label: 'Callback (в разработке)' },
                   ]}
                   size="sm"
                 />
@@ -287,6 +287,11 @@ function KeyboardEditor({ keyboard, onChange }) {
               <input value={btn.value} onChange={(e) => updBtn(ri, bi, { value: e.target.value })}
                 placeholder={btn.type === 'url' ? 'https://...' : 'pulses_get'}
                 className="w-full px-2 py-1.5 text-xs bg-sff border border-bd rounded-lg focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]" />
+              {btn.type === 'callback' && (
+                <div className="text-[10px] text-amber-500 font-bold px-1 bg-amber-500/10 rounded">
+                  ⚠️ В разработке: обработка кликов пока недоступна
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -427,11 +432,15 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
       } else {
         saved = await api.create(body);
       }
+      if (saved._flood_warning) {
+        alert(saved._flood_warning);
+      }
       onSaved?.(saved);
       setDraft(saved);
       // Pop-галочка на 1.5с
       setDoneAction(action);
       setTimeout(() => setDoneAction(null), 1500);
+      return saved; // Возвращаем для handlePublishNow
     } catch (e) {
       alert('Ошибка сохранения: ' + (e?.detail || e?.message || e));
     } finally {
@@ -447,7 +456,10 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
     if (!confirm('Опубликовать сейчас?')) return;
     setSavingAction('published');
     try {
-      await api.publishNow(draft.id);
+      const publishedPost = await api.publishNow(draft.id);
+      if (publishedPost && publishedPost._flood_warning) {
+        alert(publishedPost._flood_warning);
+      }
       onSaved?.({ ...draft, status: 'published' });
       setDoneAction('published');
       setTimeout(() => setDoneAction(null), 1500);
@@ -589,29 +601,8 @@ const PressReleaseEditor = forwardRef(function PressReleaseEditor({
                   hint="Первая строка текста выделяется жирным"
                   checked={!!draft.bold_header} onChange={(v) => upd({ bold_header: v ? 1 : 0 })} />
                 <Toggle label="Добавить подпись"
-                  hint={branding?.signature ? `Дефолт: ${branding.signature.replace(/<[^>]+>/g, '').slice(0,40)}…` : 'Дефолтная подпись не задана'}
+                  hint="Подпись будет добавлена в конец сообщения согласно глобальным настройкам"
                   checked={!!draft.add_signature} onChange={(v) => upd({ add_signature: v ? 1 : 0 })} />
-                {!!draft.add_signature && (() => {
-                  const sigList = parseSignatures(branding?.signatures);
-                  if (!sigList.length) return null;
-                  return (
-                    <div className="ml-12 flex items-center gap-2">
-                      <span className="text-xs font-bold text-tx">Шаблон:</span>
-                      <StyledSelect
-                        value={draft.signature || ''}
-                        onChange={(v) => upd({ signature: v })}
-                        options={[
-                          { value: '', label: '— Использовать дефолтный —' },
-                          ...sigList.map(s => ({
-                            value: s.html,
-                            label: `${s.is_default ? '★ ' : ''}${s.name}`,
-                          })),
-                        ]}
-                        className="flex-1"
-                      />
-                    </div>
-                  );
-                })()}
                 <div className="border-t border-bd my-2" />
                 <Toggle label="Авто-удаление из Telegram"
                   checked={settings.delete_after_publish?.enabled}

@@ -5,14 +5,14 @@ import os
 from typing import Optional
 from urllib import request as _urlreq
 from urllib.error import URLError, HTTPError
-from fastapi import APIRouter, Header, HTTPException
+from fastapi import APIRouter, Header, HTTPException, Body
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
 from bot_core.workspace_icons import workspace_icons_enabled
 from database.db_workspaces import (
-    get_workspaces_for_user, get_workspace_details,
-    add_member, remove_member, update_workspace_name,
+    get_workspaces_for_user, get_workspace_details, get_workspace,
+    add_member, remove_member, update_workspace_name, update_workspace_settings,
     update_bot_chat_role,
     remove_bot_chat, delete_workspace, list_chat_ids_for_workspace,
 )
@@ -451,3 +451,51 @@ async def delete_workspace_endpoint(
     except ValueError as e:
         raise HTTPException(status_code=403, detail=str(e))
     return {"ok": True, "deleted_workspace_id": ws_id, "left_chats": len(chat_ids)}
+
+
+@router.get("/{ws_id}/garbage_collector")
+async def get_garbage_collector(ws_id: int, authorization: str = Header(default=None)):
+    """Получить настройки Garbage Collector для workspace."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'moderator')
+    
+    ws = get_workspace(_db.conn, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Сообщество не найдено")
+    
+    settings = {}
+    if ws.settings_json:
+        try:
+            parsed = _json.loads(ws.settings_json)
+            settings = parsed.get("garbage_collector", {})
+        except _json.JSONDecodeError:
+            pass
+            
+    return {"ok": True, "settings": settings}
+
+
+@router.put("/{ws_id}/garbage_collector")
+async def put_garbage_collector(ws_id: int, authorization: str = Header(default=None), request: dict = Body(...)):
+    """Обновить настройки Garbage Collector для workspace."""
+    payload = _auth(authorization)
+    user_id = int(payload['user_id'])
+    _check_role(ws_id, user_id, 'admin')
+    
+    ws = get_workspace(_db.conn, ws_id)
+    if not ws:
+        raise HTTPException(status_code=404, detail="Сообщество не найдено")
+        
+    full_settings = {}
+    if ws.settings_json:
+        try:
+            full_settings = _json.loads(ws.settings_json)
+        except _json.JSONDecodeError:
+            pass
+            
+    if request and "settings" in request:
+        full_settings["garbage_collector"] = request["settings"]
+        
+    update_workspace_settings(_db.conn, ws_id, _json.dumps(full_settings))
+    
+    return {"ok": True}

@@ -314,7 +314,26 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
     keyboard = _build_keyboard(post)
 
     # Подпись из брендинга (default fallback)
-    sig_default = get_branding(db, ws_id, 'signature', '') or ''
+    sig_default = ""
+    try:
+        global_sig_str = get_branding(db, ws_id, 'global_signature', '')
+        if global_sig_str:
+            gs = json.loads(global_sig_str)
+            if gs.get('enabled') and gs.get('modules', {}).get('press_release'):
+                # Собираем подпись: [значок] [текст] [год]
+                sign = gs.get('sign', '')
+                text = gs.get('text', '')
+                year = f" {datetime.now().year}" if gs.get('show_year') else ""
+                parts = [p for p in (sign, text, year.strip()) if p]
+                if parts:
+                    sig_default = " ".join(parts)
+        else:
+            # Fallback for old signature format
+            sig_default = get_branding(db, ws_id, 'signature', '') or ''
+    except Exception as e:
+        logger.error(f"Error parsing global_signature: {e}")
+        sig_default = get_branding(db, ws_id, 'signature', '') or ''
+
     text = _build_text(post, signature_default=sig_default)
 
     # Если targets пустой — fallback на legacy target_chat_id/thread_id

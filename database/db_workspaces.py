@@ -259,6 +259,14 @@ def update_workspace_name(conn: sqlite3.Connection, workspace_id: int, new_name:
     conn.commit()
 
 
+def update_workspace_settings(conn: sqlite3.Connection, workspace_id: int, settings_json: str) -> None:
+    conn.execute(
+        "UPDATE workspaces SET settings_json=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+        (settings_json, workspace_id)
+    )
+    conn.commit()
+
+
 def add_bot_chat(conn: sqlite3.Connection, chat_id: int, workspace_id: int,
                  added_by: int, title: Optional[str], chat_type: Optional[str],
                  role: Optional[str] = None) -> None:

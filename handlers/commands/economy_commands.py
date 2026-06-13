@@ -216,18 +216,18 @@ async def pay_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db):
             f"💰 Ваш баланс: {format_number(user_data['balance'] - amount)} 💎"
         )
 
-        # Delete command message and bot reply after 10 seconds
-        async def _cleanup():
-            await asyncio.sleep(10)
-            try:
-                await update.message.delete()
-            except Exception:
-                pass
-            try:
-                await sent_msg.delete()
-            except Exception:
-                pass
-        asyncio.create_task(_cleanup())
+        # GC
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, update.effective_chat.id) or 1
+            # Schedule command itself
+            schedule_deletion(db, ws_id, update.effective_chat.id, update.message.message_id, 10, 'economy')
+            # Schedule bot reply
+            schedule_deletion(db, ws_id, update.effective_chat.id, sent_msg.message_id, 10, 'economy')
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to schedule GC for economy command: {e}")
 
         # Notify recipient
         try:

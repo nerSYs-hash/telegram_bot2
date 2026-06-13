@@ -134,8 +134,16 @@ function PostCard({ post, onSelect, onAction, isSelected, userCan }) {
           <button
             onClick={(e) => { e.stopPropagation(); onAction('delete_from_tg', post); }}
             title="Удалить из Telegram (на сайте останется)"
-            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
+            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg">
             <span className="text-[10px] font-black">TG</span>
+          </button>
+        )}
+        {userCan('press_release.delete') && (
+          <button
+            onClick={(e) => { e.stopPropagation(); onAction('delete', post); }}
+            title="Удалить пресс-релиз"
+            className="p-1.5 text-lbl hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-lg ml-auto">
+            <Trash2 size={12} />
           </button>
         )}
       </div>

@@ -63,6 +63,14 @@ class CallbackHandler:
         if data.startswith('titles_') or data.startswith('owner_titles_'):
             return
 
+        # ═══ PRESS RELEASE CALLBACKS ═══
+        if data.startswith('pr_act_'):
+            try:
+                await query.answer("⚠️ В разработке!", show_alert=True)
+            except Exception:
+                pass
+            return
+
         try:
             await query.answer()
         except Exception:

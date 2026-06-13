@@ -268,6 +268,15 @@ async def run_shipper_roulette(context, db=None, target_chat_id=None):
             )
         except Exception as e:
             logger.error(f"Shipper: failed to create match tracking: {e}")
+
+        # GC
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            schedule_deletion(db, ws_id, target_chat_id, sent.message_id, 60, 'shipper')
+        except Exception as e:
+            logger.error(f"Shipper GC error: {e}")
     except Exception as e:
         logger.error(f"run_shipper_roulette error: {e}")
     finally:

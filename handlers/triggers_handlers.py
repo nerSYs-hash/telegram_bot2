@@ -2522,10 +2522,10 @@ async def _handle_bot_msg_deletion(context, db, trigger, bot_msg):
             delay = trigger['bot_msg_delete_after'] or 60
             if old_id and old_chat:
                 try:
-                    context.job_queue.run_once(
-                        _delete_bot_msg_job, when=delay,
-                        data={'chat_id': old_chat, 'message_id': old_id},
-                        name=f"trig_prevdel_{old_id}")
+                    from bot_core.workspace_context import resolve_workspace_for_chat
+                    from services.garbage_collector import schedule_deletion
+                    ws_id = resolve_workspace_for_chat(db.conn, old_chat) or 1
+                    schedule_deletion(db, ws_id, old_chat, old_id, delay, 'triggers')
                 except Exception as e:
                     logger.warning(f"Schedule previous bot msg deletion: {e}")
         except (KeyError, TypeError):
@@ -2544,10 +2544,12 @@ async def _handle_bot_msg_deletion(context, db, trigger, bot_msg):
         except (KeyError, TypeError):
             delay = 60
         try:
-            context.job_queue.run_once(
-                _delete_bot_msg_job, when=delay,
-                data={'chat_id': bot_msg.chat.id, 'message_id': bot_msg.message_id},
-                name=f"trig_del_{bot_msg.message_id}")
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, bot_msg.chat.id) or 1
+            schedule_deletion(db, ws_id, bot_msg.chat.id, bot_msg.message_id, delay, 'triggers')
+        except Exception as e:
+            logger.warning(f"Schedule period bot msg deletion: {e}")
         except Exception as e:
             logger.warning(f"Schedule bot msg deletion: {e}")
 

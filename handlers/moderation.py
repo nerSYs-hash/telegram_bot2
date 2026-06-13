@@ -186,12 +186,20 @@ async def mute_command(
         await context.bot.restrict_chat_member(**restrict_kwargs)
 
         duration_text = f"на <b>{human}</b>" if not permanent else "<b>навсегда</b>"
-        await message.reply_text(
+        bot_msg = await message.reply_text(
             f"🔇 {_user_link(target)} замучен {duration_text}",
             parse_mode='HTML',
         )
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            schedule_deletion(db, ws_id, target_chat_id, bot_msg.message_id, 60, 'moderation')
+        except Exception as gc_e:
+            logger.error(f"Failed to schedule garbage collection: {gc_e}")
         await _delete_silently(message)
-        logger.info(f"MUTE: {target.id} by {user.id} for {human} ({seconds}s, until_ts={until_date})")
+        until_ts = restrict_kwargs.get('until_date', 'permanent')
+        logger.info(f"MUTE: {target.id} by {user.id} for {human} ({seconds}s, until_ts={until_ts})")
 
         # Журнал
         try:
@@ -258,10 +266,17 @@ async def unmute_command(
             ),
         )
 
-        await message.reply_text(
+        bot_msg = await message.reply_text(
             f"🔊 {_user_link(target)} размучен",
             parse_mode='HTML',
         )
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            schedule_deletion(db, ws_id, target_chat_id, bot_msg.message_id, 60, 'moderation')
+        except Exception as gc_e:
+            logger.error(f"Failed to schedule garbage collection: {gc_e}")
         await _delete_silently(message)
         logger.info(f"UNMUTE: {target.id} by {user.id}")
 
@@ -320,10 +335,17 @@ async def ban_command(
             user_id=target.id,
         )
 
-        await message.reply_text(
+        bot_msg = await message.reply_text(
             f"🚫 {_user_link(target)} забанен",
             parse_mode='HTML',
         )
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            schedule_deletion(db, ws_id, target_chat_id, bot_msg.message_id, 60, 'moderation')
+        except Exception as gc_e:
+            logger.error(f"Failed to schedule garbage collection: {gc_e}")
         await _delete_silently(message)
         logger.info(f"BAN: {target.id} by {user.id}")
 
@@ -380,10 +402,17 @@ async def unban_command(
             only_if_banned=True,
         )
 
-        await message.reply_text(
+        bot_msg = await message.reply_text(
             f"✅ {_user_link(target)} разбанен",
             parse_mode='HTML',
         )
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            schedule_deletion(db, ws_id, target_chat_id, bot_msg.message_id, 60, 'moderation')
+        except Exception as gc_e:
+            logger.error(f"Failed to schedule garbage collection: {gc_e}")
         await _delete_silently(message)
         logger.info(f"UNBAN: {target.id} by {user.id}")
 

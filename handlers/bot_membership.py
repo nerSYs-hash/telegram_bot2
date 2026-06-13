@@ -65,16 +65,16 @@ async def _delete_greeting_job(context):
 
 
 def _schedule_greeting_delete(context, chat_id, message_id, delay=GREETING_DELETE_SECONDS):
-    """Планирует самоудаление приветствия. job_queue может отсутствовать."""
-    jq = getattr(context, 'job_queue', None)
-    if jq is None:
-        return
+    """Планирует самоудаление приветствия. Использует Garbage Collector."""
     try:
-        jq.run_once(
-            _delete_greeting_job, delay,
-            data={'chat_id': chat_id, 'message_id': message_id},
-            name=f"del_greeting_{chat_id}",
-        )
+        from database.db_manager import DatabaseManager
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        from services.garbage_collector import schedule_deletion
+        
+        db = DatabaseManager()
+        db.connect()
+        ws_id = resolve_workspace_for_chat(db.conn, chat_id) or 1
+        schedule_deletion(db, ws_id, chat_id, message_id, delay, 'bot_membership')
     except Exception as e:
         logger.warning(f"schedule greeting delete failed: {e}")
 

@@ -182,6 +182,16 @@ async def publish_profile(query, context, db, target_chat_id, bbs_thread_id):
 
     clear_bbs(context)
 
+    # GC
+    try:
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        from services.garbage_collector import schedule_deletion
+        ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+        for mid in sent_message_ids:
+            schedule_deletion(db, ws_id, target_chat_id, mid, 60, 'bbs')
+    except Exception as gc_e:
+        logging.error(f"BBS GC error: {gc_e}")
+
     # Успешный ответ — safe_answer работает и с фото, и с текстом
     success_keyboard = InlineKeyboardMarkup([
         [InlineKeyboardButton("🔙 В меню", callback_data="back_to_menu")]
@@ -404,6 +414,16 @@ async def republish_profile(bot, db, user_id, target_chat_id, bbs_thread_id):
             (json.dumps(sent_ids), bbs_thread_id, now_iso, user_id),
         )
         db.conn.commit()
+
+        # GC
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, target_chat_id) or 1
+            for mid in sent_ids:
+                schedule_deletion(db, ws_id, target_chat_id, mid, 60, 'bbs')
+        except Exception as gc_e:
+            logging.error(f"BBS GC error: {gc_e}")
     except Exception as e:
         logging.error(f"BBS: Error updating message_ids: {e}")
         raise e

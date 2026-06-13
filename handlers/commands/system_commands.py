@@ -365,9 +365,18 @@ async def menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db, a
     # Обычные пользователи — только в ЛС
     if not is_owner and update.effective_chat.type != 'private':
         bot_me = await context.bot.get_me()
-        await update.message.reply_text(
+        msg = await update.message.reply_text(
             f"📋 Меню доступно только в ЛС.\n👉 @{bot_me.username}",
         )
+        try:
+            from bot_core.workspace_context import resolve_workspace_for_chat
+            from services.garbage_collector import schedule_deletion
+            ws_id = resolve_workspace_for_chat(db.conn, update.effective_chat.id) or 1
+            schedule_deletion(db, ws_id, update.effective_chat.id, msg.message_id, 30, 'system')
+            schedule_deletion(db, ws_id, update.effective_chat.id, update.message.message_id, 30, 'system')
+        except Exception as e:
+            import logging
+            logging.error(f"Failed to GC menu command: {e}")
         return
 
     chat_id = update.effective_chat.id

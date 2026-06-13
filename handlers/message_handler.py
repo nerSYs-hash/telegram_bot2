@@ -37,13 +37,16 @@ async def _delete_msg_job(context):
 
 
 def _schedule_auto_delete(context, chat_id: int, message_id: int, delay: int = 60):
-    """Планирует удаление сообщения через delay секунд."""
+    """Планирует удаление сообщения через delay секунд (Garbage Collector)."""
     try:
-        context.job_queue.run_once(
-            _delete_msg_job, when=delay,
-            data={'chat_id': chat_id, 'message_id': message_id},
-            name=f"autodel_{message_id}",
-        )
+        from database.db_manager import DatabaseManager
+        from bot_core.workspace_context import resolve_workspace_for_chat
+        from services.garbage_collector import schedule_deletion
+        
+        db = DatabaseManager()
+        db.connect()
+        ws_id = resolve_workspace_for_chat(db.conn, chat_id) or 1
+        schedule_deletion(db, ws_id, chat_id, message_id, delay, 'triggers')
     except Exception as e:
         logging.warning(f"_schedule_auto_delete: {e}")
 from handlers.owner_handlers import handle_owner_text_input

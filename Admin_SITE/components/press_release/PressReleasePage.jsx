@@ -139,6 +139,9 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
         </div>
       </div>
 
+      {/* Глобальный брендинг */}
+      <BrandingPanel token={token} onChange={refresh} />
+
       {/* Split layout: editor (left) + list (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">
         {/* Левая колонка: редактор */}
