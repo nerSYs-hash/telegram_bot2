@@ -7,7 +7,6 @@ import { Megaphone, Loader2, Plus } from 'lucide-react';
 import { makeApi } from './useApi';
 import PressReleaseEditor from './PressReleaseEditor';
 import PressReleaseList from './PressReleaseList';
-import BrandingPanel from './BrandingPanel';
 import ConfirmDialog from '../shared/ConfirmDialog';
 import Button from '../shared/Button';
 
@@ -138,9 +137,6 @@ export default function PressReleasePage({ token, userPermissions, userId }) {
           </p>
         </div>
       </div>
-
-      {/* Глобальный брендинг */}
-      <BrandingPanel token={token} onChange={refresh} />
 
       {/* Split layout: editor (left) + list (right) */}
       <div className="grid grid-cols-1 lg:grid-cols-[2fr_1fr] gap-3">

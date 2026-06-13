@@ -12,6 +12,7 @@ import NewsTree from './components/updates/NewsTree';
 import UpdateToast from './components/updates/UpdateToast';
 import SiteUpdateToast from './components/updates/SiteUpdateToast';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
+import BrandingPanel from './components/press_release/BrandingPanel';
 import { useModules } from './hooks/useModules';
 import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
 import WorkspaceList from './components/workspaces/WorkspaceList';
@@ -35,7 +36,7 @@ import {
   Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
   Megaphone, PartyPopper, Wrench, Bug,
   GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
-  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch, Newspaper
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch, Newspaper, Palette
 } from 'lucide-react';
 
 const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
@@ -1127,6 +1128,7 @@ export default function App() {
     { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
     { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
     { id: 'garbage_collector', name: 'Очистка от бота', icon: Trash2,    group: 'system_group', resource: 'system', isModule: true },
+    { id: 'branding',      name: 'Брендинг',       icon: Palette,        group: 'system_group', resource: 'system', isModule: true },
     { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
   ];
 
@@ -5454,6 +5456,17 @@ export default function App() {
           <GarbageCollectorPanel
             token={localStorage.getItem('auth_token')}
           />
+        );
+
+      case 'branding':
+        return (
+          <div className="max-w-4xl mx-auto py-8">
+             <div className="mb-6">
+                <h1 className="text-3xl font-black text-tx uppercase tracking-tight">Глобальный брендинг</h1>
+                <p className="text-sm text-lbl mt-2">Единая подпись для публикаций в каналах сообщества</p>
+             </div>
+             <BrandingPanel token={localStorage.getItem('auth_token')} />
+          </div>
         );
 
       default: return null;

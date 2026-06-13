@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Button from '../shared/Button';
 import BBSThreadPanel from './BBSThreadPanel';
-import { Trash2 } from 'lucide-react';
+import { Trash2, Palette } from 'lucide-react';
 
 /**
  * ModulesHub — хаб «Модули» = КАТАЛОГ (IA_MODULES).
@@ -175,6 +175,9 @@ export const SECTIONS = [
       { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
         name: 'Очистка чата от бота',
         desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
+      { id: 'branding', nav: 'branding', target: 'branding', icon: Palette,
+        name: 'Глобальный брендинг',
+        desc: 'Единая подпись для публикаций в каналах сообщества.' },
     ],
   },
 ];
