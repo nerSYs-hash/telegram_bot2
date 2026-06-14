@@ -339,3 +339,27 @@ code, pre, kbd, samp,
   .roadmap-dot   { transition: none; }
   .news-toast-in, .news-toast-out { animation-duration: .01ms; }
 }
+
+/* ── Кузница: Конструкторы (анимация строительной ленты) ── */
+.kuznitsa-module-card::before {
+  content: '';
+  position: absolute; inset: 0;
+  background: repeating-linear-gradient(
+    45deg,
+    rgba(255, 200, 0, 0.85) 0 12px,
+    rgba(0, 0, 0, 0.85) 12px 24px
+  );
+  opacity: 0;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+  border-radius: inherit;
+  transition: opacity 0.3s ease;
+}
+.kuznitsa-module-card:hover::before {
+  opacity: 0.08; /* Немного приглушим для светлой темы, чтобы текст читался лучше */
+  animation: kuznitsa-tape 8s linear infinite;
+}
+@keyframes kuznitsa-tape {
+  from { background-position: 0 0; }
+  to   { background-position: 48px 0; }
+}

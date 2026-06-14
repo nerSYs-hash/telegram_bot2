@@ -172,17 +172,22 @@ export const SECTIONS = [
     id: 'utilities',
     name: 'Утилиты',
     modules: [
-      { id: 'system_group', icon: Settings,
-        name: 'Система',
-        desc: 'Базовые системные настройки и утилиты чата.',
-        children: [
-          { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
-            name: 'Очистка чата от бота',
-            desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
-          { id: 'branding', nav: 'branding', target: 'branding', icon: Palette,
-            name: 'Глобальный брендинг',
-            desc: 'Единая подпись для публикаций в каналах сообщества.' }
-        ]
+      { id: 'garbage_collector', nav: 'garbage_collector', target: 'garbage_collector', icon: Trash2,
+        name: 'Очистка чата от бота',
+        desc: 'Сборщик мусора: настройка автоматического удаления системных ответов бота.' },
+      { id: 'branding', nav: 'branding', target: 'branding', icon: Palette,
+        name: 'Глобальный брендинг',
+        desc: 'Единая подпись для публикаций в каналах сообщества.' }
+    ],
+  },
+  {
+    id: 'kuznitsa',
+    name: 'Конструктор',
+    modules: [
+      { id: 'registration_builder', nav: 'registration_builder', target: 'registration_builder', icon: Wrench,
+        name: 'Регистрация-конструктор',
+        desc: 'Собери свою анкету регистрации из визуальных блоков (Текст, Фото, Выбор).',
+        is_kuznitsa: true
       }
     ],
   },
@@ -230,6 +235,8 @@ function ModuleCard({ mod, connected, onOpenModule, onOpen, onConnect, onDisconn
     <div
       onClick={cardClick}
       className={`relative h-full min-h-[210px] rounded-[1.75rem] border bg-sff p-5 flex flex-col gap-3 transition-all duration-200 ${
+        mod.is_kuznitsa ? 'kuznitsa-module-card overflow-hidden ' : ''
+      }${
         cardClick
           ? 'border-bd hover:border-[color-mix(in_oklab,var(--cta)_45%,transparent)] hover:shadow-lg cursor-pointer'
           : 'border-bd'

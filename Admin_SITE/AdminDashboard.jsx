@@ -13,6 +13,7 @@ import UpdateToast from './components/updates/UpdateToast';
 import SiteUpdateToast from './components/updates/SiteUpdateToast';
 import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
 import BrandingPanel from './components/press_release/BrandingPanel';
+import RegistrationBuilder from './components/kuznitsa/RegistrationBuilder';
 import { useModules } from './hooks/useModules';
 import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
 import WorkspaceList from './components/workspaces/WorkspaceList';
@@ -5477,6 +5478,9 @@ export default function App() {
              <BrandingPanel token={localStorage.getItem('auth_token')} />
           </div>
         );
+
+      case 'registration_builder':
+        return <RegistrationBuilder />;
 
       default: return null;
     }

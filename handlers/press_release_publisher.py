@@ -420,21 +420,9 @@ async def publish_press_release(application, db, post: dict) -> tuple[bool, list
 # ────────────────────────────────────────────────────────────────────
 
 def _schedule_delete(application, chat_id: int, msg_ids: list, dap: dict) -> None:
-    """Планирует удаление сообщений через delete_after_publish.value [unit]."""
-    value = int(dap.get('value', 0) or 0)
-    unit = dap.get('unit', 'minutes')
-    seconds = {'minutes': 60, 'hours': 3600, 'days': 86400}.get(unit, 60) * value
-    if seconds <= 0:
-        return
-
-    async def _job(context):
-        for mid in msg_ids:
-            try:
-                await context.bot.delete_message(chat_id=chat_id, message_id=mid)
-            except Exception as e:
-                logger.debug(f"auto-delete chat={chat_id} msg={mid}: {e}")
-
-    application.job_queue.run_once(_job, when=seconds, name=f"pr_del_{chat_id}_{msg_ids[0]}")
+    """Планирует удаление сообщений. Отключено по требованию владельца."""
+    # Функция отключена: бот больше не имеет права самостоятельно удалять пресс-релизы.
+    return
 
 
 async def check_pre_publish_reminders(application, db) -> None:
