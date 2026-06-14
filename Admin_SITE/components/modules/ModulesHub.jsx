@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Button from '../shared/Button';
 import BBSThreadPanel from './BBSThreadPanel';
-import { Trash2, Palette } from 'lucide-react';
+import { Trash2, Palette, Wrench } from 'lucide-react';
 
 /**
  * ModulesHub — хаб «Модули» = КАТАЛОГ (IA_MODULES).
