@@ -38,6 +38,7 @@
     {"id": "journal:activity",  "name": "Журнал · Активность",     "section": "journal", "parent": "journal", "description": "События активности."},
     {"id": "journal:photo",     "name": "Журнал · Смена фото",     "section": "journal", "parent": "journal", "description": "Смена аватара."},
     {"id": "garbage_collector", "name": "Очистка чата от бота",    "section": "utilities", "description": "Сборщик мусора: настройка автоматического удаления системных ответов бота."},
-    {"id": "branding",          "name": "Глобальный брендинг",     "section": "utilities", "description": "Единая подпись для публикаций в каналах сообщества."}
+    {"id": "branding",          "name": "Глобальный брендинг",     "section": "utilities", "description": "Единая подпись для публикаций в каналах сообщества."},
+    {"id": "registration_builder", "name": "Регистрация-конструктор", "section": "kuznitsa", "description": "Собери свою анкету регистрации из визуальных блоков (Текст, Фото, Выбор)."}
   ]
 }
