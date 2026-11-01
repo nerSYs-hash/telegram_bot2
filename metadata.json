@@ -1,0 +1,8 @@
+{
+  "name": "Puls Chat — Панель управления",
+  "description": "Официальная панель управления Telegram-ботом и сообществом Puls Chat: воркспейсы, экономика, модули, статистика и рассылки.",
+  "permissions": [],
+  "capabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}

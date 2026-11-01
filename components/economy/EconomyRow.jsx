@@ -1,0 +1,144 @@
+import { useState } from 'react';
+import { BarChart3, Edit } from 'lucide-react';
+import EconomyEditForm from './EconomyEditForm';
+import EconomyToggleForm from './EconomyToggleForm';
+
+export default function EconomyRow({ row, onOpenHistory, onUpdated, recentlyChanged, token, canEdit }) {
+  const [editing, setEditing]   = useState(false);
+  const [toggling, setToggling] = useState(false);
+
+  const isRecent = recentlyChanged?.has(row.key);
+  const isNew = row.created_at && (Date.now() - new Date(row.created_at).getTime()) < 86_400_000;
+  const isExpanded = editing || toggling;
+
+  // defib-множитель: «(xN = +M%)» считаем динамически по текущему значению
+  const descText = (row.key === 'defib.buff_multiplier' && row.description)
+    ? `${row.description} (x${Number(row.value)} = +${Math.round((Number(row.value) - 1) * 100)}%)`
+    : row.description;
+
+  const handleSave = async (newValue, comment) => {
+    const res = await fetch(`/api/economy/settings/${row.key}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ value: newValue, comment }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || 'Ошибка API');
+    }
+    onUpdated?.(row.key, newValue, null);
+  };
+
+  const handleToggle = async (comment) => {
+    const res = await fetch(`/api/economy/settings/${row.key}/toggle`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+      body: JSON.stringify({ comment }),
+    });
+    if (!res.ok) {
+      const d = await res.json().catch(() => ({}));
+      throw new Error(d.detail || 'Ошибка API');
+    }
+    onUpdated?.(row.key, null, !row.is_enabled);
+  };
+
+  return (
+    <div className={`bg-sff rounded-xl border transition overflow-hidden ${
+      isRecent ? 'border-[color-mix(in_oklab,var(--warn)_40%,transparent)] bg-amber-50/30' : isExpanded ? 'border-[color-mix(in_oklab,var(--cta)_40%,transparent)] shadow-sm' : 'border-bd hover:border-bd2'
+    }`}>
+      <div className="flex items-center gap-3 p-3">
+
+        {/* Название */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 flex-wrap">
+            <span className="text-sm font-bold text-tx truncate">{row.label}</span>
+            {isNew && (
+              <span className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-full px-2 py-0.5 text-[8px] font-black uppercase">
+                Новое
+              </span>
+            )}
+            {isRecent && (
+              <span className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)] rounded-full px-2 py-0.5 text-[8px] font-black uppercase animate-pulse">
+                Изменено
+              </span>
+            )}
+          </div>
+          {descText && (
+            <div className="text-[10px] text-lbl mt-0.5 truncate">{descText}</div>
+          )}
+        </div>
+
+        {/* Значение — фиксированная ширина */}
+        <div className="w-24 text-right text-base font-black text-tx flex-shrink-0 whitespace-nowrap tabular-nums">
+          {row.value} <span className="text-[10px] text-txd font-normal">{row.unit}</span>
+        </div>
+
+        {/* Тумблер — фиксированная ширина */}
+        <div className="w-12 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => canEdit && setToggling(v => !v)}
+            disabled={!canEdit}
+            title={canEdit ? (row.is_enabled ? 'Выключить' : 'Включить') : 'Нет прав'}
+            className={`relative inline-flex items-center w-11 h-6 rounded-full transition-colors ${
+              row.is_enabled ? 'bg-green-500' : 'bg-bd2'
+            } ${canEdit ? 'cursor-pointer hover:opacity-80' : 'cursor-not-allowed'}`}>
+            <span className={`inline-block w-4 h-4 bg-sff rounded-full shadow transform transition-transform duration-200 ${
+              row.is_enabled ? 'translate-x-6' : 'translate-x-1'
+            }`} />
+          </button>
+        </div>
+
+        {/* История — фиксированная ширина */}
+        <div className="w-12 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => onOpenHistory(row.key, row.label)}
+            className="flex items-center justify-center gap-1 px-2 py-2 text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] rounded-lg transition active:scale-90 min-w-[34px]">
+            <BarChart3 size={15} />
+            {row.history_count > 0 && (
+              <span className="text-[9px] font-black tabular-nums">{row.history_count}</span>
+            )}
+          </button>
+        </div>
+
+        {/* Редактировать — фиксированная ширина */}
+        <div className="w-10 flex justify-center flex-shrink-0">
+          <button
+            onClick={() => canEdit && setEditing(v => !v)}
+            disabled={!canEdit}
+            title={canEdit ? 'Изменить значение' : 'Нет прав'}
+            className={`p-2 rounded-lg transition ${
+              editing ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' :
+              canEdit ? 'text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] active:scale-90'
+                      : 'text-gray-200 cursor-not-allowed'
+            }`}>
+            <Edit size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Inline expand: редактирование */}
+      {editing && (
+        <div className="border-t border-[color-mix(in_oklab,var(--cta)_30%,transparent)] bg-blue-50/30 animate-in slide-in-from-top-2 duration-200">
+          <EconomyEditForm
+            row={row}
+            onCancel={() => setEditing(false)}
+            onSave={async (v, c) => { await handleSave(v, c); setEditing(false); }}
+          />
+        </div>
+      )}
+
+      {/* Inline expand: тумблер с комментарием */}
+      {toggling && (
+        <div className="border-t border-[color-mix(in_oklab,var(--warn)_30%,transparent)] bg-amber-50/30 animate-in slide-in-from-top-2 duration-200">
+          <EconomyToggleForm
+            label={row.label}
+            currentEnabled={row.is_enabled}
+            isMaster={false}
+            onCancel={() => setToggling(false)}
+            onSave={async (c) => { await handleToggle(c); setToggling(false); }}
+          />
+        </div>
+      )}
+    </div>
+  );
+}

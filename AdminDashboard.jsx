@@ -1,0 +1,6024 @@
+// AdminDashboard — корневой компонент админ-панели Puls Chat.
+// Сайдбар + навигация по разделам (Новости/Модули/Статистика/Журнал/
+// Триггеры/Пресс-релизы/Шиппер/Экономика/Система/Права).
+// Хранит массив UPDATES — данные для дерева Новостей.
+
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
+import EconomyPage from './components/economy/EconomyPage';
+import StatsPage from './components/stats/StatsPage';
+import GarbageCollectorPanel from './components/utilities/GarbageCollectorPanel';
+import PressReleasePage from './components/press_release/PressReleasePage';
+import NewsTree from './components/updates/NewsTree';
+import UpdateToast from './components/updates/UpdateToast';
+import SiteUpdateToast from './components/updates/SiteUpdateToast';
+import ModulesHub, { MODULE_NAV } from './components/modules/ModulesHub';
+import BrandingPanel from './components/press_release/BrandingPanel';
+import RegistrationBuilder from './components/kuznitsa/RegistrationBuilder';
+import { useModules } from './hooks/useModules';
+import ModuleStatusBanner from './components/modules/ModuleStatusBanner';
+import WorkspaceList from './components/workspaces/WorkspaceList';
+import WorkspacePage from './components/workspaces/WorkspacePage';
+import InviteMemberModal from './components/workspaces/InviteMemberModal';
+import WorkspaceSwitcher from './components/workspaces/WorkspaceSwitcher';
+import { getActiveWs } from './components/shared/api';
+import { createPortal } from 'react-dom';
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid,
+  Tooltip, ResponsiveContainer, Brush
+} from 'recharts';
+import { 
+  Home, Users, Settings, Send, Power, Menu, X, Calendar, Heart, 
+  ShieldAlert, ScrollText, PieChart, Trash2, PlusCircle, AlertOctagon, 
+  CheckCircle2, Info, Edit, ShieldBan, Clock, MessageSquareX, 
+  Zap, Sparkles, Loader2, Download, FileSpreadsheet,
+  FileText, TrendingUp, TrendingDown, Activity, ChevronRight,
+  Wallet, Ghost, MessageCircle, UserSearch, UserCheck,
+  ChevronDown, ChevronUp, Globe, User, Image as ImageIcon, Video, Smile, Link2,
+  Flame, HeartHandshake, Dices, Coins, ShieldCheck, UserMinus, Percent,
+  Megaphone, PartyPopper, Wrench, Bug,
+  GripVertical, Play, Square, Copy, Search, Check, RotateCcw, Ban,
+  Crown, AtSign, Hash, Plug, LogOut, ToggleRight, GitBranch, Newspaper, Palette
+} from 'lucide-react';
+
+const UserAvatar = React.memo(({ userId, name = '', size = 36 }) => {
+  const [err, setErr] = React.useState(false);
+  const initials = (name || '?').replace(/^@/, '').slice(0, 1).toUpperCase();
+  const px = `${size}px`;
+  if (!userId || err) {
+    return (
+      <div className="rounded-full bg-gradient-to-tr from-blue-500 to-indigo-500 flex items-center justify-center text-white font-black flex-shrink-0 select-none"
+           style={{ width: px, height: px, fontSize: Math.round(size * 0.42) }}>
+        {initials}
+      </div>
+    );
+  }
+  return (
+    <img src={`/api/user/${userId}/avatar`} alt="" onError={() => setErr(true)}
+         className="rounded-full object-cover flex-shrink-0 border-2 border-white shadow-sm"
+         style={{ width: px, height: px }}/>
+  );
+});
+
+// ═══════════════════════════════════════════
+//  НОВОСТИ — добавляй запись при каждом релизе бота/сайта.
+//  ПРАВИЛО ТОНА: всегда от лица «Мы» / «Наша команда».
+//  cat: 'feature' (новинка) | 'update' (обновление) | 'promo' (акция)
+//  Старые записи на поле type (new/improve/fix) нормализуются в UI.
+//  changelog копит техдетали — сюда кладём только выжимку для юзера.
+// ═══════════════════════════════════════════
+const UPDATES = [
+  {
+    version: '1.0',
+    date: '30 мая 2026',
+    title: '📊 Статистика прокачана + мелкие удобства',
+    items: [
+      { cat: 'feature', tag: 'statistics', place: 'Панель → Статистика', text: 'Добавили новые графики: «Новые и вернувшиеся», «Статистика по сообщениям», «Активность пользователей» и теплокарты — видно, в какие часы и дни чат живёт активнее всего.' },
+      { cat: 'update',  tag: 'statistics', place: 'Панель → Статистика', text: 'Клик по подписи в легенде скрывает/показывает линию на графике — и выбор запоминается. А у каждой карточки появилась кнопка ↻, чтобы обновить только её.' },
+      { cat: 'update',  tag: 'bot',        text: 'Бот теперь учитывает отредактированные сообщения — они видны в статистике активности.' },
+      { cat: 'update',  tag: 'site',       text: 'Сайт сам тихо подсказывает, когда вышло обновление, — обновиться можно одной кнопкой, без жёсткой перезагрузки.' },
+    ],
+  },
+  {
+    version: '1.0',
+    date: '29 мая 2026',
+    title: '✨ Рефералы, честная статистика и удобный вход',
+    items: [
+      { cat: 'feature', tag: 'bot',        place: 'Бот → /myref · Панель → Экономика → Рефералы', text: 'Запустили реферальную систему — у каждого своя пригласительная ссылка, зови друзей одним нажатием. А команда /myref покажет и ссылку, и всех, кого ты привёл.' },
+      { cat: 'update',  tag: 'statistics', place: 'Панель → Статистика',                              text: 'Признаёмся честно: какое-то время статистика показывала не то, что есть на самом деле. Докопались до причины и починили — теперь графикам снова можно верить. Заметишь странности — напиши @Nersys, разберёмся.' },
+      { cat: 'update',  tag: 'bot',         place: 'Панель → Экономика → Начисления',                 text: 'Раньше менял настройки начислений и ждал, пока подхватятся — теперь всё применяется на лету. Если вдруг идёт не так — напиши @Nersys.' },
+      { cat: 'update',  tag: 'site',        place: 'Панель → Вход',                                   text: 'Бывало, после закрытия вкладки кабинет открывался не туда или подвисал — нашли причину и устранили, теперь вход стабильный. Не пустит снова — пиши @Nersys.' },
+      { cat: 'update',  tag: 'site',        place: 'Панель → Ветки',                                  text: 'Перечитали управление ветками свежим взглядом и выкинули непонятный жаргон — теперь всё на человеческом языке, а «тред» стал привычной «веткой».' },
+    ],
+  },
+  {
+    version: 'V1.17.0h',
+    date: '22 мая 2026',
+    title: '🗺️ Карта проекта и новая Статистика',
+    items: [
+      { cat: 'feature', tag: 'site',       text: 'Мы превратили раздел «Обновления» в живой Новостной раздел — дерево новостей по месяцам с анимированными узлами' },
+      { cat: 'feature', tag: 'statistics', text: 'Мы переделали Статистику — теперь это лента графиков с переключателем периода: день, неделя, месяц, квартал, год' },
+      { cat: 'update',  tag: 'statistics', text: 'Мы добавили на каждый график приближение диапазона и выбор детализации' },
+      { cat: 'feature', tag: 'bot',        text: 'Мы разбили Экономику на 9 отдельных модулей — майнинг, спринты, комбо, штрафы, лотерея, бинго, подарок месяца, рефералы, BBS-бонус' },
+      { cat: 'update',  tag: 'bot',        text: 'Теперь каждый модуль экономики включается и выключается отдельно — выключенный не работает в боте' },
+      { cat: 'update',  tag: 'site',       text: 'Мы починили управление администраторами — список снова загружается без ошибок' },
+    ],
+  },
+  {
+    version: 'V1.17.0g',
+    date: '20 мая 2026',
+    title: '🧩 Хаб «Модули»',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы собрали все функции бота в новый раздел «Модули» — единый каталог, где нужное подключается карточками' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили под-навигацию секций с фирменным подчёркиванием: Аналитика, Экономика, Вовлечение, Контент, Журнал' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход в кабинет одним тапом из бота — кнопка «🔑 Войти в кабинет», без пароля' },
+      { cat: 'update',  tag: 'site', text: 'Теперь при подключении модуля карточка плавно уезжает в начало каталога' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили всплывающее оповещение при подключении и отключении модуля' },
+    ],
+  },
+  {
+    version: 'V1.17.0e–f',
+    date: '19 мая 2026',
+    title: '🎨 Единая дизайн-система Puls Chat',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы перевели весь кабинет на единую дизайн-систему — общий язык цветов, скруглений и анимаций' },
+      { cat: 'update',  tag: 'site', text: 'Мы привели все экраны и компоненты к одному визуальному стилю' },
+      { cat: 'update',  tag: 'site', text: 'Мы вылечили неровное свечение у кнопок и карточек — теперь ореол ровный и мягкий' },
+    ],
+  },
+  {
+    version: 'V1.17.0d',
+    date: '16 мая 2026',
+    title: '🌐 Несколько сообществ в одном кабинете',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы добавили переключатель сообществ в шапку — управляй несколькими чатами из одного аккаунта' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали вход и права в кабинете отдельными для каждого сообщества' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь помощник получает доступ строго к тому сообществу, куда его пригласили' },
+    ],
+  },
+  {
+    version: 'V1.17.0b–c',
+    date: '14 мая 2026',
+    title: '🔗 Подключение бота и кабинет сообщества',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы сделали само-подключение — добавил бота в чат, и кабинет сообщества создаётся автоматически' },
+      { cat: 'feature', tag: 'site', text: 'Мы открыли кабинет сообщества: список чатов, помощники и роли чатов — главный, админский, журнальный' },
+      { cat: 'update',  tag: 'bot',  text: 'Теперь при добавлении в чат бот сам предлагает выбрать, к какому сообществу его привязать' },
+      { cat: 'feature', tag: 'bot',  text: 'Мы добавили команду /get_thread_id — она помогает настроить нужные топики чата' },
+    ],
+  },
+  {
+    version: 'V1.17.0a',
+    date: '12 мая 2026',
+    title: '🏢 Фундамент мульти-сообществ',
+    items: [
+      { cat: 'feature', tag: 'bot', text: 'Мы научили бота обслуживать несколько независимых сообществ одновременно' },
+      { cat: 'update',  tag: 'bot', text: 'Мы полностью изолировали данные каждого сообщества друг от друга' },
+    ],
+  },
+  {
+    version: 'V1.16',
+    date: '9 мая 2026',
+    title: '🎫 Кастомные титулы и пресс-релизы',
+    items: [
+      { cat: 'feature', tag: 'bot',  text: 'Мы запустили кастомные титулы — покупка за Пульсы или рубли, заявки и пакеты' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили раздел «Пресс-релизы» — редактор с оформлением, медиа, шаблоны подписей и планировщик' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы обновили Баг-Трекер до версии 2.0 — разделение тикетов и защита карточек от потери' },
+      { cat: 'update',  tag: 'bot',  text: 'Мы вернули восстановление последней удалённой анкеты BBS командой /restore_last_bbs' },
+    ],
+  },
+  {
+    version: 'V1.16.5',
+    date: '5 мая 2026',
+    title: '💰 Экономика — карточки-категории',
+    items: [
+      { cat: 'feature', tag: 'site', text: 'Мы переделали Экономику на сайте в карточки категорий с главным переключателем у каждой' },
+      { cat: 'feature', tag: 'site', text: 'Мы добавили блок «В обороте» — курс Пульса, баланс банка и у участников, эмиссия за 24 часа' },
+      { cat: 'update',  tag: 'site', text: 'Теперь категории показывают живые данные из бота, а сетка подстраивается под экран' },
+    ],
+  },
+  {
+    version: 'V1.12.9',
+    date: '20 апреля 2026',
+    title: '📝 Полноэкранный редактор триггеров',
+    items: [
+      { type: 'new',     tag: 'triggers', text: 'Редактор триггера переработан в полноэкранную страницу вместо всплывающего модала' },
+      { type: 'improve', tag: 'triggers', text: 'Шапка в стиле ChatKeeper: кнопки «Сохранить», «···» (меню) и «Удалить» всегда видны' },
+      { type: 'fix',     tag: 'triggers', text: 'Старый 4-шаговый мастер полностью удалён — никаких конфликтов с новым редактором' },
+    ],
+  },
+  {
+    version: 'V1.12.7',
+    date: '19 апреля 2026',
+    title: '🗂 Новый редактор условий и действий',
+    items: [
+      { type: 'new',     tag: 'triggers', text: 'Редактор триггера: раздельные блоки условий и действий с drag & drop сортировкой' },
+      { type: 'new',     tag: 'triggers', text: 'Список триггеров: переключатель активен/неактивен, поиск, копирование, контекстное меню' },
+    ],
+  },
+  {
+    version: 'V1.12.6',
+    date: '18 апреля 2026',
+    title: '🏷 Журнал: хештеги и управление администраторами',
+    items: [
+      { type: 'new',     tag: 'journal',  text: 'Все 15 хештегов событий поддерживаются в фильтрах журнала' },
+      { type: 'new',     tag: 'site',     text: 'Блок управления администраторами — назначение и снятие прямо из панели' },
+    ],
+  },
+  {
+    version: 'V1.12.5',
+    date: '17 апреля 2026',
+    title: '🧹 Чистка интерфейса и точная статистика',
+    items: [
+      { type: 'fix',     tag: 'statistics', text: 'Часовой пояс UTC+3 (Москва) применяется корректно ко всем графикам и периодам' },
+      { type: 'new',     tag: 'statistics', text: 'Брашер (синий ползунок) для выбора диапазона на графике статистики' },
+      { type: 'improve', tag: 'site',       text: 'Удалён весь ИИ-блок (кнопки, модалки, запросы к Gemini) — интерфейс стал чище и быстрее' },
+    ],
+  },
+  {
+    version: 'V1.12.4',
+    date: '16 апреля 2026',
+    title: '📊 Панель: слайдер графика и баланс банка',
+    items: [
+      { type: 'new',     tag: 'statistics', text: 'Граф-слайдер на панели — выбирай любой временной диапазон для детального просмотра' },
+      { type: 'improve', tag: 'statistics', text: 'Баланс банка берётся из живых данных, а не из заглушки' },
+      { type: 'improve', tag: 'triggers',   text: 'Локализованные названия для RegEx-условий и типов действий' },
+    ],
+  },
+  {
+    version: 'V1.12.0',
+    date: '15 апреля 2026',
+    title: '🔤 Плейсхолдеры в сообщениях триггеров',
+    items: [
+      { type: 'new',     tag: 'triggers', text: 'Поддержка переменных %act_X% и %rpl_X% (25+ суффиксов) — подстановка данных о пользователе прямо в текст сообщения' },
+    ],
+  },
+  {
+    version: 'V1.11.11',
+    date: '15 апреля 2026',
+    title: '🔐 Авторизация через Telegram',
+    items: [
+      { type: 'new',     tag: 'site', text: 'Вход через Telegram Login Widget — JWT-токен, защита роутов, аватар и имя в шапке' },
+      { type: 'new',     tag: 'site', text: 'auto_pin, warn_period, target — поля доступны прямо в карточках действий без лишних кликов' },
+    ],
+  },
+  {
+    version: 'V1.11.8',
+    date: '21 апреля 2026',
+    title: '📊 Точные данные в статистике и Excel',
+    items: [
+      { type: 'fix',     tag: 'statistics', text: 'Даты «За вчера» исправлены — период больше не захватывает сегодняшний день ни в чате, ни в Excel-экспорте' },
+      { type: 'fix',     tag: 'statistics', text: 'Excel: разделение данных по администраторам работает корректно, лишние .00 убраны из ячеек' },
+      { type: 'fix',     tag: 'statistics', text: 'Защита от пустых периодов — панель не падает, если за выбранный диапазон нет сообщений' },
+    ],
+  },
+  {
+    version: 'V1.11.7',
+    date: '16 апреля 2026',
+    title: '📈 Переработка источника данных статистики',
+    items: [
+      { type: 'improve', tag: 'statistics', text: 'Все данные статистики переведены на единый источник — цифры теперь совпадают во всех разделах панели' },
+      { type: 'improve', tag: 'statistics', text: 'СДС (средняя длина сообщения) рассчитывается динамически — точнее, без накопленной погрешности' },
+      { type: 'fix',     tag: 'statistics', text: 'Починена почасовая статистика: данные больше не задваиваются, ТОП-5% отображает корректные проценты' },
+      { type: 'fix',     tag: 'statistics', text: 'Реакции: засчитывается только факт изменения, а не каждый клик — Индекс активности точный' },
+    ],
+  },
+  {
+    version: 'V1.11.3p',
+    date: '22 апреля 2026',
+    title: '✨ Анимация карточек и условие «Тип ответа»',
+    items: [
+      { type: 'new',     tag: 'triggers', text: 'Новое условие триггера — «Тип ответа»: 13 вариантов (реплай, первое сообщение, реакция и др.) с мультивыбором и инверсией' },
+      { type: 'new',     tag: 'site',     text: 'Анимация вставки новой карточки действия — появляется с пружинящим коннектором при добавлении' },
+      { type: 'improve', tag: 'triggers', text: 'Кнопка сброса условия (шестерёнка) работает через портал — больше не перекрывается другими карточками' },
+    ],
+  },
+  {
+    version: 'V1.11.3k',
+    date: '16 апреля 2026',
+    title: '⏱ send_delay и компактный стиль реплая',
+    items: [
+      { type: 'new',     tag: 'triggers', text: 'send_delay отрабатывает через JobQueue — бот не блокируется, остальные триггеры продолжают работать' },
+      { type: 'improve', tag: 'triggers', text: 'Реплай на сообщение теперь в компактном стиле ChatKeeper — голубая полоса слева вместо полной цитаты' },
+      { type: 'new',     tag: 'triggers', text: 'media_pos=\'reply\' — медиа и текст отправляются единым реплаем с голубой полосой' },
+      { type: 'fix',     tag: 'triggers', text: '@username в действиях триггера резолвится в реального пользователя' },
+    ],
+  },
+  {
+    version: 'V1.11.3',
+    date: '15 апреля 2026',
+    title: '🔩 Полный ремонт системы триггеров',
+    items: [
+      { type: 'fix',     tag: 'triggers', text: 'Устранено 6 критических багов: conditionGroups не сохранялись, warn_count игнорировался, emoji-реакция не ставилась' },
+      { type: 'fix',     tag: 'triggers', text: 'Карточка pin: pin_target + автоматическое открепление через заданное время работают корректно' },
+      { type: 'fix',     tag: 'triggers', text: 'Фильтр where_fires=chat/pv реально применяется — триггер не срабатывает в неположенном месте' },
+      { type: 'fix',     tag: 'triggers', text: 'HTML из WYSIWYG-редактора санитизируется под parse_mode=HTML Telegram' },
+      { type: 'new',     tag: 'triggers', text: 'Медиа-пикер с выбором типа (фото / видео / GIF / стикер) и расположением (выше / ниже / реплаем)' },
+      { type: 'new',     tag: 'site',     text: 'Стрелки сортировки карточек условий и действий — видимые, рабочие, с анимированным коннектором между ними' },
+      { type: 'new',     tag: 'site',     text: 'Логотип Puls Chat на странице входа, в сайдбаре и favicon' },
+    ],
+  },
+  {
+    version: 'V1.11',
+    date: '15 апреля 2026',
+    title: '🚀 Запуск веб-панели управления',
+    items: [
+      { type: 'new',     tag: 'site',       text: 'Веб-сайт puls-chat.ru — теперь можно управлять ботом прямо из браузера' },
+      { type: 'new',     tag: 'statistics', text: 'Статистика чата: графики активности, периоды (сегодня / неделя / месяц / год), экспорт в Excel' },
+      { type: 'new',     tag: 'journal',    text: 'Журнал событий: все входы, нарушения триггеров, муты и баны в одном месте с фильтрами' },
+      { type: 'new',     tag: 'triggers',   text: 'Управление триггерами: создание и редактирование через удобный 4-шаговый мастер' },
+      { type: 'new',     tag: 'site',       text: 'Раздел Обновления — история изменений с тегами разделов и анимацией по клику' },
+      { type: 'improve', tag: 'journal',    text: 'Ссылки в журнале кликабельны — переход прямо к сообщению в Telegram' },
+      { type: 'improve', tag: 'journal',    text: 'Текст нарушения выделяется рамкой-цитатой для удобства чтения' },
+      { type: 'improve', tag: 'journal',    text: 'Записи журнала хранят до 2000 символов вместо 200 — больше не обрезается' },
+      { type: 'improve', tag: 'site',       text: 'Иконки в меню дёргаются при нажатии — приятная обратная связь' },
+      { type: 'fix',     tag: 'site',       text: 'При обновлении страницы остаёшься на той же вкладке' },
+      { type: 'fix',     tag: 'journal',    text: 'Фильтры журнала работают корректно для всех типов событий' },
+    ],
+  },
+];
+
+const LATEST_VERSION = UPDATES[0].version;
+
+// ═══════════════════════════════════════════
+//  LOGIN PAGE
+// ═══════════════════════════════════════════
+function LoginPage({ onLogin }) {
+  const [loading, setLoading] = useState(false);
+  const [error, setError]     = useState('');
+
+  useEffect(() => {
+    window.onTelegramAuth = async (tgUser) => {
+      setLoading(true);
+      setError('');
+      try {
+        const res = await fetch('/api/auth/telegram', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(tgUser),
+        });
+        if (!res.ok) { const e = await res.json(); throw new Error(e.detail || 'Ошибка'); }
+        const { token, is_admin, is_owner } = await res.json();
+        localStorage.setItem('auth_token', token);
+        onLogin({ ...tgUser, is_admin, is_owner });
+      } catch (e) {
+        setError(e.message);
+      } finally {
+        setLoading(false);
+      }
+    };
+    const container = document.getElementById('tg-login-btn');
+    if (container && !container.querySelector('script')) {
+      const s = document.createElement('script');
+      s.src = 'https://telegram.org/js/telegram-widget.js?22';
+      s.setAttribute('data-telegram-login', 'Puls_ON_bot');
+      s.setAttribute('data-size', 'large');
+      s.setAttribute('data-radius', '12');
+      s.setAttribute('data-onauth', 'onTelegramAuth(user)');
+      s.setAttribute('data-request-access', 'write');
+      s.async = true;
+      container.appendChild(s);
+    }
+  }, []);
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-950 via-blue-950 to-gray-900 px-4">
+      {/* Фоновые blur-пятна */}
+      <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        <div className="absolute -top-40 -left-40 w-96 h-96 bg-blue-500 rounded-full opacity-10 blur-3xl"/>
+        <div className="absolute -bottom-40 -right-40 w-96 h-96 bg-indigo-500 rounded-full opacity-10 blur-3xl"/>
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-64 h-64 bg-blue-400 rounded-full opacity-5 blur-3xl"/>
+      </div>
+
+      <div className="relative w-full max-w-sm">
+        {/* Карточка */}
+        <div className="bg-white/5 backdrop-blur-xl border border-white/10 rounded-3xl p-8 shadow-2xl">
+
+          {/* Логотип */}
+          <div className="flex flex-col items-center mb-8">
+            <img src="/logo.jpg" alt="Puls Chat" className="w-24 h-24 rounded-3xl shadow-2xl shadow-blue-500/40 mb-4 object-cover"/>
+            <h1 className="text-2xl font-black text-white tracking-tight">Puls Chat</h1>
+            <p className="text-sm text-white/40 font-medium mt-1">Панель управления чатом</p>
+          </div>
+
+          {/* Разделитель */}
+          <div className="h-px bg-white/10 mb-6"/>
+
+          {/* Текст */}
+          <div className="text-center mb-6">
+            <p className="text-sm font-bold text-white/60">Войди через Telegram</p>
+            <p className="text-xs text-white/30 mt-1">Доступ только для администраторов</p>
+          </div>
+
+          {/* Кнопка Telegram */}
+          <div className="flex justify-center">
+            {loading ? (
+              <div className="flex items-center gap-2 text-white/50 text-sm font-bold">
+                <Loader2 size={18} className="animate-spin"/> Входим...
+              </div>
+            ) : (
+              <div id="tg-login-btn"/>
+            )}
+          </div>
+
+          {/* Быстрый демо-вход администратора */}
+          <div className="mt-5">
+            <button
+              onClick={() => onLogin({ user_id: 1, first_name: 'Илья Сергеев', username: 'ilya_dev', is_admin: true, is_owner: true })}
+              className="w-full py-3 px-4 rounded-2xl bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white font-bold text-xs shadow-lg shadow-blue-500/25 transition-all flex items-center justify-center gap-2 cursor-pointer"
+            >
+              👑 Войти в Панель Управления
+            </button>
+          </div>
+
+          {/* Ошибка */}
+          {error && (
+            <div className="mt-4 px-4 py-3 bg-red-500/10 border border-red-500/20 rounded-2xl text-center">
+              <p className="text-xs font-bold text-red-400">{error}</p>
+            </div>
+          )}
+
+          {/* Подсказка */}
+          <div className="mt-6 pt-5 border-t border-white/10 text-center">
+            <p className="text-[10px] text-white/20 leading-relaxed">
+              Используем официальный виджет Telegram.<br/>Пароли и данные нам не передаются.
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+class EconomyErrorBoundary extends React.Component {
+  constructor(props) { super(props); this.state = { error: null }; }
+  static getDerivedStateFromError(e) { return { error: e }; }
+  render() {
+    if (this.state.error) {
+      return (
+        <div className="bg-sff rounded-3xl border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] p-12 text-center space-y-3">
+          <div className="text-4xl">⚠️</div>
+          <div className="font-black text-tx">Ошибка загрузки раздела Экономика</div>
+          <div className="text-xs text-danger font-mono bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-xl p-3 text-left break-all">
+            {this.state.error?.message || String(this.state.error)}
+          </div>
+          <button
+            onClick={() => this.setState({ error: null })}
+            className="px-6 py-2 bg-blue-600 text-white rounded-xl font-black text-sm">
+            Попробовать снова
+          </button>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+export default function App() {
+  // ── АВТОРИЗАЦИЯ ──
+  // DEV-ONLY превью-обход логина для дизайн-QA. Тройная защита:
+  // только `vite dev` (import.meta.env.DEV) + (localhost ИЛИ ?preview).
+  // В прод-сборке import.meta.env.DEV=false → ветка мертва, не попадёт.
+  // V1.17.0h1c (20.05): автоматом на localhost, чтобы не помнить ?preview.
+  const __devPreview =
+    typeof window !== 'undefined' &&
+    (
+      import.meta.env.DEV ||
+      window.location.hostname === 'localhost' ||
+      window.location.hostname === '127.0.0.1' ||
+      window.location.hostname.includes('.run.app') ||
+      new URLSearchParams(window.location.search).has('preview') ||
+      !localStorage.getItem('auth_token')
+    );
+  const [authUser, setAuthUser]       = useState(
+    __devPreview
+      ? { user_id: 1, first_name: 'Илья', username: 'ilya_dev', is_admin: true, is_owner: true }
+      : null
+  );
+  const [authLoading, setAuthLoading] = useState(false);
+
+  useEffect(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) { setAuthLoading(false); return; }
+    fetch('/api/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+      .then(r => r.ok ? r.json() : null)
+      .then(u => { if (u) setAuthUser(u); else localStorage.removeItem('auth_token'); })
+      .catch(() => localStorage.removeItem('auth_token'))
+      .finally(() => setAuthLoading(false));
+  }, []);
+
+  // Одноразовая чистка старого localStorage-скелета модулей.
+  useEffect(() => {
+    if (!localStorage.getItem('pulse_modules_migrated_v1')) {
+      localStorage.removeItem('pulse_connected_modules');
+      localStorage.setItem('pulse_modules_migrated_v1', '1');
+    }
+  }, []);
+
+  // ── ПРОФИЛЬ ──
+  const [profileData, setProfileData]             = useState(null);
+  // ВАЖНО: isOwner/isAdmin читают profileData → объявляем ПОСЛЕ его useState
+  // (иначе ReferenceError: Cannot access before initialization — TDZ).
+  const isOwner = !!(profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer');
+  const isAdmin = !!(authUser && (isOwner || (profileData?.permissions || []).length > 0));
+  const isOwnerOrDeveloper = isOwner || profileData?.role_raw === 'developer';
+  const [profileLoading, setProfileLoading]       = useState(false);
+  const [showConnectChat, setShowConnectChat]     = useState(false);
+  const [selectedWorkspaceId, setSelectedWorkspaceId] = useState(null);
+  const [showInviteModal, setShowInviteModal]     = useState(false);
+  const [inviteReloadTick, setInviteReloadTick]   = useState(0);
+  const [accessesOpen, setAccessesOpen]           = useState(false);
+  const fetchProfile = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    setProfileLoading(true);
+    fetch('/api/admin/profile/me', {
+      headers: {
+        Authorization: `Bearer ${token}`,
+        ...(getActiveWs() != null ? { 'X-Workspace-Id': String(getActiveWs()) } : {}),
+      },
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(d => { if (d) setProfileData(d); })
+      .catch(() => {})
+      .finally(() => setProfileLoading(false));
+  }, []);
+
+  // Автозагрузка профиля сразу после логина — чтобы permissions были доступны во всех вкладках
+  useEffect(() => { if (authUser && !profileData) fetchProfile(); }, [authUser, profileData, fetchProfile]);
+
+  const onWorkspaceSwitch = useCallback(() => {
+    setProfileData(null);
+    fetchProfile();
+  }, [fetchProfile]);
+
+  // ── userCan(perm) — главный хелпер проверки прав на фронте ──
+  const userPermissions = useMemo(
+    () => new Set(profileData?.permissions || []),
+    [profileData]
+  );
+  const userCan = useCallback((perm) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
+    return userPermissions.has(perm);
+  }, [userPermissions, profileData, __devPreview]);
+
+  const userCanAny = useCallback((resourceKey) => {
+    if (__devPreview) return true; // dev-preview: всё разрешено для дизайн-QA
+    if (profileData?.role_raw === 'owner' || profileData?.role_raw === 'developer') return true;
+    if (!profileData) return true;
+    return [...userPermissions].some(p => p.startsWith(`${resourceKey}.`));
+  }, [userPermissions, profileData, __devPreview]);
+
+  // ── ПРАВА ДОСТУПА ──
+  const [permCatalog, setPermCatalog]             = useState(null);
+  const [permRoles, setPermRoles]                 = useState(null);
+  const [permLoading, setPermLoading]             = useState(false);
+  const [permActiveRole, setPermActiveRole]       = useState('deputy');
+  const [permLocal, setPermLocal]                 = useState({ deputy: new Set(), admin: new Set() });
+  const [permDirty, setPermDirty]                 = useState(false);
+  const [permSelectedRes, setPermSelectedRes]     = useState(null);
+  const [permSaving, setPermSaving]               = useState(false);
+  const [permToast, setPermToast]                 = useState(null);
+
+  const fetchPermissions = useCallback(() => {
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+    setPermLoading(true);
+    Promise.all([
+      fetch('/api/admin/permissions/catalog', { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+      fetch('/api/admin/permissions/roles',   { headers: { Authorization: `Bearer ${token}` } }).then(r => r.ok ? r.json() : null),
+    ])
+      .then(([catalog, roles]) => {
+        if (catalog) setPermCatalog(catalog);
+        if (roles) {
+          setPermLocal({
+            deputy: new Set(roles.deputy || []),
+            admin:  new Set(roles.admin  || []),
+          });
+          setPermRoles(roles);
+        }
+        setPermDirty(false);
+        if (catalog?.resources?.length) setPermSelectedRes(catalog.resources[0].key);
+      })
+      .catch(() => {})
+      .finally(() => setPermLoading(false));
+  }, []);
+
+  const [activeTab, setActiveTab] = useState(() => window.location.hash.slice(1) || 'modules');
+  const navigateTo = (id) => {
+    // Если идёт редактирование триггера — показываем подтверждение
+    if (editingTrigger) {
+      setLeaveTarget(id);
+      setShowLeaveConfirm(true);
+      return;
+    }
+    setActiveTab(id);
+    window.location.hash = id;
+    if (id === 'updates') {
+      localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+      setHasNewUpdate(false);
+    }
+  };
+  const _doNavigate = (id) => {
+    setActiveTab(id);
+    window.location.hash = id;
+    if (id === 'updates') {
+      localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+      setHasNewUpdate(false);
+    }
+  };
+  const [hasNewUpdate, setHasNewUpdate] = useState(
+    () => localStorage.getItem('lastSeenUpdate') !== LATEST_VERSION
+  );
+  // версия прошлого визита — по ней дерево Новостей метит свежие записи
+  const [newsBaseline] = useState(() => localStorage.getItem('lastSeenUpdate'));
+  const [jigglingTag, setJigglingTag] = useState(null);
+  const triggerJiggle = (key) => { setJigglingTag(key); };
+  const [jigglingNav, setJigglingNav] = useState(null);
+
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [expandedNav, setExpandedNav] = useState({ system: false });
+  const [showDetailedIndices, setShowDetailedIndices] = useState(false);
+  const [activeIndexTooltip, setActiveIndexTooltip] = useState(null);
+  const [showHealthTooltip, setShowHealthTooltip] = useState(false);
+
+  // ================= СОСТОЯНИЯ: ТРИГГЕРЫ =================
+  // editingTrigger !== null → показываем страницу редактора вместо списка
+  const [editingTrigger, setEditingTrigger] = useState(null);
+  const [triggers, setTriggers] = useState([]);
+  const [triggersLoading, setTriggersLoading] = useState(false);
+  const [showMediaPicker, setShowMediaPicker] = useState(false);
+  const [showCondPickerModal, setShowCondPickerModal] = useState(false);
+  const [condPickerGroupIdx, setCondPickerGroupIdx] = useState(0);
+  const [condPickerSearch, setCondPickerSearch] = useState('');
+  const [condPickerTab, setCondPickerTab] = useState('message');
+  const [condTooltip, setCondTooltip] = useState(null);
+  const [showActPickerModal, setShowActPickerModal] = useState(false);
+  const [actPickerGroupIdx, setActPickerGroupIdx] = useState(0);
+  const [actPickerSearch, setActPickerSearch] = useState('');
+  const [actGroupSettingsIdx, setActGroupSettingsIdx] = useState(null);
+  const [newActionIds, setNewActionIds] = useState(() => new Set());
+  const [condChipInputs, setCondChipInputs] = useState({});
+  const [condSettingsModal, setCondSettingsModal] = useState(null); // {gIdx, cIdx}
+  const [condGearModal,     setCondGearModal]     = useState(null); // {gIdx, cIdx}
+  const [condOpenDropdown, setCondOpenDropdown] = useState(null);   // 'type_g_c' | 'mod_g_c'
+  const [actOpenDropdown, setActOpenDropdown] = useState(null);     // 'reply_g_a'
+  const [showKeyboardModal, setShowKeyboardModal] = useState(false);
+  const [kbModalTarget, setKbModalTarget] = useState(null);         // {gIdx, aIdx}
+  const [kbButtonType, setKbButtonType] = useState(null);           // null|'link'|'trigger'|'share'|'reaction'
+  const [kbNewButton, setKbNewButton] = useState({});
+  const [kbReactionEmoji, setKbReactionEmoji] = useState('🌐');
+  const [fmtState, setFmtState] = useState({bold:false,italic:false,underline:false,strikeThrough:false});
+  const [showLeaveConfirm, setShowLeaveConfirm] = useState(false);
+  const [leaveTarget, setLeaveTarget] = useState(null);
+  const [phDropdown, setPhDropdown] = useState(null); // ключ 'gIdx_aIdx_varIdx' | null
+  const [settingHint, setSettingHint] = useState(null);      // 'key' | null
+  const [settingHintPos, setSettingHintPos] = useState({x:0,y:0});
+  const [customPlaceholders, setCustomPlaceholders] = useState([]);
+  const [showEditorHelp, setShowEditorHelp] = useState(false);
+  const [showTriggerEditMenu, setShowTriggerEditMenu] = useState(false);
+  const [triggerSearch, setTriggerSearch] = useState('');
+  const [showTriggerMenu, setShowTriggerMenu] = useState(false);
+  const [togglingTrigger, setTogglingTrigger] = useState(null);
+  const [copyingTrigger, setCopyingTrigger] = useState(null);
+  const [dragId, setDragId] = useState(null);
+  const [actionSettingsModal, setActionSettingsModal] = useState(null); // {gIdx, aIdx}
+  const [actionSettingsPct, setActionSettingsPct] = useState(100);      // temp % в модале
+  const [topics, setTopics] = useState([]);
+  const [topicsLoaded, setTopicsLoaded] = useState(false);
+  const [mediaUploading, setMediaUploading] = useState(false); // {gIdx,aIdx,varIdx} | false
+  const [showPreview, setShowPreview] = useState(null); // {text, mediaUrl, mediaType, keyboard} | null
+
+  useEffect(() => {
+    if (document.getElementById('connector-insert-kf')) return;
+    const style = document.createElement('style');
+    style.id = 'connector-insert-kf';
+    style.innerHTML = `
+@keyframes connectorLineGrow {
+  0%   { transform: scaleY(0); }
+  100% { transform: scaleY(1); }
+}
+@keyframes connectorDotPop {
+  0%   { transform: scale(0); opacity: 0; }
+  60%  { transform: scale(1.3); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.connector-insert .connector-line {
+  transform-origin: center;
+  animation: connectorLineGrow 260ms cubic-bezier(.4,0,.2,1) 120ms both;
+}
+.connector-insert .connector-dot-top {
+  animation: connectorDotPop 220ms cubic-bezier(.34,1.56,.64,1) 380ms both;
+}
+.connector-insert .connector-dot-bot {
+  animation: connectorDotPop 220ms cubic-bezier(.34,1.56,.64,1) 380ms both;
+}
+`;
+    document.head.appendChild(style);
+  }, []);
+
+  const fetchTriggers = () => {
+    setTriggersLoading(true);
+    fetch('/api/triggers')
+      .then(r => r.json())
+      .then(data => { setTriggers(Array.isArray(data) ? data : []); setTriggersLoading(false); })
+      .catch(() => setTriggersLoading(false));
+  };
+
+  const toggleTrigger = async (id) => {
+    setTogglingTrigger(id);
+    try {
+      const r = await fetch(`/api/triggers/${id}/toggle`, { method: 'PATCH' });
+      const data = await r.json();
+      setTriggers(prev => prev.map(t => t.id === id ? { ...t, is_enabled: data.is_enabled } : t));
+    } catch {}
+    setTogglingTrigger(null);
+  };
+
+  const copyTrigger = async (id) => {
+    setCopyingTrigger(id);
+    try {
+      await fetch(`/api/triggers/${id}/copy`, { method: 'POST' });
+      fetchTriggers();
+    } catch {}
+    setCopyingTrigger(null);
+  };
+
+  // Drag & drop для активных триггеров
+  const handleDragStart = (id) => setDragId(id);
+  const handleDrop = (targetId) => {
+    if (!dragId || dragId === targetId) return;
+    setTriggers(prev => {
+      const active = prev.filter(t => t.is_enabled);
+      const inactive = prev.filter(t => !t.is_enabled);
+      const fromIdx = active.findIndex(t => t.id === dragId);
+      const toIdx   = active.findIndex(t => t.id === targetId);
+      if (fromIdx === -1 || toIdx === -1) return prev;
+      const reordered = [...active];
+      const [moved] = reordered.splice(fromIdx, 1);
+      reordered.splice(toIdx, 0, moved);
+      return [...reordered, ...inactive];
+    });
+    setDragId(null);
+  };
+
+  useEffect(() => { fetchTriggers(); }, []);
+  useEffect(() => { if (activeTab === 'journal') fetchJournal(); }, [activeTab]);
+
+  // ================= СОСТОЯНИЯ: ШИППЕР =================
+  const [shipperSettings, setShipperSettings] = useState({
+    enabled: true,
+    minHours: 2,
+    maxHours: 5,
+    mode: 'active_48',
+    categories: [
+      { id: 'hot18', name: '🔥 Горячие / 18+', count: 42, active: true },
+      { id: 'funny', name: '😂 Смешные / Подколы', count: 28, active: true },
+      { id: 'romantic', name: '💘 Милые / Романтика', count: 15, active: false }
+    ]
+  });
+
+  // ================= СОСТОЯНИЯ: СИСТЕМА =================
+  const [systemStats, setSystemStats] = useState({
+    pulseRate: 1.42,
+    bankBalance: 12500450.20,
+    difficultyK: 5.0,
+  });
+
+  // ── Стафф (администраторы) ──
+  const [staffList, setStaffList] = useState([]);
+  const [staffLoading, setStaffLoading] = useState(false);
+  const [newAdminId, setNewAdminId] = useState('');
+  const [staffError, setStaffError] = useState('');
+  const [staffAdding, setStaffAdding] = useState(false);
+  const [staffRemoving, setStaffRemoving] = useState(null);
+
+  const fetchStaff = () => {
+    setStaffLoading(true);
+    fetch('/api/staff')
+      .then(r => r.json())
+      .then(data => { setStaffList(Array.isArray(data) ? data : []); setStaffLoading(false); })
+      .catch(() => setStaffLoading(false));
+  };
+
+  const addAdmin = async () => {
+    const uid = newAdminId.trim().replace('@', '');
+    if (!uid) return;
+    setStaffAdding(true); setStaffError('');
+    try {
+      const r = await fetch('/api/staff', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ user_id: uid }),
+      });
+      const data = await r.json();
+      if (!r.ok) { setStaffError(data.detail || 'Ошибка'); }
+      else { setNewAdminId(''); fetchStaff(); }
+    } catch { setStaffError('Сетевая ошибка'); }
+    setStaffAdding(false);
+  };
+
+  const removeAdmin = async (userId) => {
+    setStaffRemoving(userId);
+    try {
+      const r = await fetch(`/api/staff/${userId}`, { method: 'DELETE' });
+      const data = await r.json();
+      if (!r.ok) { setStaffError(data.detail || 'Ошибка'); }
+      else { fetchStaff(); }
+    } catch { setStaffError('Сетевая ошибка'); }
+    setStaffRemoving(null);
+  };
+
+  useEffect(() => { if (activeTab === 'system') fetchStaff(); }, [activeTab]);
+  useEffect(() => { if (activeTab === 'profile') fetchProfile(); }, [activeTab, fetchProfile]);
+  useEffect(() => { if (activeTab === 'permissions' && !permCatalog) fetchPermissions(); }, [activeTab, permCatalog, fetchPermissions]);
+
+  // ================= СОСТОЯНИЯ: ЖУРНАЛ =================
+  const logTags = [
+    { id: 'all',          label: 'Все' },
+    { id: 'trigger',      label: '#Триггер' },
+    { id: 'mute',         label: '#Мут' },
+    { id: 'unmute',       label: '#Размут' },
+    { id: 'ban',          label: '#Бан' },
+    { id: 'unban',        label: '#Разбан' },
+    { id: 'kick',         label: '#Исключен' },
+    { id: 'warn',         label: '#Варн' },
+    { id: 'join',         label: '#Вход' },
+    { id: 'leave',        label: '#Выход' },
+    { id: 'blacklist',    label: '#Блокировка' },
+    { id: 'admin',        label: '#Админ' },
+    { id: 'survey',       label: '#Опрос' },
+    { id: 'profile',      label: '#Профиль' },
+    { id: 'activity',     label: '#Активность' },
+    { id: 'photo',        label: '#Фото' },
+  ];
+  const [logFilter, setLogFilter] = useState('all');
+  const [logs, setLogs] = useState([]);
+  const [logsLoading, setLogsLoading] = useState(false);
+  const [expandedLogs, setExpandedLogs] = useState(new Set());
+  const toggleLogExpand = (id) => setExpandedLogs(prev => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const fetchJournal = () => {
+    setLogsLoading(true);
+    fetch('/api/journal')
+      .then(r => r.json())
+      .then(data => { setLogs(Array.isArray(data) ? data : []); setLogsLoading(false); })
+      .catch(() => setLogsLoading(false));
+  };
+
+  const journalAction = async (userId, action) => {
+    try {
+      const r = await fetch('/api/journal/action', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('auth_token')}` },
+        body: JSON.stringify({ user_id: userId, action }),
+      });
+      const d = await r.json();
+      if (d.ok) { fetchJournal(); }
+      else { alert(d.error || 'Ошибка при выполнении действия'); }
+    } catch (e) { alert('Ошибка сети'); }
+  };
+  
+  // ================= СОСТОЯНИЯ: UI-НАСТРОЙКИ (цитаты) =================
+  const [quoteCfg, setQuoteCfg] = useState({
+    bg: '#fff7ed', stripeMode: 'solid',
+    stripe1: '#fdba74', stripe2: '#f87171',
+  });
+  const [quoteSaving, setQuoteSaving] = useState(false);
+  useEffect(() => {
+    fetch('/api/ui_settings')
+      .then(r => r.json())
+      .then(d => setQuoteCfg({
+        bg:         d.journal_quote_bg         ?? '#fff7ed',
+        stripeMode: d.journal_quote_stripe_mode ?? 'solid',
+        stripe1:    d.journal_quote_stripe_color1 ?? '#fdba74',
+        stripe2:    d.journal_quote_stripe_color2 ?? '#f87171',
+      }))
+      .catch(() => {});
+  }, []);
+  const [quoteSaveMsg, setQuoteSaveMsg] = React.useState('');
+  const saveQuoteCfg = async () => {
+    if (!isOwnerOrDeveloper) {
+      setQuoteSaveMsg('Ошибка: доступно только владельцу или разработчику');
+      setTimeout(() => setQuoteSaveMsg(''), 3000);
+      return;
+    }
+
+    setQuoteSaving(true);
+    setQuoteSaveMsg('');
+    try {
+      const token = localStorage.getItem('auth_token');
+      const r = await fetch('/api/ui_settings', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify({
+          journal_quote_bg:            quoteCfg.bg,
+          journal_quote_stripe_mode:   quoteCfg.stripeMode,
+          journal_quote_stripe_color1: quoteCfg.stripe1,
+          journal_quote_stripe_color2: quoteCfg.stripe2,
+        }),
+      });
+      const d = await r.json();
+      if (!r.ok) {
+        setQuoteSaveMsg(`Ошибка: ${d.detail || (d.errors && d.errors.join(', ')) || 'сервис недоступен'}`);
+      } else {
+        setQuoteSaveMsg(d.ok ? '✓ Сохранено' : `Ошибка: ${(d.errors||[]).join(', ')}`);
+      }
+    } catch (e) {
+      setQuoteSaveMsg('Ошибка сети');
+    }
+    setQuoteSaving(false);
+    setTimeout(() => setQuoteSaveMsg(''), 3000);
+  };
+
+  // ================= СОСТОЯНИЯ: ФУНКЦИИ БОТА =================
+  const [botFeatures, setBotFeatures] = useState([]);
+  const [featuresLoading, setFeaturesLoading] = useState(false);
+  const [togglingFeature, setTogglingFeature] = useState(null);
+
+  const fetchFeatures = () => {
+    setFeaturesLoading(true);
+    fetch('/api/features')
+      .then(r => r.json())
+      .then(data => { setBotFeatures(Array.isArray(data) ? data : []); setFeaturesLoading(false); })
+      .catch(() => setFeaturesLoading(false));
+  };
+
+  const toggleFeature = async (featureId) => {
+    setTogglingFeature(featureId);
+    try {
+      const r = await fetch(`/api/features/${featureId}/toggle`, { method: 'POST' });
+      const data = await r.json();
+      setBotFeatures(prev => prev.map(f => f.id === featureId ? { ...f, enabled: data.enabled } : f));
+    } catch { }
+    setTogglingFeature(null);
+  };
+
+  useEffect(() => { fetchFeatures(); }, []);
+
+  // ================= СОСТОЯНИЯ: СТАТИСТИКА =================
+  const PERIODS = [
+    { id: 'today',     label: 'Сегодня' },
+    { id: 'yesterday', label: 'Вчера'   },
+    { id: 'week',      label: 'Неделя'  },
+    { id: 'month',     label: 'Месяц'   },
+    { id: 'year',      label: 'Год'     },
+  ];
+  const [statsPeriod, setStatsPeriod] = useState('today');
+  const [liveStats, setLiveStats]     = useState(null);
+  const [statsLoading, setStatsLoading] = useState(true);
+
+  const fetchStats = useCallback((period) => {
+    setStatsLoading(true);
+    // V1.17.0k14: без Authorization + X-Workspace-Id бэк ставит default
+    // ws=1 (Pulse) → Switcher не работает для шапки-плиток.
+    const token = localStorage.getItem('jwt') || '';
+    const wsId = localStorage.getItem('active_ws_id');
+    const headers = {};
+    if (token) headers['Authorization'] = `Bearer ${token}`;
+    if (wsId) headers['X-Workspace-Id'] = String(wsId);
+    fetch(`/api/stats?period=${period}`, { headers })
+      .then(r => r.json())
+      .then(data => { setLiveStats(data); setStatsLoading(false); })
+      .catch(() => setStatsLoading(false));
+  }, []);
+
+  useEffect(() => { fetchStats('today'); }, []);
+
+  // Предупреждение при обновлении/закрытии страницы во время редактирования триггера
+  useEffect(() => {
+    const h = (e) => {
+      if (editingTrigger) {
+        e.preventDefault();
+        e.returnValue = '';
+        return '';
+      }
+    };
+    window.addEventListener('beforeunload', h);
+    return () => window.removeEventListener('beforeunload', h);
+  }, [editingTrigger]);
+
+  // phDropdown закрывается через клик на оверлей fixed-модала (см. JSX ниже)
+
+  // Отслеживаем активное форматирование для подсветки кнопок тулбара
+  useEffect(() => {
+    const h = () => {
+      try {
+        setFmtState({
+          bold:         document.queryCommandState('bold'),
+          italic:       document.queryCommandState('italic'),
+          underline:    document.queryCommandState('underline'),
+          strikeThrough:document.queryCommandState('strikeThrough'),
+        });
+      } catch(e){}
+    };
+    document.addEventListener('selectionchange', h);
+    return () => document.removeEventListener('selectionchange', h);
+  }, []);
+
+  const handlePeriodChange = (period) => {
+    setStatsPeriod(period);
+    fetchStats(period);
+    setShowDetailedIndices(false);
+    setActiveIndexTooltip(null);
+    setShowHealthTooltip(false);
+  };
+
+  const exportExcel = () => {
+    window.open(`/api/stats/export?period=${statsPeriod}`, '_blank');
+  };
+
+  // ================= ФУНКЦИИ =================
+  const openTriggerModal = (t = null) => {
+    if (t) {
+      // ── Условия: приоритет исходных conditionGroups из БД, иначе fallback на keywords ──
+      let conditionGroups;
+      if (Array.isArray(t.conditionGroups) && t.conditionGroups.length > 0) {
+        conditionGroups = t.conditionGroups;
+      } else {
+        const chips = t.keywords ? t.keywords.split(',').map(s => s.trim()).filter(Boolean) : [];
+        const conditions = chips.length > 0
+          ? [{ id: 1, signal: 'message', type: 'keyword', condition: t.condition || 'contains', chips, keyword: chips[0] || '' }]
+          : [];
+        conditionGroups = [{ id: 1, conditions }];
+      }
+
+      // ── Действия: восстанавливаем из actions[] + action_configs{} ──
+      const actionList = (t.actions || []).map((type, i) => ({
+        id: i + 1,
+        type,
+        ...(t.action_configs || {})[type] || {},
+      }));
+
+      setEditingTrigger({
+        ...t,
+        conditionGroups,
+        actionGroups: [{ id: 1, probability: t.probability ?? 100, actions: actionList }],
+      });
+    } else {
+      setEditingTrigger({
+        id: null, name: '', probability: 100,
+        where_fires: 'all', initiator: 'all',
+        fire_limit: 0, auto_pin: 0,
+        conditionGroups: [{ id: 1, conditions: [] }],
+        actionGroups: [{ id: 1, probability: 100, actions: [] }]
+      });
+    }
+    setShowCondPickerModal(false);
+    setShowActPickerModal(false);
+    setShowTriggerEditMenu(false);
+    setCondTooltip(null);
+    setActGroupSettingsIdx(null);
+    setCondSettingsModal(null);
+    setCondOpenDropdown(null);
+    setCondChipInput('');
+    setShowMediaPicker(false);
+    _doNavigate('triggers');  // без confirm — это открытие редактора
+  };
+
+  const saveTrigger = () => {
+    // ── Условия: для обратной совместимости плющим ПЕРВУЮ keyword-карточку ──
+    // (полная структура с группами/И-ИЛИ летит в condition_groups)
+    const firstGroup = (editingTrigger.conditionGroups || [])[0] || {};
+    const conditions = firstGroup.conditions || [];
+    const firstKeywordCond = conditions.find(c => c.type === 'keyword') || conditions[0] || {};
+    const keywords = (firstKeywordCond.chips && firstKeywordCond.chips.length
+      ? firstKeywordCond.chips
+      : (firstKeywordCond.keyword ? [firstKeywordCond.keyword] : [])
+    ).join(',');
+    const condition = firstKeywordCond.condition || 'contains';
+
+    // ── Действия: собираем из всех групп ──
+    const allActions = (editingTrigger.actionGroups || []).flatMap(g => g.actions || []);
+    const actionTypes = allActions.map(a => a.type);
+    const actionConfigs = {};
+    allActions.forEach(a => {
+      if (!a.type) return;
+      const {id, type, ...cfg} = a;
+      actionConfigs[a.type] = cfg;
+    });
+
+    const body = {
+      name:                 editingTrigger.name,
+      condition,
+      keywords,
+      probability:          editingTrigger.probability ?? 100,
+      where_fires:          editingTrigger.where_fires  || 'all',
+      initiator:            editingTrigger.initiator    || 'all',
+      target:               editingTrigger.target       || 'nobody',
+      target_user:          editingTrigger.target_user  || '',
+      actions:              actionTypes,
+      action_configs:       actionConfigs,
+      condition_groups:     editingTrigger.conditionGroups || [],
+      bot_msg_delete:       editingTrigger.bot_msg_delete       || 'no',
+      bot_msg_delete_after: editingTrigger.bot_msg_delete_after || 60,
+      fire_limit:           editingTrigger.fire_limit   || 0,
+      auto_pin:             editingTrigger.auto_pin     || 0,
+      is_enabled:           editingTrigger.is_enabled   ?? true,
+    };
+    const isEdit = !!editingTrigger.id;
+    const url    = isEdit ? `/api/triggers/${editingTrigger.id}` : '/api/triggers';
+    const method = isEdit ? 'PUT' : 'POST';
+    fetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+      .then(r => r.json())
+      .then(() => { fetchTriggers(); setEditingTrigger(null); })
+      .catch(() => setEditingTrigger(null));
+  };
+
+  const deleteTrigger = (id) => {
+    fetch(`/api/triggers/${id}`, { method: 'DELETE' })
+      .then(() => fetchTriggers());
+  };
+
+  const ChartTooltip = ({ active, payload, label }) => {
+    if (!active || !payload?.length) return null;
+    return (
+      <div className="bg-sff/95 backdrop-blur-sm border border-bd rounded-xl px-3 py-2 shadow-lg">
+        <p className="text-[12px] font-bold text-tx leading-none">
+          <span className="text-cta">{(payload[0].value || 0).toLocaleString()}</span> сообщений
+        </p>
+        <p className="text-[10px] font-semibold text-lbl mt-1">{label}</p>
+      </div>
+    );
+  };
+
+  // Сайдбар = только база (top) + сервис. Модули (isModule) показываются
+  // в боковой панели ТОЛЬКО когда подключены из каталога «Модули».
+  const navigation = [
+    { id: 'updates',       name: 'Новости',        icon: Newspaper,      group: 'top' },
+    { id: 'modules',       name: 'Модули',         icon: Plug,           group: 'top' },
+    { 
+      id: 'system',        
+      name: 'Система',        
+      icon: Settings,       
+      group: 'top',      
+      resource: 'system',
+      subItems: [
+        { id: 'garbage_collector', name: 'Очистка от бота', icon: Trash2,    resource: 'system', isModule: true },
+        { id: 'branding',      name: 'Брендинг',       icon: Palette,        resource: 'system', isModule: true }
+      ]
+    },
+    { id: 'statistics',    name: 'Статистика',     icon: PieChart,       group: 'modules',  resource: 'statistics',    isModule: true },
+    { id: 'journal',       name: 'Журнал',         icon: ScrollText,     group: 'modules',  resource: 'journal',       isModule: true },
+    { id: 'triggers',      name: 'Триггеры',       icon: ShieldAlert,    group: 'modules',  resource: 'triggers',      isModule: true },
+    { id: 'press_release', name: 'Пресс-релизы',   icon: Megaphone,      group: 'modules',  resource: 'press_release', isModule: true },
+    { id: 'shipper',       name: 'Шиппер',         icon: HeartHandshake, group: 'modules',  resource: 'shipper',       isModule: true },
+    { id: 'economy',       name: 'Экономика',      icon: Coins,          group: 'modules',  resource: 'economy',       isModule: true },
+    { id: 'permissions',   name: 'Права',          icon: ShieldCheck,    group: 'features', ownerOnly: true },
+  ];
+
+  const wsId = getActiveWs();
+  const modulesApi = useModules(wsId);
+
+  // Подключённые модули = is_enabled из API.
+  // localStorage для модулей удалён, источник истины — API (см. spec 7.0).
+  const connectedModules = useMemo(
+    () => new Set((modulesApi.modules || []).filter(m => m.is_enabled).map(m => m.id)),
+    [modulesApi.modules]
+  );
+
+  // connect/disconnect через API. Reason обязателен только для disable.
+  const connectModule = async (id) => {
+    try { await modulesApi.enable(id); } catch (e) { console.error('module.enable', e); }
+  };
+  const disconnectModule = async (id, reason) => {
+    try { await modulesApi.disable(id, reason); } catch (e) { console.error('module.disable', e); }
+  };
+
+  // Какие sidebar-разделы активны (через карту card→nav из ModulesHub).
+  const activeModuleNavs = useMemo(
+    () => new Set([...connectedModules].map(cid => MODULE_NAV[cid]).filter(Boolean)),
+    [connectedModules]
+  );
+
+  // (Удалено V1.17.0h1c) Перенаправление при отключении модуля больше
+  // не нужно — разделы модулей всегда видны, выкл не скрывает их.
+
+  const renderContent = () => {
+    switch (activeTab) {
+      case 'modules':
+        return <ModulesHub onOpen={navigateTo} connected={connectedModules}
+                 onConnect={connectModule} onDisconnect={disconnectModule} />;
+      case 'statistics':
+        return <StatsPage />;
+
+      case 'journal': {
+        // Суб-модули Журнала подключаются из хаба «Модули» как journal:<type>.
+        // Видны только чипы/события подключённых типов (1 подключил → 1 виден).
+        const enabledJ = new Set(
+          [...connectedModules].filter(x => x.startsWith('journal:')).map(x => x.slice(8))
+        );
+        const jTags = logTags.filter(t =>
+          t.id === 'all' ? enabledJ.size > 1 : enabledJ.has(t.id)
+        );
+        return (
+          <div className="space-y-4 pb-24">
+            {enabledJ.size === 0 && (
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
+                Подключите суб-модули Журнала в разделе «Модули»
+              </div>
+            )}
+            <div className="flex space-x-2 overflow-x-auto pt-2 pb-2 scrollbar-hide -mx-4 px-4">
+              {jTags.map(tag => (
+                <button key={tag.id} onClick={() => setLogFilter(tag.id)} className={`flex-shrink-0 px-6 py-3 rounded-2xl font-black text-[10px] uppercase border transition-all ${logFilter === tag.id ? 'bg-cta text-white border-cta scale-105 shadow-md' : 'bg-sff text-txd border-bd'}`}>{tag.label}</button>
+              ))}
+            </div>
+            {logsLoading && (
+              <div className="text-center py-8 text-txd font-black text-sm">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2" /> Загрузка журнала...
+              </div>
+            )}
+            {!logsLoading && logs.length === 0 && (
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
+                Событий пока нет
+              </div>
+            )}
+            {logs.filter(l => enabledJ.has(l.type) && (logFilter === 'all' || l.type === logFilter)).map(log => {
+              const TAG_STYLE = {
+                trigger:      'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                mute:         'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                unmute:       'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                ban:          'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_40%,transparent)]',
+                unban:        'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                kick:         'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_40%,transparent)]',
+                warn:         'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_40%,transparent)]',
+                join:         'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                leave:        'bg-sf2 text-txd border border-bd2',
+                blacklist:    'bg-sf2 text-txd border border-bd2',
+                admin:        'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                survey:       'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple border border-[color-mix(in_oklab,var(--purple)_40%,transparent)]',
+                profile:      'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_40%,transparent)]',
+                activity:     'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]',
+                photo:        'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_40%,transparent)]',
+              };
+              const tagStyle = TAG_STYLE[log.type] || 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_40%,transparent)]';
+              const isExpanded = expandedLogs.has(log.id);
+              const hasActions = ['join','ban','mute','blacklist'].includes(log.type);
+              return (
+                <div key={log.id} className="bg-sff rounded-2xl border border-bd shadow-sm animate-in slide-in-from-bottom-2 overflow-hidden">
+
+                  {/* ── Шапка: аватар + имя + тег + стрелка ── */}
+                  <div
+                    className="flex items-center gap-2 px-3 pt-2.5 pb-2 cursor-pointer select-none"
+                    onClick={() => hasActions && toggleLogExpand(log.id)}
+                  >
+                    <UserAvatar userId={log.user_id} name={log.user} size={34}/>
+                    <div className="flex-1 min-w-0">
+                      <div className="font-black text-[12px] text-tx truncate leading-tight">{log.user || '—'}</div>
+                      <div className="text-[9px] text-lbl font-mono">{log.time?.replace('T',' ')}</div>
+                    </div>
+                    <span className={`flex-shrink-0 px-2 py-0.5 rounded-full text-[9px] font-black uppercase tracking-widest ${tagStyle}`}>{log.tag}</span>
+                    {hasActions && (
+                      <button className={`flex-shrink-0 p-1 rounded-lg transition-colors ${isExpanded ? 'bg-ih text-txd' : 'text-lbl hover:text-txd'}`}>
+                        {isExpanded ? <ChevronUp size={13}/> : <ChevronDown size={13}/>}
+                      </button>
+                    )}
+                  </div>
+
+                  {/* ── Тело: текст сообщения ── */}
+                  <div className="px-3 pb-2.5"
+                    style={{
+                      '--q-bg':       quoteCfg.bg,
+                      '--q-stripe-1': quoteCfg.stripe1,
+                      '--q-stripe-2': quoteCfg.stripeMode === 'alternating' ? quoteCfg.stripe2 : quoteCfg.stripe1,
+                    }}
+                  >
+                    <div
+                      className="journal-html text-[11.5px] text-txd leading-snug break-words [&_a]:text-cta [&_a]:underline [&_a]:font-semibold [&_b]:font-black [&_b]:text-tx"
+                      dangerouslySetInnerHTML={{ __html: log.text }}
+                    />
+                  </div>
+
+                  {/* ── Кнопки действий — только при раскрытии ── */}
+                  {isExpanded && (
+                    <div className="px-3 pb-3 space-y-1.5 border-t border-bd pt-2">
+                      <a
+                        href={`tg://user?id=${log.user_id}`}
+                        className="flex items-center justify-center gap-1.5 bg-blue-600 text-white py-2.5 rounded-xl font-black text-[9px] uppercase shadow-sm shadow-blue-100 active:scale-[0.98] transition-all"
+                      >
+                        <MessageCircle size={12}/><span>Написать в ЛС</span>
+                      </a>
+                      <div className="grid grid-cols-2 gap-1.5">
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'unmute')} className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--ok)_40%,transparent)] active:scale-95 transition-all"><UserCheck size={12}/><span>Размутить</span></button>}
+                        {log.type === 'mute'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'unban')}  className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] active:scale-95 transition-all"><UserCheck size={12}/><span>Разбанить</span></button>}
+                        {log.type === 'ban'       && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--pink)_40%,transparent)] active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                        {log.type === 'join'      && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'join'      && <button className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] active:scale-95 transition-all"><UserSearch size={12}/><span>Досье</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'ban')}    className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-95 transition-all"><Ban size={12}/><span>Забанить</span></button>}
+                        {log.type === 'blacklist' && <button onClick={() => journalAction(log.user_id, 'kick')}   className="flex items-center justify-center gap-1 bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink py-2 rounded-xl font-black text-[9px] uppercase border border-[color-mix(in_oklab,var(--pink)_40%,transparent)] active:scale-95 transition-all"><UserMinus size={12}/><span>Удалить</span></button>}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        );
+      }
+
+      case 'shipper':
+        return (
+          <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+            <div className="bg-sff rounded-[2.5rem] p-6 border border-bd shadow-sm flex items-center justify-between">
+              <div>
+                <h3 className="font-black text-xl text-tx mb-1">Модуль Шиппер</h3>
+                <span className={`text-[10px] font-black uppercase tracking-widest ${shipperSettings.enabled ? 'text-ok' : 'text-danger'}`}>
+                   {shipperSettings.enabled ? '● Активен' : '○ Отключен'}
+                </span>
+              </div>
+              <button onClick={() => setShipperSettings({...shipperSettings, enabled: !shipperSettings.enabled})} className={`w-14 h-8 rounded-full transition-colors relative ${shipperSettings.enabled ? 'bg-green-500' : 'bg-bd2'}`}>
+                <div className={`absolute top-1 w-6 h-6 bg-sff rounded-full transition-all ${shipperSettings.enabled ? 'left-7' : 'left-1'}`} />
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 gap-3">
+              <h3 className="px-4 text-[10px] font-black text-lbl uppercase tracking-widest">Категории</h3>
+              {shipperSettings.categories.map(cat => (
+                <div key={cat.id} className="bg-sff p-5 rounded-3xl border border-bd shadow-sm flex items-center justify-between active:scale-[0.98] transition-all">
+                  <div className="flex items-center space-x-4">
+                    <div className="w-12 h-12 bg-sf2 rounded-2xl flex items-center justify-center text-xl">{cat.id === 'hot18' ? '🔥' : cat.id === 'funny' ? '😂' : '💘'}</div>
+                    <span className="font-black text-tx">{cat.name.replace(/^[^\p{L}\p{N}]+/u, '')}</span>
+                  </div>
+                  <ChevronRight size={20} className="text-lbl" />
+                </div>
+              ))}
+            </div>
+
+            <div className="bg-gray-900 text-white rounded-[2.5rem] p-8 space-y-6">
+               <div className="space-y-4">
+                  <h4 className="text-[10px] font-black text-blue-400 uppercase tracking-widest flex items-center"><Dices size={14} className="mr-2"/> Режим отбора</h4>
+                  <div className="grid grid-cols-2 gap-2">
+                    {['active_48', 'active_72', 'inactive', 'random'].map(m => (
+                      <button key={m} onClick={() => setShipperSettings({...shipperSettings, mode: m})} className={`p-4 rounded-2xl font-black text-[9px] uppercase border transition-all ${shipperSettings.mode === m ? 'bg-blue-600 border-blue-600 text-white' : 'bg-gray-800 border-gray-700 text-lbl'}`}>
+                        {m === 'active_48' ? '48ч' : m === 'active_72' ? '72ч' : m === 'inactive' ? 'Спящие' : 'Рандом'}
+                      </button>
+                    ))}
+                  </div>
+               </div>
+            </div>
+          </div>
+        );
+
+      case 'system':
+        return (
+          <div className="space-y-6 pb-24 animate-in fade-in duration-500">
+             <div className="grid grid-cols-1 gap-4">
+                <div className="bg-sff p-8 rounded-[2.5rem] border border-bd shadow-sm flex items-center justify-between">
+                   <div>
+                      <span className="text-[10px] font-black text-cta uppercase block mb-2">Курс Пульса</span>
+                      <div className="flex items-baseline space-x-2">
+                         <span className="text-5xl font-black text-tx">{liveStats?.pulseRate ?? systemStats.pulseRate}</span>
+                         <span className="text-lbl font-bold uppercase text-xs"> manual</span>
+                      </div>
+                   </div>
+                   <button className="p-5 bg-[color-mix(in_oklab,var(--cta)_14%,transparent)] text-cta rounded-3xl"><Edit size={24}/></button>
+                </div>
+
+             </div>
+
+             {/* ─── АДМИНИСТРАТОРЫ ─── */}
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd space-y-4">
+               <div className="flex items-center justify-between">
+                 <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                   <ShieldCheck className="mr-3 text-ok" size={16}/> Администраторы
+                 </h3>
+                 <button onClick={fetchStaff} className="text-xs text-txd font-bold px-3 py-1.5 bg-sf2 rounded-xl active:scale-95 transition-all">
+                   Обновить
+                 </button>
+               </div>
+
+               {/* Добавить */}
+               <div className="flex space-x-2">
+                 <input
+                   value={newAdminId}
+                   onChange={e => { setNewAdminId(e.target.value); setStaffError(''); }}
+                   onKeyDown={e => e.key === 'Enter' && addAdmin()}
+                   placeholder="ID или @username"
+                   className="flex-1 bg-sf2 border border-bd rounded-2xl px-4 py-3 text-sm font-bold text-tx placeholder:text-lbl focus:outline-none focus:border-cta"
+                 />
+                 <button
+                   onClick={addAdmin}
+                   disabled={staffAdding || !newAdminId.trim()}
+                   className="px-5 py-3 bg-cta text-white rounded-2xl font-black text-xs disabled:opacity-40 active:scale-95 transition-all flex items-center space-x-1"
+                 >
+                   {staffAdding ? <Loader2 size={14} className="animate-spin"/> : <PlusCircle size={14}/>}
+                   <span>Добавить</span>
+                 </button>
+               </div>
+               {staffError && <p className="text-xs text-danger font-bold px-1">{staffError}</p>}
+
+               {/* Список */}
+               {staffLoading ? (
+                 <div className="flex items-center justify-center py-6 text-txd">
+                   <Loader2 size={18} className="animate-spin mr-2"/> Загрузка...
+                 </div>
+               ) : (
+                 <div className="space-y-2">
+                   {staffList.length === 0 && (
+                     <p className="text-center text-lbl font-black text-xs uppercase tracking-widest py-4">
+                       Нет данных
+                     </p>
+                   )}
+                   {staffList.map(m => (
+                     <div key={m.user_id} className="flex items-center justify-between p-4 bg-sf2 rounded-2xl">
+                       <div>
+                         <div className="font-black text-sm text-tx">
+                           {m.username ? `@${m.username}` : `ID ${m.user_id}`}
+                           {m.first_name ? ` · ${m.first_name}` : ''}
+                         </div>
+                         <div className="flex items-center gap-2 mt-1">
+                           <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-full ${m.is_owner ? 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn' : 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok'}`}>
+                             {m.is_owner ? '👑 Владелец' : '🛡 Админ'}
+                           </span>
+                           <span className="text-[9px] text-lbl font-mono">{m.user_id}</span>
+                         </div>
+                       </div>
+                       {!m.is_owner && (
+                         <button
+                           onClick={() => removeAdmin(m.user_id)}
+                           disabled={staffRemoving === m.user_id}
+                           className="p-2.5 bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger rounded-xl active:scale-95 transition-all disabled:opacity-40"
+                         >
+                           {staffRemoving === m.user_id
+                             ? <Loader2 size={15} className="animate-spin"/>
+                             : <UserMinus size={15}/>}
+                         </button>
+                       )}
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+
+             {/* ─── УПРАВЛЕНИЕ ФУНКЦИЯМИ ─── */}
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd">
+               <div className="flex items-center justify-between mb-5">
+                 <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                   <Wrench className="mr-3 text-purple" size={16}/> Функции бота
+                 </h3>
+                 <button
+                   onClick={fetchFeatures}
+                   className="text-xs text-txd font-bold px-3 py-1.5 bg-sf2 rounded-xl active:scale-95 transition-all"
+                 >
+                   Обновить
+                 </button>
+               </div>
+
+               {featuresLoading && (
+                 <div className="flex items-center justify-center py-8 text-txd">
+                   <Loader2 size={20} className="animate-spin mr-2"/> Загрузка...
+                 </div>
+               )}
+
+               {!featuresLoading && (
+                 <div className="space-y-2">
+                   {botFeatures.map(f => (
+                     <div key={f.id} className="flex items-center justify-between p-3.5 bg-sf2 rounded-2xl">
+                       <span className="font-bold text-sm text-tx">{f.name}</span>
+                       <button
+                         onClick={() => toggleFeature(f.id)}
+                         disabled={togglingFeature === f.id}
+                         className={`relative w-12 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${
+                           f.enabled ? 'bg-ok' : 'bg-bd2'
+                         } ${togglingFeature === f.id ? 'opacity-50' : 'active:scale-95'}`}
+                       >
+                         <span className={`absolute top-0.5 w-5 h-5 bg-sff rounded-full shadow transition-all duration-200 ${
+                           f.enabled ? 'left-[calc(100%-1.375rem)]' : 'left-0.5'
+                         }`}/>
+                       </button>
+                     </div>
+                   ))}
+                 </div>
+               )}
+             </div>
+
+             {/* ─── СТИЛЬ ЦИТАТ ЖУРНАЛА ─── */}
+             <div className="bg-sff rounded-[2.5rem] p-6 border border-bd space-y-4">
+               <h3 className="font-black text-tx text-sm uppercase flex items-center">
+                 <ScrollText className="mr-3 text-warn" size={16}/> Стиль цитат журнала
+               </h3>
+
+               {/* Превью */}
+               <div className="journal-html"
+                 style={{
+                   '--q-bg':       quoteCfg.bg,
+                   '--q-stripe-1': quoteCfg.stripe1,
+                   '--q-stripe-2': quoteCfg.stripeMode === 'alternating' ? quoteCfg.stripe2 : quoteCfg.stripe1,
+                 }}
+               >
+                 <p className="text-[10px] text-lbl font-bold uppercase mb-1">Превью:</p>
+                 <blockquote>Пример текста нарушения от пользователя — это цитата сообщения</blockquote>
+               </div>
+
+               {/* Цвет фона */}
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">Фон цитаты</span>
+                 <div className="flex items-center gap-2">
+                   <input type="color" value={quoteCfg.bg} onChange={e => setQuoteCfg(p => ({...p, bg: e.target.value}))}
+                     className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-lbl">{quoteCfg.bg}</span>
+                 </div>
+               </div>
+
+               {/* Режим полоски */}
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">Полоска</span>
+                 <div className="flex gap-2">
+                   {['solid', 'alternating'].map(m => (
+                     <button key={m} onClick={() => setQuoteCfg(p => ({...p, stripeMode: m}))}
+                       className={`px-3 py-1.5 rounded-xl text-[10px] font-black uppercase transition-all ${quoteCfg.stripeMode === m ? 'bg-gray-900 text-white' : 'bg-sff text-lbl border border-bd2'}`}>
+                       {m === 'solid' ? 'Одноцветная' : 'Чередование'}
+                     </button>
+                   ))}
+                 </div>
+               </div>
+
+               {/* Цвет 1 */}
+               <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                 <span className="text-sm font-bold text-tx">{quoteCfg.stripeMode === 'alternating' ? 'Цвет 1' : 'Цвет полоски'}</span>
+                 <div className="flex items-center gap-2">
+                   <input type="color" value={quoteCfg.stripe1} onChange={e => setQuoteCfg(p => ({...p, stripe1: e.target.value}))}
+                     className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                   <span className="text-xs font-mono text-lbl">{quoteCfg.stripe1}</span>
+                 </div>
+               </div>
+
+               {/* Цвет 2 — только при alternating */}
+               {quoteCfg.stripeMode === 'alternating' && (
+                 <div className="flex items-center justify-between p-3 bg-sf2 rounded-2xl">
+                   <span className="text-sm font-bold text-tx">Цвет 2</span>
+                   <div className="flex items-center gap-2">
+                     <input type="color" value={quoteCfg.stripe2} onChange={e => setQuoteCfg(p => ({...p, stripe2: e.target.value}))}
+                       className="w-8 h-8 rounded-lg border border-bd2 cursor-pointer p-0.5"/>
+                     <span className="text-xs font-mono text-lbl">{quoteCfg.stripe2}</span>
+                   </div>
+                 </div>
+               )}
+
+               <button
+                 onClick={saveQuoteCfg}
+                 disabled={quoteSaving || !isOwnerOrDeveloper}
+                 className="w-full py-3 bg-gray-900 text-white rounded-2xl font-black text-xs uppercase tracking-wide active:scale-[0.98] transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                 title={!isOwnerOrDeveloper ? 'Только владелец или разработчик может сохранять стиль цитат' : ''}
+               >
+                 {quoteSaving ? <Loader2 size={14} className="animate-spin"/> : <Check size={14}/>}
+                 Сохранить настройки
+               </button>
+               {!isOwnerOrDeveloper && (
+                 <p className="text-center text-xs font-semibold text-txd">
+                   Только владелец или разработчик может сохранить внешний вид цитат.
+                 </p>
+               )}
+               {quoteSaveMsg && (
+                 <p className={`text-center text-xs font-bold ${quoteSaveMsg.startsWith('✓') ? 'text-ok' : 'text-danger'}`}>
+                   {quoteSaveMsg}
+                 </p>
+               )}
+             </div>
+
+          </div>
+        );
+
+      case 'triggers': {
+        // ── Страница редактора триггера (полный экран) ──
+        if (editingTrigger) {
+          const upd = (field, val) => setEditingTrigger(prev => ({...prev, [field]: val}));
+          const conditionGroups = editingTrigger.conditionGroups || [{ id: 1, conditions: [] }];
+          const updCond = (gIdx, cIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, conditions: g.conditions.map((c, ci) => ci !== cIdx ? c : {...c, [field]: val})
+            })
+          }));
+          const removeCond = (gIdx, cIdx) => setEditingTrigger(prev => ({
+            ...prev,
+            conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, conditions: g.conditions.filter((_, ci) => ci !== cIdx)
+            })
+          }));
+          const addConditionToGroup = (gIdx, signal, ctype = 'keyword') => {
+            const newId = Date.now();
+            const newCond = ctype === 'reply_type'
+              ? { id: newId, signal: 'message', type: 'reply_type', chips: [], inverted: false, placeholder_key: '' }
+              : ctype === 'msg_type'
+              ? { id: newId, signal: 'message', type: 'msg_type', chips: [], inverted: false, placeholder_key: '' }
+              : { id: newId, signal, type: 'keyword', condition: 'contains', keyword: '', chips: [], keywordMode: 'chips', inverted: false, modifier: 'nocase', placeholder_key: '' };
+            setEditingTrigger(prev => ({
+              ...prev,
+              conditionGroups: (prev.conditionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+                ...g, conditions: [...g.conditions, newCond]
+              })
+            }));
+            setShowCondPickerModal(false);
+          };
+          const chipKey = (gi, ci) => `${gi}_${ci}`;
+          const getChipInput = (gi, ci) => condChipInputs[chipKey(gi, ci)] || '';
+          const setChipInput = (gi, ci, val) => setCondChipInputs(prev => ({...prev, [chipKey(gi, ci)]: val}));
+          const addChip = (gIdx, cIdx, text) => {
+            const trimmed = text.trim();
+            if (!trimmed) return;
+            const chips = [...(conditionGroups[gIdx]?.conditions[cIdx]?.chips || []), trimmed];
+            updCond(gIdx, cIdx, 'chips', chips);
+            updCond(gIdx, cIdx, 'keyword', chips.join(', '));
+            setChipInput(gIdx, cIdx, '');
+          };
+          const removeChip = (gIdx, cIdx, chipIdx) => {
+            const chips = (conditionGroups[gIdx]?.conditions[cIdx]?.chips || []).filter((_, i) => i !== chipIdx);
+            updCond(gIdx, cIdx, 'chips', chips);
+            updCond(gIdx, cIdx, 'keyword', chips.join(', '));
+          };
+          const moveCondInGroup = (gIdx, cIdx, dir) => setEditingTrigger(prev => {
+            const groups = (prev.conditionGroups||[]).map((g, gi) => {
+              if (gi !== gIdx) return g;
+              const conds = [...g.conditions];
+              const newIdx = cIdx + dir;
+              if (newIdx < 0 || newIdx >= conds.length) return g;
+              [conds[cIdx], conds[newIdx]] = [conds[newIdx], conds[cIdx]];
+              return {...g, conditions: conds};
+            });
+            return {...prev, conditionGroups: groups};
+          });
+          const addCondGroup = () => setEditingTrigger(prev => ({
+            ...prev, conditionGroups: [...(prev.conditionGroups||[]), { id: Date.now(), conditions: [] }]
+          }));
+          const removeCondGroup = (gIdx) => setEditingTrigger(prev => ({
+            ...prev, conditionGroups: (prev.conditionGroups||[]).filter((_, i) => i !== gIdx)
+          }));
+          const moveCondGroup = (gIdx, dir) => setEditingTrigger(prev => {
+            const groups = [...(prev.conditionGroups||[])];
+            const newIdx = gIdx + dir;
+            if (newIdx < 0 || newIdx >= groups.length) return prev;
+            [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
+            return {...prev, conditionGroups: groups};
+          });
+          const actionGroups = editingTrigger.actionGroups || [{ id: 1, probability: 100, actions: [] }];
+          const updActionGroup = (gIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {...g, [field]: val})
+          }));
+          const updAction = (gIdx, aIdx, field, val) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, actions: g.actions.map((a, ai) => ai !== aIdx ? a : {...a, [field]: val})
+            })
+          }));
+          const removeAction = (gIdx, aIdx) => setEditingTrigger(prev => ({
+            ...prev,
+            actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+              ...g, actions: g.actions.filter((_, ai) => ai !== aIdx)
+            })
+          }));
+          const addActionToGroup = (gIdx, type) => {
+            const newId = Date.now();
+            const base = { id: newId, type, duration: '', emoji: '' };
+            const sendTextExtra = type === 'send_text' || type === 'dm' ? {
+              variants: [{ id: Date.now(), text: '', media_type: 'none' }],
+              currentVariant: 0, msgTab: 'editor', reply_target: 'none',
+              settings: { delete_after: false, delete_after_sec: 60, send_delayed: false, pin: false, disable_preview: false, disable_notify: false, delete_previous: false, content_protection: false },
+              keyboard: [],
+              reply_text: '', media_type: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60,
+            } : { reply_text: '', media_type: 'none', reply_target: 'none', bot_msg_delete: 'no', bot_msg_delete_after: 60 };
+            setEditingTrigger(prev => ({
+              ...prev,
+              actionGroups: (prev.actionGroups||[]).map((g, gi) => gi !== gIdx ? g : {
+                ...g, actions: [...g.actions, { ...base, ...sendTextExtra }]
+              })
+            }));
+            setShowActPickerModal(false);
+            setNewActionIds(prev => { const n = new Set(prev); n.add(newId); return n; });
+            setTimeout(() => {
+              setNewActionIds(prev => { const n = new Set(prev); n.delete(newId); return n; });
+            }, 800);
+          };
+          const addActionGroup = () => setEditingTrigger(prev => ({
+            ...prev, actionGroups: [...(prev.actionGroups||[]), { id: Date.now(), probability: 100, actions: [] }]
+          }));
+          const removeActionGroup = (gIdx) => setEditingTrigger(prev => ({
+            ...prev, actionGroups: (prev.actionGroups||[]).filter((_, i) => i !== gIdx)
+          }));
+          const moveActionGroup = (gIdx, dir) => setEditingTrigger(prev => {
+            const groups = [...(prev.actionGroups||[])];
+            const newIdx = gIdx + dir;
+            if (newIdx < 0 || newIdx >= groups.length) return prev;
+            [groups[gIdx], groups[newIdx]] = [groups[newIdx], groups[gIdx]];
+            return {...prev, actionGroups: groups};
+          });
+          const moveActionInGroup = (gIdx, aIdx, dir) => setEditingTrigger(prev => {
+            const groups = (prev.actionGroups||[]).map((g, gi) => {
+              if (gi !== gIdx) return g;
+              const acts = [...g.actions];
+              const newIdx = aIdx + dir;
+              if (newIdx < 0 || newIdx >= acts.length) return g;
+              [acts[aIdx], acts[newIdx]] = [acts[newIdx], acts[aIdx]];
+              return {...g, actions: acts};
+            });
+            return {...prev, actionGroups: groups};
+          });
+          const COND_TOOLTIP_TEXT = {
+            'msg_keyword': 'Проверяет текст входящего сообщения — содержит ли оно указанное слово или фразу.',
+            'msg_any':     'Срабатывает на любое текстовое сообщение, без проверки содержимого.',
+            'qmsg_keyword': 'Проверяет текст сообщения, на которое ответили (цитируемое).',
+            'qmsg_any':    'Срабатывает, когда пользователь отвечает на любое сообщение цитированием.',
+            'msg_reply_type': 'Проверяет тип сообщения: обычное, реплай, первое сообщение пользователя, комментарий под постом и т.д.',
+            'msg_msg_type':   'Проверяет формат входящего сообщения: фото, видео, стикер, документ, голосовое и т.д. Всего 15 типов.',
+          };
+          const MSG_TYPE_OPTIONS = [
+            { key: 'text',       label: 'Текст' },
+            { key: 'photo',      label: 'Фото' },
+            { key: 'photo_file', label: 'Фотофайл' },
+            { key: 'video',      label: 'Видео' },
+            { key: 'video_file', label: 'Видеофайл' },
+            { key: 'video_note', label: 'Видео заметка' },
+            { key: 'document',   label: 'Документ' },
+            { key: 'sticker',    label: 'Стикер' },
+            { key: 'animation',  label: 'Анимация' },
+            { key: 'audio',      label: 'Аудио' },
+            { key: 'voice',      label: 'Войс' },
+            { key: 'contact',    label: 'Контакт' },
+            { key: 'location',   label: 'Локация' },
+            { key: 'poll',       label: 'Опрос' },
+            { key: 'game',       label: 'Игра' },
+          ];
+          const MSG_TYPE_INFO = `Вызов триггера через параметр тип (или формат) посылаемого сообщения: фото, аудио, стикер и т.д. Всего доступно 15 типов сообщений.
+
+• Текст — триггер сработает, если пользователь отправил обычное текстовое сообщение без вложений.
+• Фото — триггер сработает, если отправлена фотография из галереи телефона.
+• Фотофайл — триггер сработает, если изображение отправлено как файл (без сжатия).
+• Видео — триггер сработает, если видеозапись загружена напрямую из галереи телефона.
+• Видеофайл — триггер сработает, если видеозапись отправлена как файл, а не из галереи.
+• Видео заметка — триггер сработает, если отправлено круглое видео (видеокружок).
+• Документ — триггер сработает, если отправлен файл: doc, word, pdf, excel и т.д.
+• Стикер — триггер сработает, если отправлен статичный или анимированный стикер Telegram.
+• Анимация — триггер сработает, если отправлен GIF или анимированное изображение.
+• Аудио — триггер сработает, если отправлен музыкальный файл или аудиозапись. Не относится к голосовым сообщениям.
+• Войс — триггер сработает, если отправлено голосовое сообщение в Telegram.
+• Контакт — триггер сработает, если отправлен контакт (номер телефона).
+• Локация — триггер сработает, если отправлена геолокация.
+• Опрос — триггер сработает, если создан опрос в чате.
+• Игра — триггер сработает, если отправлена Telegram-игра.`;
+
+          const REPLY_TYPE_OPTIONS = [
+            { key: 'any',                label: 'Любое сообщение' },
+            { key: 'any_reply',          label: 'Все ответы' },
+            { key: 'reply_bot',          label: 'Ответ боту' },
+            { key: 'reply_user',         label: 'Ответ участнику' },
+            { key: 'reply_admin',        label: 'Ответ админу' },
+            { key: 'reply_non_admin',    label: 'Ответ не админу' },
+            { key: 'reply_self_bot',     label: 'Ответ @Pulse_On_bot' },
+            { key: 'non_reply',          label: 'Не ответ' },
+            { key: 'first_message',      label: 'Первое сообщение пользователя' },
+            { key: 'reply_linked_post',  label: 'Ответ на пост в привязанном канале' },
+            { key: 'reply_channel',      label: 'Ответ на сообщение от имени канала' },
+            { key: 'comment_under_post', label: 'Любой комментарий под постом' },
+            { key: 'reply_self',         label: 'Ответ самому себе' },
+          ];
+          const REPLY_TYPE_INFO = `Бот будет реагировать на определённые типы сообщения участников чата. Например, на «ответы админу». Настройка полезна, если хотите контролировать ответы в группе, например — разрешить или запретить их.
+
+• Любое сообщение — триггер будет срабатывать на любые типы сообщений участников.
+• Все ответы — сработает, если участник написал сообщение в ответ (реплай) на любое сообщение.
+• Ответ боту — сработает, если участник написал сообщение в ответ на сообщение бота.
+• Ответ участнику — сработает, если участник написал сообщение в ответ на сообщение другого участника.
+• Ответ админу — сработает, если участник написал сообщение в ответ на сообщение администратора.
+• Ответ не админу — сработает, если участник написал сообщение в ответ тому, кто не является админом.
+• Ответ @Pulse_On_bot — сработает, если участник написал сообщение в ответ нашему боту.
+• Не ответ — сработает, если участник написал обычное сообщение, не в ответ кому-либо.
+• Первое сообщение пользователя — сработает, если участник написал в чате впервые.
+• Ответ на пост в привязанном канале — сработает, если участник пишет в ответ на пост в канале, который привязан к группе.
+• Ответ на сообщение от имени канала — сработает, если участник пишет в ответ на сообщение, которое написано от имени любого канала.
+• Любой комментарий под постом — сработает, если участник оставит любой комментарий или ответ на комментарий под постом.
+• Ответ самому себе — сработает, если участник отвечает на своё собственное сообщение.`;
+
+          const COND_LABELS = { contains:'Содержит', exact:'Точное', starts_with:'Начало', ends_with:'Конец', whole_word:'Целое слово' };
+          const ACTION_TYPES = [
+            { type:'send_text', label:'Отправить сообщение в чат', Icon: MessageCircle },
+            { type:'dm',        label:'Личное сообщение',   Icon: Send          },
+            { type:'mute',      label:'Мут',               Icon: Clock         },
+            { type:'ban',       label:'Бан',               Icon: ShieldBan     },
+            { type:'warn',      label:'Предупреждение',    Icon: AlertOctagon  },
+            { type:'delete',    label:'Удалить сообщение', Icon: Trash2        },
+            { type:'emoji',     label:'Реакция',           Icon: Smile         },
+            { type:'pin',       label:'Закрепить сообщение',Icon: CheckCircle2   },
+          ];
+
+          return (
+            <div className="pb-24 animate-in fade-in duration-300">
+
+              {/* ── Шапка редактора ── */}
+              <div className="bg-sff rounded-[2rem] border border-bd shadow-sm p-5 mb-5 space-y-4">
+
+                {/* Кнопки действий */}
+                <div className="flex items-center gap-2">
+                  <button onClick={() => { setLeaveTarget(null); setShowLeaveConfirm(true); }}
+                    className="p-2 text-lbl hover:text-txd active:scale-90 transition-all mr-auto">
+                    <X size={20}/>
+                  </button>
+                  <button onClick={saveTrigger}
+                    className="flex items-center gap-1.5 px-4 py-2.5 bg-green-500 text-white rounded-xl font-black text-sm shadow-md shadow-green-100 active:scale-95 transition-all">
+                    <CheckCircle2 size={15}/> Сохранить
+                  </button>
+                  <div className="relative">
+                    <button onClick={() => setShowTriggerEditMenu(v=>!v)}
+                      className="px-3 py-2.5 bg-sf2 text-txd rounded-xl font-black text-sm active:scale-95 transition-all hover:bg-bd2">
+                      ···
+                    </button>
+                    {showTriggerEditMenu && (
+                      <div className="absolute right-0 top-full mt-1.5 w-56 bg-sff border border-bd rounded-2xl shadow-xl z-10 overflow-hidden"
+                        onClick={() => setShowTriggerEditMenu(false)}>
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-lbl cursor-not-allowed border-b border-bd">
+                          <FileText size={14} className="text-gray-200"/>
+                          <span>Сохранить и продолжить</span>
+                          <span className="ml-auto text-[9px] bg-sf2 text-lbl px-1.5 py-0.5 rounded font-black">***</span>
+                        </button>
+                        <button className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-lbl cursor-not-allowed">
+                          <Download size={14} className="text-gray-200"/>
+                          <span>Экспортировать триггер</span>
+                          <span className="ml-auto text-[9px] bg-sf2 text-lbl px-1.5 py-0.5 rounded font-black">***</span>
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                  {editingTrigger.id && userCan('triggers.delete') && (
+                    <button onClick={() => { deleteTrigger(editingTrigger.id); setEditingTrigger(null); }}
+                      className="flex items-center gap-1.5 px-4 py-2.5 bg-red-500 text-white rounded-xl font-black text-sm shadow-md shadow-red-100 active:scale-95 transition-all">
+                      <Trash2 size={15}/> Удалить
+                    </button>
+                  )}
+                </div>
+
+                {/* Имя триггера */}
+                <div>
+                  <p className="text-xs font-black text-tx mb-0.5">
+                    Имя триггера <span className="text-danger">*</span>
+                  </p>
+                  <p className="text-[10px] text-lbl font-medium mb-2">
+                    Позволяет быстро найти нужный триггер и включить его
+                  </p>
+                  <input type="text" placeholder="Например: Мут за спам"
+                    value={editingTrigger.name} onChange={e => upd('name', e.target.value)}
+                    className="w-full px-4 py-3.5 bg-sf2 border-2 border-bd rounded-2xl font-black text-base outline-none focus:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] transition-all"/>
+                </div>
+              </div>
+
+              {/* ── Вероятность + Лимит срабатываний ── */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+                <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] p-4 rounded-2xl border border-[color-mix(in_oklab,var(--warn)_30%,transparent)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-warn uppercase tracking-widest flex items-center gap-1">
+                      <Percent size={11}/> Шанс срабатывания
+                    </span>
+                    <span className="text-xl font-black text-warn">{editingTrigger.probability}%</span>
+                  </div>
+                  <input type="range" min="1" max="100" value={editingTrigger.probability}
+                    onChange={e => upd('probability', parseInt(e.target.value))}
+                    className="w-full h-2 bg-[color-mix(in_oklab,var(--warn)_24%,transparent)] rounded-full appearance-none cursor-pointer accent-amber-600"/>
+                </div>
+                <div className="bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] p-4 rounded-2xl border border-[color-mix(in_oklab,var(--cta)_30%,transparent)]">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-cta uppercase tracking-widest">Лимит срабатываний</span>
+                    <span className="text-[10px] font-bold text-blue-400">{(editingTrigger.fire_limit || 0) === 0 ? '∞' : editingTrigger.fire_limit}</span>
+                  </div>
+                  <input type="number" min="0" max="9999"
+                    value={editingTrigger.fire_limit || 0}
+                    onChange={e => upd('fire_limit', parseInt(e.target.value) || 0)}
+                    className="w-full px-3 py-2 bg-sff border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl font-black text-sm outline-none focus:border-blue-400 transition-all text-center"/>
+                  <p className="text-[9px] text-blue-400 mt-1 text-center">0 = без лимита</p>
+                </div>
+              </div>
+
+              {/* ── УСЛОВИЯ + ДЕЙСТВИЯ (2 колонки) ── */}
+              <div className="grid grid-cols-2 gap-3 mb-5">
+
+              {/* ─── Левая колонка: УСЛОВИЯ ─── */}
+              <div className="space-y-3">
+                {/* Заголовок блока */}
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[10px] font-black text-txd uppercase tracking-widest">Условия</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCondTooltip(condTooltip === 'block' ? null : 'block')}
+                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 active:scale-90 transition-all flex-shrink-0">
+                      ?
+                    </button>
+                    {condTooltip === 'block' && (
+                      <div className="absolute left-0 top-6 w-64 bg-gray-900 text-white text-[11px] font-medium p-3 rounded-2xl shadow-xl z-50 leading-relaxed">
+                        Условия определяют, на что реагирует триггер. Несколько условий в одной группе работают как «И» (все должны совпасть). Несколько групп работают как «ИЛИ» (достаточно одной).
+                        <div className="absolute -top-1.5 left-2 w-3 h-3 bg-gray-900 rotate-45"/>
+                      </div>
+                    )}
+                  </div>
+                  {conditionGroups.length > 1 && (
+                    <span className="ml-auto text-[9px] font-black text-lbl bg-sf2 px-2 py-0.5 rounded-full uppercase">
+                      {conditionGroups.length} группы
+                    </span>
+                  )}
+                </div>
+
+                {/* Группы условий */}
+                {conditionGroups.map((group, gIdx) => {
+                  return (
+                    <div key={group.id} className="bg-sff rounded-2xl border border-bd shadow-sm">
+                      {/* Шапка группы */}
+                      <div className="flex items-center gap-2 px-4 py-2.5 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
+                        <span className="text-[10px] font-black text-txd uppercase tracking-widest flex-1">
+                          {conditionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Условия'}
+                          {conditionGroups.length > 1 && gIdx < conditionGroups.length - 1 && (
+                            <span className="ml-2 text-[9px] font-black text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] px-1.5 py-0.5 rounded-full">ИЛИ ↓</span>
+                          )}
+                        </span>
+                        <div className="flex items-center gap-0.5">
+                          <button onClick={() => moveCondGroup(gIdx, -1)} disabled={gIdx === 0}
+                            className="p-1 text-lbl hover:text-txd disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↑</button>
+                          <button onClick={() => moveCondGroup(gIdx, 1)} disabled={gIdx === conditionGroups.length - 1}
+                            className="p-1 text-lbl hover:text-txd disabled:opacity-20 active:scale-90 transition-all text-xs font-black">↓</button>
+                          {conditionGroups.length > 1 && (
+                            <button onClick={() => removeCondGroup(gIdx)}
+                              className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all ml-0.5">
+                              <Trash2 size={12}/>
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Условия внутри группы */}
+                      <div className="p-3">
+                        {group.conditions.length === 0 && (
+                          <div className="text-center py-4 text-lbl text-[11px] font-black uppercase tracking-widest">
+                            Список пуст
+                          </div>
+                        )}
+                        {group.conditions.map((cond, cIdx) => {
+                          const COND_TYPE_LABELS = { exact:'Полное совпадение', ends_with:'Сообщение заканчивается на', starts_with:'Сообщение начинается с', contains:'Сообщение содержит', whole_word:'Целое слово' };
+                          const typeKey = `type_${gIdx}_${cIdx}`;
+                          const modKey  = `mod_${gIdx}_${cIdx}`;
+                          return (
+                          <div key={cond.id}>
+                            {cIdx > 0 && (
+                              <div className="flex justify-center my-3">
+                                <div className="flex flex-col items-center">
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]"/>
+                                  <div className="w-px h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]"/>
+                                </div>
+                              </div>
+                            )}
+                          <div className="bg-sff rounded-2xl border border-bd2"
+                            style={condOpenDropdown && condOpenDropdown.endsWith(`_${gIdx}_${cIdx}`) ? {position:'relative', zIndex:9999} : {}}>
+                            {/* Шапка: ⚙️ + Условие N + ↑↓🗑 */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
+                              <button onClick={() => setCondSettingsModal({gIdx, cIdx})}
+                                className="p-1 text-lbl hover:text-txd active:scale-90 transition-all flex-shrink-0">
+                                <Settings size={12}/>
+                              </button>
+                              <span className="text-[11px] font-black text-tx flex-1">Условие {cIdx + 1}</span>
+                              {cond.placeholder_key && (
+                                <span className="text-[9px] font-bold text-purple bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] px-1.5 py-0.5 rounded-full">%{cond.placeholder_key}%</span>
+                              )}
+                              <div className="flex items-center gap-0.5">
+                                <button onClick={() => moveCondInGroup(gIdx, cIdx, -1)} disabled={cIdx === 0}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronUp size={14}/>
+                                </button>
+                                <button onClick={() => moveCondInGroup(gIdx, cIdx, 1)} disabled={cIdx === group.conditions.length - 1}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronDown size={14}/>
+                                </button>
+                                <button onClick={() => removeCond(gIdx, cIdx)}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-red-300 hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] active:scale-90 transition-all ml-0.5">
+                                  <Trash2 size={11}/>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Тело карточки */}
+                            <div className="px-3 py-3 space-y-3" onClick={() => setCondOpenDropdown(null)}>
+
+                              {cond.type === 'reply_type' ? (
+                                <>
+                                  {/* Заголовок "Тип ответа" + ? */}
+                                  <div className="flex items-center gap-1.5 relative">
+                                    <span className="text-[13px] font-black text-tx">Тип ответа</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_info_${gIdx}_${cIdx}` ? null : `rt_info_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                    {condTooltip === `rt_info_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-[600] w-[280px] bg-gray-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-2xl leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto">
+                                        {REPLY_TYPE_INFO}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-warn font-semibold -mt-1">
+                                    Сигнал для вызова триггера: 📋 Сообщение
+                                  </p>
+                                  {/* Значения условия (multi-select) */}
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <p className="text-[9px] font-black text-txd uppercase">
+                                        Значения условия <span className="text-red-400">*</span>
+                                      </p>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setCondGearModal({gIdx, cIdx}); }}
+                                        className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
+                                    </div>
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => setCondOpenDropdown(condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? null : `rt_dd_${gIdx}_${cIdx}`)}
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-sff border-2 border-bd2 rounded-xl hover:border-gray-300 transition-all">
+                                        <div className="flex flex-wrap gap-1 flex-1">
+                                          {(cond.chips||[]).length === 0 && <span className="text-lbl text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).map((key, ci) => {
+                                            const lbl = REPLY_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
+                                            return (
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 text-tx rounded-lg text-[10px] font-bold">
+                                                {lbl}
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-lbl hover:text-tx leading-none ml-0.5">×</button>
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        <ChevronDown size={14} className={`text-lbl flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                      </button>
+                                      {condOpenDropdown === `rt_dd_${gIdx}_${cIdx}` && (
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                          {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
+                                            <button key={o.key}
+                                              onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-tx hover:bg-sf2">
+                                              {o.label}
+                                            </button>
+                                          ))}
+                                          {REPLY_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
+                                            <div className="px-4 py-3 text-xs text-lbl text-center font-medium">Все опции выбраны</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-1">Обязательное поле</p>}
+                                  </div>
+                                  {/* Инвертировать */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
+                                        <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `rt_inv_${gIdx}_${cIdx}` ? null : `rt_inv_${gIdx}_${cIdx}`); }}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                      </div>
+                                      <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                  </div>
+                                </>
+                              ) : cond.type === 'msg_type' ? (
+                                <>
+                                  {/* Заголовок "Тип сообщения" + ? */}
+                                  <div className="flex items-center gap-1.5 relative">
+                                    <span className="text-[13px] font-black text-tx">Тип сообщения</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_info_${gIdx}_${cIdx}` ? null : `mt_info_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                    {condTooltip === `mt_info_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-[600] w-[300px] bg-gray-900 text-white text-[10px] font-medium p-3 rounded-xl shadow-2xl leading-relaxed whitespace-pre-line max-h-80 overflow-y-auto">
+                                        {MSG_TYPE_INFO}
+                                      </div>
+                                    )}
+                                  </div>
+                                  <p className="text-[10px] text-warn font-semibold -mt-1">
+                                    Сигнал для вызова триггера: 📨 Сообщение
+                                  </p>
+                                  {/* Мультивыбор типов */}
+                                  <div onClick={e => e.stopPropagation()}>
+                                    <div className="flex items-center gap-1.5 mb-2">
+                                      <p className="text-[9px] font-black text-txd uppercase">
+                                        Тип сообщения <span className="text-red-400">*</span>
+                                      </p>
+                                      <button
+                                        onClick={e => { e.stopPropagation(); setCondGearModal({gIdx, cIdx}); }}
+                                        className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">⚙</button>
+                                    </div>
+                                    <div className="relative">
+                                      <button
+                                        onClick={() => setCondOpenDropdown(condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? null : `mt_dd_${gIdx}_${cIdx}`)}
+                                        className="w-full flex items-start justify-between gap-2 min-h-[42px] px-3 py-2 bg-sff border-2 border-bd2 rounded-xl hover:border-gray-300 transition-all">
+                                        <div className="flex flex-wrap gap-1 flex-1">
+                                          {(cond.chips||[]).length === 0 && <span className="text-lbl text-sm font-medium">—</span>}
+                                          {(cond.chips||[]).map((key, ci) => {
+                                            const lbl = MSG_TYPE_OPTIONS.find(o => o.key === key)?.label || key;
+                                            return (
+                                              <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 text-tx rounded-lg text-[10px] font-bold">
+                                                {lbl}
+                                                <button onClick={e => { e.stopPropagation(); const chips = (cond.chips||[]).filter(c => c !== key); updCond(gIdx, cIdx, 'chips', chips); }} className="text-lbl hover:text-tx leading-none ml-0.5">×</button>
+                                              </span>
+                                            );
+                                          })}
+                                        </div>
+                                        <ChevronDown size={14} className={`text-lbl flex-shrink-0 mt-1 transition-transform ${condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` ? 'rotate-180' : ''}`}/>
+                                      </button>
+                                      {condOpenDropdown === `mt_dd_${gIdx}_${cIdx}` && (
+                                        <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-64 overflow-y-auto">
+                                          {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).map(o => (
+                                            <button key={o.key}
+                                              onClick={() => { const chips = [...(cond.chips||[]), o.key]; updCond(gIdx, cIdx, 'chips', chips); }}
+                                              className="w-full px-4 py-2.5 text-sm font-bold text-left transition-all text-tx hover:bg-sf2">
+                                              {o.label}
+                                            </button>
+                                          ))}
+                                          {MSG_TYPE_OPTIONS.filter(o => !(cond.chips||[]).includes(o.key)).length === 0 && (
+                                            <div className="px-4 py-3 text-xs text-lbl text-center font-medium">Список пуст</div>
+                                          )}
+                                        </div>
+                                      )}
+                                    </div>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-1">Обязательное поле</p>}
+                                  </div>
+                                  {/* Инвертировать */}
+                                  <div className="space-y-1">
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
+                                        <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `mt_inv_${gIdx}_${cIdx}` ? null : `mt_inv_${gIdx}_${cIdx}`); }}
+                                          className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                      </div>
+                                      <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                        className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                                  </div>
+                                </>
+                              ) : (<>
+                              {/* Сигнал */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-tx">
+                                  {cond.signal === 'message' ? 'Сообщение' : 'Цитируемое'}
+                                </span>
+                                <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `sig_${gIdx}_${cIdx}` ? null : `sig_${gIdx}_${cIdx}`); }}
+                                  className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">?</button>
+                                {condTooltip === `sig_${gIdx}_${cIdx}` && (
+                                  <div className="absolute z-50 mt-1 w-52 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl leading-relaxed">
+                                    {cond.signal === 'message' ? 'Условие проверяет текст входящего сообщения.' : 'Условие проверяет текст цитируемого (reply) сообщения.'}
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Тип условия */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <p className="text-[9px] font-black text-txd uppercase mb-1.5">
+                                  Выберите тип условия <span className="text-red-400">*</span>
+                                </p>
+                                <div className="relative">
+                                  <button
+                                    onClick={() => setCondOpenDropdown(condOpenDropdown === typeKey ? null : typeKey)}
+                                    className="w-full flex items-center justify-between px-3 py-2.5 bg-sff border-2 border-bd2 rounded-xl text-sm font-bold text-tx hover:border-gray-300 transition-all">
+                                    <span>{COND_TYPE_LABELS[cond.condition] || cond.condition}</span>
+                                    <ChevronDown size={14} className={`text-lbl transition-transform duration-200 ${condOpenDropdown === typeKey ? 'rotate-180' : ''}`}/>
+                                  </button>
+                                  {condOpenDropdown === typeKey && (
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                      {Object.entries(COND_TYPE_LABELS).map(([key, lbl]) => (
+                                        <button key={key}
+                                          onClick={() => { updCond(gIdx, cIdx, 'condition', key); setCondOpenDropdown(null); }}
+                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.condition === key ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                          {lbl}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Сигнал для вызова */}
+                              <p className="text-[10px] text-warn font-semibold -mt-1">
+                                Сигнал для вызова триггера: {cond.signal === 'message' ? '📋 Сообщение' : '↩️ Цитируемое'}
+                              </p>
+
+                              {/* Значения условия (Chips / Text) */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-1.5 mb-2">
+                                  <p className="text-[9px] font-black text-txd uppercase">
+                                    Значения условия <span className="text-red-400">*</span>
+                                  </p>
+                                  <div className="relative">
+                                    <button
+                                      onClick={() => setCondOpenDropdown(condOpenDropdown === `kw_${gIdx}_${cIdx}` ? null : `kw_${gIdx}_${cIdx}`)}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600 flex-shrink-0">
+                                      ⚙
+                                    </button>
+                                    {condOpenDropdown === `kw_${gIdx}_${cIdx}` && (
+                                      <div className="absolute left-0 top-6 z-[500] bg-sff border border-bd rounded-xl shadow-xl overflow-hidden min-w-[160px]">
+                                        <button onClick={() => { updCond(gIdx, cIdx, 'chips', []); updCond(gIdx, cIdx, 'keyword', ''); setCondOpenDropdown(null); setCondChipInput(''); }}
+                                          className="w-full flex items-center gap-2 px-3 py-2.5 text-[11px] font-bold text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] transition-all text-left">
+                                          <RotateCcw size={11}/> Отменить изменения
+                                        </button>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                                {/* Табы */}
+                                <div className="flex border-b border-bd2 mb-2">
+                                  <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'chips')}
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'chips' ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
+                                    🏷 Chips ({(cond.chips||[]).length})
+                                  </button>
+                                  <button onClick={() => updCond(gIdx, cIdx, 'keywordMode', 'text')}
+                                    className={`flex items-center gap-1 px-3 py-1.5 text-[10px] font-black border-b-2 -mb-px transition-all ${(cond.keywordMode||'chips') === 'text' ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
+                                    📄 Text
+                                  </button>
+                                </div>
+                                {(cond.keywordMode||'chips') === 'chips' ? (
+                                  <div>
+                                    {(cond.chips||[]).length > 0 && (
+                                      <div className="flex flex-wrap gap-1 mb-2">
+                                        {(cond.chips||[]).map((chip, ci) => (
+                                          <span key={ci} className="inline-flex items-center gap-1 px-2 py-0.5 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta rounded-lg text-[10px] font-bold">
+                                            {chip}
+                                            <button onClick={() => removeChip(gIdx, cIdx, ci)} className="text-blue-400 hover:text-cta leading-none ml-0.5">×</button>
+                                          </span>
+                                        ))}
+                                      </div>
+                                    )}
+                                    <div className="flex gap-1">
+                                      <input type="text"
+                                        value={getChipInput(gIdx, cIdx)}
+                                        onChange={e => setChipInput(gIdx, cIdx, e.target.value)}
+                                        onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addChip(gIdx, cIdx, getChipInput(gIdx, cIdx)); }}}
+                                        placeholder=""
+                                        className="flex-1 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                      <button onClick={() => addChip(gIdx, cIdx, getChipInput(gIdx, cIdx))}
+                                        className={`px-3 py-2 rounded-xl active:scale-95 transition-all ${getChipInput(gIdx, cIdx).trim() ? 'bg-green-500 hover:bg-green-600 text-white' : 'bg-sf2 hover:bg-bd2 text-txd'}`}>
+                                        <Check size={13}/>
+                                      </button>
+                                    </div>
+                                    <p className="text-[9px] text-lbl mt-1">* Введите значения по одному с помощью «Enter»</p>
+                                    {(cond.chips||[]).length === 0 && <p className="text-[9px] text-red-400 mt-0.5">Обязательное поле</p>}
+                                  </div>
+                                ) : (
+                                  <div>
+                                    <textarea
+                                      value={(cond.chips||[]).join(', ')}
+                                      onChange={e => { const chips = e.target.value.split(',').map(s=>s.trim()).filter(Boolean); updCond(gIdx, cIdx, 'chips', chips); updCond(gIdx, cIdx, 'keyword', e.target.value); }}
+                                      rows={2}
+                                      className="w-full p-2.5 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] resize-none transition-all"/>
+                                    <p className="text-[9px] text-lbl mt-1">* Перечислите значения через запятую</p>
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Модификаторы */}
+                              <div onClick={e => e.stopPropagation()}>
+                                <div className="flex items-center gap-1 mb-1.5">
+                                  <p className="text-[9px] font-black text-txd uppercase">Модификаторы</p>
+                                  <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `modtip_${gIdx}_${cIdx}` ? null : `modtip_${gIdx}_${cIdx}`); }}
+                                    className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                  {condTooltip === `modtip_${gIdx}_${cIdx}` && (
+                                    <div className="absolute z-50 mt-1 w-52 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl leading-relaxed">
+                                      Модификаторы изменяют поведение проверки. «Не учитывать регистр» позволяет реагировать на «Привет» и «привет» одинаково.
+                                    </div>
+                                  )}
+                                </div>
+                                <div className="relative">
+                                  <button onClick={() => setCondOpenDropdown(condOpenDropdown === modKey ? null : modKey)}
+                                    className="w-full flex items-center justify-between px-3 py-2 bg-sff border-2 border-bd2 rounded-xl text-sm hover:border-gray-300 transition-all">
+                                    <div className="flex items-center gap-1.5 flex-1 flex-wrap">
+                                      {cond.modifier === 'nocase' ? (
+                                        <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-sf2 rounded-lg text-[10px] font-bold text-txd">
+                                          Не учитывать регистр
+                                          <button onClick={e => { e.stopPropagation(); updCond(gIdx, cIdx, 'modifier', ''); }} className="ml-0.5 text-lbl hover:text-tx leading-none">×</button>
+                                        </span>
+                                      ) : <span className="text-lbl text-sm font-medium">—</span>}
+                                    </div>
+                                    <ChevronDown size={13} className={`text-lbl flex-shrink-0 transition-transform ${condOpenDropdown === modKey ? 'rotate-180' : ''}`}/>
+                                  </button>
+                                  {condOpenDropdown === modKey && (
+                                    <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                      <button onClick={() => { updCond(gIdx, cIdx, 'modifier', 'nocase'); setCondOpenDropdown(null); }}
+                                        className={`w-full px-4 py-2.5 text-sm font-bold text-left transition-all ${cond.modifier === 'nocase' ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                        Не учитывать регистр
+                                      </button>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+
+                              {/* Инвертировать */}
+                              <div className="space-y-1">
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className="text-[11px] font-black text-tx">Инвертировать условие</span>
+                                    <button onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `inv_${gIdx}_${cIdx}` ? null : `inv_${gIdx}_${cIdx}`); }}
+                                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center hover:bg-blue-600">?</button>
+                                  </div>
+                                  <button onClick={() => updCond(gIdx, cIdx, 'inverted', !(cond.inverted||false))}
+                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${cond.inverted ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                    <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${cond.inverted ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                  </button>
+                                </div>
+                                <p className="text-[9px] text-lbl leading-relaxed">* Триггер будет работать наоборот. Бот будет реагировать, если условие не выполнено.</p>
+                              </div>
+                              </>)}
+
+                            </div>
+                          </div>
+                          </div>
+                          );
+                        })}
+
+                        {/* Добавить условие в эту группу */}
+                        <button
+                          onClick={() => { setCondPickerGroupIdx(gIdx); setCondPickerTab('message'); setCondPickerSearch(''); setShowCondPickerModal(true); }}
+                          className="w-full py-2.5 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-cta transition-all bg-blue-50/30 active:scale-[0.98]">
+                          <PlusCircle size={12}/> Добавить условие
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {/* Добавить группу условий */}
+                <button
+                  onClick={addCondGroup}
+                  className="w-full py-2.5 border-2 border-dashed border-bd2 rounded-2xl text-lbl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:text-blue-400 transition-all bg-sff active:scale-[0.98]">
+                  <PlusCircle size={11}/> Добавить группу условий
+                </button>
+              </div>{/* конец левой колонки */}
+
+              {/* ─── Правая колонка: ДЕЙСТВИЯ ─── */}
+              <div className="space-y-3">
+                {/* Заголовок */}
+                <div className="flex items-center gap-2 px-1">
+                  <span className="text-[10px] font-black text-txd uppercase tracking-widest">Действия</span>
+                  <div className="relative">
+                    <button
+                      onClick={() => setCondTooltip(condTooltip === 'actions_block' ? null : 'actions_block')}
+                      className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 active:scale-90 transition-all flex-shrink-0">
+                      ?
+                    </button>
+                    {condTooltip === 'actions_block' && (
+                      <div className="absolute left-0 top-6 w-64 bg-gray-900 text-white text-[11px] font-medium p-3 rounded-2xl shadow-xl z-50 leading-relaxed">
+                        Действия — это что бот делает при срабатывании триггера. Можно добавить несколько групп: каждая группа имеет свой шанс выполнения.
+                        <div className="absolute -top-1.5 left-2 w-3 h-3 bg-gray-900 rotate-45"/>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Группы действий */}
+                {actionGroups.map((group, gIdx) => (
+                  <div key={group.id} className="bg-sff rounded-2xl border border-bd shadow-sm">
+                    {/* Шапка группы */}
+                    <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
+                      {/* Шестерёнка */}
+                      <div className="relative">
+                        <button
+                          onClick={e => { e.stopPropagation(); setActGroupSettingsIdx(gIdx); }}
+                          className="p-1 text-lbl hover:text-txd active:scale-90 transition-all">
+                          <Settings size={12}/>
+                        </button>
+                      </div>
+                      <span className="text-[10px] font-black text-txd uppercase tracking-widest flex-1">
+                        {actionGroups.length > 1 ? `Группа ${gIdx + 1}` : 'Действия'}
+                        {group.probability < 100 && (
+                          <span className="ml-1.5 text-[9px] font-black text-warn bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] px-1.5 py-0.5 rounded-full">{group.probability}%</span>
+                        )}
+                      </span>
+                      <div className="flex items-center gap-0.5">
+                        <button onClick={() => moveActionGroup(gIdx, -1)} disabled={gIdx === 0}
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                          <ChevronUp size={14}/>
+                        </button>
+                        <button onClick={() => moveActionGroup(gIdx, 1)} disabled={gIdx === actionGroups.length - 1}
+                          className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                          <ChevronDown size={14}/>
+                        </button>
+                        {actionGroups.length > 1 && (
+                          <button onClick={() => removeActionGroup(gIdx)}
+                            className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all ml-0.5">
+                            <Trash2 size={12}/>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Действия внутри группы */}
+                    <div className="p-2.5">
+                      {group.actions.length === 0 && (
+                        <div className="text-center py-4 text-lbl text-[11px] font-black uppercase tracking-widest">
+                          Список пуст
+                        </div>
+                      )}
+                      {group.actions.map((action, aIdx) => {
+                        const actCfg = ACTION_TYPES.find(a => a.type === action.type) || ACTION_TYPES[0];
+                        const variants = action.variants || [{ id: 1, text: '', media_type: 'none' }];
+                        const curVarIdx = action.currentVariant || 0;
+                        const curVar = variants[curVarIdx] || variants[0] || { text: '', media_type: 'none' };
+                        const msgTab = action.msgTab || 'editor';
+                        const settings = action.settings || {};
+                        const keyboard = action.keyboard || [];
+                        const replyDropKey = `reply_${gIdx}_${aIdx}`;
+
+                        const updVar = (field, val) => updAction(gIdx, aIdx, 'variants',
+                          variants.map((v, vi) => vi === curVarIdx ? {...v, [field]: val} : v));
+                        const addVariant = () => {
+                          updAction(gIdx, aIdx, 'variants', [...variants, { id: Date.now(), text: '', media_type: 'none' }]);
+                          updAction(gIdx, aIdx, 'currentVariant', variants.length);
+                        };
+                        const deleteVariant = () => {
+                          if (variants.length <= 1) return;
+                          const newVars = variants.filter((_, vi) => vi !== curVarIdx);
+                          updAction(gIdx, aIdx, 'variants', newVars);
+                          updAction(gIdx, aIdx, 'currentVariant', Math.max(0, curVarIdx - 1));
+                        };
+                        const updSetting = (key, val) => updAction(gIdx, aIdx, 'settings', {...settings, [key]: val});
+
+                        return (
+                          <div key={action.id}>
+                            {aIdx > 0 && (
+                              <div className="flex justify-center my-3">
+                                <div className={`flex flex-col items-center ${newActionIds.has(action.id) ? 'connector-insert' : ''}`}>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)] connector-dot-top"/>
+                                  <div className="w-px h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] connector-line"/>
+                                  <div className="w-2 h-2 rounded-full bg-[color-mix(in_oklab,var(--cta)_24%,transparent)] connector-dot-bot"/>
+                                </div>
+                              </div>
+                            )}
+                            <div className="bg-sff rounded-2xl border border-bd2">
+                            {/* Шапка: ⚙️ + "Действие N" + ↑↓🗑 */}
+                            <div className="flex items-center gap-1.5 px-3 py-2 bg-sf2 border-b border-bd rounded-t-2xl overflow-hidden">
+                              <button
+                                onClick={() => { setActionSettingsPct(action.action_probability ?? 100); setActionSettingsModal({gIdx, aIdx}); }}
+                                className="p-1 text-lbl hover:text-cta active:scale-90 transition-all flex-shrink-0">
+                                <Settings size={12}/>
+                              </button>
+                              <span className="text-[11px] font-black text-tx flex-1">Действие {aIdx + 1}</span>
+                              <div className="flex items-center gap-0">
+                                <button onClick={() => moveActionInGroup(gIdx, aIdx, -1)} disabled={aIdx === 0}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronUp size={14}/>
+                                </button>
+                                <button onClick={() => moveActionInGroup(gIdx, aIdx, 1)} disabled={aIdx === group.actions.length - 1}
+                                  className="w-6 h-6 flex items-center justify-center rounded-lg text-lbl hover:text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] disabled:opacity-20 active:scale-90 transition-all">
+                                  <ChevronDown size={14}/>
+                                </button>
+                                <button onClick={() => removeAction(gIdx, aIdx)}
+                                  className="p-1 text-red-300 hover:text-danger active:scale-90 transition-all">
+                                  <Trash2 size={11}/>
+                                </button>
+                              </div>
+                            </div>
+
+                            {/* Тело карточки */}
+                            <div className="px-3 py-3 space-y-3">
+
+                              {/* Тип действия — заголовок */}
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[12px] font-black text-tx">{actCfg.label}</span>
+                                <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
+                              </div>
+
+                              {/* ── send_text / dm ── */}
+                              {(action.type === 'send_text' || action.type === 'dm') && (
+                                <div className="space-y-3">
+
+                                  {/* ── Сообщение * ── */}
+                                  <div>
+                                    <p className="text-sm font-black text-tx mb-2">
+                                      {action.type === 'dm' ? 'Текст сообщения' : 'Сообщение'} <span className="text-red-400">*</span>
+                                    </p>
+
+                                    {/* Навигация вариантов */}
+                                    <div className="flex items-center gap-2 mb-2">
+                                      <div className="flex items-center border border-bd2 rounded-lg overflow-hidden">
+                                        <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.max(0, curVarIdx - 1))}
+                                          disabled={curVarIdx === 0}
+                                          className="px-2.5 py-1.5 text-txd hover:text-tx disabled:opacity-30 text-sm font-bold transition-colors">‹</button>
+                                        <span className="text-xs font-black text-tx px-2 border-x border-bd2">{curVarIdx + 1} из {variants.length}</span>
+                                        <button onClick={() => updAction(gIdx, aIdx, 'currentVariant', Math.min(variants.length - 1, curVarIdx + 1))}
+                                          disabled={curVarIdx === variants.length - 1}
+                                          className="px-2.5 py-1.5 text-txd hover:text-tx disabled:opacity-30 text-sm font-bold transition-colors">›</button>
+                                      </div>
+                                      <button onClick={addVariant}
+                                        className="flex items-center gap-1.5 px-3 py-1.5 border border-[color-mix(in_oklab,var(--cta)_40%,transparent)] text-cta rounded-lg text-xs font-black hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] transition-all active:scale-95 ml-auto">
+                                        <PlusCircle size={11}/> Добавить вариант сообщения
+                                      </button>
+                                      {variants.length > 1 && (
+                                        <button onClick={deleteVariant}
+                                          className="p-1.5 text-red-300 hover:text-danger active:scale-90 transition-all">
+                                          <Trash2 size={14}/>
+                                        </button>
+                                      )}
+                                    </div>
+
+                                    {/* Медиа область */}
+                                    {(() => {
+                                      const isUploading = mediaUploading && mediaUploading.gIdx===gIdx && mediaUploading.aIdx===aIdx && mediaUploading.varIdx===curVarIdx;
+                                      const hasMedia = curVar.media_type && curVar.media_type !== 'none';
+                                      const mediaPos = curVar.media_pos || 'above';
+                                      const mediaPosKey = `mediaPos_${gIdx}_${aIdx}`;
+
+                                      const pickFile = (accept) => {
+                                        const inp = document.createElement('input');
+                                        inp.type = 'file';
+                                        inp.accept = accept;
+                                        inp.onchange = async (e) => {
+                                          const file = e.target.files?.[0];
+                                          if (!file) return;
+                                          setMediaUploading({gIdx, aIdx, varIdx: curVarIdx});
+                                          try {
+                                            const fd = new FormData();
+                                            fd.append('file', file);
+                                            const res = await fetch('/api/media/upload', { method: 'POST', body: fd });
+                                            if (!res.ok) throw new Error(await res.text());
+                                            const data = await res.json();
+                                            updAction(gIdx, aIdx, 'variants',
+                                              variants.map((v, vi) => vi === curVarIdx
+                                                ? {...v, media_type: data.media_type, media_url: data.url, media_server_path: data.server_path}
+                                                : v));
+                                          } catch(err) {
+                                            alert('Ошибка загрузки: ' + err.message);
+                                          } finally {
+                                            setMediaUploading(false);
+                                          }
+                                        };
+                                        inp.click();
+                                      };
+
+                                      const MEDIA_TYPES = [
+                                        { type:'photo',     label:'Изображение', icon:'🖼',  accept:'image/jpeg,image/png,image/webp', active:true  },
+                                        { type:'video',     label:'Видео',        icon:'🎬',  accept:'video/mp4,video/quicktime',       active:true  },
+                                        { type:'animation', label:'Анимация',     icon:'🎭',  accept:'image/gif',                       active:true  },
+                                        { type:'voice',     label:'Голосовое',    icon:'🎤',  accept:'',                                active:false },
+                                        { type:'audio',     label:'Аудио',        icon:'🎵',  accept:'',                                active:false },
+                                        { type:'document',  label:'Документ',     icon:'📄',  accept:'',                                active:false },
+                                      ];
+
+                                      const typeLabel = { photo:'Изображение', video:'Видео', animation:'Анимация' };
+
+                                      return (
+                                        <div className="mb-2 space-y-2">
+                                          {!hasMedia ? (
+                                            <>
+                                              <div style={{display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:'6px'}}>
+                                                {MEDIA_TYPES.map(m => (
+                                                  <button key={m.type}
+                                                    onClick={() => m.active && !isUploading && pickFile(m.accept)}
+                                                    className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
+                                                      ${m.active ? 'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'border-dashed border-bd2 text-lbl cursor-not-allowed'}`}>
+                                                    <span className="text-xl">{m.icon}</span>
+                                                    <span>{m.label}</span>
+                                                    {!m.active && <span className="absolute top-1 right-1 text-[7px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1 py-0.5 rounded-full uppercase">Скоро</span>}
+                                                  </button>
+                                                ))}
+                                                {/* Расположение */}
+                                                <button
+                                                  onClick={() => setActOpenDropdown(actOpenDropdown === mediaPosKey ? null : mediaPosKey)}
+                                                  className={`relative flex flex-col items-center justify-center gap-1 py-3 border-2 rounded-xl text-xs font-bold transition-all active:scale-95
+                                                    ${actOpenDropdown === mediaPosKey ? 'border-blue-400 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta' : 'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]'}
+                                                    ${mediaPos !== 'above' ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : ''}`}>
+                                                  <span className="text-xl">📐</span>
+                                                  <span>Расположение</span>
+                                                  {mediaPos !== 'above' && <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-blue-400 rounded-full"/>}
+                                                </button>
+                                              </div>
+                                              {actOpenDropdown === mediaPosKey && (
+                                                <div className="border border-bd2 rounded-xl overflow-hidden">
+                                                  {[
+                                                    { v:'above', icon:'🖼', l:'Медиа над текстом',      desc:'Сначала медиа, текст идёт подписью снизу (одно сообщение)' },
+                                                    { v:'below', icon:'📝', l:'Медиа под текстом',      desc:'Сначала текст, потом медиа отдельным сообщением' },
+                                                    { v:'reply', icon:'💬', l:'Текст реплаем на медиа', desc:'Медиа отдельно → текст как ответ на него (стиль ChatKeeper, голубая полоса слева)' },
+                                                  ].map(o => (
+                                                    <button key={o.v}
+                                                      onClick={() => { updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v)); setActOpenDropdown(null); }}
+                                                      className={`w-full px-4 py-3 text-left border-b border-bd last:border-0 transition-all flex items-start gap-3 ${mediaPos===o.v?'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'hover:bg-sf2'}`}>
+                                                      <span className="text-lg mt-0.5">{o.icon}</span>
+                                                      <div>
+                                                        <p className={`text-sm font-bold ${mediaPos===o.v?'text-cta':'text-tx'}`}>{o.l}</p>
+                                                        <p className="text-[10px] text-lbl font-medium mt-0.5">{o.desc}</p>
+                                                      </div>
+                                                      {mediaPos===o.v && <span className="ml-auto text-cta text-sm">✓</span>}
+                                                    </button>
+                                                  ))}
+                                                </div>
+                                              )}
+                                              {isUploading && (
+                                                <div className="flex items-center justify-center gap-2 py-3 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl">
+                                                  <span className="animate-spin text-xl">⏳</span>
+                                                  <span className="text-sm text-cta font-semibold">Загрузка...</span>
+                                                </div>
+                                              )}
+                                            </>
+                                          ) : (
+                                            <>
+                                              <div className="w-full rounded-xl overflow-hidden border border-bd2 bg-sf2 relative group">
+                                                {curVar.media_type === 'photo' ? (
+                                                  <img src={curVar.media_url} alt="preview" className="w-full max-h-48 object-contain"/>
+                                                ) : curVar.media_type === 'video' ? (
+                                                  <video src={curVar.media_url} className="w-full max-h-48 object-contain" controls={false} muted/>
+                                                ) : (
+                                                  <img src={curVar.media_url} alt="gif" className="w-full max-h-48 object-contain"/>
+                                                )}
+                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-all flex items-center justify-center gap-3">
+                                                  <button onClick={e=>{e.stopPropagation();pickFile('image/jpeg,image/png,image/gif,image/webp,video/mp4,video/quicktime');}}
+                                                    className="px-3 py-1.5 bg-sff text-tx rounded-lg text-xs font-bold shadow">Заменить</button>
+                                                  <button onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_type:'none',media_url:'',media_server_path:''}:v));}}
+                                                    className="px-3 py-1.5 bg-red-500 text-white rounded-lg text-xs font-bold shadow">Удалить</button>
+                                                </div>
+                                                <span className="absolute top-1.5 left-1.5 text-[9px] font-black text-white bg-black/50 px-1.5 py-0.5 rounded uppercase">
+                                                  {typeLabel[curVar.media_type] || curVar.media_type}
+                                                </span>
+                                              </div>
+                                              {/* Расположение после загрузки */}
+                                              <div className="flex gap-1.5">
+                                                {[
+                                                  { v:'above', l:'🖼 Над' },
+                                                  { v:'below', l:'📝 Под' },
+                                                  { v:'reply', l:'💬 Реплаем' },
+                                                ].map(o => (
+                                                  <button key={o.v}
+                                                    onClick={() => updAction(gIdx,aIdx,'variants',variants.map((v,vi)=>vi===curVarIdx?{...v,media_pos:o.v}:v))}
+                                                    className={`flex-1 py-2 rounded-xl text-[11px] font-bold transition-all border-2 ${mediaPos===o.v?'border-blue-400 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta':'border-bd2 text-txd hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            </>
+                                          )}
+                                        </div>
+                                      );
+                                    })()}
+
+                                    {/* Топики + вкладки + редактор */}
+                                    <div className="border border-bd2 rounded-xl">
+                                      {/* Строка вкладок */}
+                                      <div className="flex items-center justify-between px-3 py-2 bg-sf2 border-b border-bd2 rounded-t-xl">
+                                        <div className="flex items-center gap-1.5">
+                                          {/* Топик-пикер */}
+                                          {(() => {
+                                            const topicDropKey = `topic_${gIdx}_${aIdx}`;
+                                            const isOpen = actOpenDropdown === topicDropKey;
+                                            const selectedTopic = action.target_thread_id
+                                              ? topics.find(t => t.thread_id === action.target_thread_id)
+                                              : null;
+                                            const openTopicDrop = () => {
+                                              if (!topicsLoaded) {
+                                                fetch('/api/topics').then(r=>r.json()).then(data=>{
+                                                  setTopics(Array.isArray(data)?data:[]);
+                                                  setTopicsLoaded(true);
+                                                }).catch(()=>setTopicsLoaded(true));
+                                              }
+                                              setActOpenDropdown(isOpen ? null : topicDropKey);
+                                            };
+                                            return (
+                                              <div className="relative">
+                                                <button onClick={openTopicDrop}
+                                                  className={`flex items-center gap-1 text-xs font-black rounded-lg px-2 py-1 transition-all ${action.target_thread_id ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
+                                                  <span>📋</span>
+                                                  <span className="max-w-[80px] truncate">{selectedTopic ? selectedTopic.name : 'Топик'}</span>
+                                                  {action.target_thread_id && (
+                                                    <span onClick={e=>{e.stopPropagation();updAction(gIdx,aIdx,'target_thread_id',null);}}
+                                                      className="ml-0.5 text-blue-400 hover:text-danger">×</span>
+                                                  )}
+                                                </button>
+                                                {isOpen && (
+                                                  <div className="absolute top-full left-0 z-[600] bg-sff border border-bd2 rounded-xl shadow-xl mt-1 min-w-[200px] max-h-60 overflow-y-auto">
+                                                    <div className="px-3 py-2 border-b border-bd">
+                                                      <span className="text-[10px] font-black text-lbl uppercase">Ветки группы</span>
+                                                    </div>
+                                                    {!topicsLoaded ? (
+                                                      <div className="px-4 py-3 text-xs text-lbl">Загрузка...</div>
+                                                    ) : topics.length === 0 ? (
+                                                      <div className="px-4 py-3 text-xs text-lbl">Ветки не найдены</div>
+                                                    ) : (
+                                                      <>
+                                                        <button onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',null);setActOpenDropdown(null);}}
+                                                          className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd transition-all ${!action.target_thread_id?'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'text-txd hover:bg-sf2'}`}>
+                                                          Автоматически
+                                                        </button>
+                                                        {topics.map(t => (
+                                                          <button key={t.thread_id}
+                                                            onClick={()=>{updAction(gIdx,aIdx,'target_thread_id',t.thread_id);setActOpenDropdown(null);}}
+                                                            className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${action.target_thread_id===t.thread_id?'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]':'text-txd hover:bg-sf2'}`}>
+                                                            {t.is_main ? '🏠 ' : '📌 '}{t.name}
+                                                          </button>
+                                                        ))}
+                                                      </>
+                                                    )}
+                                                  </div>
+                                                )}
+                                              </div>
+                                            );
+                                          })()}
+                                        </div>
+                                        <div className="flex gap-0.5">
+                                          {[
+                                            { v:'editor',   l:'✏ Редактор' },
+                                            { v:'code',     l:'<> Код'     },
+                                            { v:'settings', l:'⚙ Настройки'},
+                                          ].map(t => (
+                                            <button key={t.v} onClick={() => updAction(gIdx, aIdx, 'msgTab', t.v)}
+                                              className={`px-2.5 py-1 text-[11px] font-black rounded transition-all ${msgTab===t.v ? 'bg-blue-500 text-white' : 'text-txd hover:bg-sf2'}`}>
+                                              {t.l}
+                                            </button>
+                                          ))}
+                                        </div>
+                                      </div>
+
+                                      {/* Редактор — WYSIWYG */}
+                                      {msgTab === 'editor' && (() => {
+                                        const ceId = `ce_${gIdx}_${aIdx}_${curVarIdx}`;
+
+                                        // execCommand-форматирование (bold/italic/underline/strikeThrough)
+                                        const execFmt = (cmd) => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          document.execCommand(cmd, false, null);
+                                          updVar('text', el.innerHTML);
+                                        };
+
+                                        // Вставка произвольного HTML-тега вокруг выделения
+                                        const insertCustomTag = (open, close) => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          const sel = window.getSelection();
+                                          if (!sel || !sel.rangeCount) return;
+                                          const range = sel.getRangeAt(0);
+                                          const text = range.toString() || '\u200B';
+                                          const tmp = document.createElement('div');
+                                          tmp.innerHTML = open + text + close;
+                                          const frag = document.createDocumentFragment();
+                                          let last;
+                                          while (tmp.firstChild) last = frag.appendChild(tmp.firstChild);
+                                          range.deleteContents();
+                                          range.insertNode(frag);
+                                          if (last) {
+                                            const r2 = document.createRange();
+                                            r2.setStartAfter(last);
+                                            r2.collapse(true);
+                                            sel.removeAllRanges();
+                                            sel.addRange(r2);
+                                          }
+                                          setTimeout(() => updVar('text', el.innerHTML), 0);
+                                        };
+
+                                        // Ссылка
+                                        const insertLink = () => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          const url = window.prompt('Введите URL:');
+                                          if (!url) return;
+                                          el.focus();
+                                          document.execCommand('createLink', false, url);
+                                          // Убираем target="_blank" который браузер может добавить
+                                          el.querySelectorAll('a').forEach(a => a.removeAttribute('target'));
+                                          updVar('text', el.innerHTML);
+                                        };
+
+                                        // Очистить теги в выделении
+                                        const clearFmt = () => {
+                                          const el = document.getElementById(ceId);
+                                          if (!el) return;
+                                          el.focus();
+                                          const sel = window.getSelection();
+                                          if (!sel || !sel.rangeCount) return;
+                                          const range = sel.getRangeAt(0);
+                                          const text = range.toString();
+                                          range.deleteContents();
+                                          range.insertNode(document.createTextNode(text));
+                                          setTimeout(() => updVar('text', el.innerHTML), 0);
+                                        };
+
+                                        const TOOLBAR = [
+                                          { l:'B',  cmd:'bold',          cls:'font-black',      tip:'Жирный' },
+                                          { l:'I',  cmd:'italic',        cls:'italic',          tip:'Курсив' },
+                                          { l:'S',  cmd:'strikeThrough', cls:'line-through',    tip:'Зачёркнутый' },
+                                          { l:'U',  cmd:'underline',     cls:'underline',       tip:'Подчёркнутый' },
+                                          { l:'<>', custom:()=>insertCustomTag('<code>','</code>'),            cls:'font-mono text-[9px]', tip:'Моноширинный / код' },
+                                          { l:'»',  custom:()=>insertCustomTag('<blockquote>','</blockquote>'),cls:'',                    tip:'Цитата' },
+                                          { l:'🔗', custom:insertLink,                                         cls:'',                    tip:'Ссылка' },
+                                          { l:'✒',  custom:()=>insertCustomTag('<tg-spoiler>','</tg-spoiler>'), cls:'',                    tip:'Спойлер' },
+                                          { l:'Tx', custom:clearFmt,                                           cls:'text-[9px]',           tip:'Очистить форматирование' },
+                                        ];
+
+                                        const textLen = (curVar.text||'').replace(/<[^>]+>/g,'').length;
+
+                                        return (
+                                          <div>
+                                            <div className="flex items-center gap-0.5 px-2 py-1.5 border-b border-bd flex-wrap">
+                                              {TOOLBAR.map(f => {
+                                                const isActive = f.cmd ? fmtState[f.cmd] : false;
+                                                return (
+                                                  <button key={f.l}
+                                                    title={f.tip}
+                                                    onMouseDown={e => { e.preventDefault(); f.cmd ? execFmt(f.cmd) : f.custom(); }}
+                                                    className={`w-7 h-7 text-[11px] rounded flex items-center justify-center transition-all active:scale-90 ${f.cls} ${isActive ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
+                                                    {f.l}
+                                                  </button>
+                                                );
+                                              })}
+                                              {/* ── Emoji picker ── */}
+                                              {(() => {
+                                                const emojiKey = `emoji_${gIdx}_${aIdx}_${curVarIdx}`;
+                                                const emojiOpen = actOpenDropdown === emojiKey;
+                                                const EMOJIS = ['😀','😂','😍','🥰','😎','🤔','👍','👎','🙏','🔥','❤️','💯','🎉','😊','😭','🤣','😱','😴','💪','✅','❌','⚠️','💡','📌','🚀','👋','🌟','💬','🎯','⭐','🏆','🔑','💎','🍀','🎵'];
+                                                const insertEmoji = (emoji) => {
+                                                  const el = document.getElementById(ceId);
+                                                  if (!el) return;
+                                                  el.focus();
+                                                  document.execCommand('insertText', false, emoji);
+                                                  updVar('text', el.innerHTML);
+                                                  setActOpenDropdown(null);
+                                                };
+                                                return (
+                                                  <div className="relative">
+                                                    <button
+                                                      title="Эмодзи"
+                                                      onMouseDown={e => { e.preventDefault(); setActOpenDropdown(emojiOpen ? null : emojiKey); }}
+                                                      className={`w-7 h-7 text-[13px] rounded flex items-center justify-center transition-all active:scale-90 ${emojiOpen ? 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta' : 'text-txd hover:bg-sf2'}`}>
+                                                      😊
+                                                    </button>
+                                                    {emojiOpen && (
+                                                      <div className="absolute left-0 top-8 z-[700] bg-sff border border-bd2 rounded-xl shadow-xl p-1.5 gap-0.5" style={{display:'grid',gridTemplateColumns:'repeat(7,1fr)',width:'220px'}}>
+                                                        {EMOJIS.map(em => (
+                                                          <button key={em}
+                                                            onMouseDown={ev => { ev.preventDefault(); insertEmoji(em); }}
+                                                            className="w-7 h-7 text-base flex items-center justify-center rounded hover:bg-sf2 transition-all active:scale-90">
+                                                            {em}
+                                                          </button>
+                                                        ))}
+                                                      </div>
+                                                    )}
+                                                  </div>
+                                                );
+                                              })()}
+                                              {/* ── Кнопка %плейсхолдеры% с выпадающим списком ── */}
+                                              {(() => {
+                                                const phKey = `${gIdx}_${aIdx}_${curVarIdx}`;
+                                                const phOpen = phDropdown === phKey;
+
+                                                const PH_GROUPS = [
+                                                  { label:'Инициатор', color:'blue', items:[
+                                                    { key:'user_name',     label:'Имя' },
+                                                    { key:'user_username', label:'@username' },
+                                                    { key:'user_id',       label:'ID' },
+                                                    { key:'act_tgun',      label:'Имя TG' },
+                                                    { key:'act_nn',        label:'@nick (новый)' },
+                                                  ]},
+                                                  { label:'Цель', color:'purple', items:[
+                                                    { key:'target_name',     label:'Имя цели' },
+                                                    { key:'target_username', label:'@username цели' },
+                                                    { key:'target_id',       label:'ID цели' },
+                                                  ]},
+                                                  { label:'Чат', color:'green', items:[
+                                                    { key:'chat_name', label:'Название чата' },
+                                                    { key:'date',      label:'Дата' },
+                                                    { key:'time',      label:'Время' },
+                                                  ]},
+                                                  { label:'Статистика', color:'amber', items:[
+                                                    { key:'act_msg',   label:'Сообщений всего' },
+                                                    { key:'act_msg_t', label:'Сегодня' },
+                                                    { key:'act_msg_w', label:'За неделю' },
+                                                    { key:'act_msg_m', label:'За месяц' },
+                                                    { key:'act_blns',  label:'Пульсы' },
+                                                    { key:'act_d',     label:'Дней в чате' },
+                                                    { key:'act_plc',   label:'Место в топе' },
+                                                    { key:'act_rnk',   label:'Ранг' },
+                                                  ]},
+                                                  { label:'Санкции', color:'red', items:[
+                                                    { key:'warn_count', label:'Предупреждений' },
+                                                    { key:'act_w',      label:'Предупр. (новый)' },
+                                                  ]},
+                                                  { label:'Анкета', color:'pink', items:[
+                                                    { key:'act_form', label:'Полная анкета' },
+                                                    { key:'act_un',   label:'Имя из анкеты' },
+                                                    { key:'act_city', label:'Город' },
+                                                    { key:'act_yo',   label:'Возраст' },
+                                                    { key:'act_sr',   label:'Роль' },
+                                                  ]},
+                                                ];
+
+                                                const COLOR_MAP = {
+                                                  blue:   'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] border-[color-mix(in_oklab,var(--cta)_30%,transparent)]',
+                                                  purple: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple hover:bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] border-[color-mix(in_oklab,var(--purple)_30%,transparent)]',
+                                                  green:  'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] border-[color-mix(in_oklab,var(--ok)_30%,transparent)]',
+                                                  amber:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] border-[color-mix(in_oklab,var(--warn)_30%,transparent)]',
+                                                  red:    'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] border-[color-mix(in_oklab,var(--danger)_30%,transparent)]',
+                                                  pink:   'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink hover:bg-[color-mix(in_oklab,var(--pink)_16%,transparent)] border-[color-mix(in_oklab,var(--pink)_30%,transparent)]',
+                                                };
+
+                                                const openPh = () => {
+                                                  // Сохраняем позицию курсора в редакторе
+                                                  const sel = window.getSelection();
+                                                  if (sel && sel.rangeCount) {
+                                                    window._savedPhRange = sel.getRangeAt(0).cloneRange();
+                                                  } else {
+                                                    window._savedPhRange = null;
+                                                  }
+                                                  if (!phOpen) {
+                                                    // Загружаем кастомные плейсхолдеры при открытии
+                                                    fetch('/api/placeholders')
+                                                      .then(r => r.json())
+                                                      .then(data => setCustomPlaceholders(Array.isArray(data) ? data : []))
+                                                      .catch(() => setCustomPlaceholders([]));
+                                                  }
+                                                  setPhDropdown(phOpen ? null : phKey);
+                                                };
+
+                                                const insertPh = (key) => {
+                                                  const el = document.getElementById(ceId);
+                                                  if (!el) return;
+                                                  el.focus();
+                                                  // Восстанавливаем сохранённую позицию
+                                                  if (window._savedPhRange) {
+                                                    const sel = window.getSelection();
+                                                    sel.removeAllRanges();
+                                                    sel.addRange(window._savedPhRange);
+                                                    window._savedPhRange = null;
+                                                  }
+                                                  document.execCommand('insertText', false, `%${key}%`);
+                                                  updVar('text', el.innerHTML);
+                                                  setPhDropdown(null);
+                                                };
+
+                                                return (
+                                                  <div className="ml-auto">
+                                                    <button
+                                                      onMouseDown={e => { e.preventDefault(); e.stopPropagation(); openPh(); }}
+                                                      className={`px-2 py-1 text-[10px] font-bold border rounded-lg transition-all whitespace-nowrap ${phOpen ? 'bg-blue-500 text-white border-blue-500' : 'text-cta border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]'}`}>
+                                                      %плейсхолдеры%
+                                                    </button>
+                                                  </div>
+                                                );
+                                              })()}
+                                              <div className="flex items-center gap-0.5 ml-1">
+                                                <button
+                                                  onMouseDown={e => { e.preventDefault(); setShowEditorHelp(true); }}
+                                                  className="w-6 h-6 text-[10px] text-lbl hover:text-cta font-black rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center transition-all">?</button>
+                                                <button
+                                                  onMouseDown={e => {
+                                                    e.preventDefault();
+                                                    setShowPreview({
+                                                      text: curVar.text || '',
+                                                      mediaUrl: curVar.media_url || '',
+                                                      mediaType: curVar.media_type || 'none',
+                                                      keyboard: keyboard,
+                                                    });
+                                                  }}
+                                                  title="Предпросмотр"
+                                                  className="w-6 h-6 text-[10px] text-lbl hover:text-cta rounded hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center transition-all">↗</button>
+                                              </div>
+                                            </div>
+                                            <div className="relative">
+                                              {!curVar.text && (
+                                                <span className="absolute top-3 left-4 text-sm text-lbl italic pointer-events-none select-none">
+                                                  Insert text here ...
+                                                </span>
+                                              )}
+                                              <div
+                                                key={`ce_${gIdx}_${aIdx}_${curVarIdx}`}
+                                                id={ceId}
+                                                contentEditable
+                                                suppressContentEditableWarning
+                                                ref={el => {
+                                                  if (el) {
+                                                    const html = curVar.text || '';
+                                                    if (el.innerHTML !== html) el.innerHTML = html;
+                                                  }
+                                                }}
+                                                onInput={e => updVar('text', e.currentTarget.innerHTML)}
+                                                className="w-full min-h-[120px] px-4 py-3 text-sm font-medium text-tx outline-none bg-sff"
+                                                style={{wordBreak:'break-word'}}
+                                              />
+                                              <span className="absolute bottom-2 right-3 text-[10px] text-cta font-black bg-sff px-1">{textLen}/4096</span>
+                                            </div>
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Код */}
+                                      {msgTab === 'code' && (
+                                        <textarea
+                                          value={curVar.text || ''}
+                                          onChange={e => updVar('text', e.target.value)}
+                                          placeholder="HTML код сообщения..."
+                                          rows={6}
+                                          className="w-full px-4 py-3 font-mono text-sm text-tx outline-none resize-none bg-sff"/>
+                                      )}
+
+                                      {/* Настройки */}
+                                      {msgTab === 'settings' && (() => {
+                                        const SETTING_HINTS = {
+                                          delete_after:      'Сообщение бота будет удалено через указанное время. Оставьте "0", чтобы не удалять.',
+                                          send_delayed:      'Сообщение будет отправлено через указанное время. Оставьте "0", чтобы отправлять без задержки.',
+                                          pin:               'Если включить, отправленное сообщение автоматически закрепится в шапке чата.',
+                                          disable_preview:   'В Telegram при добавлении ссылки прикрепляется превью. Включи — превью показано не будет.',
+                                          disable_notify:    'Сообщение придёт без звука. Удобно в ночное время суток.',
+                                          delete_previous:   'Предыдущее сообщение бота, связанное с этим триггером, будет удалено.',
+                                          content_protection:'Защищает содержимое сообщения от пересылки и сохранения.',
+                                        };
+                                        const TIME_UNITS_SHORT = ['секунда','минута','час','день'];
+                                        const TIME_UNITS_LONG  = ['секунда','минута','час','день','неделя','месяц'];
+
+                                        const SETTINGS_CFG = [
+                                          { key:'delete_after',      label:'Удалить сообщение через',        hasTime:true,  units:TIME_UNITS_SHORT, valKey:'delete_after_val',   unitKey:'delete_after_unit'  },
+                                          { key:'send_delayed',      label:'Отправить с задержкой',          hasTime:true,  units:TIME_UNITS_LONG,  valKey:'send_delayed_val',   unitKey:'send_delayed_unit'  },
+                                          { key:'pin',               label:'Закрепить сообщение',            hasTime:false },
+                                          { key:'disable_preview',   label:'Откл. предпросмотр ссылок',      hasTime:false },
+                                          { key:'disable_notify',    label:'Отключить уведомления',          hasTime:false },
+                                          { key:'delete_previous',   label:'Удалять предыдущее сообщение',   hasTime:false },
+                                          { key:'content_protection',label:'Защита контента',                hasTime:false },
+                                        ];
+
+                                        return (
+                                          <div className="p-4 space-y-3">
+                                            {SETTINGS_CFG.map(s => (
+                                              <div key={s.key}>
+                                                <div className="flex items-center justify-between gap-2">
+                                                  <div className="flex items-center gap-1 min-w-0">
+                                                    <span className="text-xs font-medium text-tx leading-tight">{s.label}</span>
+                                                    <button
+                                                      onMouseDown={e => {
+                                                        e.preventDefault();
+                                                        const r = e.currentTarget.getBoundingClientRect();
+                                                        setSettingHintPos({x: r.right + 10, y: r.top - 8});
+                                                        setSettingHint(settingHint === s.key ? null : s.key);
+                                                      }}
+                                                      className={`w-4 h-4 rounded-full text-[9px] font-black flex items-center justify-center flex-shrink-0 transition-all ${settingHint===s.key?'bg-blue-500 text-white':'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta hover:bg-[color-mix(in_oklab,var(--cta)_24%,transparent)]'}`}>?</button>
+                                                  </div>
+                                                  <button onClick={() => updSetting(s.key, !settings[s.key])}
+                                                    className={`relative w-10 h-5 rounded-full transition-all duration-200 flex-shrink-0 ${settings[s.key] ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                                    <span className={`absolute top-0.5 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${settings[s.key] ? 'left-[calc(100%-1.125rem)]' : 'left-0.5'}`}/>
+                                                  </button>
+                                                </div>
+
+                                                {/* Инпут времени (для delete_after и send_delayed) */}
+                                                {s.hasTime && settings[s.key] && (
+                                                  <div className="flex gap-2 mt-2">
+                                                    <input
+                                                      type="number" min="0" max="9999"
+                                                      value={settings[s.valKey] ?? 1}
+                                                      onChange={e => updSetting(s.valKey, Math.max(0, parseInt(e.target.value)||0))}
+                                                      className="w-20 px-2 py-1.5 text-sm font-bold text-tx bg-sf2 border border-bd2 rounded-xl outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all text-center"
+                                                    />
+                                                    <div className="relative flex-1">
+                                                      <select
+                                                        value={settings[s.unitKey] ?? s.units[0]}
+                                                        onChange={e => updSetting(s.unitKey, e.target.value)}
+                                                        className="w-full px-3 py-1.5 text-sm font-bold text-tx bg-sf2 border border-bd2 rounded-xl outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] appearance-none transition-all cursor-pointer">
+                                                        {s.units.map(u => <option key={u} value={u}>{u}</option>)}
+                                                      </select>
+                                                      <ChevronDown size={12} className="absolute right-2.5 top-1/2 -translate-y-1/2 text-lbl pointer-events-none"/>
+                                                    </div>
+                                                  </div>
+                                                )}
+                                              </div>
+                                            ))}
+                                          </div>
+                                        );
+                                      })()}
+
+                                      {/* Создать / Редактировать клавиатуру */}
+                                      <div className="border-t border-bd rounded-b-xl overflow-hidden">
+                                        {keyboard.length === 0 ? (
+                                          <button
+                                            onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
+                                            className="w-full py-3 text-sm font-bold text-txd hover:bg-sf2 flex items-center justify-center gap-2 transition-all active:scale-[0.99]">
+                                            ✏️ Создать клавиатуру
+                                          </button>
+                                        ) : (
+                                          <div>
+                                            <div className="p-2 space-y-1.5">
+                                              {keyboard.map((btn, bi) => (
+                                                <div key={btn.id} className="flex items-center gap-2 px-3 py-2 bg-sf2 rounded-lg border border-bd">
+                                                  <GripVertical size={13} className="text-lbl cursor-grab flex-shrink-0"/>
+                                                  <span className="text-base w-5 text-center">{btn.emoji || '○'}</span>
+                                                  <span className="text-xs font-bold text-tx flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
+                                                  <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_,i)=>i!==bi))}
+                                                    className="text-red-300 hover:text-danger text-lg leading-none">×</button>
+                                                </div>
+                                              ))}
+                                            </div>
+                                            <button
+                                              onClick={() => { setKbModalTarget({gIdx, aIdx}); setKbButtonType(null); setKbNewButton({}); setShowKeyboardModal(true); }}
+                                              className="w-full py-2.5 text-xs font-bold text-cta hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center gap-1.5 transition-all border-t border-bd">
+                                              ✏️ Редактировать клавиатуру
+                                            </button>
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Отправить ответом — только для send_text */}
+                                    {action.type === 'send_text' && (
+                                      <div className="mt-3">
+                                        <p className="text-sm font-black text-tx mb-1.5">
+                                          Отправить ответом <span className="text-red-400">*</span>
+                                        </p>
+                                        <div className="relative">
+                                          <button onClick={() => setActOpenDropdown(actOpenDropdown === replyDropKey ? null : replyDropKey)}
+                                            className="w-full flex items-center justify-between px-4 py-3 bg-sff border border-bd2 rounded-xl text-sm font-bold text-tx hover:border-gray-300 transition-all">
+                                            <span>{action.reply_target === 'initiator' ? 'Ответить реплаем автору' : action.reply_target === 'quoted' ? 'Ответить на цитируемое' : 'Без реплая (обычное сообщение)'}</span>
+                                            <ChevronDown size={14} className={`text-lbl transition-transform ${actOpenDropdown === replyDropKey ? 'rotate-180' : ''}`}/>
+                                          </button>
+                                          {actOpenDropdown === replyDropKey && (
+                                            <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                              {[{v:'none',l:'Без реплая (обычное сообщение)'},{v:'initiator',l:'Ответить реплаем автору'},{v:'quoted',l:'Ответить на цитируемое'}].map(o => (
+                                                <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'reply_target', o.v); setActOpenDropdown(null); }}
+                                                  className={`w-full px-4 py-3 text-sm font-bold text-left transition-all border-b border-bd last:border-0 ${action.reply_target === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                  {o.l}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              )}
+
+                              {/* ── mute ── */}
+                              {action.type === 'mute' && (() => {
+                                const MUTE_TARGETS = [
+                                  { v:'initiator', l:'Инициатор триггера' },
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'replied',   l:'Кому ответили' },
+                                  { v:'command',   l:'Режим команды' },
+                                ];
+                                const MUTE_UNITS = [
+                                  { v:'seconds', l:'секунда' },
+                                  { v:'minutes', l:'минута'  },
+                                  { v:'hours',   l:'час'     },
+                                  { v:'days',    l:'день'    },
+                                  { v:'weeks',   l:'неделя'  },
+                                  { v:'months',  l:'месяц'   },
+                                ];
+                                const MUTE_TYPES = [
+                                  { v:'all',     l:'Все сообщения'          },
+                                  { v:'media',   l:'Медиа файлы'            },
+                                  { v:'inline',  l:'Inline сообщения'       },
+                                  { v:'invite',  l:'Возможность приглашать' },
+                                  { v:'polls',   l:'Опросы'                 },
+                                ];
+                                const muteTarget    = action.mute_target     || 'initiator';
+                                const muteTimeOn    = action.mute_time_enabled || false;
+                                const muteTimeVal   = action.mute_time_value  ?? 1;
+                                const muteTimeUnit  = action.mute_time_unit   || 'days';
+                                const muteType      = action.mute_type        || 'all';
+
+                                const muteTgtKey    = `muteTgt_${gIdx}_${aIdx}`;
+                                const muteUnitKey   = `muteUnit_${gIdx}_${aIdx}`;
+                                const muteTypeKey   = `muteType_${gIdx}_${aIdx}`;
+                                const muteTgtGear   = `muteTgtGear_${gIdx}_${aIdx}`;
+                                const muteTimeGear  = `muteTimeGear_${gIdx}_${aIdx}`;
+
+                                const curTgt  = MUTE_TARGETS.find(o => o.v === muteTarget) || MUTE_TARGETS[0];
+                                const curUnit = MUTE_UNITS.find(o => o.v === muteTimeUnit) || MUTE_UNITS[3];
+                                const curType = MUTE_TYPES.find(o => o.v === muteType)     || MUTE_TYPES[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-tx">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {muteTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtGear ? null : muteTgtGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === muteTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'mute_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <Ban size={11} className="text-lbl"/> Отключить настройку
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTgtKey ? null : muteTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === muteTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {MUTE_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${muteTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Кол-во времени */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-black text-tx">
+                                            Кол-во времени <span className="text-red-400">*</span>
+                                          </p>
+                                          {muteTimeOn && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTimeGear ? null : muteTimeGear)}
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === muteTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_value', 1); updAction(gIdx, aIdx, 'mute_time_unit', 'days'); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                  </button>
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'mute_time_enabled', false); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <Ban size={11} className="text-lbl"/> Отключить настройку
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {muteTimeOn ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', false)}
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
+                                            <Ban size={14}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'mute_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {muteTimeOn && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={muteTimeVal}
+                                            onChange={e => updAction(gIdx, aIdx, 'mute_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === muteUnitKey ? null : muteUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === muteUnitKey && (
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                                {MUTE_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${muteTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Тип ограничения */}
+                                    <div>
+                                      <p className="text-sm font-black text-tx mb-1.5">Тип ограничения</p>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === muteTypeKey ? null : muteTypeKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === muteTypeKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curType.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === muteTypeKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === muteTypeKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {MUTE_TYPES.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'mute_type', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${muteType === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── ban ── */}
+                              {action.type === 'ban' && (() => {
+                                const BAN_TARGETS = [
+                                  { v:'initiator', l:'Инициатор триггера' },
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'replied',   l:'Кому ответили' },
+                                ];
+                                const BAN_UNITS = [
+                                  { v:'seconds', l:'секунда' },
+                                  { v:'minutes', l:'минута'  },
+                                  { v:'hours',   l:'час'     },
+                                  { v:'days',    l:'день'    },
+                                ];
+                                const banTarget      = action.ban_target        || 'initiator';
+                                const banTimeOn      = action.ban_time_enabled  || false;
+                                const banTimeVal     = action.ban_time_value    ?? 1;
+                                const banTimeUnit    = action.ban_time_unit     || 'hours';
+                                const banRevokeMsgs  = action.ban_revoke_messages || false;
+
+                                const banTgtKey     = `banTgt_${gIdx}_${aIdx}`;
+                                const banUnitKey    = `banUnit_${gIdx}_${aIdx}`;
+                                const banTgtGear    = `banTgtGear_${gIdx}_${aIdx}`;
+                                const banTimeGear   = `banTimeGear_${gIdx}_${aIdx}`;
+                                const banRevokeGear = `banRevokeGear_${gIdx}_${aIdx}`;
+
+                                const curTgt  = BAN_TARGETS.find(o => o.v === banTarget) || BAN_TARGETS[0];
+                                const curUnit = BAN_UNITS.find(o => o.v === banTimeUnit) || BAN_UNITS[2];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-tx">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {banTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtGear ? null : banTgtGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === banTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'ban_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === banTgtKey ? null : banTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === banTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === banTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === banTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {BAN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${banTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Временный бан */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-black text-tx">Временный бан</p>
+                                          {banTimeOn && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === banTimeGear ? null : banTimeGear)}
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === banTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'ban_time_enabled', false); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <Ban size={11} className="text-lbl"/> Отключить настройку
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {banTimeOn ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', false)}
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
+                                            <Ban size={14}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'ban_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {banTimeOn && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={banTimeVal}
+                                            onChange={e => updAction(gIdx, aIdx, 'ban_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banUnitKey ? null : banUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === banUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === banUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === banUnitKey && (
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[110px]">
+                                                {BAN_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'ban_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${banTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                      {!banTimeOn && (
+                                        <p className="text-[11px] text-lbl mt-1">Без ограничения по времени (перманентный бан)</p>
+                                      )}
+                                    </div>
+
+                                    {/* Удалить сообщения за 24ч */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-tx">Удалить сообщения пользователя за 24ч</p>
+                                        {banRevokeMsgs && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === banRevokeGear ? null : banRevokeGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === banRevokeGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'ban_revoke_messages', false); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'ban_revoke_messages', !banRevokeMsgs)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${banRevokeMsgs ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${banRevokeMsgs ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── emoji ── */}
+                              {action.type === 'emoji' && (() => {
+                                const EMOJI_TARGETS = [
+                                  { v:'initiator', l:'инициатора триггера'   },
+                                  { v:'replied',   l:'на которое ответили'   },
+                                ];
+                                const TG_EMOJIS = [
+                                  '👍','👎','❤️','🔥','🥰','👏','😁','🤔','🤯','😱',
+                                  '🤬','😢','🎉','🤩','🤮','💩','🙏','👌','🕊','🤡',
+                                  '🥱','🥴','😍','🐳','❤️‍🔥','🌚','🌭','💯','🤣','⚡',
+                                  '🍌','🏆','💔','🤨','😐','🍓','🍾','💋','🖕','😈',
+                                  '😴','😭','🤓','👻','👨‍💻','👀','🎃','🙈','😇','😂',
+                                  '🤝','✍️','🤗','🫡','🎅','🎄','☃️','💅','🤪','🗿',
+                                  '🆒','💘','🙉','🦄','😘','💊','🙊','😎','👾','🤷',
+                                  '🫠',
+                                ];
+                                const emojiTarget  = action.emoji_target  || 'initiator';
+                                // основной ключ — action.emoji; emoji_reaction оставлен как legacy-фолбэк для старых триггеров
+                                const emojiReaction = action.emoji || action.emoji_reaction || '👍';
+                                const emojiTgtKey  = `emojiTgt_${gIdx}_${aIdx}`;
+                                const emojiPickKey = `emojiPick_${gIdx}_${aIdx}`;
+                                const emojiTgtGear = `emojiTgtGear_${gIdx}_${aIdx}`;
+                                const curTgt = EMOJI_TARGETS.find(o => o.v === emojiTarget) || EMOJI_TARGETS[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Отметить эмодзи сообщение */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-tx">Отметить эмодзи сообщение</p>
+                                        {emojiTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtGear ? null : emojiTgtGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === emojiTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'emoji_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiTgtKey ? null : emojiTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === emojiTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === emojiTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === emojiTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {EMOJI_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'emoji_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${emojiTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Эмодзи */}
+                                    <div>
+                                      <p className="text-sm font-black text-tx mb-1.5">Эмодзи</p>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === emojiPickKey ? null : emojiPickKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-lg hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === emojiPickKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{emojiReaction}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === emojiPickKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === emojiPickKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden max-h-52 overflow-y-auto">
+                                            {TG_EMOJIS.map(em => (
+                                              <button key={em} onClick={() => { updAction(gIdx, aIdx, 'emoji', em); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2 text-xl text-left border-b border-bd last:border-0 transition-all hover:bg-sf2 ${emojiReaction === em ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : ''}`}>
+                                                {em}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── warn ── */}
+                              {action.type === 'warn' && (() => {
+                                const WARN_TARGETS = [
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'initiator', l:'Инициатор триггера'                 },
+                                  { v:'replied',   l:'Кому ответили'                      },
+                                  { v:'command',   l:'Режим команды'                      },
+                                ];
+                                const warnNotify  = action.warn_notify  ?? true;
+                                const warnTarget  = action.warn_target  || 'initiator';
+                                const warnCount   = action.warn_count   ?? 1;
+
+                                const warnTgtKey    = `warnTgt_${gIdx}_${aIdx}`;
+                                const warnNotifyGear = `warnNotifyGear_${gIdx}_${aIdx}`;
+                                const warnTgtGear    = `warnTgtGear_${gIdx}_${aIdx}`;
+
+                                const curTgt = WARN_TARGETS.find(o => o.v === warnTarget) || WARN_TARGETS[1];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Отправлять уведомление */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-tx">Отправлять уведомление о предупреждении</p>
+                                        {!warnNotify && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === warnNotifyGear ? null : warnNotifyGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === warnNotifyGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_notify', true); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'warn_notify', !warnNotify)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${warnNotify ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${warnNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                    {/* На кого */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-tx">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {warnTarget !== 'initiator' && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtGear ? null : warnTgtGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === warnTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'warn_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <Ban size={11} className="text-lbl"/> Отключить настройку
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === warnTgtKey ? null : warnTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === warnTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curTgt.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === warnTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === warnTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {WARN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'warn_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-4 py-2.5 text-sm font-bold text-left border-b border-bd last:border-0 transition-all ${warnTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Кол-во */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <p className="text-sm font-black text-tx">
+                                        Кол-во <span className="text-red-400">*</span>
+                                      </p>
+                                      <input type="number" min="1" max="999"
+                                        value={warnCount}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_count', Math.max(1, parseInt(e.target.value)||1))}
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                    </div>
+
+                                    {/* Период варнов */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-black text-tx">Период варнов</p>
+                                        <span className="text-xs text-lbl font-normal">(дней, 0 = без сброса)</span>
+                                      </div>
+                                      <input type="number" min="0" max="365"
+                                        value={action.warn_period ?? 0}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_period', Math.max(0, parseInt(e.target.value)||0))}
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                    </div>
+
+                                    {/* Длительность мута при достижении кол-ва */}
+                                    <div className="flex items-center justify-between gap-3">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-black text-tx">Длительность мута</p>
+                                        <span className="text-xs text-lbl font-normal">(минут, при эскалации)</span>
+                                      </div>
+                                      <input type="number" min="1" max="43200"
+                                        value={Math.max(1, Math.floor((action.warn_mute_duration_seconds ?? 3600) / 60))}
+                                        onChange={e => updAction(gIdx, aIdx, 'warn_mute_duration_seconds', Math.max(60, (parseInt(e.target.value)||1) * 60))}
+                                        className="w-20 px-3 py-2 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── delete ── */}
+                              {action.type === 'delete' && (() => {
+                                const delTarget    = action.delete_target    || 'initiator';
+                                const delDelay     = action.delete_delay     ?? 0;
+                                const delDelayUnit = action.delete_delay_unit|| 'seconds';
+                                const delTgtKey    = `delTgt_${gIdx}_${aIdx}`;
+                                const delUnitKey   = `delUnit_${gIdx}_${aIdx}`;
+                                const delGearKey   = `delGear_${gIdx}_${aIdx}`;
+                                const isModified   = delTarget !== 'initiator';
+
+                                const TARGET_OPTIONS = [
+                                  { v:'both',      l:'Кому ответили и инициатор триггера' },
+                                  { v:'initiator', l:'Инициатор триггера'                 },
+                                  { v:'replied',   l:'Кому ответили'                      },
+                                ];
+                                const UNIT_OPTIONS = [
+                                  { v:'seconds', l:'секунд' },
+                                  { v:'minutes', l:'минут'  },
+                                  { v:'hours',   l:'часов'  },
+                                  { v:'days',    l:'дней'   },
+                                ];
+                                const curTarget = TARGET_OPTIONS.find(o => o.v === delTarget) || TARGET_OPTIONS[1];
+                                const curUnit   = UNIT_OPTIONS.find(o => o.v === delDelayUnit) || UNIT_OPTIONS[0];
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* На кого распространяется */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-black text-tx">
+                                          На кого распространяется действие <span className="text-red-400">*</span>
+                                        </p>
+                                        {isModified && (
+                                          <div className="relative">
+                                            <button
+                                              onClick={() => setActOpenDropdown(actOpenDropdown === delGearKey ? null : delGearKey)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === delGearKey && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-lg shadow-xl z-[500] overflow-hidden whitespace-nowrap">
+                                                <button
+                                                  onClick={() => { updAction(gIdx, aIdx, 'delete_target', 'initiator'); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button
+                                          onClick={() => setActOpenDropdown(actOpenDropdown === delTgtKey ? null : delTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === delTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span>{curTarget.l}</span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === delTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === delTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {TARGET_OPTIONS.map(o => (
+                                              <button key={o.v}
+                                                onClick={() => { updAction(gIdx, aIdx, 'delete_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${delTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                    {/* Задержка */}
+                                    <div>
+                                      <p className="text-sm font-black text-tx mb-1.5">
+                                        Задержка <span className="text-red-400">*</span>
+                                      </p>
+                                      <div className="flex gap-2">
+                                        <input
+                                          type="number" min="0"
+                                          value={delDelay}
+                                          onChange={e => updAction(gIdx, aIdx, 'delete_delay', Math.max(0, parseInt(e.target.value)||0))}
+                                          className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                        <div className="relative">
+                                          <button
+                                            onClick={() => setActOpenDropdown(actOpenDropdown === delUnitKey ? null : delUnitKey)}
+                                            className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all min-w-[110px] ${actOpenDropdown === delUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                            <span className="flex-1">{curUnit.l}</span>
+                                            <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === delUnitKey ? 'rotate-180' : ''}`}/>
+                                          </button>
+                                          {actOpenDropdown === delUnitKey && (
+                                            <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
+                                              {UNIT_OPTIONS.map(o => (
+                                                <button key={o.v}
+                                                  onClick={() => { updAction(gIdx, aIdx, 'delete_delay_unit', o.v); setActOpenDropdown(null); }}
+                                                  className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${delDelayUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
+                                                  {o.l}
+                                                </button>
+                                              ))}
+                                            </div>
+                                          )}
+                                        </div>
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                              {/* ── pin ── */}
+                              {action.type === 'pin' && (() => {
+                                const pinTimeEnabled = action.pin_time_enabled || false;
+                                const pinTimeValue   = action.pin_time_value   ?? 10;
+                                const pinTimeUnit    = action.pin_time_unit    || 'seconds';
+                                const pinNotify      = action.pin_notify       || false;
+                                const pinTarget      = action.pin_target       || '';
+                                const pinUnitKey     = `pinUnit_${gIdx}_${aIdx}`;
+                                const pinTgtKey      = `pinTgt_${gIdx}_${aIdx}`;
+                                const pinNotifyGear  = `pinNotifyGear_${gIdx}_${aIdx}`;
+                                const pinTgtGear     = `pinTgtGear_${gIdx}_${aIdx}`;
+                                const pinTimeGear    = `pinTimeGear_${gIdx}_${aIdx}`;
+
+                                const PIN_UNITS = [
+                                  { v:'seconds', l:'секунд'  },
+                                  { v:'minutes', l:'минут'   },
+                                  { v:'hours',   l:'часов'   },
+                                  { v:'days',    l:'дней'    },
+                                  { v:'weeks',   l:'недель'  },
+                                  { v:'months',  l:'месяцев' },
+                                ];
+                                const PIN_TARGETS = [
+                                  { v:'initiator', l:'инициатора триггера' },
+                                  { v:'replied',   l:'на которое ответили' },
+                                ];
+                                const curUnit   = PIN_UNITS.find(o => o.v === pinTimeUnit)   || PIN_UNITS[0];
+                                const curTarget = PIN_TARGETS.find(o => o.v === pinTarget);
+
+                                return (
+                                  <div className="space-y-4">
+
+                                    {/* Автозакреп ответа бота (trigger-level) */}
+                                    <div className="flex items-center justify-between bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] -mx-1 px-3 py-2.5 rounded-xl border border-[color-mix(in_oklab,var(--ok)_30%,transparent)]">
+                                      <div className="flex flex-col">
+                                        <p className="text-sm font-black text-ok">Автозакреп ответа бота</p>
+                                        <p className="text-[10px] text-ok font-semibold">Закрепить сообщение-ответ бота после отправки</p>
+                                      </div>
+                                      <button onClick={() => upd('auto_pin', editingTrigger.auto_pin ? 0 : 1)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${editingTrigger.auto_pin ? 'bg-emerald-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${editingTrigger.auto_pin ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                    {/* Через какое время открепить */}
+                                    <div>
+                                      <div className="flex items-center justify-between">
+                                        <div className="flex items-center gap-1.5">
+                                          <p className="text-sm font-medium text-tx">Через какое время открепить</p>
+                                          {pinTimeEnabled && (
+                                            <div className="relative">
+                                              <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTimeGear ? null : pinTimeGear)}
+                                                className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                                <Settings size={14}/>
+                                              </button>
+                                              {actOpenDropdown === pinTimeGear && (
+                                                <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                  <button onClick={() => { updAction(gIdx, aIdx, 'pin_time_enabled', false); updAction(gIdx, aIdx, 'pin_time_value', 10); updAction(gIdx, aIdx, 'pin_time_unit', 'seconds'); setActOpenDropdown(null); }}
+                                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                    <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                  </button>
+                                                </div>
+                                              )}
+                                            </div>
+                                          )}
+                                        </div>
+                                        {pinTimeEnabled ? (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', false)}
+                                            className="p-1.5 border border-bd2 rounded-lg text-lbl hover:text-danger hover:border-[color-mix(in_oklab,var(--danger)_40%,transparent)] active:scale-90 transition-all">
+                                            <Ban size={14}/>
+                                          </button>
+                                        ) : (
+                                          <button onClick={() => updAction(gIdx, aIdx, 'pin_time_enabled', true)}
+                                            className="px-3 py-1.5 border border-bd2 rounded-lg text-xs font-black text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:text-cta transition-all active:scale-95">
+                                            Включить
+                                          </button>
+                                        )}
+                                      </div>
+                                      {pinTimeEnabled && (
+                                        <div className="flex gap-2 mt-2">
+                                          <input type="number" min="1"
+                                            value={pinTimeValue}
+                                            onChange={e => updAction(gIdx, aIdx, 'pin_time_value', Math.max(1, parseInt(e.target.value)||1))}
+                                            className="flex-1 px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinUnitKey ? null : pinUnitKey)}
+                                              className={`flex items-center gap-2 px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-tx min-w-[110px] hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === pinUnitKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                              <span className="flex-1">{curUnit.l}</span>
+                                              <ChevronDown size={13} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === pinUnitKey ? 'rotate-180' : ''}`}/>
+                                            </button>
+                                            {actOpenDropdown === pinUnitKey && (
+                                              <div className="absolute top-full right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden min-w-[100px]">
+                                                {PIN_UNITS.map(o => (
+                                                  <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_time_unit', o.v); setActOpenDropdown(null); }}
+                                                    className={`w-full px-3 py-1.5 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${pinTimeUnit === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] font-black' : 'text-tx hover:bg-sf2'}`}>
+                                                    {o.l}
+                                                  </button>
+                                                ))}
+                                              </div>
+                                            )}
+                                          </div>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    {/* Уведомить участников чата */}
+                                    <div className="flex items-center justify-between">
+                                      <div className="flex items-center gap-1.5">
+                                        <p className="text-sm font-medium text-tx">Уведомить участников чата</p>
+                                        {pinNotify && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinNotifyGear ? null : pinNotifyGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === pinNotifyGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'pin_notify', false); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <button onClick={() => updAction(gIdx, aIdx, 'pin_notify', !pinNotify)}
+                                        className={`relative w-11 h-6 rounded-full transition-all duration-200 flex-shrink-0 ${pinNotify ? 'bg-blue-500' : 'bg-bd2'}`}>
+                                        <span className={`absolute top-1 w-4 h-4 bg-sff rounded-full shadow transition-all duration-200 ${pinNotify ? 'left-[calc(100%-1.25rem)]' : 'left-1'}`}/>
+                                      </button>
+                                    </div>
+
+                                    {/* Закрепить сообщение */}
+                                    <div>
+                                      <div className="flex items-center gap-1.5 mb-1.5">
+                                        <p className="text-sm font-medium text-tx">Закрепить сообщение</p>
+                                        {pinTarget && (
+                                          <div className="relative">
+                                            <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtGear ? null : pinTgtGear)}
+                                              className="text-blue-400 hover:text-cta active:scale-90 transition-all">
+                                              <Settings size={14}/>
+                                            </button>
+                                            {actOpenDropdown === pinTgtGear && (
+                                              <div className="absolute left-0 top-6 bg-sff border border-bd rounded-xl shadow-xl z-[500] whitespace-nowrap overflow-hidden">
+                                                <button onClick={() => { updAction(gIdx, aIdx, 'pin_target', ''); setActOpenDropdown(null); }}
+                                                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-tx hover:bg-sf2 w-full">
+                                                  <RotateCcw size={11} className="text-red-400"/> Отменить изменения
+                                                </button>
+                                              </div>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
+                                      <div className="relative">
+                                        <button onClick={() => setActOpenDropdown(actOpenDropdown === pinTgtKey ? null : pinTgtKey)}
+                                          className={`w-full flex items-center justify-between px-4 py-3 bg-sff border-2 rounded-xl text-sm font-bold text-txd hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all ${actOpenDropdown === pinTgtKey ? 'border-[color-mix(in_oklab,var(--cta)_50%,transparent)]' : 'border-bd2'}`}>
+                                          <span className={curTarget ? 'text-tx' : 'text-lbl'}>
+                                            {curTarget ? curTarget.l : '-'}
+                                          </span>
+                                          <ChevronDown size={14} className={`text-lbl transition-transform flex-shrink-0 ${actOpenDropdown === pinTgtKey ? 'rotate-180' : ''}`}/>
+                                        </button>
+                                        {actOpenDropdown === pinTgtKey && (
+                                          <div className="absolute top-full left-0 right-0 z-[500] bg-sff border border-bd rounded-xl shadow-xl mt-1 overflow-hidden">
+                                            {PIN_TARGETS.map(o => (
+                                              <button key={o.v} onClick={() => { updAction(gIdx, aIdx, 'pin_target', o.v); setActOpenDropdown(null); }}
+                                                className={`w-full px-3 py-2 text-xs font-bold text-left border-b border-bd last:border-0 transition-all ${pinTarget === o.v ? 'text-cta bg-[color-mix(in_oklab,var(--cta)_10%,transparent)]' : 'text-tx hover:bg-sf2'}`}>
+                                                {o.l}
+                                              </button>
+                                            ))}
+                                          </div>
+                                        )}
+                                      </div>
+                                    </div>
+
+                                  </div>
+                                );
+                              })()}
+
+                            </div>
+
+                            </div>
+                          </div>
+                        );
+                      })}
+
+                      {/* Добавить действие в группу — всегда видна (в т.ч. когда список пуст) */}
+                      <button
+                        onClick={() => { setActPickerGroupIdx(gIdx); setActPickerSearch(''); setShowActPickerModal(true); }}
+                        className="w-full py-2.5 border-2 border-dashed border-[color-mix(in_oklab,var(--cta)_40%,transparent)] rounded-xl text-blue-400 font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-blue-400 hover:text-cta transition-all bg-blue-50/30 active:scale-[0.98]">
+                        <PlusCircle size={12}/> Добавить действие
+                      </button>
+                    </div>
+                  </div>
+                ))}
+
+                {/* Добавить группу действий */}
+                <button
+                  onClick={addActionGroup}
+                  className="w-full py-2.5 border-2 border-dashed border-bd2 rounded-2xl text-lbl font-black text-[10px] uppercase flex items-center justify-center gap-1.5 hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:text-blue-400 transition-all bg-sff active:scale-[0.98]">
+                  <PlusCircle size={11}/> Добавить группу действий
+                </button>
+              </div>{/* конец правой колонки */}
+
+              </div>{/* конец grid */}
+
+              {/* ── МОДАЛ ВЫБОРА УСЛОВИЯ (full-screen overlay) ── */}
+              {showCondPickerModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col" onClick={e => { if (e.target === e.currentTarget) setShowCondPickerModal(false); }}>
+                  {/* Backdrop */}
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowCondPickerModal(false)}/>
+                  {/* Panel */}
+                  <div className="relative mt-auto bg-sff rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                    {/* Drag handle */}
+                    <div className="flex justify-center pt-3 pb-1">
+                      <div className="w-10 h-1 bg-bd2 rounded-full"/>
+                    </div>
+                    {/* Header */}
+                    <div className="flex items-center justify-between px-6 py-3 border-b border-bd">
+                      <h3 className="font-black text-base text-tx">Выберите условие</h3>
+                      <button onClick={() => setShowCondPickerModal(false)} className="p-2 text-lbl hover:text-txd active:scale-90 transition-all">
+                        <X size={18}/>
+                      </button>
+                    </div>
+                    {/* Signal tabs */}
+                    <div className="flex border-b border-bd">
+                      {[{v:'message',l:'Сообщение'},{v:'quoted',l:'Цитируемое'}].map(tab => (
+                        <button key={tab.v} onClick={() => setCondPickerTab(tab.v)}
+                          className={`flex-1 py-3 text-[11px] font-black uppercase tracking-wide transition-all border-b-2 ${condPickerTab===tab.v ? 'text-cta border-blue-500' : 'text-lbl border-transparent'}`}>
+                          {tab.l}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Info box */}
+                    <div className="mx-4 mt-3 px-4 py-3 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-2xl text-[11px] text-cta font-medium leading-relaxed">
+                      {condPickerTab === 'message'
+                        ? '📨 Триггер проверит входящее сообщение участника чата по выбранному условию.'
+                        : '↩️ Триггер проверит сообщение, на которое ответил пользователь (цитируемое).'}
+                    </div>
+                    {/* Search */}
+                    <div className="px-4 mt-3">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lbl"/>
+                        <input
+                          type="text"
+                          placeholder="Поиск условий..."
+                          value={condPickerSearch}
+                          onChange={e => setCondPickerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-sf2 border border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                      </div>
+                    </div>
+                    {/* Conditions list */}
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-4">
+                      {/* Секция: Условия по тексту */}
+                      <div>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">
+                          Условия по {condPickerTab === 'message' ? 'сообщению' : 'цитируемому сообщению'}
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {/* Сообщение (any) */}
+                          {(condPickerSearch === '' || 'сообщение любое'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">📩</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">
+                                {condPickerTab === 'message' ? 'Сообщение' : 'Цитируемое'}
+                              </span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Любое входящее сообщение</span>
+                              {/* ⓘ tooltip */}
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_any_${condPickerTab}` ? null : `picker_any_${condPickerTab}`); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === `picker_any_${condPickerTab}` && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {condPickerTab === 'message' ? COND_TOOLTIP_TEXT['msg_any'] : COND_TOOLTIP_TEXT['qmsg_any']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Слово в сообщении */}
+                          {(condPickerSearch === '' || 'слово ключевое keyword'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, condPickerTab === 'message' ? 'message' : 'quoted')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">🔤</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Слово в сообщении</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Реагирует на ключевые слова</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === `picker_kw_${condPickerTab}` ? null : `picker_kw_${condPickerTab}`); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === `picker_kw_${condPickerTab}` && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {condPickerTab === 'message' ? COND_TOOLTIP_TEXT['msg_keyword'] : COND_TOOLTIP_TEXT['qmsg_keyword']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Тип ответа — только для message-таба */}
+                          {condPickerTab === 'message' && (condPickerSearch === '' || 'тип ответа reply'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'reply_type')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">↩️</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Тип ответа</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Реплай, первое сообщ., коммент...</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_rt' ? null : 'picker_rt'); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === 'picker_rt' && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {COND_TOOLTIP_TEXT['msg_reply_type']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                          {/* Тип сообщения — только для message-таба */}
+                          {condPickerTab === 'message' && (condPickerSearch === '' || 'тип сообщения формат медиа фото стикер'.includes(condPickerSearch.toLowerCase())) && (
+                            <button
+                              onClick={() => addConditionToGroup(condPickerGroupIdx, 'message', 'msg_type')}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                              <span className="text-xl">🗂</span>
+                              <span className="text-[11px] font-black text-tx leading-tight">Тип сообщения</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">Фото, видео, стикер, документ...</span>
+                              <span className="absolute top-1.5 left-1.5 text-[8px] font-black bg-green-500 text-white px-1.5 py-0.5 rounded-full uppercase animate-pulse z-10">NEW</span>
+                              <button
+                                onClick={e => { e.stopPropagation(); setCondTooltip(condTooltip === 'picker_mt' ? null : 'picker_mt'); }}
+                                className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none hover:bg-blue-600 z-10">
+                                ?
+                              </button>
+                              {condTooltip === 'picker_mt' && (
+                                <div className="absolute top-8 right-2 w-48 bg-gray-900 text-white text-[10px] font-medium p-2.5 rounded-xl shadow-xl z-20 leading-relaxed">
+                                  {COND_TOOLTIP_TEXT['msg_msg_type']}
+                                </div>
+                              )}
+                            </button>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Секция: Условия по параметрам */}
+                      <div>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">
+                          Условия по параметрам сообщения
+                        </p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { icon: '📎', label: 'Тип медиа', sub: 'Фото, видео, файл...' },
+                            { icon: '👤', label: 'Автор', sub: 'ID или username' },
+                            { icon: '💬', label: 'Длина текста', sub: 'Больше/меньше N символов' },
+                            { icon: '🕐', label: 'Время отправки', sub: 'В заданный промежуток' },
+                          ].map(item => (
+                            <div key={item.label}
+                              className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
+                              <span className="text-xl">{item.icon}</span>
+                              <span className="text-[11px] font-black text-txd leading-tight">{item.label}</span>
+                              <span className="text-[9px] text-lbl font-medium leading-tight">{item.sub}</span>
+                              <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
+                              <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── МОДАЛ НАСТРОЕК ГРУППЫ ДЕЙСТВИЙ (Шанс выполнения) ── */}
+              {actGroupSettingsIdx !== null && (() => {
+                const gIdx = actGroupSettingsIdx;
+                const group = actionGroups[gIdx];
+                if (!group) return null;
+                return (
+                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setActGroupSettingsIdx(null)}/>
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-black text-sm text-tx">Настройки группы {actionGroups.length > 1 ? gIdx + 1 : ''}</h3>
+                        <button onClick={() => setActGroupSettingsIdx(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div className="flex items-center gap-3 mb-4">
+                        <label className="text-sm font-bold text-txd flex-1">Шанс выполнения</label>
+                        <div className="flex items-center gap-1.5 bg-sf2 border border-bd2 rounded-xl px-3 py-2">
+                          <input
+                            type="number" min="1" max="100"
+                            value={group.probability}
+                            onChange={e => updActionGroup(gIdx, 'probability', Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
+                            className="w-12 text-center font-black text-sm bg-transparent outline-none"/>
+                          <span className="text-xs font-black text-lbl">%</span>
+                        </div>
+                      </div>
+                      <button onClick={() => setActGroupSettingsIdx(null)}
+                        className="w-full px-4 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm hover:bg-blue-600 active:scale-95 transition-all">
+                        Готово
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── МОДАЛ ШЕСТЕРЁНКИ УСЛОВИЯ (Отменить изменения) ── */}
+              {condGearModal && (() => {
+                const { gIdx, cIdx } = condGearModal;
+                const cond = conditionGroups[gIdx]?.conditions[cIdx];
+                if (!cond) return null;
+                return (
+                  <div className="fixed inset-0 z-[400] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondGearModal(null)}/>
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-xs p-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="font-black text-sm text-tx">Значения условия</h3>
+                        <button onClick={() => setCondGearModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <button
+                        onClick={() => { updCond(gIdx, cIdx, 'chips', []); setCondGearModal(null); }}
+                        className="w-full flex items-center gap-3 px-4 py-3.5 text-sm font-bold text-danger hover:bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] rounded-2xl transition-all text-left">
+                        <RotateCcw size={14}/> Отменить изменения
+                      </button>
+                      <button onClick={() => setCondGearModal(null)}
+                        className="w-full mt-2 px-4 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
+                        Закрыть
+                      </button>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── МОДАЛ НАСТРОЕК УСЛОВИЯ (ключ плейсхолдера) ── */}
+              {condSettingsModal && (() => {
+                const { gIdx, cIdx } = condSettingsModal;
+                const cond = conditionGroups[gIdx]?.conditions[cIdx];
+                if (!cond) return null;
+                return (
+                  <div className="fixed inset-0 z-[300] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setCondSettingsModal(null)}/>
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-4 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-black text-base text-tx">Дополнительные настройки условия</h3>
+                        <button onClick={() => setCondSettingsModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-1.5">
+                          <p className="text-sm font-black text-tx">Ключ плейсхолдера</p>
+                          <div className="w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center">?</div>
+                        </div>
+                        <p className="text-red-400 text-[10px] font-bold">*</p>
+                        <p className="text-[11px] text-txd font-medium leading-relaxed">
+                          Укажите ключ, который станет плейсхолдером и будет выводить в тексте условие сработки триггера.<br/>
+                          <span className="text-lbl">Пример: <span className="font-mono font-bold">words_list</span></span>
+                        </p>
+                        <p className="text-[11px] text-txd font-medium leading-relaxed">
+                          Поместите этот ключ между <span className="font-mono font-bold text-purple">%%</span> и добавьте его в текст действия «Отправить сообщение в чат».<br/>
+                          <span className="text-lbl">Пример: <span className="font-mono text-purple">%words_list%</span></span>
+                        </p>
+                        <input type="text"
+                          value={cond.placeholder_key || ''}
+                          onChange={e => updCond(gIdx, cIdx, 'placeholder_key', e.target.value)}
+                          placeholder="words_list"
+                          className="w-full px-4 py-3 bg-sf2 border-2 border-bd2 rounded-2xl font-mono font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button onClick={() => setCondSettingsModal(null)}
+                          className="px-5 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
+                          Отмена
+                        </button>
+                        <button onClick={() => setCondSettingsModal(null)}
+                          className="px-5 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all">
+                          Сохранить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })()}
+
+              {/* ── МОДАЛ ВЫБОРА ДЕЙСТВИЯ (full-screen overlay) ── */}
+              {showActPickerModal && (
+                <div className="fixed inset-0 z-[200] flex flex-col">
+                  <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setShowActPickerModal(false)}/>
+                  <div className="relative mt-auto bg-sff rounded-t-[2rem] max-h-[85vh] flex flex-col shadow-2xl animate-in slide-in-from-bottom duration-300">
+                    <div className="flex justify-center pt-3 pb-1">
+                      <div className="w-10 h-1 bg-bd2 rounded-full"/>
+                    </div>
+                    <div className="flex items-start justify-between px-6 py-3 border-b border-bd">
+                      <div>
+                        <h3 className="font-black text-base text-tx">Выберите действия</h3>
+                        <p className="text-[10px] text-lbl font-medium mt-0.5">Укажите реакцию бота на выполненное условие</p>
+                      </div>
+                      <button onClick={() => setShowActPickerModal(false)} className="p-2 text-lbl hover:text-txd active:scale-90 transition-all">
+                        <X size={18}/>
+                      </button>
+                    </div>
+                    <div className="px-4 mt-3">
+                      <div className="relative">
+                        <Search size={14} className="absolute left-3.5 top-1/2 -translate-y-1/2 text-lbl"/>
+                        <input type="text" placeholder="Поиск действий..." value={actPickerSearch}
+                          onChange={e => setActPickerSearch(e.target.value)}
+                          className="w-full pl-9 pr-4 py-2.5 bg-sf2 border border-bd2 rounded-xl text-sm font-bold outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                      </div>
+                    </div>
+                    <div className="flex-1 overflow-y-auto px-4 py-3 space-y-5">
+                      {/* Секция 1: Действия с сообщениями */}
+                      <div>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Действия с сообщениями</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'send_text', icon:'📤', label:'Отправить сообщение в чат', sub:'Ответить сообщением', active:true  },
+                            { type:'delete',    icon:'🗑',  label:'Удалить сообщение', sub:'Удалить триггер-сообщение', active:true  },
+                            { type:'dm',        icon:'✉️',  label:'Личное сообщение',  sub:'Написать пользователю в ЛС',active:true  },
+                            { type:'pin',       icon:'📌',  label:'Закрепить',          sub:'Закрепить сообщение',      active:true  },
+                            { type:'unpin',     icon:'📍',  label:'Открепить',          sub:'Открепить сообщение',      active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                      {/* Секция 2: Действия по пользователям */}
+                      <div>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Действия по пользователям</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'mute',   icon:'🔇', label:'Запретить писать', sub:'Мут на время',        active:true  },
+                            { type:'ban',    icon:'🚫', label:'Заблокировать',     sub:'Бан из чата',         active:true  },
+                            { type:'kick',   icon:'👢', label:'Удалить из чата',   sub:'Кик с возможностью вернуться', active:false },
+                            { type:'unmute', icon:'🔊', label:'Разрешить писать',  sub:'Снять мут',           active:false },
+                            { type:'unban',  icon:'✅', label:'Разблокировать',    sub:'Снять бан',           active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                      {/* Секция 3: Прочее */}
+                      <div>
+                        <p className="text-[9px] font-black text-lbl uppercase tracking-widest mb-2 px-1">Прочее</p>
+                        <div className="grid grid-cols-2 gap-2">
+                          {[
+                            { type:'warn',  icon:'⚠️', label:'Предупреждение',   sub:'Варн с эскалацией',    active:true  },
+                            { type:'emoji', icon:'😀', label:'Реакция эмодзи',    sub:'Поставить реакцию',    active:true  },
+                            { type:'warn_add', icon:'✋', label:'Уровень наказания', sub:'Добавить варн',     active:false },
+                            { type:'trigger_toggle', icon:'🔄', label:'Изменить триггер', sub:'Вкл/выкл другой', active:false },
+                          ].filter(a => actPickerSearch === '' || a.label.toLowerCase().includes(actPickerSearch.toLowerCase())).map(a => (
+                            a.active ? (
+                              <button key={a.type} onClick={() => addActionToGroup(actPickerGroupIdx, a.type)}
+                                className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-bd rounded-2xl text-left hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)] hover:bg-blue-50/30 active:scale-[0.97] transition-all">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-tx leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <div className="absolute top-2 right-2 w-4 h-4 rounded-full bg-blue-500 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </button>
+                            ) : (
+                              <div key={a.type} className="relative flex flex-col items-start gap-1.5 p-3.5 bg-sf2 border border-dashed border-bd2 rounded-2xl opacity-50 cursor-not-allowed">
+                                <span className="text-xl">{a.icon}</span>
+                                <span className="text-[11px] font-black text-txd leading-tight">{a.label}</span>
+                                <span className="text-[9px] text-lbl font-medium leading-tight">{a.sub}</span>
+                                <span className="absolute top-2 right-2 text-[8px] font-black bg-bd2 text-lbl px-1.5 py-0.5 rounded-full uppercase">***</span>
+                                <div className="absolute top-2 right-8 w-4 h-4 rounded-full bg-gray-300 text-white text-[9px] font-black flex items-center justify-center leading-none">?</div>
+                              </div>
+                            )
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* ── МОДАЛ КЛАВИАТУРЫ ── */}
+              {showKeyboardModal && kbModalTarget && (() => {
+                const { gIdx, aIdx } = kbModalTarget;
+                const tgt = (editingTrigger.actionGroups||[])[gIdx]?.actions[aIdx];
+                if (!tgt) return null;
+                const keyboard = tgt.keyboard || [];
+                const addKbButton = (btn) => {
+                  updAction(gIdx, aIdx, 'keyboard', [...keyboard, { id: Date.now(), ...btn }]);
+                  setKbButtonType(null);
+                  setKbNewButton({});
+                };
+                const REACTION_PRESETS = [
+                  { emoji: '🌍' }, { emoji: '👋' }, { emoji: '🔥' }, { emoji: '💡' },
+                ];
+                return (
+                  <div className="fixed inset-0 z-[300] flex flex-col bg-sff">
+
+                    {/* ── Шапка ── */}
+                    <div className="flex items-center justify-between px-5 py-3 border-b border-bd flex-shrink-0">
+                      <span className="text-[10px] font-black bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta px-2 py-0.5 rounded uppercase tracking-wide">Beta</span>
+                      <button onClick={() => { setShowKeyboardModal(false); setKbButtonType(null); setKbNewButton({}); }}
+                        className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
+                        <X size={20}/>
+                      </button>
+                    </div>
+
+                    {/* ── Список добавленных кнопок ── */}
+                    <div className="px-5 py-3 border-b border-bd flex-shrink-0">
+                      {keyboard.length === 0 ? (
+                        <p className="text-sm font-bold text-lbl text-center py-1">Кнопки не выбраны</p>
+                      ) : (
+                        <div className="space-y-1.5">
+                          {keyboard.map((btn, bi) => (
+                            <div key={btn.id} className="flex items-center gap-2.5 px-3 py-2 bg-sf2 rounded-xl border border-bd">
+                              <span className="text-lbl font-black text-lg select-none leading-none">+</span>
+                              <span className="text-base w-5 text-center leading-none">{btn.emoji || '○'}</span>
+                              <span className="text-sm font-bold text-txd flex-1 truncate">{btn.text || 'Текст кнопки'}</span>
+                              <button onClick={() => updAction(gIdx, aIdx, 'keyboard', keyboard.filter((_,i)=>i!==bi))}
+                                className="text-red-300 hover:text-danger text-xl leading-none flex-shrink-0">×</button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Контент ── */}
+                    <div className="flex-1 overflow-y-auto">
+                      {kbButtonType === null ? (
+
+                        /* Выбор типа кнопки */
+                        <div className="px-5 py-5">
+                          <p className="text-sm font-black text-tx mb-4">Выберите тип кнопки</p>
+                          <div className="grid grid-cols-3 gap-2">
+                            <button
+                              onClick={() => { setKbButtonType('link'); setKbNewButton({}); }}
+                              className="px-4 py-4 border border-bd2 rounded-xl text-sm font-bold text-tx text-left hover:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] transition-all active:scale-[0.97]">
+                              🔗 Ссылка
+                            </button>
+                            <div className="relative px-4 py-4 border border-dashed border-bd2 rounded-xl text-sm font-bold text-lbl text-left cursor-not-allowed select-none">
+                              Вызов триггера
+                              <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                            </div>
+                            {REACTION_PRESETS.map((r, ri) => (
+                              <div key={ri} className="relative flex items-center gap-2 px-4 py-4 border border-dashed border-bd2 rounded-xl text-sm font-bold text-lbl text-left cursor-not-allowed select-none">
+                                <span className="text-lg">{r.emoji}</span>
+                                <span>Реакция</span>
+                                <span className="absolute top-1.5 right-1.5 text-[8px] font-black bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn px-1.5 py-0.5 rounded-full uppercase">Скоро</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+
+                      ) : (
+
+                        /* Подформа */
+                        <div className="px-5 py-5 space-y-4">
+                          {/* Назад + заголовок */}
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => { setKbButtonType(null); setKbNewButton({}); }}
+                              className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all text-lg font-bold leading-none">←</button>
+                            {kbButtonType === 'reaction' && <span className="text-xl">{kbReactionEmoji}</span>}
+                            <h3 className="text-base font-black text-tx">
+                              {kbButtonType === 'reaction' ? 'Реакция' : 'Ссылка'}
+                            </h3>
+                          </div>
+
+                          {/* Info box */}
+                          <div className="px-4 py-3 bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] rounded-2xl text-[12px] text-cta font-medium leading-relaxed">
+                            {kbButtonType === 'reaction' && <>
+                              Если вы отключили реакции на посты в канале, но мнение пользователей об определённой публикации или теме важно — помогут кнопки с реакциями. Можно вставить любые эмодзи вместо предложенных в поле "Текст кнопки".<br/><br/>
+                              После того, как читатели нажмут на кнопку, рядом с эмодзи появится количество нажатий. Вот как это будет выглядеть с использованием текущего эмодзи: {kbReactionEmoji} - 3.
+                            </>}
+                            {kbButtonType === 'link' && <>
+                              Кнопка-ссылка — при нажатии открывает указанный URL в браузере пользователя.
+                            </>}
+                          </div>
+
+                          {/* Текст кнопки */}
+                          <div>
+                            <p className="text-sm font-black text-tx mb-1.5">Текст кнопки <span className="text-red-400">*</span></p>
+                            <input type="text" placeholder="Текст кнопки"
+                              value={kbNewButton.text || ''}
+                              onChange={e => setKbNewButton(p => ({...p, text: e.target.value}))}
+                              className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                          </div>
+
+                          {/* URL */}
+                          {kbButtonType === 'link' && (
+                            <div>
+                              <p className="text-sm font-black text-tx mb-1.5">URL <span className="text-red-400">*</span></p>
+                              <input type="url" placeholder="https://..."
+                                value={kbNewButton.url || ''}
+                                onChange={e => setKbNewButton(p => ({...p, url: e.target.value}))}
+                                className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"/>
+                            </div>
+                          )}
+
+                          {/* Реакция: сообщение + чекбоксы */}
+                          {kbButtonType === 'reaction' && (<>
+                            <div>
+                              <p className="text-sm font-black text-tx mb-1.5">Сообщение пользователю</p>
+                              <div className="relative">
+                                <textarea
+                                  value={kbNewButton.user_msg || ''}
+                                  onChange={e => setKbNewButton(p => ({...p, user_msg: e.target.value.slice(0,200)}))}
+                                  rows={4}
+                                  className="w-full px-4 py-3 bg-sff border-2 border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all resize-none"/>
+                                <span className="absolute bottom-2 right-3 text-[10px] text-lbl font-bold">
+                                  {(kbNewButton.user_msg||'').length} / 200
+                                </span>
+                              </div>
+                            </div>
+                            <div className="space-y-4">
+                              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setKbNewButton(p => ({...p, noMultiple: !p.noMultiple}))}>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${kbNewButton.noMultiple ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
+                                  {kbNewButton.noMultiple && <Check size={12} className="text-white"/>}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-tx">Запрет на выбор нескольких вариантов</p>
+                                  <p className="text-[11px] text-lbl font-medium mt-0.5">* Активируйте данный параметр, чтобы запретить пользователю выбирать несколько вариантов реакции</p>
+                                </div>
+                              </div>
+                              <div className="flex items-start gap-3 cursor-pointer" onClick={() => setKbNewButton(p => ({...p, uniqueOnly: !p.uniqueOnly}))}>
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 mt-0.5 transition-all ${kbNewButton.uniqueOnly ? 'bg-blue-500 border-blue-500' : 'border-gray-300'}`}>
+                                  {kbNewButton.uniqueOnly && <Check size={12} className="text-white"/>}
+                                </div>
+                                <div>
+                                  <p className="text-sm font-bold text-tx">Учитывать только уникальные нажатия</p>
+                                  <p className="text-[11px] text-lbl font-medium mt-0.5">* При активации данного параметра будет зачтено только первое нажатие на кнопку от уникального пользователя. Если параметр выключен, то учитываться в счётчике будут все нажатия от одного и того же человека</p>
+                                </div>
+                              </div>
+                            </div>
+                          </>)}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* ── Добавить кнопку ── */}
+                    {kbButtonType !== null && (
+                      <div className="px-5 py-4 border-t border-bd flex-shrink-0">
+                        <button
+                          onClick={() => {
+                            if (!kbNewButton.text) return;
+                            addKbButton({
+                              type: kbButtonType,
+                              text: kbNewButton.text,
+                              emoji: kbButtonType === 'reaction' ? kbReactionEmoji : undefined,
+                              trigger_id: kbNewButton.trigger_id,
+                              url: kbNewButton.url,
+                              user_msg: kbNewButton.user_msg,
+                              noMultiple: kbNewButton.noMultiple,
+                              uniqueOnly: kbNewButton.uniqueOnly,
+                            });
+                          }}
+                          className="w-full py-4 bg-blue-500 text-white font-black text-sm rounded-2xl shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-[0.98] transition-all">
+                          Добавить кнопку
+                        </button>
+                      </div>
+                    )}
+
+                  </div>
+                );
+              })()}
+
+              {/* ── МОДАЛ ДОПОЛНИТЕЛЬНЫХ НАСТРОЕК ДЕЙСТВИЯ (через портал — вне стэкинг-контекста карточек) ── */}
+              {actionSettingsModal && createPortal((() => {
+                const { gIdx, aIdx } = actionSettingsModal;
+                return (
+                  <div className="fixed inset-0 z-[99999] flex items-center justify-center px-4">
+                    <div className="absolute inset-0 bg-black/50 backdrop-blur-sm" onClick={() => setActionSettingsModal(null)}/>
+                    <div className="relative bg-sff rounded-3xl shadow-2xl w-full max-w-sm p-6 space-y-5 animate-in fade-in zoom-in-95 duration-200">
+                      <div className="flex items-center justify-between">
+                        <h3 className="font-black text-base text-tx">Дополнительные настройки действия</h3>
+                        <button onClick={() => setActionSettingsModal(null)} className="p-1.5 text-lbl hover:text-txd active:scale-90 transition-all">
+                          <X size={16}/>
+                        </button>
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <p className="text-sm font-black text-tx">Шанс выполнения действия <span className="text-red-400">*</span></p>
+                        </div>
+                        <input
+                          type="number" min="1" max="100"
+                          value={actionSettingsPct}
+                          onChange={e => setActionSettingsPct(Math.min(100, Math.max(1, parseInt(e.target.value)||1)))}
+                          className="w-full px-4 py-3 bg-sf2 border-2 border-bd2 rounded-2xl font-black text-sm text-right outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] transition-all"
+                          style={{appearance:'textfield'}}/>
+                      </div>
+                      <div className="flex gap-2 justify-end pt-1">
+                        <button onClick={() => setActionSettingsModal(null)}
+                          className="px-5 py-2.5 bg-sf2 text-tx rounded-xl font-black text-sm hover:bg-bd2 active:scale-95 transition-all">
+                          Отмена
+                        </button>
+                        <button onClick={() => { updAction(gIdx, aIdx, 'action_probability', actionSettingsPct); setActionSettingsModal(null); }}
+                          className="px-5 py-2.5 bg-blue-500 text-white rounded-xl font-black text-sm shadow-md shadow-blue-100 hover:bg-blue-600 active:scale-95 transition-all">
+                          Сохранить
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })(), document.body)}
+
+              {/* ── ДЕЙСТВИЯ (старый блок — удалён, теперь в правой колонке) ── */}
+              {false && <div className="mb-5 space-y-2">
+                <span className="text-[10px] font-black text-txd uppercase tracking-widest block px-1">Действия</span>
+                {[].map((action, idx) => {
+                  const actCfg = ACTION_TYPES.find(a=>a.type===action.type)||ACTION_TYPES[0];
+                  const ActIcon = actCfg.Icon;
+                  return (
+                    <div key={action.id} className="bg-sff rounded-2xl border border-bd shadow-sm overflow-hidden">
+                      <div className="flex items-center justify-between px-4 py-2.5 border-b border-bd">
+                        <div className="flex items-center gap-2"><ActIcon size={14} className="text-txd"/><span className="text-sm font-black text-tx">{actCfg.label}</span></div>
+                        <button onClick={() => removeAction(idx)} className="p-1.5 text-red-400 hover:text-danger active:scale-90 transition-all"><X size={13}/></button>
+                      </div>
+                      <div className="px-4 py-3 space-y-3">
+                        {(action.type==='send_text'||action.type==='dm') && (<>
+                          {action.type==='send_text' && (
+                            <div className="flex gap-1.5 flex-wrap">
+                              {[{v:'none',l:'Обычный'},{v:'initiator',l:'→ Автор'},{v:'quoted',l:'→ Цитата'}].map(o => (
+                                <button key={o.v} onClick={() => updAction(idx,'reply_target',o.v)}
+                                  className={`px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.reply_target===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
+                                </button>
+                              ))}
+                            </div>
+                          )}
+                          <textarea placeholder="Текст сообщения..."
+                            value={action.reply_text} onChange={e => updAction(idx,'reply_text',e.target.value)} rows={3}
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-bold text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] resize-none transition-all"/>
+                          {action.type==='send_text' && (<>
+                            <div>
+                              <div className="flex items-center justify-between mb-1.5">
+                                <span className="text-[10px] font-black text-lbl uppercase">Медиафайл</span>
+                                <button onClick={() => { if (showMediaPicker) updAction(idx,'media_type','none'); setShowMediaPicker(v=>!v); }}
+                                  className={`flex items-center gap-1 px-3 py-1 rounded-xl text-[10px] font-black uppercase transition-all ${action.media_type!=='none' ? 'bg-blue-600 text-white' : showMediaPicker ? 'bg-bd2 text-txd' : 'bg-sf2 text-txd'}`}>
+                                  {action.media_type==='none' ? <><ImageIcon size={11}/><span>{showMediaPicker?'Убрать':'+ Добавить'}</span></> :
+                                   action.media_type==='photo' ? <><ImageIcon size={11}/><span>Фото</span><X size={9} className="ml-1 opacity-60"/></> :
+                                   action.media_type==='video' ? <><Video size={11}/><span>Видео</span><X size={9} className="ml-1 opacity-60"/></> :
+                                   <><Smile size={11}/><span>GIF</span><X size={9} className="ml-1 opacity-60"/></>}
+                                </button>
+                              </div>
+                              <div className={`overflow-hidden transition-all duration-300 ${showMediaPicker ? 'max-h-24 opacity-100' : 'max-h-0 opacity-0'}`}>
+                                <div className="grid grid-cols-3 gap-2 pb-1">
+                                  {[{v:'photo',l:'Фото',I:ImageIcon},{v:'video',l:'Видео',I:Video},{v:'animation',l:'GIF',I:Smile}].map(m => (
+                                    <button key={m.v} onClick={() => { updAction(idx,'media_type',m.v); setShowMediaPicker(false); }}
+                                      className={`flex flex-col items-center gap-1 py-2.5 rounded-xl border-2 text-[10px] font-black uppercase transition-all ${action.media_type===m.v ? 'bg-blue-600 border-blue-600 text-white' : 'bg-sff border-bd2 text-txd'}`}>
+                                      <m.I size={16}/>{m.l}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                            </div>
+                            <div>
+                              <span className="text-[10px] font-black text-lbl uppercase block mb-1.5">Удаление ответа бота</span>
+                              <div className="flex gap-2">
+                                {[{v:'no',l:'Нет'},{v:'previous',l:'Пред.'},{v:'period',l:'Таймер'}].map(o => (
+                                  <button key={o.v} onClick={() => updAction(idx,'bot_msg_delete',o.v)}
+                                    className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${action.bot_msg_delete===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
+                                  </button>
+                                ))}
+                              </div>
+                              {action.bot_msg_delete==='period' && (
+                                <input type="number" placeholder="Секунд" value={action.bot_msg_delete_after}
+                                  onChange={e => updAction(idx,'bot_msg_delete_after',parseInt(e.target.value))}
+                                  className="w-full mt-2 p-3 bg-sff border border-bd2 rounded-xl font-black text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
+                              )}
+                            </div>
+                          </>)}
+                        </>)}
+                        {(action.type==='mute'||action.type==='ban') && (
+                          <input type="text" placeholder="Длительность: 30m / 2h / forever"
+                            value={action.duration} onChange={e => updAction(idx,'duration',e.target.value)}
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-black text-sm outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
+                        )}
+                        {action.type==='warn' && (
+                          <div>
+                            <div className="flex items-center gap-1.5 mb-2">
+                              <span className="text-[10px] font-black text-lbl uppercase">За какой период считать предупреждения</span>
+                              <div className="relative group">
+                                <span className="w-4 h-4 rounded-full bg-bd2 text-txd text-[9px] font-black flex items-center justify-center cursor-help">?</span>
+                                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 w-56 bg-gray-900 text-white text-[10px] font-bold rounded-xl px-3 py-2 opacity-0 group-hover:opacity-100 transition-all pointer-events-none z-50 leading-relaxed">
+                                  Бот считает сколько раз этот пользователь уже получал предупреждение за последние N секунд. Когда набирается 3 — мут на час, 5 — мут на сутки. 0 = считать за всё время без сброса.
+                                </div>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2">
+                              <input type="number" min="0" placeholder="0"
+                                value={editingTrigger.warn_period || 0}
+                                onChange={e => upd('warn_period', parseInt(e.target.value)||0)}
+                                className="w-28 p-3 bg-sf2 border border-bd2 rounded-xl font-black text-sm text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
+                              <span className="text-[11px] font-bold text-lbl">секунд (0 = за всё время)</span>
+                            </div>
+                          </div>
+                        )}
+                        {action.type==='emoji' && (
+                          <input type="text" placeholder="👀 🔥 ❤️"
+                            value={action.emoji} onChange={e => updAction(idx,'emoji',e.target.value)}
+                            className="w-full p-3 bg-sf2 border border-bd2 rounded-xl font-black text-2xl text-center outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)]"/>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>}
+
+              {/* ── Дополнительно ── */}
+              <div className="bg-sff rounded-2xl border border-bd shadow-sm p-4 space-y-4">
+                <span className="text-[10px] font-black text-lbl uppercase tracking-widest block">Дополнительно</span>
+
+                {/* Где срабатывает */}
+                <div>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">Где срабатывает</p>
+                  <div className="flex gap-2">
+                    {[{v:'all',l:'Везде'},{v:'chat',l:'Чат'},{v:'pv',l:'Личка'}].map(o => (
+                      <button key={o.v} onClick={() => upd('where_fires',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.where_fires===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* На кого реагирует (initiator) */}
+                <div>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">На кого реагирует</p>
+                  <div className="flex gap-2">
+                    {[{v:'all',l:'Все'},{v:'users',l:'Юзеры'},{v:'admins',l:'Админы'}].map(o => (
+                      <button key={o.v} onClick={() => upd('initiator',o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 ${editingTrigger.initiator===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Действие применить к (target) */}
+                <div>
+                  <p className="text-[10px] font-bold text-txd mb-2 uppercase">Действие применить к</p>
+                  <div className="flex gap-2 flex-wrap">
+                    {[{v:'initiator',l:'Инициатор'},{v:'replied',l:'Цитируемый'},{v:'both',l:'Оба'},{v:'specific',l:'Указанный'},{v:'nobody',l:'Никто'}].map(o => (
+                      <button key={o.v} onClick={() => upd('target', o.v)}
+                        className={`flex-1 py-2 rounded-xl text-[10px] font-black uppercase transition-all active:scale-95 min-w-[60px] ${editingTrigger.target===o.v ? 'bg-gray-900 text-white' : 'bg-sf2 border border-bd2 text-txd'}`}>{o.l}
+                      </button>
+                    ))}
+                  </div>
+                  {editingTrigger.target === 'specific' && (
+                    <div className="mt-2">
+                      <input
+                        type="text"
+                        value={editingTrigger.target_user || ''}
+                        onChange={e => upd('target_user', e.target.value.trim())}
+                        placeholder="user_id или @username"
+                        className="w-full px-3 py-2 bg-sff border border-bd2 rounded-xl text-sm font-bold text-tx outline-none focus:border-blue-400 transition-all"
+                      />
+                      <p className="text-[9px] text-lbl mt-1">Целевой пользователь для действий на «Указанного»</p>
+                    </div>
+                  )}
+                </div>
+
+              </div>
+
+            </div>
+          );
+        }
+
+        // ── Список триггеров ──
+        const tSearch = triggerSearch.toLowerCase();
+        const activeTriggers   = triggers.filter(t =>  t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
+        const inactiveTriggers = triggers.filter(t => !t.is_enabled && (!tSearch || t.name.toLowerCase().includes(tSearch) || (t.keyword||'').toLowerCase().includes(tSearch)));
+
+        const TriggerRow = ({ t, index, active }) => (
+          <div
+            key={t.id}
+            draggable={active}
+            onDragStart={() => active && handleDragStart(t.id)}
+            onDragOver={e => { e.preventDefault(); }}
+            onDrop={() => active && handleDrop(t.id)}
+            className={`flex items-center py-3 px-4 border-b border-bd last:border-b-0 transition-opacity ${dragId === t.id ? 'opacity-40' : 'opacity-100'}`}
+          >
+            {/* drag handle (только активные) */}
+            {active ? (
+              <GripVertical size={16} className="text-lbl mr-2 flex-shrink-0 cursor-grab active:cursor-grabbing"/>
+            ) : (
+              <div className="w-[20px] mr-2 flex-shrink-0"/>
+            )}
+
+            {/* номер (только активные) */}
+            {active && (
+              <span className="w-7 h-7 rounded-full bg-blue-500 text-white text-[10px] font-black flex items-center justify-center mr-3 flex-shrink-0">
+                {index + 1}
+              </span>
+            )}
+
+            {/* название */}
+            <button
+              onClick={() => openTriggerModal(t)}
+              className="flex-1 text-left text-sm font-bold text-cta hover:text-cta truncate"
+            >
+              {t.name}
+            </button>
+
+            {/* кнопки */}
+            <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+              {/* удалить — только неактивные */}
+              {!active && userCan('triggers.delete') && (
+                <button
+                  onClick={() => deleteTrigger(t.id)}
+                  className="p-2 text-red-400 hover:text-danger active:scale-90 transition-all"
+                >
+                  <Trash2 size={16}/>
+                </button>
+              )}
+              {/* копировать (создание дубликата) */}
+              {userCan('triggers.create') && (
+                <button
+                  onClick={() => copyTrigger(t.id)}
+                  disabled={copyingTrigger === t.id}
+                  className="p-2 text-blue-400 hover:text-cta active:scale-90 transition-all disabled:opacity-40"
+                >
+                  {copyingTrigger === t.id ? <Loader2 size={16} className="animate-spin"/> : <Copy size={16}/>}
+                </button>
+              )}
+              {/* пауза (активные) / старт (неактивные) */}
+              {userCan('triggers.toggle') && (
+                <button
+                  onClick={() => toggleTrigger(t.id)}
+                  disabled={togglingTrigger === t.id}
+                  className={`p-0.5 rounded-full active:scale-90 transition-all disabled:opacity-40 ${
+                    active ? 'text-danger hover:text-danger' : 'text-ok hover:text-ok'
+                  }`}
+                >
+                  {togglingTrigger === t.id
+                    ? <Loader2 size={22} className="animate-spin"/>
+                    : active
+                      ? <span className="w-6 h-6 rounded-full border-2 border-red-500 flex items-center justify-center"><Square size={8} fill="currentColor"/></span>
+                      : <span className="w-6 h-6 rounded-full border-2 border-green-500 flex items-center justify-center"><Play size={9} fill="currentColor"/></span>
+                  }
+                </button>
+              )}
+            </div>
+          </div>
+        );
+
+        return (
+          <div className="space-y-4 pb-24">
+            {/* ── Статус-баннер модуля (V1.17.0h1c) ── */}
+            <ModuleStatusBanner
+              moduleId="triggers"
+              moduleName="Триггеры"
+              modulesApi={modulesApi}
+            />
+
+            {/* ── Поиск ── */}
+            <div className="relative">
+              <Search size={16} className="absolute left-4 top-1/2 -translate-y-1/2 text-lbl"/>
+              <input
+                value={triggerSearch}
+                onChange={e => setTriggerSearch(e.target.value)}
+                placeholder="Поиск по названию или ключевым словам..."
+                className="w-full bg-sff border border-bd rounded-2xl pl-10 pr-4 py-3.5 text-sm font-bold focus:outline-none focus:border-[color-mix(in_oklab,var(--cta)_50%,transparent)] shadow-sm"
+              />
+            </div>
+
+            {/* ── Панель действий ── */}
+            <div className="flex items-center space-x-2">
+              <button className="flex items-center space-x-2 px-5 py-3 bg-sff border border-bd rounded-2xl font-black text-xs text-txd shadow-sm active:scale-95 transition-all">
+                <Activity size={14}/><span>Статистика</span>
+              </button>
+              {userCan('triggers.create') && (
+                <button
+                  onClick={() => openTriggerModal()}
+                  className="flex-1 flex items-center justify-center space-x-2 py-3 bg-blue-600 text-white rounded-2xl font-black text-xs shadow-md shadow-blue-100 active:scale-95 transition-all"
+                >
+                  <PlusCircle size={14}/><span>Создать триггер</span>
+                </button>
+              )}
+              {/* меню ··· (показываем только если хоть один пункт доступен) */}
+              {(userCan('triggers.create') || userCan('triggers.toggle')) && (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowTriggerMenu(v => !v)}
+                    className="p-3 bg-sff border border-bd rounded-2xl text-lbl shadow-sm active:scale-95 transition-all font-black text-lg leading-none"
+                  >···</button>
+                  {showTriggerMenu && (
+                    <div className="absolute right-0 top-full mt-2 w-56 bg-sff border border-bd rounded-2xl shadow-xl z-50 overflow-hidden" onClick={() => setShowTriggerMenu(false)}>
+                      {userCan('triggers.create') && (
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3">
+                          <Download size={14} className="text-lbl"/> Импортировать триггеры
+                        </button>
+                      )}
+                      {userCan('triggers.create') && (
+                        <button className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3">
+                          <Clock size={14} className="text-lbl"/> Восстановить удалённый
+                        </button>
+                      )}
+                      {userCan('triggers.toggle') && (
+                        <button
+                          onClick={() => { triggers.forEach(t => t.is_enabled && toggleTrigger(t.id)); }}
+                          className="w-full text-left px-5 py-3.5 text-sm font-bold text-tx hover:bg-sf2 flex items-center gap-3"
+                        >
+                          <Power size={14} className="text-lbl"/> Отключить все триггеры
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {triggersLoading && (
+              <div className="text-center py-8 text-lbl font-black text-sm">
+                <Loader2 size={24} className="animate-spin mx-auto mb-2"/> Загрузка...
+              </div>
+            )}
+
+            {/* ── Активные ── */}
+            {!triggersLoading && activeTriggers.length > 0 && (
+              <div>
+                <p className="text-xs font-black text-lbl uppercase tracking-widest mb-2 px-1">Активные триггеры</p>
+                <div className="bg-sff rounded-[2rem] border-l-4 border-l-green-500 border border-bd shadow-sm overflow-hidden">
+                  {activeTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={true}/>)}
+                </div>
+              </div>
+            )}
+
+            {/* ── Неактивные ── */}
+            {!triggersLoading && inactiveTriggers.length > 0 && (
+              <div>
+                <p className="text-xs font-black text-lbl uppercase tracking-widest mb-2 px-1">Не активные триггеры</p>
+                <div className="bg-sff rounded-[2rem] border-l-4 border-l-red-400 border border-bd shadow-sm overflow-hidden">
+                  {inactiveTriggers.map((t, i) => <TriggerRow key={t.id} t={t} index={i} active={false}/>)}
+                </div>
+              </div>
+            )}
+
+            {!triggersLoading && triggers.length === 0 && (
+              <div className="text-center py-12 text-lbl font-black text-sm uppercase tracking-widest">
+                Триггеров пока нет
+              </div>
+            )}
+          </div>
+        );
+      }
+
+      case 'updates':
+        return <NewsTree updates={UPDATES} baseline={newsBaseline} />;
+
+      case 'profile': {
+        const initials = (authUser.first_name || '?').slice(0, 1).toUpperCase();
+        const fmtDate = (iso) => {
+          if (!iso) return null;
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return null;
+          const months = ['янв','фев','мар','апр','мая','июн','июл','авг','сен','окт','ноя','дек'];
+          return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+        };
+        const role = profileData?.role || 'user';
+        const roleStyles = {
+          owner:     { bg: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]', text: 'text-warn', icon: Crown },
+          developer: { bg: 'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]', text: 'text-warn', icon: ShieldCheck },
+          deputy:    { bg: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)]', text: 'text-purple', icon: ShieldCheck },
+          admin:     { bg: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]',  text: 'text-ok',  icon: ShieldCheck },
+          user:      { bg: 'bg-sf2',   text: 'text-txd',   icon: User },
+        };
+        const rs = roleStyles[role] || roleStyles.user;
+        const RoleIcon = rs.icon;
+        const placeholderVal = profileLoading
+          ? <Loader2 size={14} className="animate-spin text-lbl"/>
+          : <span className="text-xs text-lbl font-black uppercase">—</span>;
+        const ICON_MAP = {
+          ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
+          Settings, ShieldCheck, Ban, ShieldBan,
+        };
+        const ACTION_COLORS = {
+          view:   'bg-sf2 text-txd',
+          create: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
+          edit:   'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+          delete: 'bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',
+          toggle: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok',
+          export: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple',
+        };
+        const accesses = profileData?.accesses || [];
+        const totalActions = accesses.reduce((sum, r) => sum + r.actions.length, 0);
+
+        // V1.17.0b14 — если выбран workspace, показываем его детали вместо профиля
+        if (selectedWorkspaceId) {
+          return (
+            <div className="pb-24 animate-in fade-in duration-500">
+              <WorkspacePage
+                token={localStorage.getItem('auth_token')}
+                wsId={selectedWorkspaceId}
+                currentUserId={authUser?.user_id}
+                botUsername={profileData?.bot_username || 'Pulse_On_bot'}
+                onBack={() => setSelectedWorkspaceId(null)}
+                onInviteClick={() => setShowInviteModal(true)}
+                reloadTrigger={inviteReloadTick}
+              />
+              {showInviteModal && (
+                <InviteMemberModal
+                  token={localStorage.getItem('auth_token')}
+                  wsId={selectedWorkspaceId}
+                  onClose={() => setShowInviteModal(false)}
+                  onSuccess={() => setInviteReloadTick(t => t + 1)}
+                />
+              )}
+            </div>
+          );
+        }
+
+        return (
+          <div className="pb-24 animate-in fade-in duration-500 space-y-4">
+
+            {/* ─── HERO (компактный, горизонтальный) ─── */}
+            <div className="bg-sff rounded-[2rem] p-5 border border-bd shadow-sm
+                            flex items-center gap-5">
+              {authUser.photo_url
+                ? <img src={authUser.photo_url} alt="avatar"
+                       className="w-20 h-20 rounded-2xl border-2 border-white shadow-lg object-cover flex-shrink-0"/>
+                : <div className="w-20 h-20 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700
+                                  flex items-center justify-center text-white font-black text-4xl
+                                  border-2 border-white shadow-lg flex-shrink-0">
+                    {initials}
+                  </div>
+              }
+              <div className="flex-1 min-w-0">
+                <h2 className="text-xl font-black text-tx truncate">{authUser.first_name || 'Пользователь'}</h2>
+                {authUser.username && (
+                  <p className="text-xs font-bold text-lbl truncate">@{authUser.username}</p>
+                )}
+                <div className={`mt-2 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full
+                                ${rs.bg} ${rs.text} text-[10px] font-black uppercase tracking-wide`}>
+                  <RoleIcon size={11}/> {profileData?.role_label || 'Загрузка...'}
+                </div>
+              </div>
+            </div>
+
+            {/* ─── ДВУХКОЛОНОЧНАЯ СЕТКА (на mobile — стек) ─── */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+              {/* TELEGRAM */}
+              <div className="bg-sff rounded-[2rem] p-5 border border-bd space-y-2">
+                <h3 className="font-black text-tx text-xs uppercase flex items-center mb-2">
+                  <User className="mr-2 text-cta" size={14}/> Telegram
+                </h3>
+                <div className="flex items-center justify-between p-3 bg-sf2 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <Hash size={14} className="text-lbl"/>
+                    <span className="text-[11px] font-bold text-lbl uppercase">ID</span>
+                  </div>
+                  <span className="font-mono font-black text-sm text-tx">{authUser.id}</span>
+                </div>
+                {authUser.username && (
+                  <div className="flex items-center justify-between p-3 bg-sf2 rounded-xl">
+                    <div className="flex items-center gap-2">
+                      <AtSign size={14} className="text-lbl"/>
+                      <span className="text-[11px] font-bold text-lbl uppercase">Username</span>
+                    </div>
+                    <span className="font-black text-sm text-tx">@{authUser.username}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* МОИ СООБЩЕСТВА (V1.17.0b13) — заменили старый блок ЧАТ/БЕЗ ЧАТА */}
+              <WorkspaceList
+                token={localStorage.getItem('auth_token')}
+                onConnectClick={() => setShowConnectChat(true)}
+                onSelectWorkspace={(id) => setSelectedWorkspaceId(id)}
+              />
+
+              {/* ВАШИ ДОСТУПЫ — collapsible, на полную ширину сетки */}
+              {accesses.length > 0 && (
+                <div className="lg:col-span-2 bg-sff rounded-[2rem] border border-bd overflow-hidden">
+                  <button
+                    onClick={() => setAccessesOpen(v => !v)}
+                    className="w-full flex items-center justify-between p-5 hover:bg-sf2 transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center">
+                        <ShieldCheck size={16} className="text-cta"/>
+                      </div>
+                      <div className="text-left">
+                        <h3 className="font-black text-tx text-sm uppercase">Ваши доступы</h3>
+                        <p className="text-[11px] font-bold text-lbl mt-0.5">
+                          {accesses.length} разделов · {totalActions} действий
+                        </p>
+                      </div>
+                    </div>
+                    {accessesOpen
+                      ? <ChevronUp   size={18} className="text-lbl"/>
+                      : <ChevronDown size={18} className="text-lbl"/>}
+                  </button>
+                  {accessesOpen && (
+                    <div className="px-5 pb-5 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {accesses.map((res) => {
+                        const Icon = ICON_MAP[res.icon] || ShieldCheck;
+                        return (
+                          <div key={res.key} className="p-3 bg-sf2 rounded-xl">
+                            <div className="flex items-center gap-2 mb-2">
+                              <Icon size={14} className="text-cta flex-shrink-0"/>
+                              <span className="font-black text-xs text-tx uppercase tracking-wide truncate">{res.label}</span>
+                            </div>
+                            <div className="flex flex-wrap gap-1">
+                              {res.actions.map((a) => (
+                                <span key={a.key}
+                                      className={`px-2 py-0.5 rounded-md text-[9px] font-black uppercase
+                                                  tracking-wide ${ACTION_COLORS[a.key] || 'bg-sf2 text-txd'}`}>
+                                  {a.label}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* ─── МОДАЛКА: ИНСТРУКЦИЯ ПОДКЛЮЧЕНИЯ ─── */}
+            {showConnectChat && createPortal(
+              <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-0 sm:p-4
+                              bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
+                   onClick={() => setShowConnectChat(false)}>
+                <div className="bg-sff w-full max-w-md rounded-t-[2.5rem] sm:rounded-[2.5rem] p-6
+                                shadow-2xl animate-in slide-in-from-bottom duration-300"
+                     onClick={(e) => e.stopPropagation()}>
+                  <div className="flex items-start justify-between mb-5">
+                    <div className="flex items-center gap-3">
+                      <div className="w-12 h-12 rounded-2xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center">
+                        <Plug size={22} className="text-cta"/>
+                      </div>
+                      <div>
+                        <h3 className="font-black text-tx text-base">Подключение чата</h3>
+                        <p className="text-xs text-txd font-medium">5 простых шагов</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setShowConnectChat(false)}
+                            className="p-2 rounded-xl hover:bg-sf2 active:scale-90 transition-all">
+                      <X size={18} className="text-lbl"/>
+                    </button>
+                  </div>
+
+                  <ol className="space-y-3 mb-5">
+                    {[
+                      <>Откройте Telegram и найдите бота{' '}
+                        <span className="font-black text-cta">@{profileData?.bot_username || 'Pulse_On_bot'}</span></>,
+                      <>Нажмите кнопку <span className="font-black">«Добавить в группу»</span></>,
+                      <>Выберите свой чат из списка</>,
+                      <>Назначьте бота <span className="font-black">администратором</span> с правами:
+                        удаление сообщений, бан пользователей, закрепление сообщений</>,
+                      <>Вернитесь сюда — чат появится в профиле автоматически</>,
+                    ].map((text, i) => (
+                      <li key={i} className="flex gap-3 items-start">
+                        <span className="flex-shrink-0 w-7 h-7 rounded-xl bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta
+                                         font-black text-xs flex items-center justify-center">
+                          {i + 1}
+                        </span>
+                        <span className="text-sm text-tx font-medium leading-relaxed pt-0.5">{text}</span>
+                      </li>
+                    ))}
+                  </ol>
+
+                  <a href={`https://t.me/${profileData?.bot_username || 'Pulse_On_bot'}?startgroup=true`}
+                     target="_blank" rel="noopener noreferrer"
+                     className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
+                                bg-blue-600 text-white font-black text-sm uppercase tracking-wide
+                                hover:bg-blue-700 active:scale-[0.98] transition-all shadow-lg">
+                    <Send size={16}/> Открыть Telegram
+                  </a>
+                </div>
+              </div>,
+              document.body
+            )}
+
+            {/* ─── ДЕЙСТВИЯ ─── */}
+            <div className="bg-sff rounded-[2.5rem] p-6 border border-bd">
+              <button
+                onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
+                className="w-full flex items-center justify-center gap-2 py-4 rounded-2xl
+                           bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger font-black text-sm uppercase tracking-wide
+                           hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] active:scale-[0.98] transition-all">
+                <LogOut size={16}/> Выйти из аккаунта
+              </button>
+            </div>
+
+          </div>
+        );
+      }
+
+      case 'permissions': {
+        if (!isOwner) {
+          return (
+            <div className="flex flex-col items-center justify-center min-h-[60vh] space-y-4 pb-24 animate-in fade-in duration-500">
+              <div className="w-20 h-20 rounded-3xl bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] flex items-center justify-center border border-[color-mix(in_oklab,var(--danger)_30%,transparent)]">
+                <ShieldCheck size={36} className="text-red-400"/>
+              </div>
+              <p className="font-black text-tx text-lg">Доступно только владельцу</p>
+              <p className="text-sm text-lbl text-center max-w-xs">Этот раздел позволяет изменять права ролей. Только владелец чата имеет доступ.</p>
+            </div>
+          );
+        }
+
+        const PERM_ICON_MAP = {
+          ShieldAlert, HeartHandshake, Send, ScrollText, PieChart,
+          Settings, ShieldCheck, Ban, ShieldBan, Coins,
+        };
+        const ACTION_BADGE_COLORS = {
+          view:   'bg-sf2 text-txd',
+          create: 'bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta',
+          edit:   'bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] text-warn',
+          delete: 'bg-[color-mix(in_oklab,var(--danger)_16%,transparent)] text-danger',
+          toggle: 'bg-[color-mix(in_oklab,var(--ok)_16%,transparent)] text-ok',
+          export: 'bg-[color-mix(in_oklab,var(--purple)_16%,transparent)] text-purple',
+        };
+        const ACTION_DESCRIPTIONS = {
+          view:   'просматривать раздел',
+          create: 'создавать записи',
+          edit:   'редактировать записи',
+          delete: 'удалять записи',
+          toggle: 'включать / выключать',
+          export: 'выгружать данные',
+        };
+
+        const editableRoles = (permCatalog?.roles || []).filter(r => r.editable);
+        const totalPerms = (permCatalog?.resources || []).reduce((sum, r) => sum + (r.actions?.length || 0), 0);
+        const currentSet = permLocal[permActiveRole] || new Set();
+        const selectedResData = permCatalog?.resources?.find(r => r.key === permSelectedRes);
+
+        const togglePerm = (perm) => {
+          setPermLocal(prev => {
+            const next = new Set(prev[permActiveRole]);
+            next.has(perm) ? next.delete(perm) : next.add(perm);
+            return { ...prev, [permActiveRole]: next };
+          });
+          setPermDirty(true);
+        };
+
+        const toggleAllForResource = (resKey, enable) => {
+          setPermLocal(prev => {
+            const next = new Set(prev[permActiveRole]);
+            const resData = permCatalog?.resources?.find(r => r.key === resKey);
+            (resData?.actions || []).forEach(a => {
+              const p = `${resKey}.${a.key}`;
+              if (permCatalog?.owner_level?.includes(p)) return;
+              enable ? next.add(p) : next.delete(p);
+            });
+            return { ...prev, [permActiveRole]: next };
+          });
+          setPermDirty(true);
+        };
+
+        const savePermissions = () => {
+          const token = localStorage.getItem('auth_token');
+          if (!token) return;
+          setPermSaving(true);
+          fetch(`/api/admin/permissions/roles/${permActiveRole}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+            body: JSON.stringify({ permissions: [...currentSet] }),
+          })
+            .then(r => r.ok ? r.json() : Promise.reject())
+            .then(() => {
+              setPermDirty(false);
+              setPermToast('Сохранено');
+              setTimeout(() => setPermToast(null), 2500);
+            })
+            .catch(() => {
+              setPermToast('Ошибка сохранения');
+              setTimeout(() => setPermToast(null), 3000);
+            })
+            .finally(() => setPermSaving(false));
+        };
+
+        return (
+          <div className="space-y-4 pb-24 animate-in fade-in duration-500">
+
+            {/* Toast */}
+            {permToast && (
+              <div className={`fixed top-20 right-4 z-50 px-5 py-3 rounded-2xl shadow-2xl font-black text-sm text-white transition-all duration-300 ${permToast.startsWith('Ошибка') ? 'bg-red-500' : 'bg-green-500'}`}>
+                {permToast}
+              </div>
+            )}
+
+            {/* Шапка */}
+            <div className="bg-sff rounded-[2rem] border border-bd shadow-sm p-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] flex items-center justify-center border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] flex-shrink-0">
+                  <ShieldCheck size={18} className="text-cta"/>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="font-black text-tx text-base leading-none">Права доступа</p>
+                  <p className="text-xs text-lbl font-medium mt-0.5">Роли: зам владельца и администратор</p>
+                </div>
+                <button
+                  onClick={savePermissions}
+                  disabled={!permDirty || permSaving}
+                  className={`flex items-center gap-1.5 px-5 py-2.5 rounded-xl font-black text-sm transition-all active:scale-95 ${
+                    permDirty && !permSaving
+                      ? 'bg-blue-600 text-white shadow-md shadow-blue-100 hover:bg-blue-700'
+                      : 'bg-sf2 text-lbl cursor-not-allowed'
+                  }`}
+                >
+                  {permSaving ? <Loader2 size={14} className="animate-spin"/> : <CheckCircle2 size={14}/>}
+                  Сохранить
+                </button>
+              </div>
+            </div>
+
+            {/* Переключатель ролей */}
+            {permLoading ? (
+              <div className="flex items-center justify-center py-12">
+                <Loader2 size={28} className="text-blue-400 animate-spin"/>
+              </div>
+            ) : (
+              <>
+                <div className="flex gap-2">
+                  {editableRoles.map(role => {
+                    const roleSet = permLocal[role.key] || new Set();
+                    return (
+                      <button
+                        key={role.key}
+                        onClick={() => setPermActiveRole(role.key)}
+                        className={`flex-1 py-3 px-4 rounded-2xl transition-all duration-200 text-left ${
+                          permActiveRole === role.key
+                            ? 'bg-blue-600 text-white shadow-md shadow-blue-100'
+                            : 'bg-sff text-txd border border-bd hover:border-[color-mix(in_oklab,var(--cta)_40%,transparent)]'
+                        }`}
+                      >
+                        <p className={`font-black text-sm ${permActiveRole === role.key ? 'text-white' : 'text-tx'}`}>{role.label}</p>
+                        <p className={`text-[10px] font-bold mt-0.5 uppercase tracking-wide ${permActiveRole === role.key ? 'text-blue-200' : 'text-lbl'}`}>
+                          {roleSet.size} из {totalPerms} разрешений
+                        </p>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Аккордеон: каждый ресурс — раскрывающаяся карточка */}
+                <div className="space-y-2">
+                  {(permCatalog?.resources || []).map(res => {
+                    const ResIcon = PERM_ICON_MAP[res.icon] || ShieldCheck;
+                    const resPerms = (res.actions || []).map(a => `${res.key}.${a.key}`).filter(p => !(permCatalog?.owner_level || []).includes(p));
+                    const enabledCount = resPerms.filter(p => currentSet.has(p)).length;
+                    const allEnabled = resPerms.length > 0 && enabledCount === resPerms.length;
+                    const isExpanded = permSelectedRes === res.key;
+                    return (
+                      <div key={res.key} className="bg-sff rounded-2xl border border-bd overflow-hidden">
+                        {/* Заголовок — клик раскрывает/закрывает */}
+                        <div
+                          onClick={() => setPermSelectedRes(isExpanded ? null : res.key)}
+                          className={`flex items-center gap-3 p-4 cursor-pointer transition-all hover:bg-sf2 ${isExpanded ? 'border-b border-bd' : ''}`}
+                        >
+                          <div className={`w-9 h-9 rounded-xl flex items-center justify-center border flex-shrink-0 transition-colors ${isExpanded ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border-[color-mix(in_oklab,var(--cta)_30%,transparent)]' : 'bg-sf2 border-bd'}`}>
+                            <ResIcon size={15} className={isExpanded ? 'text-cta' : 'text-lbl'}/>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-black text-sm text-tx leading-none">{res.label}</p>
+                            <p className="text-[10px] text-lbl font-medium mt-0.5">
+                              {enabledCount === 0 ? 'Нет доступа' : `${enabledCount} из ${resPerms.length} действий`}
+                            </p>
+                          </div>
+                          <div className="flex items-center gap-2 flex-shrink-0">
+                            <button
+                              onClick={e => { e.stopPropagation(); toggleAllForResource(res.key, !allEnabled); }}
+                              className={`px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wide transition-all active:scale-90 ${allEnabled ? 'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)]' : 'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]'}`}
+                            >
+                              {allEnabled ? 'Выкл' : 'Вкл'}
+                            </button>
+                            <ChevronDown size={14} className={`text-lbl transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`}/>
+                          </div>
+                        </div>
+                        {/* Раскрытая панель: 2 колонки действий */}
+                        {isExpanded && (
+                          <div className="grid grid-cols-2 gap-2 p-4">
+                            {(res.actions || []).map(action => {
+                              const perm = `${res.key}.${action.key}`;
+                              const isOwnerLevel = (permCatalog?.owner_level || []).includes(perm);
+                              const enabled = currentSet.has(perm);
+                              const badgeCls = ACTION_BADGE_COLORS[action.key] || 'bg-sf2 text-txd';
+                              return (
+                                <label
+                                  key={action.key}
+                                  title={isOwnerLevel ? 'Доступно только владельцу' : ''}
+                                  className={`flex items-center gap-2.5 p-3 rounded-xl border transition-all ${
+                                    isOwnerLevel
+                                      ? 'bg-sf2 border-bd opacity-50 cursor-not-allowed'
+                                      : `cursor-pointer active:scale-95 ${enabled ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] border-[color-mix(in_oklab,var(--cta)_40%,transparent)]' : 'bg-sf2 border-bd hover:border-bd2'}`
+                                  }`}
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={isOwnerLevel ? false : enabled}
+                                    disabled={isOwnerLevel}
+                                    onChange={() => !isOwnerLevel && togglePerm(perm)}
+                                    className="w-4 h-4 accent-blue-600 flex-shrink-0 cursor-pointer disabled:cursor-not-allowed"
+                                  />
+                                  <div className="min-w-0">
+                                    <span className={`block text-[10px] font-black uppercase tracking-wide leading-none ${badgeCls.split(' ').slice(1).join(' ')}`}>
+                                      {action.label}
+                                    </span>
+                                    <span className="text-[9px] text-lbl font-medium mt-0.5 block leading-tight">
+                                      {isOwnerLevel ? 'только владелец' : (ACTION_DESCRIPTIONS[action.key] || action.label)}
+                                    </span>
+                                  </div>
+                                </label>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              </>
+            )}
+          </div>
+        );
+      }
+
+      case 'economy':
+        return (
+          <EconomyErrorBoundary>
+            <EconomyPage token={localStorage.getItem('auth_token')} modulesApi={modulesApi} />
+          </EconomyErrorBoundary>
+        );
+
+      case 'press_release':
+        return (
+          <PressReleasePage
+            token={localStorage.getItem('auth_token')}
+            userPermissions={authUser?.permissions || []}
+            userId={authUser?.user_id}
+          />
+        );
+
+      case 'garbage_collector':
+        return (
+          <GarbageCollectorPanel
+            token={localStorage.getItem('auth_token')}
+          />
+        );
+
+      case 'branding':
+        return (
+          <div className="max-w-4xl mx-auto py-8">
+             <div className="mb-6">
+                <h1 className="text-3xl font-black text-tx uppercase tracking-tight">Глобальный брендинг</h1>
+                <p className="text-sm text-lbl mt-2">Единая подпись для публикаций в каналах сообщества</p>
+             </div>
+             <BrandingPanel token={localStorage.getItem('auth_token')} />
+          </div>
+        );
+
+      case 'registration_builder':
+        return <RegistrationBuilder />;
+
+      default: return null;
+    }
+  };
+
+  if (authLoading) return (
+    <div className="min-h-screen flex items-center justify-center bg-gray-950">
+      <Loader2 size={32} className="text-blue-400 animate-spin"/>
+    </div>
+  );
+  if (!authUser) return <LoginPage onLogin={setAuthUser}/>;
+
+  return (
+    <div className="ds-canvas min-h-screen flex font-sans text-tx selection:bg-[color-mix(in_oklab,var(--cta)_25%,transparent)] overflow-hidden">
+      <aside className={`fixed inset-y-0 left-0 z-50 w-[260px] bg-sff border-r border-bd flex flex-col transform transition-transform duration-500 lg:translate-x-0 lg:static ${isSidebarOpen ? 'translate-x-0 shadow-2xl' : '-translate-x-full'}`}>
+        <div className="h-16 flex items-center justify-between px-5 border-b border-bd">
+          <div className="flex items-center space-x-3">
+            <img src="/logo.jpg" alt="Puls Chat" className="w-9 h-9 rounded-xl object-cover shadow-md"/>
+            <div>
+              <span className="block font-black text-base text-tx leading-none">Puls Chat</span>
+              <span className="text-[9px] font-bold text-cta uppercase tracking-wider mt-0.5 block">Owner Console</span>
+            </div>
+          </div>
+          <button onClick={() => setIsSidebarOpen(false)} className="lg:hidden p-3 bg-sf2 rounded-2xl text-txd border border-bd active:scale-90 transition-all"><X size={24} /></button>
+        </div>
+
+        <nav className="flex-1 overflow-y-auto py-4 px-4 space-y-6">
+          {['top', 'modules', 'features'].map(group => {
+            const groupItems = navigation.filter(n =>
+              n.group === group
+              && (!n.ownerOnly || isOwner)
+              && (!n.resource || userCanAny(n.resource))
+            );
+            if (groupItems.length === 0) return null;
+            return (
+            <div key={group} className="space-y-2">
+              {group !== 'top' && (
+                <p className="px-5 text-[11px] font-black text-lbl uppercase tracking-[0.3em] mb-6">
+                  {group === 'modules' ? 'Подключённые' : 'Сервис'}
+                </p>
+              )}
+              {groupItems.map((item) => {
+                const hasSub = item.subItems && item.subItems.length > 0;
+                const isExpanded = expandedNav[item.id];
+                const isActive = activeTab === item.id;
+                
+                return (
+                  <div key={item.id} className="flex flex-col space-y-1">
+                    <button
+                      onClick={() => {
+                        if (hasSub) {
+                          setExpandedNav(prev => ({ ...prev, [item.id]: !prev[item.id] }));
+                        }
+                        navigateTo(item.id);
+                        if (!hasSub) setIsSidebarOpen(false);
+                        setJigglingNav(item.id);
+                      }}
+                      className={`w-full flex items-center px-4 py-2.5 rounded-xl transition-all duration-200 ${
+                        isActive
+                        ? 'bg-cta text-white shadow-md font-black'
+                        : 'text-txd hover:bg-ih active:bg-ia'
+                      }`}
+                    >
+                      <item.icon
+                        size={18}
+                        onAnimationEnd={() => setJigglingNav(null)}
+                        className={`mr-3 ${isActive ? 'text-white' : 'text-txd'} ${jigglingNav === item.id ? 'tag-jiggle' : ''}`}
+                      />
+                      <span className="text-sm flex-1 text-left">{item.name}</span>
+                      
+                      {item.id === 'updates' && hasNewUpdate && (
+                        <span className="w-2.5 h-2.5 rounded-full bg-danger animate-pulse mr-2" />
+                      )}
+
+                      {hasSub && (
+                        <span className={`transition-transform duration-200 ${isActive ? 'text-white' : 'text-txd'}`}>
+                          {isExpanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                        </span>
+                      )}
+                    </button>
+                    
+                    {hasSub && isExpanded && (
+                      <div className="flex flex-col mt-1 ml-4 pl-3 border-l-2 border-bd space-y-1">
+                        {item.subItems.map(sub => {
+                          if (sub.ownerOnly && !isOwner) return null;
+                          if (sub.resource && !userCanAny(sub.resource)) return null;
+                          
+                          const isSubActive = activeTab === sub.id;
+                          return (
+                            <button
+                              key={sub.id}
+                              onClick={() => {
+                                navigateTo(sub.id);
+                                setIsSidebarOpen(false);
+                                setJigglingNav(sub.id);
+                              }}
+                              className={`w-full flex items-center px-3 py-2 rounded-xl transition-all duration-200 ${
+                                isSubActive
+                                ? 'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta font-black'
+                                : 'text-txd hover:bg-ih hover:text-tx'
+                              }`}
+                            >
+                              <sub.icon
+                                size={16}
+                                onAnimationEnd={() => setJigglingNav(null)}
+                                className={`mr-2 ${isSubActive ? 'text-cta' : 'text-txd'} ${jigglingNav === sub.id ? 'tag-jiggle' : ''}`}
+                              />
+                              <span className="text-sm flex-1 text-left">{sub.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+            );
+          })}
+        </nav>
+      </aside>
+
+      {hasNewUpdate && activeTab !== 'updates' && (
+        <UpdateToast
+          latest={UPDATES[0]}
+          onOpen={() => navigateTo('updates')}
+          onDismiss={() => {
+            localStorage.setItem('lastSeenUpdate', LATEST_VERSION);
+            setHasNewUpdate(false);
+          }}
+        />
+      )}
+
+      {/* Тихое обновление: новая сборка сайта → мягкий тост «Обновить» */}
+      <SiteUpdateToast />
+
+      <main className="flex-1 flex flex-col h-screen overflow-hidden bg-transparent">
+        <header className="h-16 lg:h-16 bg-sff border-b border-bd flex items-center justify-between px-4 sm:px-6 z-10 shrink-0">
+          <div className="flex items-center">
+            <button className="lg:hidden p-4 bg-sf2 rounded-[1.5rem] mr-5 border border-bd shadow-sm" onClick={() => setIsSidebarOpen(true)}>
+              <Menu size={26} />
+            </button>
+            <h1 className="text-2xl sm:text-3xl font-black text-tx tracking-tighter">
+              {navigation.find(n => n.id === activeTab)?.name}
+            </h1>
+          </div>
+          <div className="flex items-center space-x-3">
+            <WorkspaceSwitcher
+              token={localStorage.getItem('auth_token')}
+              onSwitch={onWorkspaceSwitch}
+            />
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => navigateTo('profile')}
+                className="flex items-center gap-2 p-1 pr-2 rounded-2xl hover:bg-ih transition-all active:scale-95 cursor-pointer"
+                title="Открыть профиль">
+                <div className="text-right hidden sm:block pl-2">
+                  <p className="text-sm font-black text-tx leading-none">{authUser.first_name}</p>
+                  {authUser.username && <p className="text-[10px] font-bold text-lbl mt-0.5">@{authUser.username}</p>}
+                </div>
+                {authUser.photo_url
+                  ? <img src={authUser.photo_url} alt="avatar" className="w-10 h-10 rounded-2xl border-2 border-white shadow-lg object-cover"/>
+                  : <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-blue-600 to-indigo-700 flex items-center justify-center text-white font-black text-lg border-2 border-white shadow-lg">
+                      {(authUser.first_name||'?')[0]}
+                    </div>
+                }
+              </button>
+              <button onClick={() => { localStorage.removeItem('auth_token'); setAuthUser(null); }}
+                className="p-2 rounded-xl text-txd hover:text-danger hover:bg-[color-mix(in_oklab,var(--danger)_12%,transparent)] transition-all active:scale-90"
+                title="Выйти">
+                <Power size={16}/>
+              </button>
+            </div>
+          </div>
+        </header>
+
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8 bg-transparent custom-scrollbar">
+          <div className={
+            (activeTab === 'triggers' && editingTrigger) ||
+            ['modules', 'statistics', 'economy', 'press_release'].includes(activeTab)
+              ? 'w-full'
+              : activeTab === 'triggers'
+                ? 'max-w-3xl mx-auto'
+                : 'max-w-3xl xl:max-w-5xl 2xl:max-w-6xl mx-auto'
+          }>
+            {renderContent()}
+          </div>
+        </div>
+      </main>
+
+      {/* ── Модал: панель плейсхолдеров ── */}
+      {phDropdown && (() => {
+        const PH_GROUPS_FULL = [
+          { label:'Инициатор', color:'blue', desc:'Пользователь, чьё сообщение сработало триггер', items:[
+            { key:'user_name',     label:'Имя',            desc:'Отображаемое имя в Telegram' },
+            { key:'user_username', label:'@username',       desc:'Никнейм (может отсутствовать)' },
+            { key:'user_id',       label:'ID',              desc:'Числовой ID пользователя' },
+            { key:'act_tgun',      label:'Имя TG (новый)', desc:'Имя в Telegram (новый формат)' },
+            { key:'act_nn',        label:'@nick (новый)',   desc:'Никнейм (новый формат)' },
+            { key:'act_blns',      label:'Баланс пульсов',  desc:'Текущий баланс пульсов' },
+            { key:'act_d',         label:'Дней в чате',     desc:'Сколько дней участник в чате' },
+            { key:'act_rnk',       label:'Ранг',            desc:'Текущий ранг пользователя' },
+            { key:'act_plc',       label:'Место в топе',    desc:'Позиция в рейтинге чата' },
+            { key:'act_jt',        label:'Дата вступления', desc:'Когда вступил в чат' },
+          ]},
+          { label:'Цель', color:'purple', desc:'Пользователь, на которого направлено действие', items:[
+            { key:'target_name',     label:'Имя цели',       desc:'Отображаемое имя цели' },
+            { key:'target_username', label:'@username цели',  desc:'Никнейм цели' },
+            { key:'target_id',       label:'ID цели',         desc:'Числовой ID цели' },
+          ]},
+          { label:'Чат', color:'green', desc:'Данные о текущем чате и времени', items:[
+            { key:'chat_name', label:'Название чата', desc:'Официальное название группы' },
+            { key:'date',      label:'Дата',           desc:'Текущая дата дд.мм.гггг' },
+            { key:'time',      label:'Время',          desc:'Текущее время чч:мм (МСК)' },
+          ]},
+          { label:'Статистика сообщений', color:'amber', desc:'Количество сообщений инициатора', items:[
+            { key:'act_msg',   label:'Сообщений всего', desc:'За всё время' },
+            { key:'act_msg_t', label:'За сегодня',      desc:'Сообщений за текущий день' },
+            { key:'act_msg_w', label:'За неделю',        desc:'Сообщений за последние 7 дней' },
+            { key:'act_msg_m', label:'За месяц',         desc:'Сообщений за последние 30 дней' },
+            { key:'act_msg_y', label:'За год',           desc:'Сообщений за последние 365 дней' },
+          ]},
+          { label:'Санкции', color:'red', desc:'Нарушения и предупреждения', items:[
+            { key:'warn_count', label:'Предупреждений',        desc:'Общее кол-во предупреждений' },
+            { key:'act_w',      label:'Предупреждений (новый)',desc:'Предупреждения (новый формат)' },
+          ]},
+          { label:'Анкета', color:'pink', desc:'Данные из анкеты пользователя', items:[
+            { key:'act_form', label:'Полная анкета', desc:'Все поля анкеты одним блоком' },
+            { key:'act_un',   label:'Имя из анкеты', desc:'Имя, указанное в анкете' },
+            { key:'act_city', label:'Город',          desc:'Город из анкеты' },
+            { key:'act_yo',   label:'Возраст',        desc:'Возраст из анкеты' },
+            { key:'act_sr',   label:'Роль',           desc:'Роль/статус из анкеты' },
+          ]},
+          { label:'Рефералы', color:'green', desc:'Реферальная программа', items:[
+            { key:'act_rfrl_c', label:'Кол-во рефералов', desc:'Сколько человек пригласил' },
+          ]},
+        ];
+
+        const COLOR_BADGE = {
+          blue:   'bg-[color-mix(in_oklab,var(--cta)_10%,transparent)] text-cta border border-[color-mix(in_oklab,var(--cta)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--cta)_16%,transparent)]',
+          purple: 'bg-[color-mix(in_oklab,var(--purple)_10%,transparent)] text-purple border border-[color-mix(in_oklab,var(--purple)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--purple)_16%,transparent)]',
+          green:  'bg-[color-mix(in_oklab,var(--ok)_10%,transparent)] text-ok border border-[color-mix(in_oklab,var(--ok)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--ok)_16%,transparent)]',
+          amber:  'bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] text-warn border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--warn)_16%,transparent)]',
+          red:    'bg-[color-mix(in_oklab,var(--danger)_10%,transparent)] text-danger border border-[color-mix(in_oklab,var(--danger)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--danger)_16%,transparent)]',
+          pink:   'bg-[color-mix(in_oklab,var(--pink)_10%,transparent)] text-pink border border-[color-mix(in_oklab,var(--pink)_30%,transparent)] hover:bg-[color-mix(in_oklab,var(--pink)_16%,transparent)]',
+        };
+
+        const insertPh = (key) => {
+          const el = document.getElementById(`ce_${phDropdown}`);
+          if (!el) return;
+          el.focus();
+          if (window._savedPhRange) {
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(window._savedPhRange);
+            window._savedPhRange = null;
+          }
+          document.execCommand('insertText', false, `%${key}%`);
+          // Синхронизируем state через событие input
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          setPhDropdown(null);
+        };
+
+        return (
+          <div className="fixed inset-0 z-[300] flex items-center justify-end bg-black/20 backdrop-blur-sm animate-in fade-in duration-150"
+            onClick={() => setPhDropdown(null)}>
+            <div className="relative bg-sff h-full w-[380px] max-w-[95vw] shadow-2xl flex flex-col animate-in slide-in-from-right duration-200"
+              onClick={e => e.stopPropagation()}>
+
+              {/* Шапка */}
+              <div className="flex items-center justify-between px-5 py-4 border-b border-bd shrink-0">
+                <div>
+                  <p className="font-black text-tx text-base">Плейсхолдеры</p>
+                  <p className="text-[11px] text-lbl mt-0.5">Нажми — вставится в позицию курсора</p>
+                </div>
+                <button onClick={() => setPhDropdown(null)}
+                  className="w-8 h-8 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-txd transition-all active:scale-90">
+                  <X size={16}/>
+                </button>
+              </div>
+
+              {/* Список */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-5">
+                {PH_GROUPS_FULL.map(g => (
+                  <div key={g.label}>
+                    <div className="mb-2">
+                      <p className="text-[11px] font-black text-txd uppercase tracking-wider">{g.label}</p>
+                      <p className="text-[10px] text-lbl">{g.desc}</p>
+                    </div>
+                    <div className="space-y-1">
+                      {g.items.map(it => (
+                        <button key={it.key}
+                          onClick={() => insertPh(it.key)}
+                          className={`w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left ${COLOR_BADGE[g.color]}`}>
+                          <div className="min-w-0">
+                            <p className="text-xs font-black leading-tight">{it.label}</p>
+                            <p className="text-[10px] opacity-70 mt-0.5 leading-tight">{it.desc}</p>
+                          </div>
+                          <span className="ml-3 font-mono text-[10px] opacity-60 shrink-0">%{it.key}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+
+                {/* Кастомные плейсхолдеры из БД */}
+                {customPlaceholders.length > 0 && (
+                  <div>
+                    <div className="mb-2">
+                      <p className="text-[11px] font-black text-txd uppercase tracking-wider">Кастомные</p>
+                      <p className="text-[10px] text-lbl">Созданы вручную через бота</p>
+                    </div>
+                    <div className="space-y-1">
+                      {customPlaceholders.map(ph => (
+                        <button key={ph.name}
+                          onClick={() => insertPh(ph.name)}
+                          className="w-full flex items-center justify-between px-3 py-2.5 rounded-xl transition-all active:scale-[0.98] text-left bg-sf2 text-tx border border-bd hover:bg-sf2">
+                          <div className="min-w-0">
+                            <p className="text-xs font-black leading-tight">{ph.name}</p>
+                            {ph.description && <p className="text-[10px] opacity-60 mt-0.5 leading-tight">{ph.description}</p>}
+                            {ph.value && <p className="text-[10px] text-cta mt-0.5 leading-tight truncate max-w-[180px]">{ph.value}</p>}
+                          </div>
+                          <span className="ml-3 font-mono text-[10px] opacity-50 shrink-0">%{ph.name}%</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                <div className="bg-sf2 border border-bd rounded-2xl p-3">
+                  <p className="text-[10px] font-black text-txd mb-1">💡 Для цитируемого</p>
+                  <p className="text-[10px] text-lbl leading-relaxed">Замени <code className="bg-bd2 px-1 rounded">act_</code> на <code className="bg-bd2 px-1 rounded">rpl_</code> — получишь данные пользователя, на сообщение которого ответили.</p>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Попап: подсказка по тумблеру настроек ── */}
+      {settingHint && (() => {
+        const HINTS = {
+          delete_after:      'Сообщение бота будет удалено через указанное время. Оставьте "0", чтобы не удалять.',
+          send_delayed:      'Сообщение будет отправлено через указанное время после срабатывания триггера.',
+          pin:               'Отправленное сообщение автоматически закрепится в шапке чата.',
+          disable_preview:   'В Telegram ссылки показывают превью. Включи — превью скрыто не будет.',
+          disable_notify:    'Сообщение придёт без звука. Удобно для ночных рассылок.',
+          delete_previous:   'Предыдущее сообщение бота по этому триггеру будет удалено при следующем срабатывании.',
+          content_protection:'Защищает содержимое сообщения от пересылки и сохранения.',
+        };
+        const left = Math.min(settingHintPos.x, window.innerWidth - 300);
+        const top  = Math.min(settingHintPos.y, window.innerHeight - 120);
+        return (
+          <div className="fixed z-[400] w-72 bg-sff rounded-2xl shadow-2xl border border-bd p-4 animate-in fade-in zoom-in-95 duration-150"
+            style={{left, top}}>
+            <div className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-full bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={14} className="text-cta"/>
+              </div>
+              <p className="text-sm text-tx leading-relaxed flex-1">{HINTS[settingHint]}</p>
+              <button onClick={() => setSettingHint(null)}
+                className="w-5 h-5 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-lbl flex-shrink-0 transition-all">
+                <X size={10}/>
+              </button>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Модал: справка по кнопкам форматирования ── */}
+      {showEditorHelp && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150"
+          onClick={() => setShowEditorHelp(false)}>
+          <div className="bg-sff rounded-3xl shadow-2xl w-[420px] max-w-[95vw] max-h-[85vh] overflow-hidden animate-in zoom-in-95 duration-200"
+            onClick={e => e.stopPropagation()}>
+
+            {/* Шапка */}
+            <div className="flex items-center justify-between px-5 py-4 border-b border-bd">
+              <p className="font-black text-tx text-base">Подсказка по форматированию</p>
+              <button onClick={() => setShowEditorHelp(false)}
+                className="w-7 h-7 rounded-full bg-sf2 hover:bg-bd2 flex items-center justify-center text-txd transition-all active:scale-90">
+                <X size={14}/>
+              </button>
+            </div>
+
+            {/* Контент */}
+            <div className="overflow-y-auto p-5 space-y-5 max-h-[70vh]">
+              {[
+                { btn:'B',  label:'Жирный',        tag:'<b>',           preview:<><b>Привет, как дела?</b></> },
+                { btn:'I',  label:'Курсив',         tag:'<i>',           preview:<><i>Привет, как дела?</i></> },
+                { btn:'S',  label:'Зачеркнутый',    tag:'<s>',           preview:<><s>Привет, как дела?</s></> },
+                { btn:'U',  label:'Подчеркнутый',   tag:'<u>',           preview:<><u>Привет, как дела?</u></> },
+                { btn:'<>',  label:'Моноширинный (code)', tag:'<code>',  preview:<><code className="bg-sf2 px-1 rounded text-sm">Привет, как дела?</code></> },
+                { btn:'»',  label:'Цитата (blockquote)', tag:'<blockquote>', preview:<div className="border-l-4 border-gray-300 pl-3 text-txd italic text-sm">Привет, как дела?</div> },
+                { btn:'🔗', label:'Ссылка',         tag:'<a href="...">',preview:<><a className="text-cta underline" href="#">Привет, как дела?</a></> },
+                { btn:'✒',  label:'Скрытый текст (spoiler)', tag:'<tg-spoiler>', preview:<span className="bg-gray-800 text-tx rounded px-1 select-none text-sm">Привет, как дела?</span> },
+                { btn:'Tx', label:'Очистить форматирование', tag:'—',    preview:<>Привет, как дела?</> },
+              ].map(row => (
+                <div key={row.btn}>
+                  <div className="flex items-center gap-2 mb-2">
+                    <span className="w-6 h-6 bg-[color-mix(in_oklab,var(--cta)_16%,transparent)] text-cta text-[11px] font-black rounded flex items-center justify-center flex-shrink-0">{row.btn}</span>
+                    <span className="text-sm font-black text-tx">{row.label}</span>
+                    <span className="ml-auto text-[10px] font-mono text-lbl bg-sf2 px-2 py-0.5 rounded">{row.tag}</span>
+                  </div>
+                  <div className="flex items-center gap-3 bg-sf2 rounded-2xl px-4 py-3 border border-bd min-h-[42px]">
+                    <span className="text-sm text-tx">{row.preview}</span>
+                  </div>
+                </div>
+              ))}
+
+              <div className="bg-[color-mix(in_oklab,var(--warn)_10%,transparent)] border border-[color-mix(in_oklab,var(--warn)_30%,transparent)] rounded-2xl px-4 py-3">
+                <p className="text-[11px] font-black text-warn mb-1">💡 Совет</p>
+                <p className="text-[11px] text-warn leading-relaxed">
+                  Выдели текст, затем нажми кнопку — форматирование применится к выделенному фрагменту.
+                  Для цитируемого пользователя в плейсхолдерах замени <b>act_</b> на <b>rpl_</b>.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал: предпросмотр сообщения ── */}
+      {showPreview && (
+        <div className="fixed inset-0 z-[350] flex items-center justify-center bg-black/50 backdrop-blur-sm"
+          onClick={() => setShowPreview(null)}>
+          <div className="w-[380px] max-w-[95vw] flex flex-col" onClick={e => e.stopPropagation()}>
+            {/* Шапка */}
+            <div className="flex items-center justify-between mb-3 px-1">
+              <span className="text-xs font-black text-white/70 uppercase tracking-widest">Предпросмотр</span>
+              <button onClick={() => setShowPreview(null)}
+                className="w-7 h-7 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center text-white transition-all">
+                <X size={14}/>
+              </button>
+            </div>
+
+            {/* TG-style bubble */}
+            <div className="bg-[#212121] rounded-2xl p-4 shadow-2xl">
+              {/* Sender */}
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-sm font-black flex-shrink-0">🤖</div>
+                <div>
+                  <p className="text-sm font-black text-[#6ab3f3]">Bot</p>
+                </div>
+              </div>
+
+              {/* Медиа */}
+              {showPreview.mediaUrl && showPreview.mediaType !== 'none' && (
+                <div className="mb-2 rounded-xl overflow-hidden">
+                  {showPreview.mediaType === 'photo' || showPreview.mediaType === 'animation' ? (
+                    <img src={showPreview.mediaUrl} alt="media" className="w-full max-h-64 object-contain bg-black/20"/>
+                  ) : (
+                    <video src={showPreview.mediaUrl} className="w-full max-h-64 object-contain bg-black/20" controls muted/>
+                  )}
+                </div>
+              )}
+
+              {/* Текст (HTML) */}
+              {showPreview.text && (
+                <div
+                  className="text-[14px] leading-relaxed text-white mb-2 break-words"
+                  style={{fontFamily:'system-ui,sans-serif'}}
+                  dangerouslySetInnerHTML={{__html: showPreview.text}}
+                />
+              )}
+              {!showPreview.text && !showPreview.mediaUrl && (
+                <p className="text-sm text-white/40 italic mb-2">Текст не задан</p>
+              )}
+
+              {/* Время */}
+              <div className="flex justify-end">
+                <span className="text-[11px] text-white/40">{new Date().toLocaleTimeString('ru-RU',{hour:'2-digit',minute:'2-digit'})}</span>
+              </div>
+
+              {/* Клавиатура */}
+              {showPreview.keyboard && showPreview.keyboard.length > 0 && (
+                <div className="mt-3 space-y-1.5">
+                  {showPreview.keyboard.map((btn, bi) => (
+                    <div key={bi} className="w-full py-2 rounded-xl bg-[#2b5278] text-center text-sm font-bold text-[#6ab3f3] select-none">
+                      {btn.emoji ? `${btn.emoji} ` : ''}{btn.text || 'Кнопка'}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Модал: подтверждение выхода из редактора триггера ── */}
+      {showLeaveConfirm && (
+        <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/30 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-sff rounded-3xl shadow-2xl p-6 w-80 max-w-[90vw] space-y-4 animate-in zoom-in-95 duration-200">
+            <div className="flex items-start gap-3">
+              <div className="w-10 h-10 rounded-full bg-[color-mix(in_oklab,var(--warn)_16%,transparent)] flex items-center justify-center flex-shrink-0 mt-0.5">
+                <Info size={20} className="text-warn"/>
+              </div>
+              <div>
+                <p className="font-black text-tx text-base leading-tight">Внимание</p>
+                <p className="text-sm text-txd mt-1.5 leading-relaxed">
+                  Вы уверены, что хотите покинуть раздел?<br/>
+                  Несохранённые изменения триггера будут потеряны.
+                </p>
+              </div>
+            </div>
+            <div className="flex gap-2 pt-1">
+              <button
+                onClick={() => {
+                  setShowLeaveConfirm(false);
+                  setEditingTrigger(null);
+                  if (leaveTarget) { _doNavigate(leaveTarget); }
+                  setLeaveTarget(null);
+                }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-txd bg-sf2 hover:bg-bd2 active:scale-95 transition-all">
+                Выйти
+              </button>
+              <button
+                onClick={() => { setShowLeaveConfirm(false); setLeaveTarget(null); }}
+                className="flex-1 py-2.5 rounded-xl text-sm font-bold text-white bg-blue-500 hover:bg-blue-600 active:scale-95 transition-all shadow-md shadow-blue-200">
+                Продолжить настройку
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+    </div>
+  );
+}
